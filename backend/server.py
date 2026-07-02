@@ -182,34 +182,52 @@ class Order(BaseModel):
 
 CATEGORIES_SEED = [
     {
+        "id": "law",
+        "name": "Law",
+        "description": "Our flagship legal list — constitutional, corporate, criminal, IP, family and contract law commentaries and practitioner guides.",
+        "image": "https://images.unsplash.com/photo-1589994965851-a8f479c573a9?auto=format&fit=crop&w=1200&q=85",
+    },
+    {
+        "id": "tax",
+        "name": "Taxation",
+        "description": "Authoritative tax titles across direct tax, GST, international taxation, audit and customs — updated for the latest Finance Act.",
+        "image": "https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&w=1200&q=85",
+    },
+    {
+        "id": "business",
+        "name": "Business & Management",
+        "description": "Finance, marketing, management, entrepreneurship and leadership titles for students and working professionals.",
+        "image": "https://images.unsplash.com/photo-1507842217343-583bb7270b66?auto=format&fit=crop&w=1200&q=85",
+    },
+    {
         "id": "academic",
         "name": "Academic",
-        "description": "Scholarly and test-prep titles spanning humanities, sciences, and competitive entrance exam preparation (UPSC, NEET, JEE, CAT, GRE, GMAT).",
+        "description": "Scholarly textbooks across economics, the sciences, mathematics, history and computer science for Indian undergraduate and postgraduate programmes.",
         "image": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=1200&q=85",
     },
     {
         "id": "professional",
-        "name": "Professional",
-        "description": "Authoritative practitioner titles — including our flagship Law, Tax, Business and Technology lists for working professionals.",
-        "image": "https://images.unsplash.com/photo-1589994965851-a8f479c573a9?auto=format&fit=crop&w=1200&q=85",
+        "name": "Professional & STEM",
+        "description": "Practitioner references in medicine, technology and engineering for specialists and industry professionals.",
+        "image": "https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=1200&q=85",
     },
     {
-        "id": "general",
-        "name": "General",
-        "description": "Encyclopedias, dictionaries, atlases, yearbooks and trade non-fiction for every bookshelf.",
-        "image": "https://images.unsplash.com/photo-1495446815901-a7297e633e8d?auto=format&fit=crop&w=800&q=80",
+        "id": "test-prep",
+        "name": "Test Prep",
+        "description": "Preparation guides for competitive and entrance exams — UPSC and General Studies, GMAT, and core physics, biology and quantitative/verbal aptitude.",
+        "image": "https://images.unsplash.com/photo-1491841550275-ad7854e35ca6?auto=format&fit=crop&w=1200&q=85",
     },
     {
-        "id": "coffee-table",
-        "name": "Coffee Table Books",
-        "description": "Richly illustrated large-format volumes on art, architecture, culture and photography — designed to be seen.",
-        "image": "https://images.unsplash.com/photo-1485846234645-a62644f84728?auto=format&fit=crop&w=800&q=80",
+        "id": "children",
+        "name": "Children",
+        "description": "Picture books, early readers, folklore and illustrated science and geography for young learners.",
+        "image": "https://images.unsplash.com/photo-1589829085413-56de8ae18c73?auto=format&fit=crop&w=1200&q=85",
     },
     {
-        "id": "curated-works",
-        "name": "Curated Works & Custom Publishing",
-        "description": "Bespoke publishing for corporations, institutions and estates — corporate histories, anniversary volumes, branded handbooks and white papers.",
-        "image": "https://images.unsplash.com/photo-1507842217343-583bb7270b66?auto=format&fit=crop&w=800&q=80",
+        "id": "general-reference",
+        "name": "General & Reference",
+        "description": "Encyclopedias, dictionaries, atlases, yearbooks and everyday reference for every bookshelf.",
+        "image": "https://images.unsplash.com/photo-1495446815901-a7297e633e8d?auto=format&fit=crop&w=1200&q=85",
     },
 ]
 
@@ -296,11 +314,17 @@ BOOKS_SEED = [
 
 
 async def seed_data():
-    """Seed categories and books if the collections are empty."""
-    cat_count = await db.categories.count_documents({})
-    if cat_count == 0:
-        await db.categories.insert_many([{**c} for c in CATEGORIES_SEED])
-        logger.info(f"Seeded {len(CATEGORIES_SEED)} categories")
+    """Seed books if empty, and reconcile categories to the canonical set on every startup."""
+    # Reconcile categories: upsert the canonical set and remove any stale ones.
+    # This self-heals databases seeded under an older category taxonomy.
+    canonical_ids = [c["id"] for c in CATEGORIES_SEED]
+    for c in CATEGORIES_SEED:
+        await db.categories.update_one({"id": c["id"]}, {"$set": {**c}}, upsert=True)
+    removed = await db.categories.delete_many({"id": {"$nin": canonical_ids}})
+    logger.info(
+        f"Reconciled {len(CATEGORIES_SEED)} categories "
+        f"(removed {removed.deleted_count} stale)"
+    )
 
     book_count = await db.books.count_documents({})
     if book_count == 0:

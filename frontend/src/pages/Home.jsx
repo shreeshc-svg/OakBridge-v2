@@ -10,11 +10,14 @@ import {
 } from "../lib/api";
 
 const CATEGORY_EMOJI = {
-    academic: "01",
-    professional: "02",
-    general: "03",
-    "coffee-table": "04",
-    "curated-works": "05",
+    law: "01",
+    tax: "02",
+    business: "03",
+    academic: "04",
+    professional: "05",
+    "test-prep": "06",
+    children: "07",
+    "general-reference": "08",
 };
 
 const VERTICALS = [

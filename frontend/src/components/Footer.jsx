@@ -7,11 +7,11 @@ const columns = [
     {
         title: "Shop",
         links: [
+            { to: "/books?category=law", label: "Law" },
+            { to: "/books?category=tax", label: "Taxation" },
+            { to: "/books?category=business", label: "Business & Management" },
             { to: "/books?category=academic", label: "Academic" },
-            { to: "/books?category=professional", label: "Professional" },
-            { to: "/books?category=general", label: "General" },
-            { to: "/books?category=coffee-table", label: "Coffee Table Books" },
-            { to: "/books?category=curated-works", label: "Curated Works & Custom" },
+            { to: "/books?category=general-reference", label: "General & Reference" },
         ],
     },
     {
@@ -73,7 +73,7 @@ export default function Footer() {
             <div className="px-6 md:px-12 lg:px-16 pt-20 pb-10">
                 {/* Top grid */}
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-10 border-b border-white/10 pb-16">
-                    <div className="md:col-span-5">
+                    <div className="md:col-span-4">
                         <div className="overline !text-white/50">
                             Est. 2017 · New Delhi
                         </div>
@@ -112,7 +112,7 @@ export default function Footer() {
                         </form>
                     </div>
 
-                    <div className="md:col-span-7 grid grid-cols-1 sm:grid-cols-3 gap-10">
+                    <div className="md:col-span-8 grid grid-cols-2 lg:grid-cols-4 gap-x-8 gap-y-10">
                         {columns.map((col) => (
                             <div key={col.title}>
                                 <div className="overline !text-white/50">

@@ -37,11 +37,11 @@ export default function Header() {
                 data-testid="site-header"
                 className="sticky top-0 z-40 border-b border-[#002B5C]/10 bg-[#FFFFFF]/85 backdrop-blur-xl"
             >
-                <div className="flex items-center justify-between px-6 md:px-12 lg:px-16 h-16">
+                <div className="flex items-center justify-between gap-4 px-6 md:px-12 lg:px-16 h-16">
                     <Link
                         to="/"
                         data-testid="brand-logo"
-                        className="flex items-baseline gap-2"
+                        className="flex items-baseline gap-2 flex-shrink-0"
                     >
                         <span className="font-serif text-2xl font-medium text-[#002B5C] tracking-tight">
                             Oakbridge
@@ -51,7 +51,7 @@ export default function Header() {
                         </span>
                     </Link>
 
-                    <nav className="hidden lg:flex items-center gap-7">
+                    <nav className="hidden xl:flex items-center gap-5">
                         {NAV.map((n) => (
                             <NavLink
                                 key={n.to}
@@ -66,10 +66,10 @@ export default function Header() {
                         ))}
                     </nav>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-shrink-0">
                         <form
                             onSubmit={onSearch}
-                            className="hidden md:flex items-center border border-[#E5E7EB] bg-white px-3 h-9 w-56"
+                            className="hidden md:flex items-center border border-[#E5E7EB] bg-white px-3 h-9 w-44 xl:w-52"
                         >
                             <Search
                                 size={16}
@@ -165,7 +165,7 @@ export default function Header() {
                         <button
                             onClick={() => setMobileOpen(!mobileOpen)}
                             data-testid="mobile-menu-toggle"
-                            className="lg:hidden p-2 hover:bg-[#F5F7FA]"
+                            className="xl:hidden p-2 hover:bg-[#F5F7FA]"
                             aria-label="Menu"
                         >
                             {mobileOpen ? (
