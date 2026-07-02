@@ -1,0 +1,962 @@
+import React, { useEffect, useRef, useState } from "react";
+import { Plus, Pencil, Trash2, X, FileUp, FileCheck2, Upload, ImagePlus, Trash, Sparkles } from "lucide-react";
+import {
+    adminBulkDeleteBooks,
+    adminBulkDraftAuthorBios,
+    adminBulkImportBooks,
+    adminCreateBook,
+    adminDeleteAllBooks,
+    adminDeleteBook,
+    adminDraftAuthorBio,
+    adminRemoveEbook,
+    adminUpdateBook,
+    adminUploadCover,
+    adminUploadEbook,
+    API,
+    fetchBooks,
+    fetchCategories,
+    formatApiError,
+    formatINR,
+} from "../../lib/api";
+import { toast } from "sonner";
+
+const BLANK = {
+    title: "",
+    subtitle: "",
+    author: "",
+    author_bio: "",
+    author_photo: "",
+    isbn: "",
+    category: "academic",
+    subject: "",
+    description: "",
+    price: 0,
+    original_price: "",
+    cover_image: "",
+    pages: 100,
+    bestseller: false,
+    new_release: false,
+    stock: 100,
+};
+
+function resolveImage(url) {
+    if (!url) return "";
+    if (url.startsWith("http://") || url.startsWith("https://")) return url;
+    if (url.startsWith("/api/")) {
+        return `${API.replace(/\/api$/, "")}${url}`;
+    }
+    return url;
+}
+
+function CoverUploader({ value, onChange, label = "Cover Image", testIdPrefix = "cover", aspect = "portrait" }) {
+    const [uploading, setUploading] = useState(false);
+    const inputRef = useRef(null);
+
+    const handleFile = async (file) => {
+        if (!file) return;
+        if (!file.type.startsWith("image/")) {
+            toast.error("Please choose an image file.");
+            return;
+        }
+        setUploading(true);
+        try {
+            const res = await adminUploadCover(file);
+            onChange(res.url);
+            toast.success(`${label} uploaded.`);
+        } catch (err) {
+            toast.error(formatApiError(err));
+        } finally {
+            setUploading(false);
+        }
+    };
+
+    const onDrop = (e) => {
+        e.preventDefault();
+        const f = e.dataTransfer.files?.[0];
+        if (f) handleFile(f);
+    };
+
+    const shownUrl = resolveImage(value);
+    const previewBox = aspect === "square" ? "w-24 h-24" : "w-24 h-32";
+
+    return (
+        <div>
+            <label className="overline !text-[10px] block mb-2">{label}</label>
+            <div className="flex gap-4">
+                <div
+                    onDrop={onDrop}
+                    onDragOver={(e) => e.preventDefault()}
+                    onClick={() => inputRef.current?.click()}
+                    data-testid={`${testIdPrefix}-dropzone`}
+                    className="flex-1 border-2 border-dashed border-[#E5E7EB] hover:border-[#002B5C] bg-[#F5F7FA] p-6 text-center cursor-pointer transition-colors"
+                >
+                    <input
+                        ref={inputRef}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => handleFile(e.target.files?.[0])}
+                        data-testid={`${testIdPrefix}-file-input`}
+                    />
+                    <ImagePlus size={24} strokeWidth={1.5} className="mx-auto text-[#4B5563]" />
+                    <div className="mt-2 text-sm text-[#002B5C] font-medium">
+                        {uploading ? "Uploading…" : "Drop image or click to upload"}
+                    </div>
+                    <div className="text-xs text-[#4B5563] mt-1">JPG, PNG or WebP — max 8 MB</div>
+                </div>
+                {shownUrl && (
+                    <div className={`${previewBox} border border-[#E5E7EB] bg-white overflow-hidden flex-shrink-0`}>
+                        <img src={shownUrl} alt={label} className="w-full h-full object-cover" />
+                    </div>
+                )}
+            </div>
+            <input
+                type="text"
+                value={value || ""}
+                onChange={(e) => onChange(e.target.value)}
+                placeholder="…or paste an image URL"
+                data-testid={`${testIdPrefix}-url-input`}
+                className="mt-3 w-full border border-[#E5E7EB] bg-white px-3 py-2 text-xs outline-none focus:border-[#002B5C]"
+            />
+        </div>
+    );
+}
+
+function CsvImportDialog({ onClose, onDone }) {
+    const [file, setFile] = useState(null);
+    const [busy, setBusy] = useState(false);
+    const [result, setResult] = useState(null);
+
+    const downloadTemplate = async () => {
+        try {
+            const token = localStorage.getItem("oakbridge_token");
+            const res = await fetch(`${API}/admin/books/import-template`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!res.ok) throw new Error("Could not download template");
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "oakbridge-books-template.xlsx";
+            a.click();
+            URL.revokeObjectURL(url);
+        } catch (err) {
+            toast.error(err.message || "Template download failed");
+        }
+    };
+
+    const onImport = async () => {
+        if (!file) return;
+        setBusy(true);
+        setResult(null);
+        try {
+            const res = await adminBulkImportBooks(file);
+            setResult(res);
+            toast.success(`Imported ${res.created} books`);
+            onDone && onDone();
+        } catch (err) {
+            toast.error(formatApiError(err));
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+            <div data-testid="csv-import-dialog" className="bg-white border border-[#002B5C] w-full max-w-2xl p-8">
+                <div className="flex items-start justify-between">
+                    <div>
+                        <div className="overline">Bulk Import</div>
+                        <h2 className="font-serif text-3xl mt-1 text-[#002B5C]">
+                            Import books from Excel / CSV
+                        </h2>
+                    </div>
+                    <button onClick={onClose} data-testid="csv-close" className="p-2 hover:bg-[#F5F7FA]">
+                        <X size={18} strokeWidth={1.5} />
+                    </button>
+                </div>
+
+                <div className="mt-6 text-sm text-[#4B5563] space-y-2">
+                    <p>
+                        Upload an Excel (.xlsx) or CSV with these columns (<strong>required</strong>):{" "}
+                        <code className="font-mono text-xs bg-[#F5F7FA] px-1">
+                            title, author, isbn, category, subject, description, price, cover_image
+                        </code>
+                    </p>
+                    <p>
+                        Optional:{" "}
+                        <code className="font-mono text-xs bg-[#F5F7FA] px-1">
+                            subtitle, grade, pages, original_price, stock, bestseller, new_release, language, publisher, publication_year, rating
+                        </code>
+                    </p>
+                </div>
+
+                <div className="mt-6 flex gap-3">
+                    <button
+                        onClick={downloadTemplate}
+                        data-testid="csv-template-download"
+                        className="text-sm border border-[#002B5C] px-4 py-2 hover:bg-[#F5F7FA] flex items-center gap-2"
+                    >
+                        <FileUp size={14} strokeWidth={1.5} />
+                        Download Excel template
+                    </button>
+                </div>
+
+                <label className="mt-6 block border-2 border-dashed border-[#E5E7EB] hover:border-[#002B5C] bg-[#F5F7FA] p-8 text-center cursor-pointer transition-colors">
+                    <input
+                        type="file"
+                        accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        className="hidden"
+                        onChange={(e) => setFile(e.target.files?.[0])}
+                        data-testid="csv-file-input"
+                    />
+                    <Upload size={28} strokeWidth={1.5} className="mx-auto text-[#4B5563]" />
+                    <div className="mt-2 text-sm text-[#002B5C] font-medium">
+                        {file ? file.name : "Select an .xlsx or .csv file"}
+                    </div>
+                </label>
+
+                {result && (
+                    <div
+                        data-testid="csv-result"
+                        className="mt-6 border border-[#E5E7EB] bg-[#F5F7FA] p-4 text-sm max-h-60 overflow-y-auto"
+                    >
+                        <div className="font-serif text-lg text-[#002B5C]">
+                            ✓ {result.created} created
+                        </div>
+                        {result.errors?.length > 0 && (
+                            <div className="mt-2 text-[#CC0033]">
+                                {result.errors.length} error{result.errors.length === 1 ? "" : "s"}:
+                                <ul className="mt-1 list-disc pl-5 text-xs">
+                                    {result.errors.slice(0, 10).map((e) => (
+                                        <li key={`err-${e.row}-${e.error}`}>
+                                            Row {e.row}: {e.error}
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                <div className="mt-8 flex justify-end gap-3">
+                    <button onClick={onClose} className="px-6 py-3 text-sm border border-[#E5E7EB]">
+                        Close
+                    </button>
+                    <button
+                        onClick={onImport}
+                        disabled={!file || busy}
+                        data-testid="csv-import-submit"
+                        className="px-8 py-3 text-sm bg-[#002B5C] text-white hover:bg-[#001F42] disabled:opacity-60"
+                    >
+                        {busy ? "Importing…" : "Import"}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function EbookManager({ bookId, hasEbook, filename, onChange }) {
+    const [uploading, setUploading] = useState(false);
+    const [currentHas, setCurrentHas] = useState(hasEbook);
+    const [currentName, setCurrentName] = useState(filename || "");
+
+    const onFile = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (!file.name.toLowerCase().endsWith(".pdf")) {
+            toast.error("Only PDF files are accepted");
+            return;
+        }
+        setUploading(true);
+        try {
+            await adminUploadEbook(bookId, file);
+            toast.success("eBook uploaded.");
+            setCurrentHas(true);
+            setCurrentName(file.name);
+            onChange && onChange();
+        } catch (err) {
+            toast.error(formatApiError(err));
+        } finally {
+            setUploading(false);
+            e.target.value = "";
+        }
+    };
+
+    const onRemove = async () => {
+        if (!window.confirm("Remove the attached eBook?")) return;
+        try {
+            await adminRemoveEbook(bookId);
+            toast.success("eBook removed.");
+            setCurrentHas(false);
+            setCurrentName("");
+            onChange && onChange();
+        } catch (err) {
+            toast.error(formatApiError(err));
+        }
+    };
+
+    return (
+        <div
+            data-testid="ebook-manager"
+            className="mt-6 border border-[#F59E0B]/50 bg-[#F59E0B]/10 p-4"
+        >
+            <div className="overline">eBook (PDF)</div>
+            {currentHas ? (
+                <div className="mt-3 flex flex-wrap items-center gap-4">
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <FileCheck2 size={20} strokeWidth={1.5} className="text-[#F59E0B]" />
+                        <div className="truncate">
+                            <div className="font-serif text-base text-[#002B5C] truncate">
+                                {currentName || "ebook.pdf"}
+                            </div>
+                            <div className="text-xs text-[#4B5563]">Attached</div>
+                        </div>
+                    </div>
+                    <label className="text-xs border border-[#002B5C] px-3 py-2 cursor-pointer hover:bg-[#F5F7FA]">
+                        Replace
+                        <input
+                            type="file"
+                            accept="application/pdf,.pdf"
+                            onChange={onFile}
+                            className="hidden"
+                            data-testid="ebook-replace-input"
+                        />
+                    </label>
+                    <button
+                        type="button"
+                        onClick={onRemove}
+                        data-testid="ebook-remove-button"
+                        className="text-xs border border-[#E5E7EB] px-3 py-2 hover:bg-[#F5F7FA] text-[#CC0033]"
+                    >
+                        Remove
+                    </button>
+                </div>
+            ) : (
+                <div className="mt-3">
+                    <label className="inline-flex items-center gap-2 bg-[#002B5C] text-[#FFFFFF] px-4 py-2 text-sm cursor-pointer hover:bg-[#001F42]">
+                        <FileUp size={14} strokeWidth={1.5} />
+                        {uploading ? "Uploading…" : "Upload PDF"}
+                        <input
+                            type="file"
+                            accept="application/pdf,.pdf"
+                            onChange={onFile}
+                            disabled={uploading}
+                            className="hidden"
+                            data-testid="ebook-upload-input"
+                        />
+                    </label>
+                    <p className="mt-2 text-xs text-[#4B5563]">
+                        Customers who purchase this title will be able to download the PDF from their account.
+                    </p>
+                </div>
+            )}
+        </div>
+    );
+}
+
+function BookForm({ initial, categories, onClose, onSaved }) {
+    const [form, setForm] = useState({ ...BLANK, ...(initial || {}) });
+    const [saving, setSaving] = useState(false);
+    const [draftingBio, setDraftingBio] = useState(false);
+    const isEdit = !!initial?.id;
+
+    const onDraftBio = async () => {
+        if (!isEdit) {
+            toast.info("Save the book first, then draft a bio.");
+            return;
+        }
+        setDraftingBio(true);
+        try {
+            const res = await adminDraftAuthorBio(initial.id);
+            setForm((f) => ({ ...f, author_bio: res.author_bio }));
+            toast.success("Bio drafted. Review & edit before saving.");
+        } catch (err) {
+            toast.error(formatApiError(err));
+        } finally {
+            setDraftingBio(false);
+        }
+    };
+
+    const onChange = (e) => {
+        const { name, value, type, checked } = e.target;
+        setForm((f) => ({
+            ...f,
+            [name]: type === "checkbox" ? checked : value,
+        }));
+    };
+
+    const onSubmit = async (e) => {
+        e.preventDefault();
+        setSaving(true);
+        try {
+            const payload = {
+                ...form,
+                price: Number(form.price),
+                original_price: form.original_price === "" ? null : Number(form.original_price),
+                pages: Number(form.pages),
+                stock: Number(form.stock),
+            };
+            if (isEdit) {
+                await adminUpdateBook(initial.id, payload);
+                toast.success("Book updated.");
+            } else {
+                await adminCreateBook(payload);
+                toast.success("Book created.");
+            }
+            onSaved();
+            onClose();
+        } catch (err) {
+            toast.error(formatApiError(err));
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-start justify-center p-4 overflow-y-auto">
+            <form
+                onSubmit={onSubmit}
+                data-testid="admin-book-form"
+                className="bg-white border border-[#002B5C] w-full max-w-3xl p-8 my-10"
+            >
+                <div className="flex items-center justify-between">
+                    <div>
+                        <div className="overline">{isEdit ? "Edit Book" : "New Book"}</div>
+                        <h2 className="font-serif text-3xl mt-1 text-[#002B5C]">
+                            {isEdit ? form.title || "Edit" : "Add a new title"}
+                        </h2>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        data-testid="book-form-close"
+                        className="p-2 hover:bg-[#F5F7FA]"
+                    >
+                        <X size={18} strokeWidth={1.5} />
+                    </button>
+                </div>
+                <div className="mt-6 grid grid-cols-2 gap-4">
+                    {[
+                        ["title", "Title", "text", 2, true],
+                        ["subtitle", "Subtitle", "text", 2, false],
+                        ["author", "Author", "text", 1, true],
+                        ["isbn", "ISBN", "text", 1, true],
+                        ["subject", "Subject", "text", 1, true],
+                        ["grade", "Grade / Level", "text", 1, false],
+                        ["price", "Price (INR)", "number", 1, true],
+                        ["original_price", "Original Price (optional)", "number", 1, false],
+                        ["pages", "Pages", "number", 1, false],
+                        ["stock", "Stock", "number", 1, false],
+                    ].map(([name, label, type, col, req]) => (
+                        <div key={name} className={col === 2 ? "col-span-2" : "col-span-2 sm:col-span-1"}>
+                            <label className="overline !text-[10px] block mb-2">{label}</label>
+                            <input
+                                type={type}
+                                name={name}
+                                required={req}
+                                value={form[name] ?? ""}
+                                onChange={onChange}
+                                data-testid={`book-form-${name}`}
+                                className="w-full border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none focus:border-[#002B5C]"
+                            />
+                        </div>
+                    ))}
+                    <div className="col-span-2">
+                        <CoverUploader
+                            value={form.cover_image}
+                            onChange={(url) => setForm((f) => ({ ...f, cover_image: url }))}
+                        />
+                    </div>
+                    <div className="col-span-2 sm:col-span-1">
+                        <label className="overline !text-[10px] block mb-2">Category</label>
+                        <select
+                            name="category"
+                            value={form.category}
+                            onChange={onChange}
+                            data-testid="book-form-category"
+                            className="w-full border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none focus:border-[#002B5C]"
+                        >
+                            {categories.map((c) => (
+                                <option key={c.id} value={c.id}>
+                                    {c.name}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                    <div className="col-span-2">
+                        <label className="overline !text-[10px] block mb-2">Description</label>
+                        <textarea
+                            name="description"
+                            required
+                            rows={4}
+                            value={form.description}
+                            onChange={onChange}
+                            data-testid="book-form-description"
+                            className="w-full border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none focus:border-[#002B5C] resize-none"
+                        />
+                    </div>
+                    <div className="col-span-2 border-t border-[#E5E7EB] pt-6 mt-2">
+                        <div className="overline mb-4">About the Author</div>
+                        <div className="space-y-4">
+                            <div>
+                                <div className="flex items-center justify-between mb-2">
+                                    <label className="overline !text-[10px]">Author Bio</label>
+                                    <button
+                                        type="button"
+                                        onClick={onDraftBio}
+                                        disabled={draftingBio || !isEdit}
+                                        title={isEdit ? "Draft a bio with AI" : "Save the book first, then draft a bio"}
+                                        data-testid="book-form-draft-bio"
+                                        className="inline-flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-widest border border-[#F59E0B] text-[#002B5C] px-2 py-1 hover:bg-[#F59E0B] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                                    >
+                                        <Sparkles size={11} strokeWidth={1.75} className="text-[#F59E0B]" />
+                                        {draftingBio ? "Drafting…" : "Draft with AI"}
+                                    </button>
+                                </div>
+                                <textarea
+                                    name="author_bio"
+                                    rows={4}
+                                    placeholder="A short paragraph about the author — affiliations, expertise, notable work. Shown on the book detail page."
+                                    value={form.author_bio || ""}
+                                    onChange={onChange}
+                                    data-testid="book-form-author-bio"
+                                    className="w-full border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none focus:border-[#002B5C] resize-none"
+                                />
+                            </div>
+                            <CoverUploader
+                                value={form.author_photo}
+                                onChange={(url) => setForm((f) => ({ ...f, author_photo: url }))}
+                                label="Author Photo"
+                                testIdPrefix="author-photo"
+                                aspect="square"
+                            />
+                        </div>
+                    </div>
+                    <div className="col-span-2 flex gap-6 text-sm">
+                        <label className="flex items-center gap-2">
+                            <input
+                                type="checkbox"
+                                name="bestseller"
+                                checked={!!form.bestseller}
+                                onChange={onChange}
+                                data-testid="book-form-bestseller"
+                            />{" "}
+                            Bestseller
+                        </label>
+                        <label className="flex items-center gap-2">
+                            <input
+                                type="checkbox"
+                                name="new_release"
+                                checked={!!form.new_release}
+                                onChange={onChange}
+                                data-testid="book-form-new-release"
+                            />{" "}
+                            New Release
+                        </label>
+                    </div>
+                </div>
+
+                {/* eBook management — only for existing books */}
+                {isEdit && (
+                    <EbookManager
+                        bookId={initial.id}
+                        hasEbook={!!initial.has_ebook || !!initial.ebook_filename}
+                        filename={initial.ebook_filename}
+                        onChange={() => onSaved()}
+                    />
+                )}
+
+                <div className="mt-8 flex justify-end gap-3">
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="px-6 py-3 text-sm border border-[#E5E7EB]"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        type="submit"
+                        disabled={saving}
+                        data-testid="book-form-save"
+                        className="px-8 py-3 text-sm bg-[#002B5C] text-[#FFFFFF] hover:bg-[#001F42] disabled:opacity-60"
+                    >
+                        {saving ? "Saving…" : isEdit ? "Save changes" : "Create book"}
+                    </button>
+                </div>
+            </form>
+        </div>
+    );
+}
+
+export default function AdminBooks() {
+    const [books, setBooks] = useState([]);
+    const [cats, setCats] = useState([]);
+    const [editing, setEditing] = useState(null); // object or "new"
+    const [csvOpen, setCsvOpen] = useState(false);
+    const [loading, setLoading] = useState(true);
+    const [query, setQuery] = useState("");
+    const [selected, setSelected] = useState(() => new Set());
+    const [deleteAllOpen, setDeleteAllOpen] = useState(false);
+    const [bulkDraftingBios, setBulkDraftingBios] = useState(false);
+
+    const load = () => {
+        setLoading(true);
+        fetchBooks({ limit: 500 })
+            .then((list) => {
+                setBooks(list);
+                setSelected(new Set());
+            })
+            .finally(() => setLoading(false));
+    };
+
+    useEffect(() => {
+        fetchCategories().then(setCats);
+        load();
+    }, []);
+
+    const onDelete = async (id, title) => {
+        if (!window.confirm(`Delete "${title}"?`)) return;
+        try {
+            await adminDeleteBook(id);
+            toast.success("Book deleted.");
+            load();
+        } catch (err) {
+            toast.error(formatApiError(err));
+        }
+    };
+
+    const toggleOne = (id) => {
+        setSelected((prev) => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+    };
+
+    const togglePage = (rows) => {
+        setSelected((prev) => {
+            const allSelected = rows.every((r) => prev.has(r.id));
+            const next = new Set(prev);
+            if (allSelected) rows.forEach((r) => next.delete(r.id));
+            else rows.forEach((r) => next.add(r.id));
+            return next;
+        });
+    };
+
+    const onBulkDelete = async () => {
+        const ids = Array.from(selected);
+        if (ids.length === 0) return;
+        if (!window.confirm(`Delete ${ids.length} selected book${ids.length === 1 ? "" : "s"}? This cannot be undone.`)) return;
+        try {
+            const res = await adminBulkDeleteBooks(ids);
+            toast.success(`Deleted ${res.deleted} book${res.deleted === 1 ? "" : "s"}.`);
+            load();
+        } catch (err) {
+            toast.error(formatApiError(err));
+        }
+    };
+
+    const onBulkDraftBios = async () => {
+        const missing = books.filter((b) => !b.author_bio).length;
+        if (missing === 0) {
+            toast.info("Every book already has an author bio.");
+            return;
+        }
+        if (!window.confirm(`Draft AI bios for ${missing} book${missing === 1 ? "" : "s"} missing one? This usually takes a couple of minutes.`)) return;
+        setBulkDraftingBios(true);
+        toast.info(`Drafting bios for ${missing} books — this runs in the background. You can keep using the dashboard.`);
+        try {
+            const res = await adminBulkDraftAuthorBios(false);
+            toast.success(`Done — ${res.drafted} bios drafted, ${res.failed} failed.`);
+            load();
+        } catch (err) {
+            toast.error(formatApiError(err));
+        } finally {
+            setBulkDraftingBios(false);
+        }
+    };
+
+    const filtered = books.filter(
+        (b) =>
+            !query ||
+            b.title.toLowerCase().includes(query.toLowerCase()) ||
+            b.author.toLowerCase().includes(query.toLowerCase()) ||
+            b.isbn.includes(query),
+    );
+
+    const allFilteredSelected = filtered.length > 0 && filtered.every((r) => selected.has(r.id));
+
+    return (
+        <div data-testid="admin-books-page">
+            <div className="flex flex-wrap items-end justify-between gap-4">
+                <div>
+                    <div className="overline">Catalogue</div>
+                    <h1 className="font-serif text-4xl mt-2 text-[#002B5C]">
+                        Books ({books.length})
+                    </h1>
+                </div>
+                <div className="flex gap-3">
+                    <input
+                        placeholder="Search title / author / ISBN"
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        data-testid="admin-books-search"
+                        className="border border-[#E5E7EB] bg-white px-4 py-2 text-sm w-72 outline-none focus:border-[#002B5C]"
+                    />
+                    <button
+                        onClick={() => setCsvOpen(true)}
+                        data-testid="admin-import-csv-button"
+                        className="inline-flex items-center gap-2 border border-[#002B5C] text-[#002B5C] px-4 py-2 text-sm hover:bg-[#F5F7FA]"
+                    >
+                        <Upload size={14} strokeWidth={1.5} /> Import CSV
+                    </button>
+                    <button
+                        onClick={onBulkDraftBios}
+                        disabled={bulkDraftingBios}
+                        data-testid="admin-bulk-draft-bios-button"
+                        title="AI-draft author bios for every book missing one"
+                        className="inline-flex items-center gap-2 border border-[#F59E0B] text-[#002B5C] px-4 py-2 text-sm hover:bg-[#F59E0B] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                        <Sparkles size={14} strokeWidth={1.5} className="text-[#F59E0B]" />
+                        {bulkDraftingBios ? "Drafting…" : "Draft missing bios"}
+                    </button>
+                    <button
+                        onClick={() => setDeleteAllOpen(true)}
+                        data-testid="admin-delete-all-button"
+                        className="inline-flex items-center gap-2 border border-[#CC0033] text-[#CC0033] px-4 py-2 text-sm hover:bg-[#CC0033]/5"
+                    >
+                        <Trash size={14} strokeWidth={1.5} /> Delete all
+                    </button>
+                    <button
+                        onClick={() => setEditing("new")}
+                        data-testid="admin-new-book-button"
+                        className="inline-flex items-center gap-2 bg-[#002B5C] text-[#FFFFFF] px-4 py-2 text-sm hover:bg-[#001F42]"
+                    >
+                        <Plus size={14} strokeWidth={1.5} /> New Book
+                    </button>
+                </div>
+            </div>
+
+            {selected.size > 0 && (
+                <div
+                    data-testid="admin-bulk-actions-bar"
+                    className="mt-6 flex items-center justify-between bg-[#002B5C] text-white px-4 py-3 text-sm"
+                >
+                    <div>
+                        <span data-testid="admin-selected-count" className="font-mono">{selected.size}</span> selected
+                    </div>
+                    <div className="flex gap-3">
+                        <button
+                            onClick={() => setSelected(new Set())}
+                            className="text-xs text-white/80 hover:text-white px-3 py-1"
+                        >
+                            Clear
+                        </button>
+                        <button
+                            onClick={onBulkDelete}
+                            data-testid="admin-bulk-delete-button"
+                            className="inline-flex items-center gap-2 bg-[#CC0033] hover:bg-[#A80029] px-4 py-2 text-xs uppercase tracking-wider"
+                        >
+                            <Trash2 size={12} strokeWidth={1.5} /> Delete selected
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            <div className="mt-8 bg-white border border-[#E5E7EB] overflow-x-auto">
+                <table className="w-full text-sm">
+                    <thead className="bg-[#F5F7FA] text-[10px] font-mono uppercase tracking-widest text-[#4B5563]">
+                        <tr>
+                            <th className="px-4 py-3 w-10">
+                                <input
+                                    type="checkbox"
+                                    checked={allFilteredSelected}
+                                    onChange={() => togglePage(filtered)}
+                                    data-testid="admin-books-select-all"
+                                    className="h-4 w-4 cursor-pointer accent-[#002B5C]"
+                                />
+                            </th>
+                            <th className="text-left px-4 py-3">Title</th>
+                            <th className="text-left px-4 py-3">Author</th>
+                            <th className="text-left px-4 py-3">Category</th>
+                            <th className="text-right px-4 py-3">Price</th>
+                            <th className="text-right px-4 py-3">Stock</th>
+                            <th className="px-4 py-3"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {loading && (
+                            <tr>
+                                <td colSpan={7} className="px-4 py-10 text-center text-[#4B5563]">
+                                    Loading…
+                                </td>
+                            </tr>
+                        )}
+                        {filtered.map((b) => (
+                            <tr
+                                key={b.id}
+                                data-testid={`admin-book-row-${b.id}`}
+                                className="border-t border-[#E5E7EB] hover:bg-[#F5F7FA]/40"
+                            >
+                                <td className="px-4 py-3">
+                                    <input
+                                        type="checkbox"
+                                        checked={selected.has(b.id)}
+                                        onChange={() => toggleOne(b.id)}
+                                        data-testid={`admin-book-select-${b.id}`}
+                                        className="h-4 w-4 cursor-pointer accent-[#002B5C]"
+                                    />
+                                </td>
+                                <td className="px-4 py-3">
+                                    <div className="flex items-center gap-3">
+                                        <img
+                                            src={b.cover_image}
+                                            alt=""
+                                            className="w-8 h-12 object-cover border border-[#E5E7EB]"
+                                        />
+                                        <div>
+                                            <div className="font-serif text-base text-[#002B5C]">
+                                                {b.title}
+                                            </div>
+                                            <div className="font-mono text-[10px] text-[#4B5563]">
+                                                {b.isbn}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td className="px-4 py-3 text-[#4B5563]">{b.author}</td>
+                                <td className="px-4 py-3 text-[#4B5563]">{b.category}</td>
+                                <td className="px-4 py-3 text-right font-mono text-[#002B5C]">
+                                    {formatINR(b.price)}
+                                </td>
+                                <td className="px-4 py-3 text-right font-mono text-[#4B5563]">
+                                    {b.stock}
+                                </td>
+                                <td className="px-4 py-3 text-right whitespace-nowrap">
+                                    <button
+                                        onClick={() => setEditing(b)}
+                                        data-testid={`admin-edit-book-${b.id}`}
+                                        className="inline-flex items-center gap-1 text-xs px-2 py-1 hover:bg-[#F5F7FA] mr-1"
+                                    >
+                                        <Pencil size={12} strokeWidth={1.5} /> Edit
+                                    </button>
+                                    <button
+                                        onClick={() => onDelete(b.id, b.title)}
+                                        data-testid={`admin-delete-book-${b.id}`}
+                                        className="inline-flex items-center gap-1 text-xs px-2 py-1 hover:bg-[#F5F7FA] text-[#CC0033]"
+                                    >
+                                        <Trash2 size={12} strokeWidth={1.5} /> Delete
+                                    </button>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+
+            {editing && (
+                <BookForm
+                    initial={editing === "new" ? null : editing}
+                    categories={cats}
+                    onClose={() => setEditing(null)}
+                    onSaved={load}
+                />
+            )}
+            {csvOpen && (
+                <CsvImportDialog
+                    onClose={() => setCsvOpen(false)}
+                    onDone={load}
+                />
+            )}
+            {deleteAllOpen && (
+                <DeleteAllDialog
+                    count={books.length}
+                    onClose={() => setDeleteAllOpen(false)}
+                    onDone={load}
+                />
+            )}
+        </div>
+    );
+}
+
+function DeleteAllDialog({ count, onClose, onDone }) {
+    const [confirm, setConfirm] = useState("");
+    const [busy, setBusy] = useState(false);
+    const CONFIRM_TEXT = "DELETE ALL";
+
+    const onConfirm = async () => {
+        if (confirm !== CONFIRM_TEXT) return;
+        setBusy(true);
+        try {
+            const res = await adminDeleteAllBooks(CONFIRM_TEXT);
+            toast.success(`Deleted all ${res.deleted} books.`);
+            onDone && onDone();
+            onClose();
+        } catch (err) {
+            toast.error(formatApiError(err));
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+            <div
+                data-testid="admin-delete-all-dialog"
+                className="bg-white border-t-4 border-[#CC0033] w-full max-w-lg p-8"
+            >
+                <div className="flex items-start justify-between">
+                    <div>
+                        <div className="overline !text-[#CC0033]">Destructive action</div>
+                        <h2 className="font-serif text-3xl mt-1 text-[#002B5C]">
+                            Delete every book?
+                        </h2>
+                    </div>
+                    <button onClick={onClose} className="p-2 hover:bg-[#F5F7FA]">
+                        <X size={18} strokeWidth={1.5} />
+                    </button>
+                </div>
+
+                <p className="mt-6 text-sm text-[#4B5563]">
+                    This will permanently remove <strong>all {count} books</strong> from the catalogue.
+                    Orders, reviews and desk-copy records are <strong>not</strong> affected, but any
+                    references to these books will become broken. This cannot be undone.
+                </p>
+
+                <label className="block mt-6">
+                    <span className="overline !text-[10px] block mb-2">
+                        Type <code className="font-mono text-[#CC0033]">{CONFIRM_TEXT}</code> to confirm
+                    </span>
+                    <input
+                        type="text"
+                        value={confirm}
+                        onChange={(e) => setConfirm(e.target.value)}
+                        data-testid="admin-delete-all-confirm-input"
+                        className="w-full border border-[#E5E7EB] px-4 py-3 text-sm outline-none focus:border-[#CC0033] font-mono"
+                    />
+                </label>
+
+                <div className="mt-8 flex justify-end gap-3">
+                    <button
+                        onClick={onClose}
+                        className="px-6 py-3 text-sm border border-[#E5E7EB]"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        onClick={onConfirm}
+                        disabled={confirm !== CONFIRM_TEXT || busy}
+                        data-testid="admin-delete-all-confirm-button"
+                        className="px-8 py-3 text-sm bg-[#CC0033] text-white hover:bg-[#A80029] disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                        {busy ? "Deleting…" : "Delete all books"}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}

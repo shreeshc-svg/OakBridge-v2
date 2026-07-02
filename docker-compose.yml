@@ -1,0 +1,20 @@
+# Local MongoDB for Oakbridge Publishing.
+# Start:  docker compose up -d
+# Stop:   docker compose down   (add -v to also wipe data)
+#
+# This matches MONGO_URL=mongodb://localhost:27017 in backend/.env.
+# The backend and frontend are run natively (see README) — only the
+# database runs in Docker, which is all most local setups need.
+
+services:
+  mongo:
+    image: mongo:7
+    container_name: oakbridge-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - oakbridge_mongo_data:/data/db
+
+volumes:
+  oakbridge_mongo_data:
