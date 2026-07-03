@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 import uuid
 import logging
+import secrets
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 
@@ -79,6 +80,7 @@ class UserPublic(BaseModel):
     name: str
     role: str = "customer"
     created_at: str
+    email_verified: bool = False
 
 
 class AuthResponse(BaseModel):
@@ -299,6 +301,7 @@ async def seed_admin():
             "name": "Oakbridge Admin",
             "role": "admin",
             "created_at": now_iso,
+            "email_verified": True,
         })
         log.info(f"Seeded admin user: {email}")
     elif not verify_password(password, existing["password_hash"]):
@@ -339,6 +342,7 @@ async def register(payload: UserCreate):
         raise HTTPException(status_code=400, detail="Email already registered")
     user_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
+    otp = f"{secrets.randbelow(1000000):06d}"
     doc = {
         "id": user_id,
         "email": email,
@@ -346,11 +350,20 @@ async def register(payload: UserCreate):
         "name": payload.name.strip(),
         "role": "customer",
         "created_at": now,
+        "email_verified": False,
+        "otp_hash": hash_password(otp),
+        "otp_expires_at": (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat(),
+        "otp_attempts": 0,
     }
     await db.users.insert_one({**doc})
+    try:
+        from emailer import send_verification_otp
+        await send_verification_otp(email, doc["name"], otp)
+    except Exception:  # noqa: BLE001
+        logging.getLogger(__name__).exception("verification OTP email failed for %s", email)
     token = create_access_token(user_id, email, "customer")
     return AuthResponse(
-        user=UserPublic(id=user_id, email=email, name=doc["name"], role="customer", created_at=now),
+        user=UserPublic(id=user_id, email=email, name=doc["name"], role="customer", created_at=now, email_verified=False),
         access_token=token,
     )
 
@@ -369,6 +382,7 @@ async def login(payload: UserLogin):
             name=user["name"],
             role=user.get("role", "customer"),
             created_at=user["created_at"],
+            email_verified=user.get("email_verified", False),
         ),
         access_token=token,
     )
@@ -383,6 +397,58 @@ async def me(user: dict = Depends(get_current_user)):
 async def logout():
     # Client-side token removal is sufficient for bearer tokens
     return {"ok": True}
+
+
+class OtpVerify(BaseModel):
+    code: str
+
+
+@auth_router.post("/verify-otp")
+async def verify_otp(payload: OtpVerify, user: dict = Depends(get_current_user)):
+    doc = await db.users.find_one({"id": user["id"]})
+    if not doc:
+        raise HTTPException(status_code=404, detail="User not found")
+    if doc.get("email_verified"):
+        return {"ok": True, "already_verified": True}
+    if not doc.get("otp_hash"):
+        raise HTTPException(status_code=400, detail="No verification pending. Request a new code.")
+    exp = doc.get("otp_expires_at")
+    if exp and datetime.fromisoformat(exp) < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="Code expired. Request a new one.")
+    if int(doc.get("otp_attempts", 0)) >= 5:
+        raise HTTPException(status_code=429, detail="Too many attempts. Request a new code.")
+    if not verify_password(payload.code.strip(), doc["otp_hash"]):
+        await db.users.update_one({"id": user["id"]}, {"$inc": {"otp_attempts": 1}})
+        raise HTTPException(status_code=400, detail="Incorrect code. Please try again.")
+    await db.users.update_one(
+        {"id": user["id"]},
+        {"$set": {"email_verified": True}, "$unset": {"otp_hash": "", "otp_expires_at": "", "otp_attempts": ""}},
+    )
+    return {"ok": True}
+
+
+@auth_router.post("/resend-otp")
+async def resend_otp(user: dict = Depends(get_current_user)):
+    doc = await db.users.find_one({"id": user["id"]})
+    if not doc:
+        raise HTTPException(status_code=404, detail="User not found")
+    if doc.get("email_verified"):
+        return {"ok": True, "already_verified": True}
+    otp = f"{secrets.randbelow(1000000):06d}"
+    await db.users.update_one(
+        {"id": user["id"]},
+        {"$set": {
+            "otp_hash": hash_password(otp),
+            "otp_expires_at": (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat(),
+            "otp_attempts": 0,
+        }},
+    )
+    try:
+        from emailer import send_verification_otp
+        await send_verification_otp(doc["email"], doc.get("name", ""), otp)
+    except Exception:  # noqa: BLE001
+        logging.getLogger(__name__).exception("resend OTP failed for %s", doc.get("email"))
+    return {"ok": True, "message": "A new code is on its way."}
 
 
 # ============== PUBLIC EXTRAS ROUTER ==============

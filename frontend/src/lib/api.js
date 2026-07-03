@@ -61,6 +61,10 @@ export const authLogin = (email, password) =>
 export const authRegister = (payload) =>
     api.post("/auth/register", payload).then((r) => r.data);
 export const authMe = () => api.get("/auth/me").then((r) => r.data);
+export const verifyOtp = (code) =>
+    api.post("/auth/verify-otp", { code }).then((r) => r.data);
+export const resendOtp = () =>
+    api.post("/auth/resend-otp").then((r) => r.data);
 
 // My account
 export const fetchMyOrders = () => api.get("/my/orders").then((r) => r.data);

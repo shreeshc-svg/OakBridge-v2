@@ -2,13 +2,42 @@ import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Package, LogOut, User } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
-import { fetchMyOrders, formatINR } from "../lib/api";
+import { fetchMyOrders, formatINR, verifyOtp, resendOtp, formatApiError } from "../lib/api";
+import { toast } from "sonner";
 
 export default function Account() {
-    const { user, logout } = useAuth();
+    const { user, logout, refresh } = useAuth();
     const nav = useNavigate();
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [otpCode, setOtpCode] = useState("");
+    const [verifying, setVerifying] = useState(false);
+    const [resending, setResending] = useState(false);
+
+    const onVerify = async () => {
+        setVerifying(true);
+        try {
+            await verifyOtp(otpCode);
+            toast.success("Email verified — thank you!");
+            setOtpCode("");
+            refresh();
+        } catch (err) {
+            toast.error(formatApiError(err) || "Verification failed.");
+        } finally {
+            setVerifying(false);
+        }
+    };
+    const onResend = async () => {
+        setResending(true);
+        try {
+            const res = await resendOtp();
+            toast.success(res?.message || "A new code is on its way.");
+        } catch (err) {
+            toast.error("Could not resend the code. Try again.");
+        } finally {
+            setResending(false);
+        }
+    };
 
     useEffect(() => {
         fetchMyOrders()
@@ -26,6 +55,51 @@ export default function Account() {
 
     return (
         <div data-testid="account-page" className="px-6 md:px-12 lg:px-16 py-16">
+            {user && user.email_verified === false && (
+                <div
+                    data-testid="verify-email-banner"
+                    className="mb-8 border border-[#F59E0B] bg-[#F59E0B]/10 p-6"
+                >
+                    <div className="font-serif text-xl text-[#002B5C]">
+                        Verify your email
+                    </div>
+                    <p className="text-sm text-[#4B5563] mt-1">
+                        We emailed a 6-digit code to{" "}
+                        <span className="text-[#002B5C]">{user.email}</span>. Enter it below to
+                        verify your account.
+                    </p>
+                    <div className="mt-4 flex flex-wrap items-center gap-3">
+                        <input
+                            value={otpCode}
+                            onChange={(e) =>
+                                setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 6))
+                            }
+                            inputMode="numeric"
+                            placeholder="123456"
+                            data-testid="otp-input"
+                            className="w-32 border border-[#E5E7EB] bg-white px-3 py-2 text-sm tracking-[0.3em] text-center outline-none focus:border-[#002B5C]"
+                        />
+                        <button
+                            type="button"
+                            onClick={onVerify}
+                            disabled={verifying || otpCode.length !== 6}
+                            data-testid="otp-verify"
+                            className="bg-[#002B5C] text-white px-5 py-2 text-sm font-medium hover:bg-[#001F42] disabled:opacity-50"
+                        >
+                            {verifying ? "Verifying…" : "Verify"}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={onResend}
+                            disabled={resending}
+                            data-testid="otp-resend"
+                            className="text-sm text-[#002B5C] border-b border-[#002B5C] hover:text-[#CC0033] disabled:opacity-50 pb-0.5"
+                        >
+                            {resending ? "Sending…" : "Resend code"}
+                        </button>
+                    </div>
+                </div>
+            )}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
                 <aside className="lg:col-span-3">
                     <div className="sticky top-24 border border-[#E5E7EB] bg-white p-6">

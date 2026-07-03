@@ -391,3 +391,37 @@ async def send_back_in_stock(to: str, book: dict) -> bool:
     subject = f"Back in stock — {book.get('title','your title')}"
     html = render_back_in_stock_html(book)
     return await send_email(to=to, subject=subject, html=html)
+
+
+# ====== Signup email verification (OTP) ======
+
+def render_verification_otp_html(name: str, code: str) -> str:
+    who = (name or "there").split(" ")[0]
+    return f"""\
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background-color:#F5F7FA;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:{BRAND_NAVY};">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#F5F7FA;padding:40px 16px;">
+  <tr><td align="center">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="560" style="max-width:560px;background-color:#FFFFFF;border:1px solid #E5E7EB;">
+      <tr><td style="background-color:{BRAND_NAVY};padding:28px 36px;color:#FFFFFF;">
+        <div style="font-family:Georgia,serif;font-size:22px;">Oakbridge <span style="color:{BRAND_AMBER};">Publishing</span></div>
+        <div style="font-family:monospace;text-transform:uppercase;letter-spacing:2px;font-size:11px;margin-top:6px;color:rgba(255,255,255,0.6);">Verify your email</div>
+      </td></tr>
+      <tr><td style="padding:36px 36px 8px;">
+        <h1 style="margin:0;font-family:Georgia,serif;font-weight:normal;font-size:24px;color:{BRAND_NAVY};">Hi {who},</h1>
+        <p style="margin:14px 0 0;font-size:15px;line-height:1.6;color:{BRAND_GREY};">Use the code below to verify your Oakbridge account. It expires in 10 minutes.</p>
+      </td></tr>
+      <tr><td style="padding:8px 36px 36px;">
+        <div style="font-family:monospace;font-size:40px;letter-spacing:12px;font-weight:700;color:{BRAND_NAVY};background:#F5F7FA;border:1px solid #E5E7EB;text-align:center;padding:20px 0;">{code}</div>
+        <p style="margin:16px 0 0;font-size:12px;color:{BRAND_GREY};">If you didn't create an account, you can safely ignore this email.</p>
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+</body></html>
+"""
+
+
+async def send_verification_otp(to: str, name: str, code: str) -> bool:
+    """Email a 6-digit signup verification code."""
+    return await send_email(to=to, subject="Your Oakbridge verification code", html=render_verification_otp_html(name, code))
