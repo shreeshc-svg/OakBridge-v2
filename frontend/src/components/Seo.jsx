@@ -2,7 +2,7 @@ import React from "react";
 
 const SITE = "https://oakbridge.in";
 const DEFAULT_IMG =
-    "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=1200&q=85";
+    "https://oakbridge.in/og-image.jpg";
 
 /**
  * React 19 hoists <title>/<meta>/<link> to <head> automatically, so this

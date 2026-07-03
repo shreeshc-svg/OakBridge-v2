@@ -65,6 +65,7 @@ export default function Checkout() {
     });
     const [couponCode, setCouponCode] = useState("");
     const [applyingCoupon, setApplyingCoupon] = useState(false);
+    const [couponMsg, setCouponMsg] = useState(null);
     const [submitting, setSubmitting] = useState(false);
     const nav = useNavigate();
 
@@ -72,9 +73,10 @@ export default function Checkout() {
         setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
 
     const onApplyCoupon = async (e) => {
-        e.preventDefault();
+        if (e && e.preventDefault) e.preventDefault();
         if (!couponCode.trim()) return;
         setApplyingCoupon(true);
+        setCouponMsg(null);
         try {
             const res = await validateCoupon(couponCode.trim(), subtotal);
             if (res.valid) {
@@ -85,12 +87,13 @@ export default function Checkout() {
                     value: res.value,
                 });
                 toast.success(res.message);
+                setCouponMsg({ type: "success", text: res.message });
                 setCouponCode("");
             } else {
-                toast.error(res.message);
+                setCouponMsg({ type: "error", text: res.message });
             }
         } catch (err) {
-            toast.error(formatApiError(err));
+            setCouponMsg({ type: "error", text: formatApiError(err) });
         } finally {
             setApplyingCoupon(false);
         }
@@ -349,28 +352,44 @@ export default function Checkout() {
                         </dl>
 
                         {!coupon && (
-                            <form
-                                onSubmit={onApplyCoupon}
-                                data-testid="coupon-form"
-                                className="mt-4 flex gap-2"
-                            >
-                                <input
-                                    type="text"
-                                    value={couponCode}
-                                    onChange={(e) => setCouponCode(e.target.value)}
-                                    placeholder="Coupon code"
-                                    data-testid="coupon-input"
-                                    className="flex-1 border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none focus:border-[#002B5C]"
-                                />
-                                <button
-                                    type="submit"
-                                    disabled={applyingCoupon || !couponCode.trim()}
-                                    data-testid="apply-coupon-button"
-                                    className="px-4 py-2 text-xs font-medium border border-[#002B5C] hover:bg-[#F5F7FA] disabled:opacity-50"
-                                >
-                                    {applyingCoupon ? "…" : "Apply"}
-                                </button>
-                            </form>
+                            <div data-testid="coupon-form" className="mt-4">
+                                <div className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        value={couponCode}
+                                        onChange={(e) => {
+                                            setCouponCode(e.target.value);
+                                            if (couponMsg) setCouponMsg(null);
+                                        }}
+                                        onKeyDown={(e) => {
+                                            if (e.key === "Enter") {
+                                                e.preventDefault();
+                                                onApplyCoupon();
+                                            }
+                                        }}
+                                        placeholder="Coupon code"
+                                        data-testid="coupon-input"
+                                        className="flex-1 border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none focus:border-[#002B5C]"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={onApplyCoupon}
+                                        disabled={applyingCoupon || !couponCode.trim()}
+                                        data-testid="apply-coupon-button"
+                                        className="px-4 py-2 text-xs font-medium border border-[#002B5C] hover:bg-[#F5F7FA] disabled:opacity-50"
+                                    >
+                                        {applyingCoupon ? "…" : "Apply"}
+                                    </button>
+                                </div>
+                                {couponMsg && (
+                                    <div
+                                        data-testid="coupon-message"
+                                        className={`mt-2 text-xs ${couponMsg.type === "error" ? "text-[#CC0033]" : "text-green-700"}`}
+                                    >
+                                        {couponMsg.text}
+                                    </div>
+                                )}
+                            </div>
                         )}
                         <div className="mt-5 pt-5 border-t border-[#E5E7EB] flex justify-between items-baseline">
                             <span className="overline">Total</span>
