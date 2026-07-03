@@ -74,6 +74,11 @@ export default function Footer() {
                 {/* Top grid */}
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-10 border-b border-white/10 pb-16">
                     <div className="md:col-span-4">
+                        <img
+                            src="/logo-white.svg"
+                            alt="Oakbridge Publishing"
+                            className="h-14 w-auto mb-6"
+                        />
                         <div className="overline !text-white/50">
                             Est. 2017 · New Delhi
                         </div>

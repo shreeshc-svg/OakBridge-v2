@@ -41,14 +41,13 @@ export default function Header() {
                     <Link
                         to="/"
                         data-testid="brand-logo"
-                        className="flex items-baseline gap-2 flex-shrink-0"
+                        className="flex items-center flex-shrink-0"
                     >
-                        <span className="font-serif text-2xl font-medium text-[#002B5C] tracking-tight">
-                            Oakbridge
-                        </span>
-                        <span className="overline hidden sm:inline">
-                            Publishing
-                        </span>
+                        <img
+                            src="/logo.svg"
+                            alt="Oakbridge Publishing"
+                            className="h-10 w-auto"
+                        />
                     </Link>
 
                     <nav className="hidden xl:flex items-center gap-5">
