@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import Seo from "../components/Seo";
 import { ArrowUpRight, Calendar, MapPin, Users, Sparkles, Mic, BookOpen, Award, Music, Smile, ShoppingBag, Brain, Building2 } from "lucide-react";
 
 const ASSET = (p) => `${process.env.REACT_APP_BACKEND_URL}${p}`;
@@ -207,6 +208,11 @@ export default function Events() {
 
     return (
         <div data-testid="events-page">
+            <Seo
+                title="Events"
+                description="Oakbridge Publishing events — Vidhi Utsav, the ILATS summit, book launches, panels and roundtables with scholars and policymakers."
+                path="/events"
+            />
             {/* HERO */}
             <section className="relative overflow-hidden border-b border-[#E5E7EB]">
                 <div className="relative min-h-[420px] md:min-h-[520px] bg-[#002B5C]">

@@ -1,4 +1,5 @@
 import React from "react";
+import Seo from "../components/Seo";
 import { Link } from "react-router-dom";
 import { BookOpen, Calendar, Cpu, GraduationCap, ArrowUpRight } from "lucide-react";
 
@@ -126,6 +127,11 @@ function VerticalCard({ v, reverse }) {
 export default function Verticals() {
     return (
         <div data-testid="verticals-page">
+            <Seo
+                title="What We Do"
+                description="Oakbridge Publishing's business verticals — publishing, events, digital solutions and professional training."
+                path="/what-we-do"
+            />
             <section className="px-6 md:px-12 lg:px-16 pt-20 pb-12 border-b border-[#E5E7EB]">
                 <div className="overline">What We Do</div>
                 <h1 className="font-serif text-5xl md:text-7xl mt-4 text-[#002B5C] leading-[0.95] max-w-4xl">

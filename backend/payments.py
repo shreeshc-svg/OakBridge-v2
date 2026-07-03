@@ -57,9 +57,13 @@ async def _apply_stock_decrement(order_id: str) -> None:
     )
     if claim.modified_count != 1:
         return  # already decremented, or order missing
-    order = await db.orders.find_one({"id": order_id}, {"_id": 0, "items": 1})
+    order = await db.orders.find_one({"id": order_id}, {"_id": 0, "items": 1, "coupon_code": 1})
     if not order:
         return
+    # Count coupon usage once (idempotent via the stock_decremented claim above).
+    code = order.get("coupon_code")
+    if code:
+        await db.coupons.update_one({"code": code}, {"$inc": {"used_count": 1}})
     for it in order.get("items", []):
         bid = it.get("book_id")
         qty = int(it.get("quantity", 0) or 0)

@@ -1,4 +1,5 @@
 import React from "react";
+import Seo from "../components/Seo";
 import { Link, useParams } from "react-router-dom";
 import { ArrowUpRight, Check } from "lucide-react";
 
@@ -109,6 +110,11 @@ export default function Solutions() {
 
     return (
         <div data-testid="solutions-index">
+            <Seo
+                title="Solutions"
+                description="Institutional solutions from Oakbridge Publishing — for schools, colleges, educators and firms: bulk orders, adoptions and custom publishing."
+                path="/solutions"
+            />
             <section className="px-6 md:px-12 lg:px-16 pt-20 pb-12 border-b border-[#E5E7EB]">
                 <div className="overline">Institutional Solutions</div>
                 <h1 className="font-serif text-5xl md:text-7xl mt-6 text-[#002B5C] leading-[0.95] max-w-4xl">

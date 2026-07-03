@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import Seo from "../components/Seo";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, ArrowUpRight } from "lucide-react";
 import BookCard from "../components/BookCard";
@@ -116,6 +117,11 @@ function AuthorsIndex() {
 
     return (
         <div data-testid="authors-index">
+            <Seo
+                title="Authors"
+                description="Meet the scholars, practitioners and subject-matter experts who write for Oakbridge Publishing."
+                path="/authors"
+            />
             <section className="px-6 md:px-12 lg:px-16 pt-20 pb-16 border-b border-[#E5E7EB]">
                 <div className="overline">Our Authors</div>
                 <h1 className="font-serif text-5xl md:text-7xl mt-4 text-[#002B5C] leading-[0.95] max-w-3xl">
