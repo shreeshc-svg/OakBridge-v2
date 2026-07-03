@@ -16,7 +16,7 @@ const VERTICALS = [
             "Print, eBook and institutional licensing",
         ],
         cta: { to: "/books", label: "Browse the bookstore" },
-        image: "https://static.prod-images.emergentagent.com/jobs/c0945775-4ab2-4359-9be5-2f2b7007b19c/images/1c8b6f04115c39962d20673c8b404b64a23318bf8ab8c811479ecc83aa8fed7d.png",
+        image: "https://images.unsplash.com/photo-1507842217343-583bb7270b66?auto=format&fit=crop&w=1600&q=85",
     },
     {
         id: "events",

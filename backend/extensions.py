@@ -285,7 +285,10 @@ AUTHORS_SEED = [
 
 async def seed_admin():
     email = os.environ.get("ADMIN_EMAIL", "admin@oakbridge.in").lower()
-    password = os.environ.get("ADMIN_PASSWORD", "admin123")
+    password = os.environ.get("ADMIN_PASSWORD")
+    if not password:
+        log.warning("ADMIN_PASSWORD not set — skipping admin seed. Set it to create/rotate the admin account.")
+        return
     existing = await db.users.find_one({"email": email})
     now_iso = datetime.now(timezone.utc).isoformat()
     if not existing:
@@ -448,6 +451,13 @@ async def create_review(book_id: str, payload: ReviewCreate, user: dict = Depend
     book = await db.books.find_one({"id": book_id}, {"_id": 0})
     if not book:
         raise HTTPException(status_code=404, detail="Book not found")
+    # Require a purchase: the user must have a paid order containing this book.
+    purchased = await db.orders.find_one(
+        {"user_id": user["id"], "payment_status": "paid", "items.book_id": book_id},
+        {"_id": 0, "id": 1},
+    )
+    if not purchased:
+        raise HTTPException(status_code=403, detail="You can only review a book you've purchased.")
     # One review per user per book
     existing = await db.reviews.find_one({"book_id": book_id, "user_id": user["id"]})
     if existing:

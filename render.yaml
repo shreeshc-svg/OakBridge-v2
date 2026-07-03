@@ -1,0 +1,54 @@
+# Render Blueprint — Oakbridge backend (FastAPI).
+# In Render: New → Blueprint → point at this repo. Set the `sync: false`
+# vars in the dashboard (they're secrets / environment-specific).
+services:
+  - type: web
+    name: oakbridge-api
+    runtime: python
+    rootDir: backend
+    plan: starter
+    buildCommand: "pip install -r requirements-local.txt"
+    startCommand: "uvicorn server:app --host 0.0.0.0 --port $PORT"
+    healthCheckPath: /api
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+      - key: DB_NAME
+        value: oakbridge
+      - key: SENDER_NAME
+        value: Oakbridge Publishing
+      - key: JWT_SECRET
+        generateValue: true          # Render generates a strong secret
+      # --- set these in the dashboard ---
+      - key: MONGO_URL              # Atlas SRV connection string
+        sync: false
+      - key: CORS_ORIGINS           # https://oakbridge.in,https://www.oakbridge.in
+        sync: false
+      - key: SITE_URL               # https://oakbridge.in
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD         # use the strong value from DEPLOYMENT.md
+        sync: false
+      - key: SENDER_EMAIL           # noreply@oakbridge.in (after domain verified)
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: ADMIN_NOTIFY_EMAIL
+        sync: false
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET
+        sync: false
+      # --- S3 (once the storage code migration lands) ---
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: AWS_REGION             # ap-south-1
+        sync: false
+      - key: S3_BUCKET
+        sync: false
