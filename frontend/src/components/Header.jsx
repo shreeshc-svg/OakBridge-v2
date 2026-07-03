@@ -37,16 +37,16 @@ export default function Header() {
                 data-testid="site-header"
                 className="sticky top-0 z-40 border-b border-[#002B5C]/10 bg-[#FFFFFF]/85 backdrop-blur-xl"
             >
-                <div className="flex items-center justify-between gap-4 px-6 md:px-12 lg:px-16 h-16">
+                <div className="flex items-center justify-between gap-4 px-6 md:px-12 lg:px-16 h-20">
                     <Link
                         to="/"
                         data-testid="brand-logo"
                         className="flex items-center flex-shrink-0"
                     >
                         <img
-                            src="/logo.svg"
+                            src="/logo.jpg"
                             alt="Oakbridge Publishing"
-                            className="h-10 w-auto"
+                            className="h-16 w-auto"
                         />
                     </Link>
 
