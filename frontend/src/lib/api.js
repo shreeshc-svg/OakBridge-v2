@@ -150,6 +150,8 @@ export const myBookEbookUrl = (bookId) => `${API}/my/books/${bookId}/ebook`;
 // Inventory
 export const adminLowStock = (threshold = 10) =>
     api.get("/admin/inventory/low-stock", { params: { threshold } }).then((r) => r.data);
+export const adminInventory = (threshold = 10) =>
+    api.get("/admin/inventory", { params: { threshold } }).then((r) => r.data);
 
 // Submissions
 export const submitManuscript = (payload) =>

@@ -696,6 +696,27 @@ async def admin_bulk_import(file: UploadFile = File(...)):
 
 
 
+@admin_router.get("/inventory")
+async def admin_inventory(threshold: int = 10):
+    """Full inventory: every title with its stock, plus summary counts."""
+    books = await db.books.find(
+        {},
+        {"_id": 0, "id": 1, "title": 1, "author": 1, "isbn": 1,
+         "cover_image": 1, "price": 1, "stock": 1, "category": 1},
+    ).sort([("stock", 1)]).to_list(5000)
+    total_units = sum(int(b.get("stock", 0) or 0) for b in books)
+    oos = sum(1 for b in books if int(b.get("stock", 0) or 0) <= 0)
+    low = sum(1 for b in books if 0 < int(b.get("stock", 0) or 0) <= threshold)
+    return {
+        "threshold": threshold,
+        "total_titles": len(books),
+        "total_units": total_units,
+        "out_of_stock": oos,
+        "low_stock": low,
+        "books": books,
+    }
+
+
 @admin_router.get("/inventory/low-stock")
 async def admin_low_stock(threshold: int = 10):
     low = await db.books.find(
