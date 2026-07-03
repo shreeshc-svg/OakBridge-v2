@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import Seo from "../components/Seo";
 import { Link } from "react-router-dom";
 import { ArrowUpRight, BookOpen, GraduationCap, Building2, Calendar, Cpu, Briefcase, Users } from "lucide-react";
 import BookCard from "../components/BookCard";
@@ -113,6 +114,11 @@ export default function Home() {
 
     return (
         <div data-testid="home-page">
+            <Seo
+                title="Independent Scholarly Press"
+                description="Oakbridge Publishing — authoritative law, tax, business and academic titles, reference works, events and training for students, professionals and institutions."
+                path="/"
+            />
             {/* ============== HERO ============== */}
             <section className="relative overflow-hidden border-b border-[#002B5C]/10">
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-0">

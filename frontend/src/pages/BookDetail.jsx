@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import Seo from "../components/Seo";
 import { Link, useParams } from "react-router-dom";
 import { Minus, Plus, ShoppingBag, ArrowLeft, Star, GraduationCap } from "lucide-react";
 import BookCard from "../components/BookCard";
@@ -65,6 +66,38 @@ export default function BookDetail() {
     const oos = stock <= 0;
     const low = !oos && stock <= LOW_STOCK;
 
+    const seoDesc = (book.description || "").slice(0, 160);
+    const bookLd = {
+        "@context": "https://schema.org",
+        "@type": "Book",
+        name: book.title,
+        ...(book.subtitle ? { alternateName: book.subtitle } : {}),
+        author: { "@type": "Person", name: book.author },
+        isbn: book.isbn,
+        numberOfPages: book.pages,
+        inLanguage: book.language,
+        bookFormat: "https://schema.org/Hardcover",
+        publisher: { "@type": "Organization", name: book.publisher },
+        image: book.cover_image,
+        description: book.description,
+        offers: {
+            "@type": "Offer",
+            price: book.price,
+            priceCurrency: "INR",
+            availability: stock > 0 ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
+            url: `https://oakbridge.in/books/${book.id}`,
+        },
+    };
+    const crumbLd = {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        itemListElement: [
+            { "@type": "ListItem", position: 1, name: "Home", item: "https://oakbridge.in/" },
+            { "@type": "ListItem", position: 2, name: "Bookstore", item: "https://oakbridge.in/books" },
+            { "@type": "ListItem", position: 3, name: book.title, item: `https://oakbridge.in/books/${book.id}` },
+        ],
+    };
+
     const onAdd = () => {
         addItem(book, qty);
     };
@@ -88,6 +121,14 @@ export default function BookDetail() {
 
     return (
         <div data-testid="book-detail-page">
+            <Seo
+                title={book.title}
+                description={seoDesc}
+                path={`/books/${book.id}`}
+                image={book.cover_image}
+                type="book"
+                jsonLd={[bookLd, crumbLd]}
+            />
             <div className="px-6 md:px-12 lg:px-16 pt-10 pb-8">
                 <Link
                     to="/books"

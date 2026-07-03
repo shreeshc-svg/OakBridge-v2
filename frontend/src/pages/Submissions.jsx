@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import Seo from "../components/Seo";
 import { Link } from "react-router-dom";
 import { CheckCircle2, FileText } from "lucide-react";
 import { submitManuscript, formatApiError } from "../lib/api";
@@ -54,6 +55,11 @@ export default function Submissions() {
 
     return (
         <div data-testid="submissions-page">
+            <Seo
+                title="Author Submissions"
+                description="Submit your manuscript to Oakbridge Publishing. We welcome scholarly and professional proposals across law, tax, business, academic and reference subjects."
+                path="/submissions"
+            />
             <section className="px-6 md:px-12 lg:px-16 pt-20 pb-16 border-b border-[#E5E7EB]">
                 <div className="overline">Author Submissions</div>
                 <h1 className="font-serif text-5xl md:text-7xl mt-4 text-[#002B5C] leading-[0.95] max-w-3xl">

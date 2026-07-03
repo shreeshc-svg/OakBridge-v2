@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import Seo from "../components/Seo";
 import { Link } from "react-router-dom";
 import { ArrowUpRight, Cpu } from "lucide-react";
 import { toast } from "sonner";
@@ -43,6 +44,11 @@ export default function ComingSoon({
 
     return (
         <div data-testid={pageTestId}>
+            <Seo
+                title={eyebrow}
+                description={body}
+                path={typeof window !== "undefined" ? window.location.pathname : undefined}
+            />
             {/* HERO */}
             <section className="relative overflow-hidden border-b border-[#E5E7EB] bg-[#002B5C] text-white">
                 <div

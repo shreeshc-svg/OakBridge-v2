@@ -1,4 +1,5 @@
 import React from "react";
+import Seo from "../components/Seo";
 import { Link } from "react-router-dom";
 import { ArrowUpRight } from "lucide-react";
 
@@ -13,6 +14,11 @@ const milestones = [
 export default function About() {
     return (
         <div data-testid="about-page">
+            <Seo
+                title="About"
+                description="Oakbridge Publishing is an independent scholarly press founded in 2017 by two veteran publishing professionals, producing authoritative law, tax, business and academic titles."
+                path="/about"
+            />
             <section className="px-6 md:px-12 lg:px-16 pt-20 pb-24 border-b border-[#E5E7EB]">
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
                     <div className="lg:col-span-7">

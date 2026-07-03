@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import Seo from "../components/Seo";
 import { useSearchParams } from "react-router-dom";
 import { Search, SlidersHorizontal, X } from "lucide-react";
 import BookCard from "../components/BookCard";
@@ -64,6 +65,11 @@ export default function Catalog() {
 
     return (
         <div data-testid="catalog-page">
+            <Seo
+                title={activeCat ? activeCat.name : search ? `Search: ${search}` : "Bookstore"}
+                description={activeCat ? activeCat.description : "Browse Oakbridge Publishing's full catalogue — law, tax, business, academic, reference, children's and test-prep titles."}
+                path={category ? `/books?category=${category}` : "/books"}
+            />
             {/* ============ HERO BANNER ============ */}
             <section
                 data-testid="catalog-hero"

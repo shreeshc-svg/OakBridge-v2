@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import Seo from "../components/Seo";
 import { Mail, MapPin, Phone } from "lucide-react";
 import { submitContact } from "../lib/api";
 import { toast } from "sonner";
@@ -38,6 +39,11 @@ export default function Contact() {
 
     return (
         <div data-testid="contact-page">
+            <Seo
+                title="Contact"
+                description="Get in touch with Oakbridge Publishing about orders, manuscript submissions, rights, adoptions and partnerships."
+                path="/contact"
+            />
             <section className="px-6 md:px-12 lg:px-16 pt-20 pb-16 border-b border-[#E5E7EB]">
                 <div className="overline">Get in Touch</div>
                 <h1 className="font-serif text-5xl md:text-7xl mt-6 text-[#002B5C] leading-[0.95] max-w-3xl">
