@@ -1,10 +1,22 @@
 import React from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Minus, Plus, Trash2, ArrowRight } from "lucide-react";
+import { toast } from "sonner";
 import { useCart } from "../context/CartContext";
+import { useAuth } from "../context/AuthContext";
 import { formatINR } from "../lib/api";
 
 export default function Cart() {
+    const nav = useNavigate();
+    const { isAuthenticated } = useAuth();
+    const proceedToCheckout = () => {
+        if (isAuthenticated) {
+            nav("/checkout");
+        } else {
+            toast.info("Please sign in to complete your purchase.");
+            nav("/login", { state: { from: { pathname: "/checkout" } } });
+        }
+    };
     const {
         items,
         updateQty,
@@ -154,14 +166,15 @@ export default function Cart() {
                                     {formatINR(total)}
                                 </span>
                             </div>
-                            <Link
-                                to="/checkout"
+                            <button
+                                type="button"
+                                onClick={proceedToCheckout}
                                 data-testid="cart-page-checkout-button"
                                 className="mt-6 inline-flex items-center justify-center gap-2 w-full bg-[#002B5C] text-[#FFFFFF] py-4 text-sm font-medium hover:bg-[#001F42] transition-colors"
                             >
                                 Proceed to Checkout
                                 <ArrowRight size={14} strokeWidth={1.5} />
-                            </Link>
+                            </button>
                             <p className="text-xs text-[#4B5563] text-center mt-3 font-mono">
                                 Free shipping on orders over ₹1500.
                             </p>

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import Seo from "../components/Seo";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useNavigate } from "react-router-dom";
 import { Minus, Plus, ShoppingBag, ArrowLeft, Star, GraduationCap } from "lucide-react";
 import BookCard from "../components/BookCard";
 import DeskCopyDialog from "../components/DeskCopyDialog";
@@ -19,7 +19,8 @@ export default function BookDetail() {
     const [tab, setTab] = useState("description");
     const [deskCopyOpen, setDeskCopyOpen] = useState(false);
     const { addItem, setIsOpen } = useCart();
-    const { user } = useAuth();
+    const { user, isAuthenticated } = useAuth();
+    const nav = useNavigate();
     const [notifyEmail, setNotifyEmail] = useState("");
     const [notifyBusy, setNotifyBusy] = useState(false);
     const [notified, setNotified] = useState(false);
@@ -288,7 +289,12 @@ export default function BookDetail() {
                                 onClick={() => {
                                     addItem(book, qty);
                                     setIsOpen(false);
-                                    window.location.href = "/checkout";
+                                    if (isAuthenticated) {
+                                        nav("/checkout");
+                                    } else {
+                                        toast.info("Please sign in to complete your purchase.");
+                                        nav("/login", { state: { from: { pathname: "/checkout" } } });
+                                    }
                                 }}
                                 data-testid="buy-now-button"
                                 className="inline-flex items-center gap-2 border border-[#002B5C] px-8 py-4 text-sm font-medium hover:bg-[#F5F7FA] transition-all"

@@ -1,5 +1,7 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
+import { useAuth } from "../context/AuthContext";
 import { X, Minus, Plus, Trash2 } from "lucide-react";
 import {
     Sheet,
@@ -22,10 +24,16 @@ export default function CartSheet() {
         count,
     } = useCart();
     const nav = useNavigate();
+    const { isAuthenticated } = useAuth();
 
     const goCheckout = () => {
         setIsOpen(false);
-        nav("/checkout");
+        if (isAuthenticated) {
+            nav("/checkout");
+        } else {
+            toast.info("Please sign in to complete your purchase.");
+            nav("/login", { state: { from: { pathname: "/checkout" } } });
+        }
     };
     const goCart = () => {
         setIsOpen(false);

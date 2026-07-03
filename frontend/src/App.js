@@ -46,7 +46,14 @@ function App() {
                                 <Route path="/books" element={<Catalog />} />
                                 <Route path="/books/:id" element={<BookDetail />} />
                                 <Route path="/cart" element={<Cart />} />
-                                <Route path="/checkout" element={<Checkout />} />
+                                <Route
+                                    path="/checkout"
+                                    element={
+                                        <ProtectedRoute>
+                                            <Checkout />
+                                        </ProtectedRoute>
+                                    }
+                                />
                                 <Route
                                     path="/order-confirmation/:id"
                                     element={<OrderConfirmation />}
