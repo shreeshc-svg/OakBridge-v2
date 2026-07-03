@@ -533,15 +533,36 @@ async def admin_create_book(payload: BookAdminCreate):
     return doc
 
 
+async def _notify_back_in_stock(book: dict) -> None:
+    """Email everyone waiting on this title, then clear the waitlist (one-shot)."""
+    try:
+        subs = await db.stock_notifications.find({"book_id": book["id"]}, {"_id": 0}).to_list(2000)
+        if not subs:
+            return
+        from emailer import send_back_in_stock  # late import avoids circular import
+        for s in subs:
+            try:
+                await send_back_in_stock(s["email"], book)
+            except Exception:  # noqa: BLE001
+                logging.getLogger(__name__).exception("back-in-stock email failed for %s", s.get("email"))
+        await db.stock_notifications.delete_many({"book_id": book["id"]})
+    except Exception:  # noqa: BLE001
+        logging.getLogger(__name__).exception("back-in-stock processing failed for book %s", book.get("id"))
+
+
 @admin_router.patch("/books/{book_id}")
 async def admin_update_book(book_id: str, payload: BookAdminUpdate):
     updates = {k: v for k, v in payload.model_dump().items() if v is not None}
     if not updates:
         raise HTTPException(status_code=400, detail="No updates provided")
-    result = await db.books.update_one({"id": book_id}, {"$set": updates})
-    if result.matched_count == 0:
+    prev = await db.books.find_one({"id": book_id}, {"_id": 0, "stock": 1})
+    if prev is None:
         raise HTTPException(status_code=404, detail="Book not found")
+    await db.books.update_one({"id": book_id}, {"$set": updates})
     book = await db.books.find_one({"id": book_id}, {"_id": 0})
+    # Back-in-stock: if stock crossed from 0 -> positive, notify everyone waiting.
+    if int(prev.get("stock", 0) or 0) <= 0 and int((book or {}).get("stock", 0) or 0) > 0:
+        await _notify_back_in_stock(book)
     return book
 
 

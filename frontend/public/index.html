@@ -3,41 +3,69 @@
     <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <meta name="theme-color" content="#0B1F2A" />
+        <meta name="theme-color" content="#002B5C" />
+        <meta name="robots" content="index, follow" />
+        <title>Oakbridge Publishing — Academic, Legal &amp; Professional Books</title>
         <meta
             name="description"
-            content="Oakbridge Publishing — academic, professional and general books, plus events, digital solutions and training."
+            content="Oakbridge Publishing is an independent scholarly press: authoritative law, tax, business and academic titles, reference works, events and training — for students, professionals and institutions."
         />
+        <link rel="canonical" href="https://oakbridge.in/" />
+
+        <!-- Icons & manifest -->
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+        <link rel="apple-touch-icon" href="/favicon.svg" />
+        <link rel="manifest" href="/site.webmanifest" />
+
+        <!-- Open Graph -->
+        <meta property="og:type" content="website" />
+        <meta property="og:site_name" content="Oakbridge Publishing" />
+        <meta property="og:title" content="Oakbridge Publishing — Academic, Legal & Professional Books" />
+        <meta property="og:description" content="An independent scholarly press: law, tax, business and academic titles, reference works, events and training." />
+        <meta property="og:url" content="https://oakbridge.in/" />
+        <meta property="og:image" content="https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=1200&q=85" />
+
+        <!-- Twitter -->
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="Oakbridge Publishing" />
+        <meta name="twitter:description" content="An independent scholarly press: law, tax, business and academic titles." />
+        <meta name="twitter:image" content="https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=1200&q=85" />
+
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@600&display=swap" rel="stylesheet" />
-        <!--
-        manifest.json provides metadata used when your web app is installed on a
-        user's mobile device or desktop. See https://developers.google.com/web/fundamentals/web-app-manifest/
-        -->
-        <!--
-        Notice the use of %PUBLIC_URL% in the tags above.
-        It will be replaced with the URL of the `public` folder during the build.
-        Only files inside the `public` folder can be referenced from the HTML.
 
-        Unlike "/favicon.ico" or "favicon.ico", "%PUBLIC_URL%/favicon.ico" will
-        work correctly both with client-side routing and a non-root public URL.
-        Learn how to configure a non-root public URL by running `npm run build`.
-        -->
-        <title>Oakbridge Publishing</title>
+        <!-- Structured data: Organization -->
+        <script type="application/ld+json">
+        {
+          "@context": "https://schema.org",
+          "@type": "Organization",
+          "name": "Oakbridge Publishing",
+          "url": "https://oakbridge.in/",
+          "logo": "https://oakbridge.in/favicon.svg",
+          "foundingDate": "2017",
+          "description": "Independent scholarly press publishing law, tax, business and academic titles, reference works, events and training.",
+          "email": "info@oakbridge.in",
+          "address": { "@type": "PostalAddress", "addressLocality": "New Delhi", "addressCountry": "IN" }
+        }
+        </script>
+        <!-- Structured data: WebSite + Sitelinks Search -->
+        <script type="application/ld+json">
+        {
+          "@context": "https://schema.org",
+          "@type": "WebSite",
+          "name": "Oakbridge Publishing",
+          "url": "https://oakbridge.in/",
+          "potentialAction": {
+            "@type": "SearchAction",
+            "target": { "@type": "EntryPoint", "urlTemplate": "https://oakbridge.in/books?search={search_term_string}" },
+            "query-input": "required name=search_term_string"
+          }
+        }
+        </script>
     </head>
     <body>
         <noscript>You need to enable JavaScript to run this app.</noscript>
         <div id="root"></div>
-        <!--
-      This HTML file is a template.
-      If you open it directly in the browser, you will see an empty page.
-
-      You can add webfonts, meta tags, or analytics to this file.
-      The build step will place the bundled scripts into the <body> tag.
-
-      To begin the development, run `npm start` or `yarn start`.
-      To create a production bundle, use `npm run build` or `yarn build`.
-    -->
     </body>
 </html>

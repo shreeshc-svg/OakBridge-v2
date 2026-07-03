@@ -326,3 +326,68 @@ async def send_admin_paid_order(order: dict) -> bool:
     subject = f"💸 New paid order — {order.get('order_number','')} · {_money(order.get('total',0))}"
     html = render_admin_paid_order_html(order)
     return await send_email(to=ADMIN_NOTIFY_EMAIL, subject=subject, html=html)
+
+
+# ====== Back-in-stock notifications ======
+
+SITE_URL = os.environ.get("SITE_URL", "").rstrip("/")
+
+
+def render_back_in_stock_html(book: dict) -> str:
+    title = (book.get("title") or "A title you wanted").replace("<", "&lt;").replace(">", "&gt;")
+    author = (book.get("author") or "").replace("<", "&lt;").replace(">", "&gt;")
+    price = _money(book.get("price", 0))
+    cover = book.get("cover_image") or ""
+    book_url = f"{SITE_URL}/books/{book.get('id','')}" if SITE_URL else "#"
+    cover_cell = (
+        f'<img src="{cover}" alt="" width="96" style="width:96px;border:1px solid #E5E7EB;display:block;">'
+        if cover else ""
+    )
+    return f"""\
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background-color:#F5F7FA;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:{BRAND_NAVY};">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#F5F7FA;padding:40px 16px;">
+  <tr><td align="center">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="max-width:600px;background-color:#FFFFFF;border:1px solid #E5E7EB;">
+      <tr><td style="background-color:{BRAND_NAVY};padding:28px 36px;color:#FFFFFF;">
+        <div style="font-family:Georgia,serif;font-size:22px;">Oakbridge <span style="color:{BRAND_AMBER};">Publishing</span></div>
+        <div style="font-family:monospace;text-transform:uppercase;letter-spacing:2px;font-size:11px;margin-top:6px;color:rgba(255,255,255,0.6);">Back in stock</div>
+      </td></tr>
+      <tr><td style="padding:36px 36px 8px;">
+        <h1 style="margin:0;font-family:Georgia,serif;font-weight:normal;font-size:26px;line-height:1.25;color:{BRAND_NAVY};">
+          It's back — grab it before it's gone.
+        </h1>
+        <p style="margin:14px 0 0;font-size:15px;line-height:1.6;color:{BRAND_GREY};">
+          A title you asked us to watch has just been restocked. Stock can move quickly, so we'd order soon.
+        </p>
+      </td></tr>
+      <tr><td style="padding:20px 36px 0;">
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+          <tr>
+            <td valign="top" style="width:112px;padding-right:16px;">{cover_cell}</td>
+            <td valign="top">
+              <div style="font-family:Georgia,serif;font-size:18px;color:{BRAND_NAVY};line-height:1.3;">{title}</div>
+              <div style="font-size:13px;color:{BRAND_GREY};margin-top:4px;">{author}</div>
+              <div style="font-family:Georgia,serif;font-size:20px;color:{BRAND_NAVY};margin-top:10px;">{price}</div>
+            </td>
+          </tr>
+        </table>
+      </td></tr>
+      <tr><td style="padding:28px 36px 40px;">
+        <a href="{book_url}" style="display:inline-block;background-color:{BRAND_NAVY};color:#FFFFFF;text-decoration:none;font-size:14px;font-weight:600;padding:14px 28px;">View & buy now</a>
+      </td></tr>
+    </table>
+    <div style="max-width:600px;margin-top:16px;font-family:monospace;font-size:11px;color:{BRAND_GREY};">
+      You're receiving this because you asked to be notified when this title returned to stock.
+    </div>
+  </td></tr>
+</table>
+</body></html>
+"""
+
+
+async def send_back_in_stock(to: str, book: dict) -> bool:
+    """Notify a waiting customer that an out-of-stock title is available again."""
+    subject = f"Back in stock — {book.get('title','your title')}"
+    html = render_back_in_stock_html(book)
+    return await send_email(to=to, subject=subject, html=html)

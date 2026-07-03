@@ -170,6 +170,10 @@ class StatusUpdate(BaseModel):
     status: str
 
 
+class NotifyRequest(BaseModel):
+    email: EmailStr
+
+
 # ============== PUBLIC ROUTER ==============
 public_router = APIRouter(prefix="/api", tags=["features"])
 
@@ -240,6 +244,27 @@ async def create_submission(payload: SubmissionCreate):
     }
     await db.submissions.insert_one({**doc})
     return Submission(**doc)
+
+
+@public_router.post("/books/{book_id}/notify-me")
+async def notify_when_in_stock(book_id: str, payload: NotifyRequest):
+    """Register an email to be alerted when an out-of-stock title is restocked."""
+    book = await db.books.find_one({"id": book_id}, {"_id": 0, "title": 1, "stock": 1})
+    if not book:
+        raise HTTPException(status_code=404, detail="Book not found")
+    if int(book.get("stock", 0) or 0) > 0:
+        return {"already_in_stock": True, "message": "Good news — this title is in stock now."}
+    email = payload.email.strip().lower()
+    await db.stock_notifications.update_one(
+        {"book_id": book_id, "email": email},
+        {"$setOnInsert": {
+            "book_id": book_id,
+            "email": email,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }},
+        upsert=True,
+    )
+    return {"ok": True, "message": "We'll email you the moment it's back in stock."}
 
 
 # ============== AUTHENTICATED ROUTER (customer access) ==============
@@ -737,3 +762,4 @@ async def seed_coupons():
 async def ensure_feature_indexes():
     await db.coupons.create_index("code", unique=True)
     await db.submissions.create_index("status")
+    await db.stock_notifications.create_index([("book_id", 1), ("email", 1)], unique=True)

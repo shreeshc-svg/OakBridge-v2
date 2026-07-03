@@ -1,0 +1,11 @@
+{
+  "name": "Oakbridge Publishing",
+  "short_name": "Oakbridge",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FDFBF7",
+  "theme_color": "#002B5C",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

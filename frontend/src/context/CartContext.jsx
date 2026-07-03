@@ -27,12 +27,15 @@ export function CartProvider({ children }) {
     }, [items]);
 
     const addItem = useCallback((book, qty = 1) => {
+        const stock = Number.isFinite(book.stock) ? book.stock : 9999;
+        if (stock <= 0) return; // out of stock — cannot add
         setItems((prev) => {
             const existing = prev.find((i) => i.book_id === book.id);
             if (existing) {
+                const capped = Math.min(existing.quantity + qty, stock);
                 return prev.map((i) =>
                     i.book_id === book.id
-                        ? { ...i, quantity: i.quantity + qty }
+                        ? { ...i, quantity: capped, stock }
                         : i,
                 );
             }
@@ -44,7 +47,8 @@ export function CartProvider({ children }) {
                     author: book.author,
                     cover_image: book.cover_image,
                     price: book.price,
-                    quantity: qty,
+                    quantity: Math.min(qty, stock),
+                    stock,
                 },
             ];
         });
@@ -62,9 +66,11 @@ export function CartProvider({ children }) {
                 return;
             }
             setItems((prev) =>
-                prev.map((i) =>
-                    i.book_id === book_id ? { ...i, quantity } : i,
-                ),
+                prev.map((i) => {
+                    if (i.book_id !== book_id) return i;
+                    const cap = Number.isFinite(i.stock) ? i.stock : quantity;
+                    return { ...i, quantity: Math.min(quantity, cap) };
+                }),
             );
         },
         [removeItem],

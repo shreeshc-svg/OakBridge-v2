@@ -4,8 +4,10 @@ import { Minus, Plus, ShoppingBag, ArrowLeft, Star, GraduationCap } from "lucide
 import BookCard from "../components/BookCard";
 import DeskCopyDialog from "../components/DeskCopyDialog";
 import ReviewsSection from "../components/ReviewsSection";
-import { fetchBook, fetchBooks, formatINR } from "../lib/api";
+import { fetchBook, fetchBooks, formatINR, notifyBackInStock } from "../lib/api";
 import { useCart } from "../context/CartContext";
+import { useAuth } from "../context/AuthContext";
+import { toast } from "sonner";
 
 export default function BookDetail() {
     const { id } = useParams();
@@ -16,6 +18,10 @@ export default function BookDetail() {
     const [tab, setTab] = useState("description");
     const [deskCopyOpen, setDeskCopyOpen] = useState(false);
     const { addItem, setIsOpen } = useCart();
+    const { user } = useAuth();
+    const [notifyEmail, setNotifyEmail] = useState("");
+    const [notifyBusy, setNotifyBusy] = useState(false);
+    const [notified, setNotified] = useState(false);
 
     useEffect(() => {
         setLoading(true);
@@ -54,8 +60,30 @@ export default function BookDetail() {
         ? Math.round(100 - (book.price / book.original_price) * 100)
         : 0;
 
+    const LOW_STOCK = 5;
+    const stock = Number.isFinite(book.stock) ? book.stock : (book.stock ?? 0);
+    const oos = stock <= 0;
+    const low = !oos && stock <= LOW_STOCK;
+
     const onAdd = () => {
         addItem(book, qty);
+    };
+
+    const submitNotify = async (e) => {
+        e.preventDefault();
+        const em = (notifyEmail || user?.email || "").trim();
+        if (!em) return;
+        setNotifyBusy(true);
+        try {
+            const res = await notifyBackInStock(book.id, em);
+            setNotifyEmail(em);
+            setNotified(true);
+            toast.success(res?.message || "We'll email you when it's back in stock.");
+        } catch (err) {
+            toast.error("Could not register. Please try again.");
+        } finally {
+            setNotifyBusy(false);
+        }
     };
 
     return (
@@ -142,48 +170,92 @@ export default function BookDetail() {
                         )}
                     </div>
 
-                    <div className="mt-8 flex flex-wrap items-center gap-4">
-                        <div className="flex items-center border border-[#E5E7EB] bg-white">
+                    {low && (
+                        <div data-testid="low-stock-note" className="mt-6 inline-flex items-center gap-2 text-sm font-medium text-[#CC0033]">
+                            <span className="inline-block w-2 h-2 rounded-full bg-[#CC0033]" />
+                            Only {stock} left in stock — order soon
+                        </div>
+                    )}
+
+                    {oos ? (
+                        <div data-testid="oos-panel" className="mt-8 border border-[#E5E7EB] bg-[#F5F7FA] p-6 max-w-md">
+                            <div className="font-serif text-lg text-[#002B5C]">Currently out of stock</div>
+                            {notified ? (
+                                <p className="mt-2 text-sm text-[#4B5563]">
+                                    ✓ Thanks — we'll email <span className="text-[#002B5C]">{notifyEmail}</span> the moment it's back.
+                                </p>
+                            ) : (
+                                <>
+                                    <p className="mt-2 text-sm text-[#4B5563]">
+                                        Leave your email and we'll notify you the moment it's restocked.
+                                    </p>
+                                    <form onSubmit={submitNotify} className="mt-4 flex gap-2">
+                                        <input
+                                            type="email"
+                                            required
+                                            value={notifyEmail}
+                                            onChange={(e) => setNotifyEmail(e.target.value)}
+                                            placeholder="you@email.com"
+                                            data-testid="notify-email-input"
+                                            className="flex-1 border border-[#E5E7EB] bg-white px-4 py-3 text-sm outline-none focus:border-[#002B5C]"
+                                        />
+                                        <button
+                                            type="submit"
+                                            disabled={notifyBusy}
+                                            data-testid="notify-me-button"
+                                            className="bg-[#002B5C] text-white px-6 py-3 text-sm font-medium hover:bg-[#001F42] disabled:opacity-60 whitespace-nowrap"
+                                        >
+                                            {notifyBusy ? "…" : "Notify me"}
+                                        </button>
+                                    </form>
+                                </>
+                            )}
+                        </div>
+                    ) : (
+                        <div className="mt-8 flex flex-wrap items-center gap-4">
+                            <div className="flex items-center border border-[#E5E7EB] bg-white">
+                                <button
+                                    onClick={() => setQty(Math.max(1, qty - 1))}
+                                    data-testid="qty-decrement"
+                                    className="px-3 py-3 hover:bg-[#F5F7FA]"
+                                    aria-label="Decrease"
+                                >
+                                    <Minus size={14} strokeWidth={1.5} />
+                                </button>
+                                <span className="px-6 font-mono min-w-[44px] text-center">
+                                    {qty}
+                                </span>
+                                <button
+                                    onClick={() => setQty(Math.min(qty + 1, stock))}
+                                    data-testid="qty-increment"
+                                    disabled={qty >= stock}
+                                    className="px-3 py-3 hover:bg-[#F5F7FA] disabled:opacity-40"
+                                    aria-label="Increase"
+                                >
+                                    <Plus size={14} strokeWidth={1.5} />
+                                </button>
+                            </div>
                             <button
-                                onClick={() => setQty(Math.max(1, qty - 1))}
-                                data-testid="qty-decrement"
-                                className="px-3 py-3 hover:bg-[#F5F7FA]"
-                                aria-label="Decrease"
+                                onClick={onAdd}
+                                data-testid="add-to-cart-main-button"
+                                className="inline-flex items-center gap-2 bg-[#002B5C] text-[#FFFFFF] px-8 py-4 text-sm font-medium hover:bg-[#001F42] transition-all"
                             >
-                                <Minus size={14} strokeWidth={1.5} />
+                                <ShoppingBag size={16} strokeWidth={1.5} />
+                                Add to Cart
                             </button>
-                            <span className="px-6 font-mono min-w-[44px] text-center">
-                                {qty}
-                            </span>
                             <button
-                                onClick={() => setQty(qty + 1)}
-                                data-testid="qty-increment"
-                                className="px-3 py-3 hover:bg-[#F5F7FA]"
-                                aria-label="Increase"
+                                onClick={() => {
+                                    addItem(book, qty);
+                                    setIsOpen(false);
+                                    window.location.href = "/checkout";
+                                }}
+                                data-testid="buy-now-button"
+                                className="inline-flex items-center gap-2 border border-[#002B5C] px-8 py-4 text-sm font-medium hover:bg-[#F5F7FA] transition-all"
                             >
-                                <Plus size={14} strokeWidth={1.5} />
+                                Buy Now
                             </button>
                         </div>
-                        <button
-                            onClick={onAdd}
-                            data-testid="add-to-cart-main-button"
-                            className="inline-flex items-center gap-2 bg-[#002B5C] text-[#FFFFFF] px-8 py-4 text-sm font-medium hover:bg-[#001F42] transition-all"
-                        >
-                            <ShoppingBag size={16} strokeWidth={1.5} />
-                            Add to Cart
-                        </button>
-                        <button
-                            onClick={() => {
-                                addItem(book, qty);
-                                setIsOpen(false);
-                                window.location.href = "/checkout";
-                            }}
-                            data-testid="buy-now-button"
-                            className="inline-flex items-center gap-2 border border-[#002B5C] px-8 py-4 text-sm font-medium hover:bg-[#F5F7FA] transition-all"
-                        >
-                            Buy Now
-                        </button>
-                    </div>
+                    )}
 
                     {/* Educator CTA */}
                     <button

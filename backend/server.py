@@ -484,6 +484,59 @@ async def contact_submit(payload: ContactMessage):
 async def create_order(payload: OrderCreate, user: Optional[dict] = Depends(get_current_user_optional)):
     if not payload.items:
         raise HTTPException(status_code=400, detail="Cart is empty")
+
+    # Load authoritative book data and guard availability. Prices, titles and
+    # covers come from the DB, never the client, so totals cannot be tampered with.
+    books_by_id = {}
+    shortages = []
+    for it in payload.items:
+        if it.quantity <= 0:
+            raise HTTPException(status_code=400, detail="Invalid quantity")
+        bdoc = await db.books.find_one(
+            {"id": it.book_id},
+            {"_id": 0, "id": 1, "title": 1, "author": 1, "cover_image": 1, "price": 1, "stock": 1},
+        )
+        if not bdoc:
+            raise HTTPException(status_code=404, detail=f"Book not found: {it.book_id}")
+        books_by_id[it.book_id] = bdoc
+        avail = int(bdoc.get("stock", 0) or 0)
+        if it.quantity > avail:
+            shortages.append({"title": bdoc.get("title", "Item"), "requested": it.quantity, "available": avail})
+    if shortages:
+        raise HTTPException(
+            status_code=409,
+            detail={"message": "Some items are out of stock or exceed available quantity.", "items": shortages},
+        )
+
+    # Rebuild line items from DB prices (ignore any client-supplied price/subtotal/total).
+    server_items = [
+        CartItem(
+            book_id=it.book_id,
+            title=books_by_id[it.book_id]["title"],
+            author=books_by_id[it.book_id].get("author", ""),
+            cover_image=books_by_id[it.book_id].get("cover_image", ""),
+            price=float(books_by_id[it.book_id]["price"]),
+            quantity=it.quantity,
+        )
+        for it in payload.items
+    ]
+    subtotal = round(sum(i.price * i.quantity for i in server_items), 2)
+
+    # Re-validate the coupon server-side; never trust a client-supplied discount.
+    discount = 0.0
+    coupon_code = None
+    if payload.coupon_code:
+        from features import validate_coupon, CouponValidateRequest  # local import avoids import cycle
+        cres = await validate_coupon(CouponValidateRequest(code=payload.coupon_code, subtotal=subtotal))
+        if cres.valid:
+            discount = float(cres.discount)
+            coupon_code = cres.code
+
+    discounted = max(0.0, subtotal - discount)
+    shipping = 0.0 if discounted <= 0 else (0.0 if discounted > 1500 else 60.0)
+    tax = float(round(discounted * 0.05))
+    total = round(discounted + shipping + tax, 2)
+
     order_number = "OAK-" + datetime.now(timezone.utc).strftime("%y%m%d") + "-" + uuid.uuid4().hex[:6].upper()
     order = Order(
         order_number=order_number,
@@ -496,11 +549,13 @@ async def create_order(payload: OrderCreate, user: Optional[dict] = Depends(get_
         city=payload.city,
         state=payload.state,
         pincode=payload.pincode,
-        items=payload.items,
-        subtotal=payload.subtotal,
-        shipping=payload.shipping,
-        tax=payload.tax,
-        total=payload.total,
+        items=server_items,
+        subtotal=subtotal,
+        shipping=shipping,
+        tax=tax,
+        total=total,
+        coupon_code=coupon_code,
+        discount=discount,
         notes=payload.notes or "",
         created_at=datetime.now(timezone.utc).isoformat(),
     )

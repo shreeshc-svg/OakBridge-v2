@@ -23,6 +23,8 @@ export const fetchFeatured = () =>
 export const fetchNewReleases = () =>
     api.get("/books/new-releases").then((r) => r.data);
 export const fetchBook = (id) => api.get(`/books/${id}`).then((r) => r.data);
+export const notifyBackInStock = (bookId, email) =>
+    api.post(`/books/${bookId}/notify-me`, { email }).then((r) => r.data);
 export const subscribeNewsletter = (email, source) =>
     api.post("/newsletter", { email, ...(source ? { source } : {}) }).then((r) => r.data);
 

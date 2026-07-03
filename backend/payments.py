@@ -49,6 +49,34 @@ def _require_client() -> razorpay.Client:
     return _client
 
 
+async def _apply_stock_decrement(order_id: str) -> None:
+    """Idempotently decrement stock for each item, once, on first paid confirmation."""
+    claim = await db.orders.update_one(
+        {"id": order_id, "stock_decremented": {"$ne": True}},
+        {"$set": {"stock_decremented": True}},
+    )
+    if claim.modified_count != 1:
+        return  # already decremented, or order missing
+    order = await db.orders.find_one({"id": order_id}, {"_id": 0, "items": 1})
+    if not order:
+        return
+    for it in order.get("items", []):
+        bid = it.get("book_id")
+        qty = int(it.get("quantity", 0) or 0)
+        if not bid or qty <= 0:
+            continue
+        res = await db.books.update_one(
+            {"id": bid, "stock": {"$gte": qty}},
+            {"$inc": {"stock": -qty}},
+        )
+        if res.modified_count == 0:
+            logger.warning("Insufficient stock at capture for book=%s order=%s — flagged backorder", bid, order_id)
+            await db.orders.update_one(
+                {"id": order_id},
+                {"$addToSet": {"backorder_items": bid}, "$set": {"needs_attention": True}},
+            )
+
+
 class CreateOrderRequest(BaseModel):
     order_id: str = Field(..., description="Local Oakbridge order id (from db.orders)")
 
@@ -162,6 +190,9 @@ async def verify_payment(payload: VerifyPaymentRequest):
         },
     )
 
+    # Decrement inventory once payment is confirmed (idempotent).
+    await _apply_stock_decrement(order["id"])
+
     # Fire-and-forget order receipt + admin notification (best-effort; never block the response)
     try:
         refreshed = await db.orders.find_one({"id": order["id"]}, {"_id": 0})
@@ -237,6 +268,7 @@ async def razorpay_webhook(
         try:
             order_doc = await db.orders.find_one({"rzp_order_id": rzp_order_id}, {"_id": 0})
             if order_doc:
+                await _apply_stock_decrement(order_doc["id"])
                 await send_order_receipt(order_doc)
                 await send_admin_paid_order(order_doc)
         except Exception:  # noqa: BLE001

@@ -1,0 +1,16 @@
+# Oakbridge Publishing
+
+> Independent scholarly press (est. 2017, New Delhi). Publishes authoritative
+> law, tax, business and academic titles, reference works, and children's and
+> test-prep books, and runs events and professional training.
+
+## Key pages
+- Bookstore: https://oakbridge.in/books
+- Categories: Law, Taxation, Business & Management, Academic, Professional & STEM, Test Prep, Children, General & Reference
+- Authors: https://oakbridge.in/authors
+- Events: https://oakbridge.in/events
+- About: https://oakbridge.in/about
+- Contact: https://oakbridge.in/contact
+
+## Contact
+- Email: info@oakbridge.in
