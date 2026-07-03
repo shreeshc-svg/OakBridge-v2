@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { formatApiError } from "../../lib/api";
 import { toast } from "sonner";
@@ -10,6 +10,8 @@ export default function Register() {
     const [loading, setLoading] = useState(false);
     const { register } = useAuth();
     const nav = useNavigate();
+    const loc = useLocation();
+    const from = loc.state?.from?.pathname || "/account";
 
     const onSubmit = async (e) => {
         e.preventDefault();
@@ -18,7 +20,7 @@ export default function Register() {
         try {
             const user = await register(form);
             toast.success(`Welcome to Oakbridge, ${user.name.split(" ")[0]}.`);
-            nav("/account", { replace: true });
+            nav(from, { replace: true });
         } catch (err) {
             setError(formatApiError(err));
         } finally {
@@ -116,6 +118,7 @@ export default function Register() {
                         Already a member?{" "}
                         <Link
                             to="/login"
+                            state={{ from: loc.state?.from }}
                             data-testid="register-to-login-link"
                             className="text-[#002B5C] border-b border-[#002B5C] hover:text-[#CC0033] hover:border-[#CC0033] pb-0.5"
                         >

@@ -113,6 +113,7 @@ export default function Login() {
                         New to Oakbridge?{" "}
                         <Link
                             to="/register"
+                            state={{ from: loc.state?.from }}
                             data-testid="login-to-register-link"
                             className="text-[#002B5C] border-b border-[#002B5C] hover:text-[#CC0033] hover:border-[#CC0033] pb-0.5"
                         >
