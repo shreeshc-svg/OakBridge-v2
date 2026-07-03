@@ -696,6 +696,7 @@ async def admin_bulk_import(file: UploadFile = File(...)):
 
 
 
+@admin_router.get("/inventory/low-stock")
 async def admin_low_stock(threshold: int = 10):
     low = await db.books.find(
         {"stock": {"$lte": threshold, "$gt": 0}}, {"_id": 0}
