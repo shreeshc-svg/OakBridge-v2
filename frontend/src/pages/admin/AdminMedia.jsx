@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Upload, Trash2, Copy } from "lucide-react";
+import { Link } from "react-router-dom";
+import { UploadCloud, Trash2, Copy } from "lucide-react";
 import { toast } from "sonner";
 import {
     adminListMedia,
@@ -17,6 +18,7 @@ export default function AdminMedia() {
     const [cats, setCats] = useState([]);
     const [site, setSite] = useState({});
     const [uploading, setUploading] = useState(false);
+    const [dragOver, setDragOver] = useState(false);
     const fileRef = useRef(null);
 
     const load = () => {
@@ -26,21 +28,33 @@ export default function AdminMedia() {
     };
     useEffect(load, []);
 
-    const onUpload = async (e) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
+    const uploadFiles = async (fileList) => {
+        const imgs = Array.from(fileList || []).filter((f) => f.type.startsWith("image/"));
+        if (!imgs.length) return;
         setUploading(true);
-        try {
-            const m = await adminUploadMedia(file);
-            setMedia((prev) => [m, ...prev]);
-            toast.success("Image uploaded.");
-        } catch (err) {
-            toast.error("Upload failed — object storage (S3) may not be configured yet.");
-        } finally {
-            setUploading(false);
-            if (fileRef.current) fileRef.current.value = "";
+        let ok = 0;
+        for (const f of imgs) {
+            try {
+                const m = await adminUploadMedia(f);
+                setMedia((prev) => [m, ...prev]);
+                ok += 1;
+            } catch {
+                /* keep going */
+            }
         }
+        setUploading(false);
+        if (fileRef.current) fileRef.current.value = "";
+        if (ok) toast.success(`${ok} image${ok > 1 ? "s" : ""} uploaded.`);
+        else toast.error("Upload failed — object storage (S3) may not be configured yet.");
     };
+
+    const onPick = (e) => uploadFiles(e.target.files);
+    const onDrop = (e) => {
+        e.preventDefault();
+        setDragOver(false);
+        uploadFiles(e.dataTransfer.files);
+    };
+
     const onDelete = async (id) => {
         try {
             await adminDeleteMedia(id);
@@ -57,7 +71,7 @@ export default function AdminMedia() {
     const saveSite = async (key, value) => {
         await adminSetSiteContent(key, value);
         setSite((s) => ({ ...s, [key]: value }));
-        toast.success("Saved.");
+        toast.success("Saved — live on the site.");
     };
     const saveCat = async (id, image) => {
         await adminUpdateCategoryImage(id, image);
@@ -69,57 +83,55 @@ export default function AdminMedia() {
         <div data-testid="admin-media-page">
             <div className="overline">Content</div>
             <h1 className="font-serif text-4xl md:text-5xl mt-2 text-[#002B5C]">Media</h1>
+            <p className="text-sm text-[#4B5563] mt-3 max-w-2xl">
+                Your master media library and site-wide image placements. Upload once, use anywhere —
+                changes to page images go live immediately.
+            </p>
 
+            {/* ===================== MASTER LIBRARY ===================== */}
             <section className="mt-10">
-                <h2 className="font-serif text-2xl text-[#002B5C]">Site images</h2>
-                <p className="text-sm text-[#4B5563] mt-1">
-                    Set the hero and banner images shown on the storefront. Paste an image URL, or
-                    copy one from the Media Library below.
-                </p>
-                <div className="mt-6 space-y-4">
-                    <SlotRow label="Homepage hero" value={site.home_hero} onSave={(v) => saveSite("home_hero", v)} />
-                    <SlotRow label="Bookstore banner (PLP)" value={site.plp_banner} onSave={(v) => saveSite("plp_banner", v)} />
-                </div>
+                <h2 className="font-serif text-2xl text-[#002B5C]">
+                    Media library ({media.length})
+                </h2>
 
-                <h3 className="font-serif text-xl text-[#002B5C] mt-10">Category images</h3>
-                <div className="mt-4 space-y-4">
-                    {cats.map((c) => (
-                        <SlotRow key={c.id} label={c.name} value={c.image} onSave={(v) => saveCat(c.id, v)} />
-                    ))}
-                </div>
-            </section>
-
-            <section className="mt-16 border-t border-[#E5E7EB] pt-12">
-                <div className="flex flex-wrap items-center justify-between gap-4">
-                    <div>
-                        <h2 className="font-serif text-2xl text-[#002B5C]">
-                            Media library ({media.length})
-                        </h2>
-                        <p className="text-sm text-[#4B5563] mt-1">
-                            Upload images, then copy a URL to use on covers, heroes, or anywhere.
-                        </p>
-                    </div>
-                    <label className="inline-flex items-center gap-2 bg-[#002B5C] text-white px-5 py-2.5 text-sm font-medium hover:bg-[#001F42] cursor-pointer">
-                        <Upload size={16} strokeWidth={1.5} />
-                        {uploading ? "Uploading…" : "Upload image"}
-                        <input
-                            ref={fileRef}
-                            type="file"
-                            accept="image/*"
-                            onChange={onUpload}
-                            className="hidden"
-                            data-testid="media-upload-input"
-                        />
-                    </label>
-                </div>
-
-                {media.length === 0 ? (
-                    <p className="mt-8 text-sm text-[#4B5563]">
-                        No media yet. Upload an image to get started. (Uploads require object
-                        storage / S3 to be configured.)
+                <div
+                    onDragOver={(e) => {
+                        e.preventDefault();
+                        setDragOver(true);
+                    }}
+                    onDragLeave={() => setDragOver(false)}
+                    onDrop={onDrop}
+                    data-testid="media-dropzone"
+                    className={`mt-4 border-2 border-dashed p-10 text-center transition-colors ${
+                        dragOver ? "border-[#002B5C] bg-[#F5F7FA]" : "border-[#E5E7EB] bg-white"
+                    }`}
+                >
+                    <UploadCloud size={28} strokeWidth={1.5} className="mx-auto text-[#4B5563]" />
+                    <p className="mt-3 text-sm text-[#002B5C] font-medium">
+                        {uploading ? "Uploading…" : "Drag & drop images here"}
                     </p>
-                ) : (
-                    <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                    <p className="text-xs text-[#4B5563] mt-1">
+                        or{" "}
+                        <label className="text-[#002B5C] border-b border-[#002B5C] cursor-pointer hover:text-[#CC0033]">
+                            browse your files
+                            <input
+                                ref={fileRef}
+                                type="file"
+                                accept="image/*"
+                                multiple
+                                onChange={onPick}
+                                className="hidden"
+                                data-testid="media-upload-input"
+                            />
+                        </label>
+                    </p>
+                    <p className="text-[11px] text-[#4B5563]/70 mt-2 font-mono">
+                        PNG · JPG · WEBP — up to 10 MB each
+                    </p>
+                </div>
+
+                {media.length > 0 && (
+                    <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
                         {media.map((m) => (
                             <div
                                 key={m.id}
@@ -134,26 +146,77 @@ export default function AdminMedia() {
                                         loading="lazy"
                                     />
                                 </div>
-                                <div className="p-2 flex items-center justify-between gap-2">
-                                    <button
-                                        onClick={() => copy(m.url)}
-                                        className="inline-flex items-center gap-1 text-xs text-[#002B5C] hover:text-[#CC0033]"
-                                    >
-                                        <Copy size={12} strokeWidth={1.5} /> Copy URL
-                                    </button>
-                                    <button
-                                        onClick={() => onDelete(m.id)}
-                                        className="text-[#CC0033] hover:opacity-70 p-1"
-                                        aria-label="Delete"
-                                    >
-                                        <Trash2 size={14} strokeWidth={1.5} />
-                                    </button>
+                                <div className="px-2 py-1.5">
+                                    <div className="text-[11px] text-[#4B5563] truncate" title={m.filename}>
+                                        {m.filename || "image"}
+                                    </div>
+                                    <div className="flex items-center justify-between gap-2 mt-1">
+                                        <button
+                                            onClick={() => copy(m.url)}
+                                            className="inline-flex items-center gap-1 text-xs text-[#002B5C] hover:text-[#CC0033]"
+                                        >
+                                            <Copy size={12} strokeWidth={1.5} /> Copy URL
+                                        </button>
+                                        <button
+                                            onClick={() => onDelete(m.id)}
+                                            className="text-[#CC0033] hover:opacity-70 p-1"
+                                            aria-label="Delete"
+                                        >
+                                            <Trash2 size={14} strokeWidth={1.5} />
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         ))}
                     </div>
                 )}
             </section>
+
+            {/* ===================== PLACEMENTS BY PAGE ===================== */}
+            <section className="mt-16 border-t border-[#E5E7EB] pt-12">
+                <h2 className="font-serif text-2xl text-[#002B5C]">Place media on pages</h2>
+                <p className="text-sm text-[#4B5563] mt-1 max-w-2xl">
+                    Paste an image URL (copy one from the library above), or any external URL. Saves
+                    apply to the live storefront instantly.
+                </p>
+
+                <PageGroup title="Homepage" path="/">
+                    <SlotRow label="Hero image" value={site.home_hero} onSave={(v) => saveSite("home_hero", v)} />
+                </PageGroup>
+
+                <PageGroup title="Bookstore — Product Listing (PLP)" path="/books">
+                    <SlotRow label="Banner image" value={site.plp_banner} onSave={(v) => saveSite("plp_banner", v)} />
+                    <div className="overline !text-[10px] mt-6 mb-2">Category images</div>
+                    <div className="space-y-3">
+                        {cats.map((c) => (
+                            <SlotRow key={c.id} label={c.name} value={c.image} onSave={(v) => saveCat(c.id, v)} />
+                        ))}
+                    </div>
+                </PageGroup>
+
+                <PageGroup title="Book pages — Product Detail (PDP)" path="/books/:id">
+                    <p className="text-sm text-[#4B5563]">
+                        Each book's cover is set per title in{" "}
+                        <Link to="/admin/books" className="text-[#002B5C] border-b border-[#002B5C] hover:text-[#CC0033]">
+                            Admin → Books
+                        </Link>
+                        . Upload an image to the library above, copy its URL, and paste it into the
+                        book's cover field.
+                    </p>
+                </PageGroup>
+            </section>
+        </div>
+    );
+}
+
+function PageGroup({ title, path, children }) {
+    return (
+        <div className="mt-8 border border-[#E5E7EB] bg-white p-6">
+            <div className="flex items-baseline gap-3">
+                <h3 className="font-serif text-xl text-[#002B5C]">{title}</h3>
+                <span className="font-mono text-[11px] text-[#4B5563]">{path}</span>
+            </div>
+            <div className="mt-4">{children}</div>
         </div>
     );
 }
