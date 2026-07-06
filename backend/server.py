@@ -320,7 +320,14 @@ async def seed_data():
     # This self-heals databases seeded under an older category taxonomy.
     canonical_ids = [c["id"] for c in CATEGORIES_SEED]
     for c in CATEGORIES_SEED:
-        await db.categories.update_one({"id": c["id"]}, {"$set": {**c}}, upsert=True)
+        # Update name/description on every boot, but only seed the image on first
+        # insert so admin-set category images survive restarts.
+        await db.categories.update_one(
+            {"id": c["id"]},
+            {"$set": {"id": c["id"], "name": c["name"], "description": c["description"]},
+             "$setOnInsert": {"image": c["image"]}},
+            upsert=True,
+        )
     removed = await db.categories.delete_many({"id": {"$nin": canonical_ids}})
     logger.info(
         f"Reconciled {len(CATEGORIES_SEED)} categories "

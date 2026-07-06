@@ -4,7 +4,7 @@ import Seo from "../components/Seo";
 import { useSearchParams } from "react-router-dom";
 import { Search, SlidersHorizontal, X } from "lucide-react";
 import BookCard from "../components/BookCard";
-import { fetchBooks, fetchCategories } from "../lib/api";
+import { fetchBooks, fetchCategories, fetchSiteContent, mediaUrl } from "../lib/api";
 
 const SORTS = [
     { v: "featured", label: "Featured" },
@@ -17,6 +17,7 @@ export default function Catalog() {
     const [sp, setSp] = useSearchParams();
     const [books, setBooks] = useState([]);
     const [cats, setCats] = useState([]);
+    const [site, setSite] = useState({});
     const [loading, setLoading] = useState(true);
     const [showFilters, setShowFilters] = useState(false);
 
@@ -28,6 +29,7 @@ export default function Catalog() {
 
     useEffect(() => {
         fetchCategories().then(setCats).catch(() => {});
+        fetchSiteContent().then(setSite).catch(() => {});
     }, []);
 
     useEffect(() => {
@@ -87,7 +89,7 @@ export default function Catalog() {
             >
                 <div className="relative min-h-[320px] md:min-h-[400px]">
                     <img
-                        src="https://images.unsplash.com/photo-1507842217343-583bb7270b66?auto=format&fit=crop&w=2000&q=85"
+                        src={mediaUrl(site.plp_banner) || "https://images.unsplash.com/photo-1507842217343-583bb7270b66?auto=format&fit=crop&w=2000&q=85"}
                         alt="A vibrant wall of books"
                         className="absolute inset-0 w-full h-full object-cover"
                     />

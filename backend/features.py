@@ -18,7 +18,7 @@ from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 
 import requests
-from fastapi import APIRouter, Depends, File, HTTPException, Header, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Header, UploadFile
 from fastapi.responses import Response, StreamingResponse
 from motor.motor_asyncio import AsyncIOMotorClient
 from openpyxl import Workbook, load_workbook
@@ -787,6 +787,8 @@ async def ensure_feature_indexes():
     await db.submissions.create_index("status")
     await db.stock_notifications.create_index([("book_id", 1), ("email", 1)], unique=True)
     await db.carts.create_index("user_id", unique=True)
+    await db.site_content.create_index("key", unique=True)
+    await db.media.create_index("uploaded_at")
 
 
 # ====== Server-side cart + abandoned-cart reminders ======
@@ -895,3 +897,95 @@ async def run_cart_reminders_task(x_task_token: Optional[str] = Header(None)):
 @admin_router.post("/cart-reminders/run")
 async def admin_run_cart_reminders(force: bool = False):
     return await process_cart_reminders(force=force)
+
+
+# ====== Media library + editable site imagery ======
+
+APP_MEDIA_MAX = 10 * 1024 * 1024  # 10 MB
+
+SITE_CONTENT_DEFAULTS = {
+    "home_hero": "https://images.unsplash.com/photo-1507842217343-583bb7270b66?auto=format&fit=crop&w=1600&q=85",
+    "plp_banner": "https://images.unsplash.com/photo-1507842217343-583bb7270b66?auto=format&fit=crop&w=2000&q=85",
+}
+
+
+class MediaUpdate(BaseModel):
+    alt: str = ""
+
+
+class SiteContentSet(BaseModel):
+    key: str
+    value: str
+
+
+class CategoryImageSet(BaseModel):
+    image: str
+
+
+@admin_router.post("/media")
+async def admin_upload_media(file: UploadFile = File(...), alt: str = Form("")):
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Only image files are accepted")
+    data = await file.read()
+    if len(data) > APP_MEDIA_MAX:
+        raise HTTPException(status_code=400, detail="Image too large (max 10 MB)")
+    ext = (file.filename or "img").rsplit(".", 1)[-1].lower()[:8] or "jpg"
+    path = f"{APP_NAME}/media/{uuid.uuid4()}.{ext}"
+    put_object(path, data, file.content_type)
+    doc = {
+        "id": str(uuid.uuid4()),
+        "url": f"/api/files/{path}",
+        "filename": file.filename or "",
+        "alt": alt or "",
+        "content_type": file.content_type,
+        "size": len(data),
+        "uploaded_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.media.insert_one({**doc})
+    return doc
+
+
+@admin_router.get("/media")
+async def admin_list_media():
+    return await db.media.find({}, {"_id": 0}).sort([("uploaded_at", -1)]).to_list(2000)
+
+
+@admin_router.patch("/media/{media_id}")
+async def admin_update_media(media_id: str, payload: MediaUpdate):
+    r = await db.media.update_one({"id": media_id}, {"$set": {"alt": payload.alt}})
+    if r.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Media not found")
+    return {"ok": True}
+
+
+@admin_router.delete("/media/{media_id}")
+async def admin_delete_media(media_id: str):
+    r = await db.media.delete_one({"id": media_id})
+    if r.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Media not found")
+    return {"ok": True}
+
+
+@public_router.get("/site-content")
+async def get_site_content():
+    docs = await db.site_content.find({}, {"_id": 0}).to_list(500)
+    values = {d["key"]: d["value"] for d in docs if d.get("value")}
+    return {**SITE_CONTENT_DEFAULTS, **values}
+
+
+@admin_router.put("/site-content")
+async def set_site_content(payload: SiteContentSet):
+    await db.site_content.update_one(
+        {"key": payload.key},
+        {"$set": {"key": payload.key, "value": payload.value}},
+        upsert=True,
+    )
+    return {"ok": True}
+
+
+@admin_router.patch("/categories/{category_id}")
+async def admin_update_category_image(category_id: str, payload: CategoryImageSet):
+    r = await db.categories.update_one({"id": category_id}, {"$set": {"image": payload.image}})
+    if r.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Category not found")
+    return {"ok": True}

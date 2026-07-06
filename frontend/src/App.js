@@ -26,6 +26,7 @@ import AdminWaitlists from "@/pages/admin/AdminWaitlists";
 import AdminCoupons from "@/pages/admin/AdminCoupons";
 import AdminInventory from "@/pages/admin/AdminInventory";
 import AdminSubmissions from "@/pages/admin/AdminSubmissions";
+import AdminMedia from "@/pages/admin/AdminMedia";
 import Submissions from "@/pages/Submissions";
 import Verticals from "@/pages/Verticals";
 import Events from "@/pages/Events";
@@ -102,6 +103,7 @@ function App() {
                                     <Route path="coupons" element={<AdminCoupons />} />
                                     <Route path="inventory" element={<AdminInventory />} />
                                     <Route path="submissions" element={<AdminSubmissions />} />
+                                    <Route path="media" element={<AdminMedia />} />
                                 </Route>
                             </Route>
                         </Routes>

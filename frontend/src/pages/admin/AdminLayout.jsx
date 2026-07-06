@@ -1,12 +1,13 @@
 import React from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { LayoutDashboard, BookOpen, ShoppingBag, Mail, Users, LogOut, ExternalLink, Tag, PackageCheck, FileText, Inbox } from "lucide-react";
+import { LayoutDashboard, BookOpen, ShoppingBag, Mail, Users, LogOut, ExternalLink, Tag, PackageCheck, FileText, Inbox, Image } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 
 const LINKS = [
     { to: "/admin", end: true, label: "Dashboard", icon: LayoutDashboard },
     { to: "/admin/books", label: "Books", icon: BookOpen },
     { to: "/admin/inventory", label: "Inventory", icon: PackageCheck },
+    { to: "/admin/media", label: "Media", icon: Image },
     { to: "/admin/orders", label: "Orders", icon: ShoppingBag },
     { to: "/admin/coupons", label: "Coupons", icon: Tag },
     { to: "/admin/desk-copies", label: "Desk Copies", icon: Mail },

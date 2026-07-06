@@ -8,6 +8,8 @@ import {
     fetchCategories,
     fetchFeatured,
     fetchNewReleases,
+    fetchSiteContent,
+    mediaUrl,
 } from "../lib/api";
 
 const CATEGORY_EMOJI = {
@@ -71,9 +73,11 @@ export default function Home() {
     const [featured, setFeatured] = useState([]);
     const [newRel, setNewRel] = useState([]);
     const [fallback, setFallback] = useState([]);
+    const [site, setSite] = useState({});
 
     useEffect(() => {
         fetchCategories().then(setCategories).catch(() => {});
+        fetchSiteContent().then(setSite).catch(() => {});
         fetchFeatured().then(setFeatured).catch(() => {});
         fetchNewReleases().then(setNewRel).catch(() => {});
         // Fallback feed in case bestseller / new-release flags are sparse
@@ -189,7 +193,7 @@ export default function Home() {
 
                     <div className="lg:col-span-5 relative min-h-[420px] lg:min-h-[720px] bg-[#002B5C]">
                         <img
-                            src="https://images.unsplash.com/photo-1507842217343-583bb7270b66?auto=format&fit=crop&w=1600&q=85"
+                            src={mediaUrl(site.home_hero) || "https://images.unsplash.com/photo-1507842217343-583bb7270b66?auto=format&fit=crop&w=1600&q=85"}
                             alt="A vibrant wall of books"
                             className="absolute inset-0 w-full h-full object-cover"
                         />

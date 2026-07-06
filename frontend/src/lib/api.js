@@ -74,6 +74,25 @@ export const loadCart = () => api.get("/my/cart").then((r) => r.data);
 export const adminRunCartReminders = () =>
     api.post("/admin/cart-reminders/run?force=true").then((r) => r.data);
 
+// ====== Media library + site imagery ======
+export const fetchSiteContent = () => api.get("/site-content").then((r) => r.data);
+export const adminSetSiteContent = (key, value) =>
+    api.put("/admin/site-content", { key, value }).then((r) => r.data);
+export const adminListMedia = () => api.get("/admin/media").then((r) => r.data);
+export const adminUploadMedia = (file, alt = "") => {
+    const form = new FormData();
+    form.append("file", file);
+    if (alt) form.append("alt", alt);
+    return api
+        .post("/admin/media", form, { headers: { "Content-Type": "multipart/form-data" } })
+        .then((r) => r.data);
+};
+export const adminDeleteMedia = (id) =>
+    api.delete(`/admin/media/${id}`).then((r) => r.data);
+export const adminUpdateCategoryImage = (id, image) =>
+    api.patch(`/admin/categories/${id}`, { image }).then((r) => r.data);
+export const mediaUrl = (u) => (u && u.startsWith("/api/") ? `${BACKEND_URL}${u}` : u);
+
 // Admin
 export const adminStats = () => api.get("/admin/stats").then((r) => r.data);
 export const adminListOrders = () =>
