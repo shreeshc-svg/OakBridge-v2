@@ -425,3 +425,66 @@ def render_verification_otp_html(name: str, code: str) -> str:
 async def send_verification_otp(to: str, name: str, code: str) -> bool:
     """Email a 6-digit signup verification code."""
     return await send_email(to=to, subject="Your Oakbridge verification code", html=render_verification_otp_html(name, code))
+
+
+# ====== Abandoned-cart reminders ======
+
+_CART_COPY = {
+    "12h": ("Still on your mind?", "The title below is waiting in your cart. Prices and stock can change \u2014 secure it before it slips away."),
+    "1w": ("Don\u2019t let it get away", "It\u2019s been a week and your pick is still in your cart. Popular titles sell out \u2014 now\u2019s a good time to complete your order."),
+    "eom": ("Last call this month", "Final reminder \u2014 the book below is still in your cart. Complete your order before the month closes out."),
+}
+
+
+def render_cart_reminder_html(name: str, items: list, stage: str) -> str:
+    who = (name or "there").split(" ")[0]
+    heading, sub = _CART_COPY.get(stage, _CART_COPY["12h"])
+    rows = []
+    for it in (items or [])[:6]:
+        title = (it.get("title") or "A title").replace("<", "&lt;").replace(">", "&gt;")
+        qty = it.get("quantity", 1)
+        cover = it.get("cover_image") or ""
+        cell = f'<img src="{cover}" width="60" style="width:60px;border:1px solid #E5E7EB;display:block;">' if cover else ""
+        rows.append(
+            f'<tr>'
+            f'<td style="padding:12px 0;width:76px;">{cell}</td>'
+            f'<td style="padding:12px 0;color:{BRAND_NAVY};font-size:14px;">{title}'
+            f'<div style="color:{BRAND_GREY};font-size:12px;margin-top:2px;">Qty {qty}</div></td>'
+            f'<td style="padding:12px 0;text-align:right;color:{BRAND_NAVY};font-size:14px;white-space:nowrap;">{_money(it.get("price", 0))}</td>'
+            f'</tr>'
+        )
+    cta = f"{SITE_URL}/cart" if SITE_URL else "#"
+    return f"""\
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background-color:#F5F7FA;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:{BRAND_NAVY};">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#F5F7FA;padding:40px 16px;">
+  <tr><td align="center">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="max-width:600px;background-color:#FFFFFF;border:1px solid #E5E7EB;">
+      <tr><td style="background-color:{BRAND_NAVY};padding:28px 36px;color:#FFFFFF;">
+        <div style="font-family:Georgia,serif;font-size:22px;">Oakbridge <span style="color:{BRAND_AMBER};">Publishing</span></div>
+        <div style="font-family:monospace;text-transform:uppercase;letter-spacing:2px;font-size:11px;margin-top:6px;color:rgba(255,255,255,0.6);">Your cart</div>
+      </td></tr>
+      <tr><td style="padding:36px 36px 6px;">
+        <h1 style="margin:0;font-family:Georgia,serif;font-weight:normal;font-size:26px;color:{BRAND_NAVY};">{heading}, {who}.</h1>
+        <p style="margin:14px 0 0;font-size:15px;line-height:1.6;color:{BRAND_GREY};">{sub}</p>
+      </td></tr>
+      <tr><td style="padding:16px 36px 0;">
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">{''.join(rows)}</table>
+      </td></tr>
+      <tr><td style="padding:28px 36px 40px;">
+        <a href="{cta}" style="display:inline-block;background-color:{BRAND_NAVY};color:#FFFFFF;text-decoration:none;font-size:14px;font-weight:600;padding:14px 30px;">Complete your order</a>
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+</body></html>
+"""
+
+
+async def send_cart_reminder(to: str, name: str, items: list, stage: str) -> bool:
+    subjects = {
+        "12h": "You left something in your cart",
+        "1w": "Still in your cart \u2014 don\u2019t miss out",
+        "eom": "Last call \u2014 your cart is waiting",
+    }
+    return await send_email(to=to, subject=subjects.get(stage, subjects["12h"]), html=render_cart_reminder_html(name, items, stage))

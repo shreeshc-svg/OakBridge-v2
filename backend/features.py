@@ -13,11 +13,12 @@ import io
 import os
 import uuid
 import logging
-from datetime import datetime, timezone
+import calendar
+from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 
 import requests
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Header, UploadFile
 from fastapi.responses import Response, StreamingResponse
 from motor.motor_asyncio import AsyncIOMotorClient
 from openpyxl import Workbook, load_workbook
@@ -785,3 +786,112 @@ async def ensure_feature_indexes():
     await db.coupons.create_index("code", unique=True)
     await db.submissions.create_index("status")
     await db.stock_notifications.create_index([("book_id", 1), ("email", 1)], unique=True)
+    await db.carts.create_index("user_id", unique=True)
+
+
+# ====== Server-side cart + abandoned-cart reminders ======
+
+class CartItemIn(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    book_id: str
+    title: str = ""
+    author: str = ""
+    cover_image: str = ""
+    price: float = 0
+    quantity: int = 1
+
+
+class CartSync(BaseModel):
+    items: List[CartItemIn]
+
+
+@customer_router.get("/my/cart")
+async def get_my_cart(user: dict = Depends(get_current_user)):
+    doc = await db.carts.find_one({"user_id": user["id"]}, {"_id": 0})
+    return {"items": (doc or {}).get("items", [])}
+
+
+@customer_router.put("/my/cart")
+async def save_my_cart(payload: CartSync, user: dict = Depends(get_current_user)):
+    items = [i.model_dump() for i in payload.items]
+    await db.carts.update_one(
+        {"user_id": user["id"]},
+        {"$set": {
+            "user_id": user["id"],
+            "items": items,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "reminders_sent": [],
+        }},
+        upsert=True,
+    )
+    return {"ok": True, "count": len(items)}
+
+
+def _is_last_day_of_month(dt: datetime) -> bool:
+    return dt.day == calendar.monthrange(dt.year, dt.month)[1]
+
+
+async def process_cart_reminders(force: bool = False) -> dict:
+    """Send abandoned-cart FOMO reminders at 12h, 1 week, and end of month."""
+    now = datetime.now(timezone.utc)
+    result = {"scanned": 0, "sent": 0, "by_stage": {"12h": 0, "1w": 0, "eom": 0}}
+    carts = await db.carts.find({"items.0": {"$exists": True}}).to_list(5000)
+    from emailer import send_cart_reminder  # late import avoids cycle
+    order = ["12h", "1w", "eom"]
+    for c in carts:
+        result["scanned"] += 1
+        try:
+            updated = datetime.fromisoformat(c.get("updated_at"))
+        except Exception:
+            continue
+        if updated.tzinfo is None:
+            updated = updated.replace(tzinfo=timezone.utc)
+        age = now - updated
+        done = set(c.get("reminders_sent", []))
+        stage = None
+        if force:
+            for st in order:
+                if st not in done:
+                    stage = st
+                    break
+        elif "eom" not in done and _is_last_day_of_month(now) and age >= timedelta(hours=12):
+            stage = "eom"
+        elif "1w" not in done and age >= timedelta(days=7):
+            stage = "1w"
+        elif "12h" not in done and age >= timedelta(hours=12):
+            stage = "12h"
+        if not stage:
+            continue
+        u = await db.users.find_one({"id": c["user_id"]}, {"_id": 0, "email": 1, "name": 1})
+        if not u or not u.get("email"):
+            continue
+        try:
+            await send_cart_reminder(u["email"], u.get("name", ""), c.get("items", []), stage)
+        except Exception:  # noqa: BLE001
+            log.exception("cart reminder email failed for %s", u.get("email"))
+            continue
+        mark = set(order[: order.index(stage) + 1]) | done
+        await db.carts.update_one(
+            {"user_id": c["user_id"]},
+            {"$set": {"reminders_sent": sorted(mark, key=order.index), "last_reminder_at": now.isoformat()}},
+        )
+        result["sent"] += 1
+        result["by_stage"][stage] += 1
+    log.info("cart reminders: %s", result)
+    return result
+
+
+tasks_router = APIRouter(prefix="/api/tasks", tags=["tasks"])
+
+
+@tasks_router.post("/cart-reminders")
+async def run_cart_reminders_task(x_task_token: Optional[str] = Header(None)):
+    expected = os.environ.get("TASK_TOKEN")
+    if not expected or x_task_token != expected:
+        raise HTTPException(status_code=403, detail="Invalid or missing task token")
+    return await process_cart_reminders()
+
+
+@admin_router.post("/cart-reminders/run")
+async def admin_run_cart_reminders(force: bool = False):
+    return await process_cart_reminders(force=force)

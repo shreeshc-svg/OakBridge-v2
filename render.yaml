@@ -20,6 +20,8 @@ services:
         value: Oakbridge Publishing
       - key: JWT_SECRET
         generateValue: true          # Render generates a strong secret
+      - key: TASK_TOKEN
+        generateValue: true          # secret for the cart-reminders cron endpoint
       # --- set these in the dashboard ---
       - key: MONGO_URL              # Atlas SRV connection string
         sync: false

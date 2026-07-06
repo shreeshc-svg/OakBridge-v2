@@ -47,6 +47,7 @@ from features import (
     init_storage,
     seed_coupons,
     ensure_feature_indexes,
+    tasks_router as features_tasks_router,
 )
 
 
@@ -561,6 +562,12 @@ async def create_order(payload: OrderCreate, user: Optional[dict] = Depends(get_
     )
     doc = order.model_dump()
     await db.orders.insert_one({**doc})
+    if user:
+        await db.carts.update_one(
+            {"user_id": user["id"]},
+            {"$set": {"items": [], "updated_at": datetime.now(timezone.utc).isoformat(), "reminders_sent": []}},
+            upsert=True,
+        )
     return order
 
 
@@ -584,6 +591,7 @@ from payments import payments_router, webhooks_router  # noqa: E402
 app.include_router(payments_router, prefix="/api")
 app.include_router(webhooks_router, prefix="/api")
 app.include_router(features_admin_router)
+app.include_router(features_tasks_router)
 
 app.add_middleware(
     CORSMiddleware,

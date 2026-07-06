@@ -4,8 +4,11 @@ import React, {
     useContext,
     useEffect,
     useMemo,
+    useRef,
     useState,
 } from "react";
+import { useAuth } from "./AuthContext";
+import { saveCart, loadCart } from "../lib/api";
 
 const CartContext = createContext(null);
 const STORAGE_KEY = "oakbridge_cart_v1";
@@ -25,6 +28,37 @@ export function CartProvider({ children }) {
     useEffect(() => {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
     }, [items]);
+
+    const { isAuthenticated } = useAuth();
+    const cartLoaded = useRef(false);
+
+    // On login: adopt the server cart if the local one is empty, else push local up.
+    useEffect(() => {
+        if (!isAuthenticated || cartLoaded.current) return;
+        cartLoaded.current = true;
+        (async () => {
+            try {
+                if (items.length === 0) {
+                    const data = await loadCart();
+                    if (data?.items?.length) setItems(data.items);
+                } else {
+                    await saveCart(items);
+                }
+            } catch {
+                /* non-blocking */
+            }
+        })();
+    }, [isAuthenticated, items]);
+
+    // While logged in, persist cart changes to the server (debounced) so
+    // abandoned-cart reminders have something to act on.
+    useEffect(() => {
+        if (!isAuthenticated) return;
+        const t = setTimeout(() => {
+            saveCart(items).catch(() => {});
+        }, 800);
+        return () => clearTimeout(t);
+    }, [items, isAuthenticated]);
 
     const addItem = useCallback((book, qty = 1) => {
         const stock = Number.isFinite(book.stock) ? book.stock : 9999;

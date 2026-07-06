@@ -68,6 +68,11 @@ export const resendOtp = () =>
 
 // My account
 export const fetchMyOrders = () => api.get("/my/orders").then((r) => r.data);
+export const saveCart = (items) =>
+    api.put("/my/cart", { items }).then((r) => r.data);
+export const loadCart = () => api.get("/my/cart").then((r) => r.data);
+export const adminRunCartReminders = () =>
+    api.post("/admin/cart-reminders/run?force=true").then((r) => r.data);
 
 // Admin
 export const adminStats = () => api.get("/admin/stats").then((r) => r.data);

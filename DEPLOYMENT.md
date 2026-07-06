@@ -69,6 +69,18 @@ Resend → Domains → add `oakbridge.in` → add the DKIM/SPF/MX DNS records it
 
 ---
 
+## 5b. Abandoned-cart reminders (Render Cron Job)
+The app persists logged-in users' carts and can email FOMO reminders at **12h, 1 week, and end of month**. Wire the schedule:
+1. Render → **New → Cron Job**.
+2. **Schedule:** `0 * * * *` (hourly).
+3. **Command:**
+   ```
+   curl -fsS -X POST -H "X-Task-Token: $TASK_TOKEN" "$API_URL/api/tasks/cart-reminders"
+   ```
+4. Set env on the cron job: `TASK_TOKEN` (same value as the web service) and `API_URL` = your Render backend URL.
+
+The endpoint is token-protected (403 without the correct `X-Task-Token`). You can also run it on demand from **Admin → Dashboard → "Run cart reminders"**.
+
 ## 6. Go-live checklist
 - [ ] Backend healthy at `/api`; `/api/books` returns data (Atlas connected, seeded).
 - [ ] Frontend loads, talks to backend, admin login works.
@@ -76,4 +88,5 @@ Resend → Domains → add `oakbridge.in` → add the DKIM/SPF/MX DNS records it
 - [ ] Razorpay live keys + webhook; a real payment → confirmation → **inbox** receipt.
 - [ ] Resend domain verified (emails inbox, not spam).
 - [ ] S3 wired (if using cover/eBook uploads).
+- [ ] Cart-reminders cron job created (`TASK_TOKEN` set on both web + cron).
 - [ ] `main` updated from `Oak-v2-UAT`, release tagged.

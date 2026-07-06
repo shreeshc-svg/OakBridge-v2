@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { BookOpen, ShoppingBag, Users, Mail, TrendingUp, FileText, Inbox, AlertTriangle, Sparkles } from "lucide-react";
-import { adminStats, formatINR } from "../../lib/api";
+import { adminStats, adminRunCartReminders, formatINR } from "../../lib/api";
+import { toast } from "sonner";
 
 function Stat({ label, value, icon: Icon, accent }) {
     return (
@@ -20,17 +21,43 @@ function Stat({ label, value, icon: Icon, accent }) {
 
 export default function AdminDashboard() {
     const [stats, setStats] = useState(null);
+    const [reminding, setReminding] = useState(false);
 
     useEffect(() => {
         adminStats().then(setStats).catch(() => {});
     }, []);
 
+    const runReminders = async () => {
+        setReminding(true);
+        try {
+            const r = await adminRunCartReminders();
+            toast.success(`Cart reminders: ${r.sent} sent, ${r.scanned} carts scanned.`);
+        } catch (e) {
+            toast.error("Could not run cart reminders.");
+        } finally {
+            setReminding(false);
+        }
+    };
+
     return (
         <div data-testid="admin-dashboard">
-            <div className="overline">Overview</div>
-            <h1 className="font-serif text-4xl md:text-5xl mt-2 text-[#002B5C]">
-                Dashboard
-            </h1>
+            <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                    <div className="overline">Overview</div>
+                    <h1 className="font-serif text-4xl md:text-5xl mt-2 text-[#002B5C]">
+                        Dashboard
+                    </h1>
+                </div>
+                <button
+                    type="button"
+                    onClick={runReminders}
+                    disabled={reminding}
+                    data-testid="run-cart-reminders"
+                    className="mt-2 text-xs font-medium border border-[#002B5C] px-4 py-2 hover:bg-[#F5F7FA] disabled:opacity-50"
+                >
+                    {reminding ? "Sending…" : "Run cart reminders"}
+                </button>
+            </div>
 
             <div className="mt-10 grid grid-cols-2 lg:grid-cols-5 gap-4">
                 <Stat
