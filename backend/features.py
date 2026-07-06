@@ -15,7 +15,7 @@ import uuid
 import logging
 import calendar
 from datetime import datetime, timezone, timedelta
-from typing import List, Optional
+from typing import Any, List, Optional
 
 import requests
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Header, UploadFile
@@ -790,6 +790,7 @@ async def ensure_feature_indexes():
     await db.site_content.create_index("key", unique=True)
     await db.media.create_index("uploaded_at")
     await db.content_collections.create_index("key", unique=True)
+    await db.settings.create_index("key", unique=True)
 
 
 # ====== Server-side cart + abandoned-cart reminders ======
@@ -1040,3 +1041,34 @@ async def set_collection(key: str, payload: CollectionSet):
         {"key": key}, {"$set": {"key": key, "items": payload.items}}, upsert=True
     )
     return {"ok": True, "count": len(payload.items)}
+
+
+SETTINGS_DEFAULTS = {
+    "tax_percent": 5,
+    "free_ship_threshold": 1500,
+    "ship_flat": 60,
+    "pdp_shipping": "Free shipping on orders over \u20b91,500",
+    "pdp_delivery": "3\u20137 business days",
+    "pdp_returns": "14-day returns",
+    "binding_options": ["Hardcover", "Softcover"],
+    "size_options": ["Demi", "Royal", "Crown"],
+}
+
+
+class SettingSet(BaseModel):
+    key: str
+    value: Any
+
+
+@public_router.get("/settings")
+async def get_settings():
+    docs = await db.settings.find({}, {"_id": 0}).to_list(200)
+    return {**SETTINGS_DEFAULTS, **{d["key"]: d["value"] for d in docs}}
+
+
+@admin_router.put("/settings")
+async def set_setting(payload: SettingSet):
+    await db.settings.update_one(
+        {"key": payload.key}, {"$set": {"key": payload.key, "value": payload.value}}, upsert=True
+    )
+    return {"ok": True}

@@ -95,6 +95,9 @@ export const mediaUrl = (u) => (u && u.startsWith("/api/") ? `${BACKEND_URL}${u}
 export const fetchCollection = (key) => api.get(`/collections/${key}`).then((r) => r.data);
 export const adminSaveCollection = (key, items) =>
     api.put(`/admin/collections/${key}`, { items }).then((r) => r.data);
+export const fetchSettings = () => api.get("/settings").then((r) => r.data);
+export const adminSetSetting = (key, value) =>
+    api.put("/admin/settings", { key, value }).then((r) => r.data);
 
 // Admin
 export const adminStats = () => api.get("/admin/stats").then((r) => r.data);

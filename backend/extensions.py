@@ -111,6 +111,7 @@ class BookAdminCreate(BaseModel):
     new_release: bool = False
     rating: float = 4.5
     stock: int = 100
+    variants: Optional[list] = None
 
 
 class BookAdminUpdate(BaseModel):
@@ -131,6 +132,7 @@ class BookAdminUpdate(BaseModel):
     bestseller: Optional[bool] = None
     new_release: Optional[bool] = None
     stock: Optional[int] = None
+    variants: Optional[list] = None
 
 
 class DeskCopyCreate(BaseModel):

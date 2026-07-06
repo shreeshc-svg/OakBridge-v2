@@ -20,6 +20,7 @@ export default function Cart() {
     };
     const {
         items,
+        itemKey,
         updateQty,
         removeItem,
         subtotal,
@@ -63,7 +64,7 @@ export default function Cart() {
                         </div>
                         {items.map((i) => (
                             <div
-                                key={i.book_id}
+                                key={itemKey(i)}
                                 data-testid={`cart-row-${i.book_id}`}
                                 className="grid grid-cols-12 gap-4 py-6 border-b border-[#E5E7EB] items-center"
                             >
@@ -92,7 +93,7 @@ export default function Cart() {
                                     <div className="flex items-center border border-[#E5E7EB] bg-white w-fit">
                                         <button
                                             onClick={() =>
-                                                updateQty(i.book_id, i.quantity - 1)
+                                                updateQty(itemKey(i), i.quantity - 1)
                                             }
                                             data-testid={`cart-page-decrement-${i.book_id}`}
                                             className="px-2 py-1 hover:bg-[#F5F7FA]"
@@ -104,7 +105,7 @@ export default function Cart() {
                                         </span>
                                         <button
                                             onClick={() =>
-                                                updateQty(i.book_id, i.quantity + 1)
+                                                updateQty(itemKey(i), i.quantity + 1)
                                             }
                                             data-testid={`cart-page-increment-${i.book_id}`}
                                             className="px-2 py-1 hover:bg-[#F5F7FA]"
@@ -118,7 +119,7 @@ export default function Cart() {
                                 </div>
                                 <div className="col-span-1 text-right">
                                     <button
-                                        onClick={() => removeItem(i.book_id)}
+                                        onClick={() => removeItem(itemKey(i))}
                                         data-testid={`cart-page-remove-${i.book_id}`}
                                         className="text-[#4B5563] hover:text-[#CC0033]"
                                     >

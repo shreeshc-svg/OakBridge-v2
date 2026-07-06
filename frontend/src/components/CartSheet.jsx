@@ -18,6 +18,7 @@ export default function CartSheet() {
         items,
         isOpen,
         setIsOpen,
+        itemKey,
         removeItem,
         updateQty,
         subtotal,
@@ -82,7 +83,7 @@ export default function CartSheet() {
                         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-5">
                             {items.map((i) => (
                                 <div
-                                    key={i.book_id}
+                                    key={itemKey(i)}
                                     data-testid={`cart-item-${i.book_id}`}
                                     className="flex gap-4 border-b border-[#E5E7EB] pb-5"
                                 >
@@ -103,7 +104,7 @@ export default function CartSheet() {
                                                 <button
                                                     onClick={() =>
                                                         updateQty(
-                                                            i.book_id,
+                                                            itemKey(i),
                                                             i.quantity - 1,
                                                         )
                                                     }
@@ -122,7 +123,7 @@ export default function CartSheet() {
                                                 <button
                                                     onClick={() =>
                                                         updateQty(
-                                                            i.book_id,
+                                                            itemKey(i),
                                                             i.quantity + 1,
                                                         )
                                                     }
@@ -144,7 +145,7 @@ export default function CartSheet() {
                                         </div>
                                     </div>
                                     <button
-                                        onClick={() => removeItem(i.book_id)}
+                                        onClick={() => removeItem(itemKey(i))}
                                         data-testid={`cart-remove-${i.book_id}`}
                                         className="self-start text-[#4B5563] hover:text-[#CC0033]"
                                         aria-label="Remove"

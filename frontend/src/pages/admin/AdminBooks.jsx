@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { fetchSettings } from "../../lib/api";
 import { Plus, Pencil, Trash2, X, FileUp, FileCheck2, Upload, ImagePlus, Trash, Sparkles } from "lucide-react";
 import {
     adminBulkDeleteBooks,
@@ -37,6 +38,7 @@ const BLANK = {
     bestseller: false,
     new_release: false,
     stock: 100,
+    variants: [],
 };
 
 function resolveImage(url) {
@@ -359,6 +361,16 @@ function EbookManager({ bookId, hasEbook, filename, onChange }) {
 
 function BookForm({ initial, categories, onClose, onSaved }) {
     const [form, setForm] = useState({ ...BLANK, ...(initial || {}) });
+    const [vsettings, setVsettings] = useState(null);
+    useEffect(() => {
+        fetchSettings().then(setVsettings).catch(() => {});
+    }, []);
+    const bindingOpts = vsettings?.binding_options || ["Hardcover", "Softcover"];
+    const sizeOpts = vsettings?.size_options || ["Demi", "Royal", "Crown"];
+    const updateVariant = (i, key, val) =>
+        setForm((f) => ({ ...f, variants: (f.variants || []).map((v, idx) => (idx === i ? { ...v, [key]: val } : v)) }));
+    const removeVariant = (i) =>
+        setForm((f) => ({ ...f, variants: (f.variants || []).filter((_, idx) => idx !== i) }));
     const [saving, setSaving] = useState(false);
     const [draftingBio, setDraftingBio] = useState(false);
     const isEdit = !!initial?.id;
@@ -398,6 +410,12 @@ function BookForm({ initial, categories, onClose, onSaved }) {
                 original_price: form.original_price === "" ? null : Number(form.original_price),
                 pages: Number(form.pages),
                 stock: Number(form.stock),
+                variants: (form.variants || []).map((v) => ({
+                    binding: v.binding || "",
+                    size: v.size || "",
+                    price: Number(v.price) || 0,
+                    stock: v.stock === "" || v.stock == null ? null : Number(v.stock),
+                })),
             };
             if (isEdit) {
                 await adminUpdateBook(initial.id, payload);
@@ -568,6 +586,52 @@ function BookForm({ initial, categories, onClose, onSaved }) {
                         onChange={() => onSaved()}
                     />
                 )}
+
+                <div className="mt-8 border-t border-[#E5E7EB] pt-6">
+                    <div className="flex items-center justify-between gap-4">
+                        <div>
+                            <div className="overline">Price matrix (optional)</div>
+                            <p className="text-xs text-[#4B5563] mt-1">
+                                Binding &times; size variants with their own price. Leave empty to sell at the single price above.
+                            </p>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() =>
+                                setForm((f) => ({
+                                    ...f,
+                                    variants: [
+                                        ...(f.variants || []),
+                                        { binding: bindingOpts[0] || "", size: sizeOpts[0] || "", price: form.price, stock: "" },
+                                    ],
+                                }))
+                            }
+                            data-testid="add-variant"
+                            className="text-xs border border-[#002B5C] px-3 py-1.5 hover:bg-[#F5F7FA] whitespace-nowrap"
+                        >
+                            + Add variant
+                        </button>
+                    </div>
+                    {(form.variants || []).length > 0 && (
+                        <div className="mt-4 space-y-2">
+                            {(form.variants || []).map((v, i) => (
+                                <div key={i} className="flex flex-wrap items-center gap-2">
+                                    <select value={v.binding || ""} onChange={(e) => updateVariant(i, "binding", e.target.value)} className="border border-[#E5E7EB] bg-white px-2 py-1.5 text-sm">
+                                        <option value="">Binding…</option>
+                                        {bindingOpts.map((b) => (<option key={b} value={b}>{b}</option>))}
+                                    </select>
+                                    <select value={v.size || ""} onChange={(e) => updateVariant(i, "size", e.target.value)} className="border border-[#E5E7EB] bg-white px-2 py-1.5 text-sm">
+                                        <option value="">Size…</option>
+                                        {sizeOpts.map((sz) => (<option key={sz} value={sz}>{sz}</option>))}
+                                    </select>
+                                    <input type="number" value={v.price} onChange={(e) => updateVariant(i, "price", e.target.value)} placeholder="Price" className="w-28 border border-[#E5E7EB] bg-white px-2 py-1.5 text-sm" />
+                                    <input type="number" value={v.stock ?? ""} onChange={(e) => updateVariant(i, "stock", e.target.value)} placeholder="Stock" className="w-24 border border-[#E5E7EB] bg-white px-2 py-1.5 text-sm" />
+                                    <button type="button" onClick={() => removeVariant(i)} className="text-[#CC0033] border border-[#CC0033] px-2 py-1.5 text-xs">Remove</button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
 
                 <div className="mt-8 flex justify-end gap-3">
                     <button

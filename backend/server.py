@@ -85,6 +85,7 @@ class Book(BaseModel):
     rating: float = 4.5
     stock: int = 100
     has_ebook: bool = False
+    variants: list = Field(default_factory=list)  # [{binding,size,price,mrp?,stock?}]
 
 
 class Category(BaseModel):
@@ -128,6 +129,8 @@ class CartItem(BaseModel):
     cover_image: str
     price: float
     quantity: int
+    binding: Optional[str] = None
+    size: Optional[str] = None
 
 
 class OrderCreate(BaseModel):
@@ -488,6 +491,33 @@ async def contact_submit(payload: ContactMessage):
     )
 
 
+SETTINGS_DEFAULTS = {
+    "tax_percent": 5,
+    "free_ship_threshold": 1500,
+    "ship_flat": 60,
+    "pdp_shipping": "Free shipping on orders over \u20b91,500",
+    "pdp_delivery": "3\u20137 business days",
+    "pdp_returns": "14-day returns",
+    "binding_options": ["Hardcover", "Softcover"],
+    "size_options": ["Demi", "Royal", "Crown"],
+}
+
+
+async def _get_settings() -> dict:
+    docs = await db.settings.find({}, {"_id": 0}).to_list(200)
+    return {**SETTINGS_DEFAULTS, **{d["key"]: d["value"] for d in docs}}
+
+
+def _variant_price(bdoc: dict, binding, size) -> float:
+    base = float(bdoc.get("price", 0) or 0)
+    if not (binding or size):
+        return base
+    for v in (bdoc.get("variants") or []):
+        if v.get("binding") == binding and v.get("size") == size and v.get("price") not in (None, ""):
+            return float(v["price"])
+    return base
+
+
 @api_router.post("/orders", response_model=Order)
 async def create_order(payload: OrderCreate, user: Optional[dict] = Depends(get_current_user_optional)):
     if not payload.items:
@@ -502,7 +532,7 @@ async def create_order(payload: OrderCreate, user: Optional[dict] = Depends(get_
             raise HTTPException(status_code=400, detail="Invalid quantity")
         bdoc = await db.books.find_one(
             {"id": it.book_id},
-            {"_id": 0, "id": 1, "title": 1, "author": 1, "cover_image": 1, "price": 1, "stock": 1},
+            {"_id": 0, "id": 1, "title": 1, "author": 1, "cover_image": 1, "price": 1, "stock": 1, "variants": 1},
         )
         if not bdoc:
             raise HTTPException(status_code=404, detail=f"Book not found: {it.book_id}")
@@ -517,17 +547,19 @@ async def create_order(payload: OrderCreate, user: Optional[dict] = Depends(get_
         )
 
     # Rebuild line items from DB prices (ignore any client-supplied price/subtotal/total).
-    server_items = [
-        CartItem(
+    server_items = []
+    for it in payload.items:
+        b = books_by_id[it.book_id]
+        server_items.append(CartItem(
             book_id=it.book_id,
-            title=books_by_id[it.book_id]["title"],
-            author=books_by_id[it.book_id].get("author", ""),
-            cover_image=books_by_id[it.book_id].get("cover_image", ""),
-            price=float(books_by_id[it.book_id]["price"]),
+            title=b["title"],
+            author=b.get("author", ""),
+            cover_image=b.get("cover_image", ""),
+            price=_variant_price(b, it.binding, it.size),
             quantity=it.quantity,
-        )
-        for it in payload.items
-    ]
+            binding=it.binding,
+            size=it.size,
+        ))
     subtotal = round(sum(i.price * i.quantity for i in server_items), 2)
 
     # Re-validate the coupon server-side; never trust a client-supplied discount.
@@ -540,9 +572,13 @@ async def create_order(payload: OrderCreate, user: Optional[dict] = Depends(get_
             discount = float(cres.discount)
             coupon_code = cres.code
 
+    settings = await _get_settings()
+    tax_pct = float(settings.get("tax_percent", 5) or 0)
+    free_thr = float(settings.get("free_ship_threshold", 1500) or 0)
+    ship_flat = float(settings.get("ship_flat", 60) or 0)
     discounted = max(0.0, subtotal - discount)
-    shipping = 0.0 if discounted <= 0 else (0.0 if discounted > 1500 else 60.0)
-    tax = float(round(discounted * 0.05))
+    shipping = 0.0 if discounted <= 0 else (0.0 if discounted > free_thr else ship_flat)
+    tax = float(round(discounted * tax_pct / 100.0))
     total = round(discounted + shipping + tax, 2)
 
     order_number = "OAK-" + datetime.now(timezone.utc).strftime("%y%m%d") + "-" + uuid.uuid4().hex[:6].upper()

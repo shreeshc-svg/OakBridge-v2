@@ -6,7 +6,7 @@ import { Minus, Plus, ShoppingBag, ArrowLeft, Star, GraduationCap } from "lucide
 import BookCard from "../components/BookCard";
 import DeskCopyDialog from "../components/DeskCopyDialog";
 import ReviewsSection from "../components/ReviewsSection";
-import { fetchBook, fetchBooks, formatINR, notifyBackInStock } from "../lib/api";
+import { fetchBook, fetchBooks, formatINR, notifyBackInStock, fetchSettings } from "../lib/api";
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
 import { toast } from "sonner";
@@ -25,6 +25,9 @@ export default function BookDetail() {
     const [notifyEmail, setNotifyEmail] = useState("");
     const [notifyBusy, setNotifyBusy] = useState(false);
     const [notified, setNotified] = useState(false);
+    const [settings, setSettings] = useState(null);
+    const [binding, setBinding] = useState(null);
+    const [size, setSize] = useState(null);
 
     useEffect(() => {
         setLoading(true);
@@ -37,6 +40,18 @@ export default function BookDetail() {
             .catch(() => setBook(null))
             .finally(() => setLoading(false));
     }, [id]);
+
+    useEffect(() => {
+        fetchSettings().then(setSettings).catch(() => {});
+    }, []);
+
+    useEffect(() => {
+        const vs = book && Array.isArray(book.variants) ? book.variants : [];
+        if (vs.length) {
+            setBinding(vs[0].binding || null);
+            setSize(vs[0].size || null);
+        }
+    }, [book]);
 
     if (loading) {
         return (
@@ -63,8 +78,27 @@ export default function BookDetail() {
         ? Math.round(100 - (book.price / book.original_price) * 100)
         : 0;
 
+    const variants = Array.isArray(book.variants) ? book.variants : [];
+    const hasVariants = variants.length > 0;
+    const bindings = [...new Set(variants.map((v) => v.binding).filter(Boolean))];
+    const sizes = [...new Set(variants.map((v) => v.size).filter(Boolean))];
+    const activeVariant = hasVariants
+        ? variants.find((v) => v.binding === binding && v.size === size) || null
+        : null;
+    const activePrice =
+        activeVariant && activeVariant.price != null ? Number(activeVariant.price) : book.price;
+    const activeStock =
+        activeVariant && Number.isFinite(activeVariant.stock)
+            ? activeVariant.stock
+            : Number.isFinite(book.stock)
+              ? book.stock
+              : 0;
+    const chosenVariant = hasVariants
+        ? { binding, size, price: activePrice, stock: activeStock }
+        : null;
+
     const LOW_STOCK = 5;
-    const stock = Number.isFinite(book.stock) ? book.stock : (book.stock ?? 0);
+    const stock = hasVariants ? activeStock : Number.isFinite(book.stock) ? book.stock : 0;
     const oos = stock <= 0;
     const low = !oos && stock <= LOW_STOCK;
 
@@ -101,7 +135,7 @@ export default function BookDetail() {
     };
 
     const onAdd = () => {
-        addItem(book, qty);
+        addItem(book, qty, chosenVariant);
     };
 
     const submitNotify = async (e) => {
@@ -200,7 +234,7 @@ export default function BookDetail() {
                             data-testid="book-price"
                             className="font-serif text-5xl text-[#002B5C]"
                         >
-                            {formatINR(book.price)}
+                            {formatINR(activePrice)}
                         </span>
                         {book.original_price && (
                             <>
@@ -213,6 +247,45 @@ export default function BookDetail() {
                             </>
                         )}
                     </div>
+
+                    {hasVariants && (
+                        <div className="mt-6 space-y-4">
+                            {bindings.length > 0 && (
+                                <div>
+                                    <div className="overline !text-[10px] mb-2">Binding</div>
+                                    <div className="flex flex-wrap gap-2">
+                                        {bindings.map((b) => (
+                                            <button
+                                                key={b}
+                                                type="button"
+                                                onClick={() => setBinding(b)}
+                                                className={`px-4 py-2 text-sm border transition-colors ${binding === b ? "border-[#002B5C] bg-[#002B5C] text-white" : "border-[#E5E7EB] hover:border-[#002B5C]"}`}
+                                            >
+                                                {b}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                            {sizes.length > 0 && (
+                                <div>
+                                    <div className="overline !text-[10px] mb-2">Size</div>
+                                    <div className="flex flex-wrap gap-2">
+                                        {sizes.map((sz) => (
+                                            <button
+                                                key={sz}
+                                                type="button"
+                                                onClick={() => setSize(sz)}
+                                                className={`px-4 py-2 text-sm border transition-colors ${size === sz ? "border-[#002B5C] bg-[#002B5C] text-white" : "border-[#E5E7EB] hover:border-[#002B5C]"}`}
+                                            >
+                                                {sz}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                     {low && (
                         <div data-testid="low-stock-note" className="mt-6 inline-flex items-center gap-2 text-sm font-medium text-[#CC0033]">
@@ -289,7 +362,7 @@ export default function BookDetail() {
                             </button>
                             <button
                                 onClick={() => {
-                                    addItem(book, qty);
+                                    addItem(book, qty, chosenVariant);
                                     setIsOpen(false);
                                     if (isAuthenticated) {
                                         nav("/checkout");
@@ -329,15 +402,15 @@ export default function BookDetail() {
                     <div className="mt-10 grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs font-mono text-[#4B5563]">
                         <div>
                             <div className="overline !text-[10px]">Free Shipping</div>
-                            <div className="mt-1 text-[#002B5C]">On ₹1500+</div>
+                            <div className="mt-1 text-[#002B5C]">On ₹{settings?.free_ship_threshold ?? 1500}+</div>
                         </div>
                         <div>
                             <div className="overline !text-[10px]">Delivery</div>
-                            <div className="mt-1 text-[#002B5C]">3-7 days</div>
+                            <div className="mt-1 text-[#002B5C]">{settings?.pdp_delivery ?? "3-7 days"}</div>
                         </div>
                         <div>
                             <div className="overline !text-[10px]">Returns</div>
-                            <div className="mt-1 text-[#002B5C]">14 days</div>
+                            <div className="mt-1 text-[#002B5C]">{settings?.pdp_returns ?? "14 days"}</div>
                         </div>
                         <div>
                             <div className="overline !text-[10px]">Invoice</div>

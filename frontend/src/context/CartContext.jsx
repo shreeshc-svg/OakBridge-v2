@@ -8,10 +8,13 @@ import React, {
     useState,
 } from "react";
 import { useAuth } from "./AuthContext";
-import { saveCart, loadCart } from "../lib/api";
+import { saveCart, loadCart, fetchSettings } from "../lib/api";
 
 const CartContext = createContext(null);
 const STORAGE_KEY = "oakbridge_cart_v1";
+
+const keyOf = (book_id, binding, size) => `${book_id}::${binding || ""}::${size || ""}`;
+const itemKey = (i) => i.key || keyOf(i.book_id, i.binding, i.size);
 
 export function CartProvider({ children }) {
     const [items, setItems] = useState(() => {
@@ -23,16 +26,20 @@ export function CartProvider({ children }) {
         }
     });
     const [isOpen, setIsOpen] = useState(false);
-    const [coupon, setCouponState] = useState(null); // { code, discount, kind, value }
+    const [coupon, setCouponState] = useState(null);
+    const [settings, setSettings] = useState(null);
 
     useEffect(() => {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
     }, [items]);
 
+    useEffect(() => {
+        fetchSettings().then(setSettings).catch(() => {});
+    }, []);
+
     const { isAuthenticated } = useAuth();
     const cartLoaded = useRef(false);
 
-    // On login: adopt the server cart if the local one is empty, else push local up.
     useEffect(() => {
         if (!isAuthenticated || cartLoaded.current) return;
         cartLoaded.current = true;
@@ -50,8 +57,6 @@ export function CartProvider({ children }) {
         })();
     }, [isAuthenticated, items]);
 
-    // While logged in, persist cart changes to the server (debounced) so
-    // abandoned-cart reminders have something to act on.
     useEffect(() => {
         if (!isAuthenticated) return;
         const t = setTimeout(() => {
@@ -60,55 +65,59 @@ export function CartProvider({ children }) {
         return () => clearTimeout(t);
     }, [items, isAuthenticated]);
 
-    const addItem = useCallback((book, qty = 1) => {
-        const stock = Number.isFinite(book.stock) ? book.stock : 9999;
-        if (stock <= 0) return; // out of stock — cannot add
+    const addItem = useCallback((book, qty = 1, variant = null) => {
+        const binding = variant?.binding || null;
+        const size = variant?.size || null;
+        const price = variant && variant.price != null ? Number(variant.price) : book.price;
+        const stock = Number.isFinite(variant?.stock)
+            ? variant.stock
+            : Number.isFinite(book.stock)
+              ? book.stock
+              : 9999;
+        if (stock <= 0) return;
+        const k = keyOf(book.id, binding, size);
         setItems((prev) => {
-            const existing = prev.find((i) => i.book_id === book.id);
+            const existing = prev.find((i) => itemKey(i) === k);
             if (existing) {
                 const capped = Math.min(existing.quantity + qty, stock);
-                return prev.map((i) =>
-                    i.book_id === book.id
-                        ? { ...i, quantity: capped, stock }
-                        : i,
-                );
+                return prev.map((i) => (itemKey(i) === k ? { ...i, quantity: capped, stock, price } : i));
             }
             return [
                 ...prev,
                 {
+                    key: k,
                     book_id: book.id,
                     title: book.title,
                     author: book.author,
                     cover_image: book.cover_image,
-                    price: book.price,
+                    price,
                     quantity: Math.min(qty, stock),
                     stock,
+                    binding,
+                    size,
                 },
             ];
         });
         setIsOpen(true);
     }, []);
 
-    const removeItem = useCallback((book_id) => {
-        setItems((prev) => prev.filter((i) => i.book_id !== book_id));
+    const removeItem = useCallback((key) => {
+        setItems((prev) => prev.filter((i) => itemKey(i) !== key));
     }, []);
 
-    const updateQty = useCallback(
-        (book_id, quantity) => {
-            if (quantity <= 0) {
-                removeItem(book_id);
-                return;
-            }
-            setItems((prev) =>
-                prev.map((i) => {
-                    if (i.book_id !== book_id) return i;
-                    const cap = Number.isFinite(i.stock) ? i.stock : quantity;
-                    return { ...i, quantity: Math.min(quantity, cap) };
-                }),
-            );
-        },
-        [removeItem],
-    );
+    const updateQty = useCallback((key, quantity) => {
+        if (quantity <= 0) {
+            setItems((prev) => prev.filter((i) => itemKey(i) !== key));
+            return;
+        }
+        setItems((prev) =>
+            prev.map((i) => {
+                if (itemKey(i) !== key) return i;
+                const cap = Number.isFinite(i.stock) ? i.stock : quantity;
+                return { ...i, quantity: Math.min(quantity, cap) };
+            }),
+        );
+    }, []);
 
     const clear = useCallback(() => {
         setItems([]);
@@ -119,18 +128,18 @@ export function CartProvider({ children }) {
     const clearCoupon = useCallback(() => setCouponState(null), []);
 
     const totals = useMemo(() => {
-        const subtotal = items.reduce(
-            (sum, i) => sum + i.price * i.quantity,
-            0,
-        );
+        const taxPct = Number(settings?.tax_percent ?? 5);
+        const freeThr = Number(settings?.free_ship_threshold ?? 1500);
+        const shipFlat = Number(settings?.ship_flat ?? 60);
+        const subtotal = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
         const count = items.reduce((sum, i) => sum + i.quantity, 0);
         const discount = coupon && subtotal > 0 ? Math.min(coupon.discount, subtotal) : 0;
         const discounted = Math.max(0, subtotal - discount);
-        const shipping = discounted === 0 ? 0 : discounted > 1500 ? 0 : 60;
-        const tax = Math.round(discounted * 0.05);
+        const shipping = discounted === 0 ? 0 : discounted > freeThr ? 0 : shipFlat;
+        const tax = Math.round((discounted * taxPct) / 100);
         const total = discounted + shipping + tax;
-        return { subtotal, discount, shipping, tax, total, count };
-    }, [items, coupon]);
+        return { subtotal, discount, shipping, tax, total, count, taxPct };
+    }, [items, coupon, settings]);
 
     const value = useMemo(
         () => ({
@@ -144,14 +153,14 @@ export function CartProvider({ children }) {
             coupon,
             setCoupon,
             clearCoupon,
+            settings,
+            itemKey,
             ...totals,
         }),
-        [items, isOpen, addItem, removeItem, updateQty, clear, coupon, setCoupon, clearCoupon, totals],
+        [items, isOpen, addItem, removeItem, updateQty, clear, coupon, setCoupon, clearCoupon, settings, totals],
     );
 
-    return (
-        <CartContext.Provider value={value}>{children}</CartContext.Provider>
-    );
+    return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
 }
 
 export const useCart = () => {
