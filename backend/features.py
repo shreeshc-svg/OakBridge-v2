@@ -789,6 +789,7 @@ async def ensure_feature_indexes():
     await db.carts.create_index("user_id", unique=True)
     await db.site_content.create_index("key", unique=True)
     await db.media.create_index("uploaded_at")
+    await db.content_collections.create_index("key", unique=True)
 
 
 # ====== Server-side cart + abandoned-cart reminders ======
@@ -906,6 +907,36 @@ APP_MEDIA_MAX = 10 * 1024 * 1024  # 10 MB
 SITE_CONTENT_DEFAULTS = {
     "home_hero": "https://images.unsplash.com/photo-1507842217343-583bb7270b66?auto=format&fit=crop&w=1600&q=85",
     "plp_banner": "https://images.unsplash.com/photo-1507842217343-583bb7270b66?auto=format&fit=crop&w=2000&q=85",
+    # What We Do / verticals
+    "verticals_publishing": "https://images.unsplash.com/photo-1507842217343-583bb7270b66?auto=format&fit=crop&w=1600&q=85",
+    "verticals_events": "https://images.unsplash.com/photo-1505373877841-8d25f7d46678?auto=format&fit=crop&w=1400&q=80",
+    "verticals_digital-solutions": "https://images.unsplash.com/photo-1551033406-611cf9a28f67?auto=format&fit=crop&w=1400&q=80",
+    "verticals_training": "https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=1400&q=80",
+    # Solutions sub-pages
+    "solutions_schools": "https://images.unsplash.com/photo-1503676260728-1c00da094a0b?auto=format&fit=crop&w=1600&q=80",
+    "solutions_higher-ed": "https://images.unsplash.com/photo-1485846234645-a62644f84728?auto=format&fit=crop&w=1600&q=85",
+    "solutions_educators": "https://images.unsplash.com/photo-1434030216411-0b793f4b4173?auto=format&fit=crop&w=1600&q=80",
+    # Events flagship banners (also power the rotating hero)
+    "events_vidhi_banner": "/api/files/oakbridge/events/vidhi-banner.webp",
+    "events_summit_banner": "/api/files/oakbridge/events/summit-banner.webp",
+}
+
+COLLECTION_DEFAULTS = {
+    "events_vidhi_speakers": [
+        {"name": "Arjun Ram Meghwal", "role": "Union Minister for Law & Justice, GoI", "photo": "/api/files/oakbridge/events/vidhi-arjun-meghwal.png"},
+        {"name": "Justice A K Sikri", "role": "Former SC Judge \u00b7 Singapore Int'l Commercial Court", "photo": "/api/files/oakbridge/events/vidhi-justice-sikri.png"},
+        {"name": "R Venkataramani", "role": "Attorney General for India", "photo": "/api/files/oakbridge/events/vidhi-venkataramani.png"},
+        {"name": "Dr Lalit Bhasin", "role": "President, Society of Indian Law Firms", "photo": "/api/files/oakbridge/events/vidhi-lalit-bhasin.png"},
+        {"name": "Ravi Kishan", "role": "Member of Parliament & Actor", "photo": "/api/files/oakbridge/events/vidhi-ravi-kishan.png"},
+        {"name": "Gaythri Raman", "role": "Managing Director SEA & India, LexisNexis", "photo": "/api/files/oakbridge/events/vidhi-gaythri-raman.png"},
+    ],
+    "events_summit_speakers": [
+        {"name": "Justice Manmohan", "role": "Judge, Supreme Court of India", "photo": "/api/files/oakbridge/events/summit-justice-manmohan.png"},
+        {"name": "Dr. Shardul S. Shroff", "role": "Executive Chairman, SAM & Co", "photo": "/api/files/oakbridge/events/summit-shardul-shroff.png"},
+        {"name": "Dr Manoj Kumar", "role": "Addl. Secretary, Ministry of Law & Justice", "photo": "/api/files/oakbridge/events/summit-manoj-kumar.jpg"},
+        {"name": "Shailesh Haribhakti", "role": "Board Chairperson, leading Indian companies", "photo": "/api/files/oakbridge/events/summit-shailesh-haribhakti.png"},
+        {"name": "L Badri Narayanan", "role": "Executive Partner, Lakshmikumaran Sridharan", "photo": "/api/files/oakbridge/events/summit-badri-narayanan.png"},
+    ],
 }
 
 
@@ -989,3 +1020,23 @@ async def admin_update_category_image(category_id: str, payload: CategoryImageSe
     if r.matched_count == 0:
         raise HTTPException(status_code=404, detail="Category not found")
     return {"ok": True}
+
+
+class CollectionSet(BaseModel):
+    items: List[dict]
+
+
+@public_router.get("/collections/{key}")
+async def get_collection(key: str):
+    doc = await db.content_collections.find_one({"key": key}, {"_id": 0})
+    if doc and doc.get("items") is not None:
+        return {"key": key, "items": doc["items"]}
+    return {"key": key, "items": COLLECTION_DEFAULTS.get(key, [])}
+
+
+@admin_router.put("/collections/{key}")
+async def set_collection(key: str, payload: CollectionSet):
+    await db.content_collections.update_one(
+        {"key": key}, {"$set": {"key": key, "items": payload.items}}, upsert=True
+    )
+    return {"ok": True, "count": len(payload.items)}

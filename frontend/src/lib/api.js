@@ -92,6 +92,9 @@ export const adminDeleteMedia = (id) =>
 export const adminUpdateCategoryImage = (id, image) =>
     api.patch(`/admin/categories/${id}`, { image }).then((r) => r.data);
 export const mediaUrl = (u) => (u && u.startsWith("/api/") ? `${BACKEND_URL}${u}` : u);
+export const fetchCollection = (key) => api.get(`/collections/${key}`).then((r) => r.data);
+export const adminSaveCollection = (key, items) =>
+    api.put(`/admin/collections/${key}`, { items }).then((r) => r.data);
 
 // Admin
 export const adminStats = () => api.get("/admin/stats").then((r) => r.data);

@@ -1,4 +1,5 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
+import { fetchSiteContent, mediaUrl } from "../lib/api";
 import Breadcrumbs from "../components/Breadcrumbs";
 import Seo from "../components/Seo";
 import { Link } from "react-router-dom";
@@ -110,7 +111,7 @@ function VerticalCard({ v, reverse }) {
             </div>
             <div className="lg:col-span-5 relative aspect-[4/3] bg-[#002B5C] overflow-hidden">
                 <img
-                    src={v.image}
+                    src={mediaUrl(site["verticals_" + v.id]) || v.image}
                     alt={v.title}
                     className="absolute inset-0 w-full h-full object-cover opacity-90"
                 />
@@ -126,6 +127,10 @@ function VerticalCard({ v, reverse }) {
 }
 
 export default function Verticals() {
+    const [site, setSite] = useState({});
+    useEffect(() => {
+        fetchSiteContent().then(setSite).catch(() => {});
+    }, []);
     return (
         <div data-testid="verticals-page">
             <Breadcrumbs items={[{ label: "What We Do" }]} />

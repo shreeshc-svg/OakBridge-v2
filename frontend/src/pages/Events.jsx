@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import Breadcrumbs from "../components/Breadcrumbs";
 import Seo from "../components/Seo";
+import { fetchSiteContent, fetchCollection, mediaUrl } from "../lib/api";
 import { ArrowUpRight, Calendar, MapPin, Users, Sparkles, Mic, BookOpen, Award, Music, Smile, ShoppingBag, Brain, Building2 } from "lucide-react";
 
 const ASSET = (p) => `${process.env.REACT_APP_BACKEND_URL}${p}`;
@@ -184,16 +185,40 @@ function SpeakerCard({ s }) {
 }
 
 export default function Events() {
+    const [site, setSite] = useState({});
+    const [vidhiSpeakers, setVidhiSpeakers] = useState(VIDHI_SPEAKERS);
+    const [summitSpeakers, setSummitSpeakers] = useState(SUMMIT_SPEAKERS);
+    useEffect(() => {
+        fetchSiteContent().then(setSite).catch(() => {});
+        fetchCollection("events_vidhi_speakers")
+            .then((d) => {
+                if (d?.items?.length)
+                    setVidhiSpeakers(d.items.map((x) => ({ ...x, photo: mediaUrl(x.photo) })));
+            })
+            .catch(() => {});
+        fetchCollection("events_summit_speakers")
+            .then((d) => {
+                if (d?.items?.length)
+                    setSummitSpeakers(d.items.map((x) => ({ ...x, photo: mediaUrl(x.photo) })));
+            })
+            .catch(() => {});
+    }, []);
+    const flagshipEvents = FLAGSHIP_EVENTS.map((e) => ({
+        ...e,
+        image:
+            mediaUrl(e.id === "vidhi-utsav" ? site.events_vidhi_banner : site.events_summit_banner) ||
+            e.image,
+    }));
     const HERO_BANNERS = [
         {
             id: "vidhi-utsav",
-            src: ASSET("/api/files/oakbridge/events/vidhi-banner.webp"),
+            src: mediaUrl(site.events_vidhi_banner) || ASSET("/api/files/oakbridge/events/vidhi-banner.webp"),
             alt: "Vidhi Utsav — Legal Literature Festival",
             caption: "Vidhi Utsav · The Legal Literature Festival",
         },
         {
             id: "law-ai-tech",
-            src: ASSET("/api/files/oakbridge/events/summit-banner.webp"),
+            src: mediaUrl(site.events_summit_banner) || ASSET("/api/files/oakbridge/events/summit-banner.webp"),
             alt: "India Law, AI & Tech Summit",
             caption: "India Law, AI & Tech Summit · Where Law Meets Innovation",
         },
@@ -301,7 +326,7 @@ export default function Events() {
                 </div>
 
                 <div className="space-y-10">
-                    {FLAGSHIP_EVENTS.map((ev, i) => (
+                    {flagshipEvents.map((ev, i) => (
                         <FlagshipCard key={ev.id} ev={ev} i={i} />
                     ))}
                 </div>
@@ -363,7 +388,7 @@ export default function Events() {
                     </a>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-6 md:gap-8">
-                    {VIDHI_SPEAKERS.map((s) => (
+                    {vidhiSpeakers.map((s) => (
                         <SpeakerCard key={s.name} s={s} />
                     ))}
                 </div>
@@ -391,7 +416,7 @@ export default function Events() {
                     </a>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-6 md:gap-8">
-                    {SUMMIT_SPEAKERS.map((s) => (
+                    {summitSpeakers.map((s) => (
                         <div key={s.name}>
                             <div className="aspect-square overflow-hidden bg-white/10 border border-white/15">
                                 <img

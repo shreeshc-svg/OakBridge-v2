@@ -1,4 +1,5 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
+import { fetchSiteContent, mediaUrl } from "../lib/api";
 import Breadcrumbs from "../components/Breadcrumbs";
 import Seo from "../components/Seo";
 import { Link, useParams } from "react-router-dom";
@@ -48,6 +49,10 @@ const SOLUTIONS = {
 
 function SolutionDetail({ slug }) {
     const s = SOLUTIONS[slug];
+    const [site, setSite] = useState({});
+    useEffect(() => {
+        fetchSiteContent().then(setSite).catch(() => {});
+    }, []);
     if (!s) return null;
     return (
         <div>
@@ -69,7 +74,7 @@ function SolutionDetail({ slug }) {
             <section className="px-6 md:px-12 lg:px-16 py-24 grid grid-cols-1 lg:grid-cols-12 gap-10">
                 <div className="lg:col-span-5 relative aspect-[4/3] border border-[#E5E7EB] overflow-hidden">
                     <img
-                        src={s.image}
+                        src={mediaUrl(site["solutions_" + slug]) || s.image}
                         alt={s.title}
                         className="absolute inset-0 w-full h-full object-cover"
                     />
