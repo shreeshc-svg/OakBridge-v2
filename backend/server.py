@@ -387,7 +387,7 @@ async def list_books(
     new_release: Optional[bool] = None,
     min_price: Optional[float] = None,
     max_price: Optional[float] = None,
-    sort: Optional[str] = Query("featured", description="featured | price_asc | price_desc | title"),
+    sort: Optional[str] = Query("featured", description="featured | price_asc | price_desc | title | rating_desc | newest"),
     limit: int = 60,
     skip: int = 0,
 ):
@@ -419,6 +419,8 @@ async def list_books(
         "price_asc": [("price", 1)],
         "price_desc": [("price", -1)],
         "title": [("title", 1)],
+        "rating_desc": [("rating", -1)],
+        "newest": [("created_at", -1)],
         "featured": [("bestseller", -1), ("new_release", -1), ("rating", -1)],
     }
     cursor = db.books.find(query, {"_id": 0}).sort(sort_map.get(sort, sort_map["featured"])).skip(skip).limit(limit)

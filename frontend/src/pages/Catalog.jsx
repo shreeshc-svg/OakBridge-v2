@@ -4,13 +4,18 @@ import Seo from "../components/Seo";
 import { useSearchParams } from "react-router-dom";
 import { Search, SlidersHorizontal, X } from "lucide-react";
 import BookCard from "../components/BookCard";
-import { fetchBooks, fetchCategories, fetchSiteContent, mediaUrl } from "../lib/api";
+import { fetchBooks, fetchCategories, fetchSiteContent, fetchSettings, mediaUrl } from "../lib/api";
 
-const SORTS = [
-    { v: "featured", label: "Featured" },
-    { v: "price_asc", label: "Price — Low to High" },
-    { v: "price_desc", label: "Price — High to Low" },
-    { v: "title", label: "Title A-Z" },
+// Fallbacks used until settings load (mirror backend SETTINGS_DEFAULTS).
+const DEFAULT_SORTS = [
+    { value: "featured", label: "Featured" },
+    { value: "price_asc", label: "Price — Low to High" },
+    { value: "price_desc", label: "Price — High to Low" },
+    { value: "title", label: "Title A–Z" },
+];
+const DEFAULT_FILTERS = [
+    { key: "bestseller", label: "Bestsellers", enabled: true },
+    { key: "new_release", label: "New Releases", enabled: true },
 ];
 
 export default function Catalog() {
@@ -18,18 +23,27 @@ export default function Catalog() {
     const [books, setBooks] = useState([]);
     const [cats, setCats] = useState([]);
     const [site, setSite] = useState({});
+    const [settings, setSettings] = useState(null);
     const [loading, setLoading] = useState(true);
     const [showFilters, setShowFilters] = useState(false);
 
     const category = sp.get("category") || "";
     const search = sp.get("search") || "";
     const sort = sp.get("sort") || "featured";
-    const bestseller = sp.get("bestseller") === "true";
-    const new_release = sp.get("new_release") === "true";
+
+    // Admin-editable sort menu + filter toggles (fall back to defaults until loaded).
+    const sortOptions =
+        Array.isArray(settings?.plp_sort_options) && settings.plp_sort_options.length
+            ? settings.plp_sort_options
+            : DEFAULT_SORTS;
+    const enabledFilters = (
+        Array.isArray(settings?.plp_filters) ? settings.plp_filters : DEFAULT_FILTERS
+    ).filter((f) => f && f.key && f.enabled !== false);
 
     useEffect(() => {
         fetchCategories().then(setCats).catch(() => {});
         fetchSiteContent().then(setSite).catch(() => {});
+        fetchSettings().then(setSettings).catch(() => {});
     }, []);
 
     useEffect(() => {
@@ -37,12 +51,14 @@ export default function Catalog() {
         const params = { sort };
         if (category) params.category = category;
         if (search) params.search = search;
-        if (bestseller) params.bestseller = true;
-        if (new_release) params.new_release = true;
+        enabledFilters.forEach((f) => {
+            if (sp.get(f.key) === "true") params[f.key] = true;
+        });
         fetchBooks(params)
             .then(setBooks)
             .finally(() => setLoading(false));
-    }, [category, search, sort, bestseller, new_release]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [sp, settings]);
 
     const activeCat = cats.find((c) => c.id === category);
 
@@ -60,11 +76,13 @@ export default function Catalog() {
     const activeFilters = useMemo(() => {
         const arr = [];
         if (category) arr.push({ k: "category", v: category, label: activeCat?.name || category });
-        if (bestseller) arr.push({ k: "bestseller", v: "", label: "Bestsellers" });
-        if (new_release) arr.push({ k: "new_release", v: "", label: "New Releases" });
+        enabledFilters.forEach((f) => {
+            if (sp.get(f.key) === "true") arr.push({ k: f.key, v: "", label: f.label });
+        });
         if (search) arr.push({ k: "search", v: "", label: `"${search}"` });
         return arr;
-    }, [category, bestseller, new_release, search, activeCat]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [category, search, activeCat, sp, settings]);
 
     return (
         <div data-testid="catalog-page">
@@ -222,35 +240,30 @@ export default function Catalog() {
                             </ul>
                         </div>
 
-                        <div>
-                            <div className="overline">Collections</div>
-                            <div className="mt-4 space-y-3">
-                                <label className="flex items-center gap-2 text-sm text-[#4B5563] cursor-pointer">
-                                    <input
-                                        type="checkbox"
-                                        data-testid="filter-bestseller"
-                                        checked={bestseller}
-                                        onChange={(e) =>
-                                            update("bestseller", e.target.checked ? "true" : "")
-                                        }
-                                        className="accent-[#002B5C]"
-                                    />
-                                    Bestsellers only
-                                </label>
-                                <label className="flex items-center gap-2 text-sm text-[#4B5563] cursor-pointer">
-                                    <input
-                                        type="checkbox"
-                                        data-testid="filter-new-release"
-                                        checked={new_release}
-                                        onChange={(e) =>
-                                            update("new_release", e.target.checked ? "true" : "")
-                                        }
-                                        className="accent-[#002B5C]"
-                                    />
-                                    New releases
-                                </label>
+                        {enabledFilters.length > 0 && (
+                            <div>
+                                <div className="overline">Collections</div>
+                                <div className="mt-4 space-y-3">
+                                    {enabledFilters.map((f) => (
+                                        <label
+                                            key={f.key}
+                                            className="flex items-center gap-2 text-sm text-[#4B5563] cursor-pointer"
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                data-testid={`filter-${f.key}`}
+                                                checked={sp.get(f.key) === "true"}
+                                                onChange={(e) =>
+                                                    update(f.key, e.target.checked ? "true" : "")
+                                                }
+                                                className="accent-[#002B5C]"
+                                            />
+                                            {f.label}
+                                        </label>
+                                    ))}
+                                </div>
                             </div>
-                        </div>
+                        )}
 
                         {activeFilters.length > 0 && (
                             <button
@@ -290,8 +303,8 @@ export default function Catalog() {
                                 data-testid="catalog-sort"
                                 className="bg-white border border-[#E5E7EB] text-sm px-3 py-1.5 outline-none focus:border-[#002B5C]"
                             >
-                                {SORTS.map((s) => (
-                                    <option key={s.v} value={s.v}>
+                                {sortOptions.map((s) => (
+                                    <option key={s.value} value={s.value}>
                                         Sort: {s.label}
                                     </option>
                                 ))}

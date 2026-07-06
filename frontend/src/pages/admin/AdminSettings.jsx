@@ -1,10 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { Link } from "react-router-dom";
 import { fetchSettings, adminSetSetting } from "../../lib/api";
-
-const toArr = (v) =>
-    Array.isArray(v) ? v : String(v || "").split(",").map((x) => x.trim()).filter(Boolean);
-const toStr = (v) => (Array.isArray(v) ? v.join(", ") : v || "");
 
 export default function AdminSettings() {
     const [s, setS] = useState(null);
@@ -26,10 +23,6 @@ export default function AdminSettings() {
             await adminSetSetting("tax_percent", Number(s.tax_percent) || 0);
             await adminSetSetting("free_ship_threshold", Number(s.free_ship_threshold) || 0);
             await adminSetSetting("ship_flat", Number(s.ship_flat) || 0);
-            await adminSetSetting("pdp_delivery", String(s.pdp_delivery || ""));
-            await adminSetSetting("pdp_returns", String(s.pdp_returns || ""));
-            await adminSetSetting("binding_options", toArr(s.binding_options));
-            await adminSetSetting("size_options", toArr(s.size_options));
             toast.success("Settings saved — live on the storefront.");
         } catch {
             toast.error("Could not save settings.");
@@ -70,38 +63,24 @@ export default function AdminSettings() {
                     </p>
                 </div>
 
-                <div className="border border-[#E5E7EB] bg-white p-6">
-                    <h2 className="font-serif text-xl text-[#002B5C]">Book page info</h2>
-                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <Field label="Delivery time" k="pdp_delivery" hint="e.g. 3–7 business days" />
-                        <Field label="Returns" k="pdp_returns" hint="e.g. 14-day returns" />
-                    </div>
-                </div>
-
-                <div className="border border-[#E5E7EB] bg-white p-6">
-                    <h2 className="font-serif text-xl text-[#002B5C]">Variant options</h2>
+                <div className="border border-dashed border-[#E5E7EB] bg-[#F5F7FA] p-6">
+                    <h2 className="font-serif text-xl text-[#002B5C]">Page editors</h2>
                     <p className="text-sm text-[#4B5563] mt-1">
-                        The binding and size choices offered when adding variants to a book (comma-separated).
+                        Storefront page content now has its own editors:
                     </p>
-                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                            <label className="overline !text-[10px] block mb-1">Binding options</label>
-                            <input
-                                value={toStr(s.binding_options)}
-                                onChange={(e) => set("binding_options", e.target.value)}
-                                data-testid="setting-binding-options"
-                                className="w-full border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none focus:border-[#002B5C]"
-                            />
-                        </div>
-                        <div>
-                            <label className="overline !text-[10px] block mb-1">Size options</label>
-                            <input
-                                value={toStr(s.size_options)}
-                                onChange={(e) => set("size_options", e.target.value)}
-                                data-testid="setting-size-options"
-                                className="w-full border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none focus:border-[#002B5C]"
-                            />
-                        </div>
+                    <div className="mt-4 flex flex-wrap gap-3">
+                        <Link
+                            to="/admin/page-bookstore"
+                            className="inline-flex items-center text-sm border border-[#002B5C] text-[#002B5C] px-4 py-2 hover:bg-white"
+                        >
+                            Bookstore (PLP) — sort &amp; filters →
+                        </Link>
+                        <Link
+                            to="/admin/page-book"
+                            className="inline-flex items-center text-sm border border-[#002B5C] text-[#002B5C] px-4 py-2 hover:bg-white"
+                        >
+                            Book page (PDP) — delivery, binding &amp; size →
+                        </Link>
                     </div>
                 </div>
 

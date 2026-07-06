@@ -47,7 +47,7 @@ export default function OrderConfirmation() {
                 <CheckCircle2
                     size={56}
                     strokeWidth={1}
-                    className="mx-auto text-[#F59E0B]"
+                    className="mx-auto text-[#16A34A]"
                 />
                 <div className="overline mt-8">Order Confirmed</div>
                 <h1 className="font-serif text-5xl md:text-6xl mt-3 text-[#002B5C] leading-none">

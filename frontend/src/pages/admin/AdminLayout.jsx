@@ -1,6 +1,6 @@
 import React from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { LayoutDashboard, BookOpen, ShoppingBag, Mail, Users, LogOut, ExternalLink, Tag, PackageCheck, FileText, Inbox, Image, Settings } from "lucide-react";
+import { LayoutDashboard, BookOpen, ShoppingBag, Mail, Users, LogOut, ExternalLink, Tag, PackageCheck, FileText, Inbox, Image, Settings, SlidersHorizontal, BookMarked } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 
 const LINKS = [
@@ -8,6 +8,8 @@ const LINKS = [
     { to: "/admin/books", label: "Books", icon: BookOpen },
     { to: "/admin/inventory", label: "Inventory", icon: PackageCheck },
     { to: "/admin/media", label: "Media", icon: Image },
+    { to: "/admin/page-bookstore", label: "Page: Bookstore", icon: SlidersHorizontal },
+    { to: "/admin/page-book", label: "Page: Book", icon: BookMarked },
     { to: "/admin/orders", label: "Orders", icon: ShoppingBag },
     { to: "/admin/coupons", label: "Coupons", icon: Tag },
     { to: "/admin/desk-copies", label: "Desk Copies", icon: Mail },

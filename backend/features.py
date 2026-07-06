@@ -1052,6 +1052,19 @@ SETTINGS_DEFAULTS = {
     "pdp_returns": "14-day returns",
     "binding_options": ["Hardcover", "Softcover"],
     "size_options": ["Demi", "Royal", "Crown"],
+    # Storefront listing (PLP) — admin-editable sort menu + filter toggles.
+    # sort `value` must be one of the server-supported keys:
+    # featured | price_asc | price_desc | title | rating_desc | newest
+    "plp_sort_options": [
+        {"value": "featured", "label": "Featured"},
+        {"value": "price_asc", "label": "Price — Low to High"},
+        {"value": "price_desc", "label": "Price — High to Low"},
+        {"value": "title", "label": "Title A–Z"},
+    ],
+    "plp_filters": [
+        {"key": "bestseller", "label": "Bestsellers", "enabled": True},
+        {"key": "new_release", "label": "New Releases", "enabled": True},
+    ],
 }
 
 
