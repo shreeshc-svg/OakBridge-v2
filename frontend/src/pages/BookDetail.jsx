@@ -50,8 +50,11 @@ export default function BookDetail() {
         if (vs.length) {
             setBinding(vs[0].binding || null);
             setSize(vs[0].size || null);
+        } else {
+            setBinding(settings?.binding_options?.[0] ?? null);
+            setSize(settings?.size_options?.[0] ?? null);
         }
-    }, [book]);
+    }, [book, settings]);
 
     if (loading) {
         return (
@@ -80,8 +83,15 @@ export default function BookDetail() {
 
     const variants = Array.isArray(book.variants) ? book.variants : [];
     const hasVariants = variants.length > 0;
-    const bindings = [...new Set(variants.map((v) => v.binding).filter(Boolean))];
-    const sizes = [...new Set(variants.map((v) => v.size).filter(Boolean))];
+    // Options: use the book's own matrix if present, else fall back to the
+    // global Settings placeholders so PDPs always expose Binding/Size choices.
+    const bindings = hasVariants
+        ? [...new Set(variants.map((v) => v.binding).filter(Boolean))]
+        : Array.isArray(settings?.binding_options) ? settings.binding_options : [];
+    const sizes = hasVariants
+        ? [...new Set(variants.map((v) => v.size).filter(Boolean))]
+        : Array.isArray(settings?.size_options) ? settings.size_options : [];
+    const hasOptions = bindings.length > 0 || sizes.length > 0;
     const activeVariant = hasVariants
         ? variants.find((v) => v.binding === binding && v.size === size) || null
         : null;
@@ -93,7 +103,7 @@ export default function BookDetail() {
             : Number.isFinite(book.stock)
               ? book.stock
               : 0;
-    const chosenVariant = hasVariants
+    const chosenVariant = hasOptions
         ? { binding, size, price: activePrice, stock: activeStock }
         : null;
 
@@ -248,7 +258,7 @@ export default function BookDetail() {
                         )}
                     </div>
 
-                    {hasVariants && (
+                    {hasOptions && (
                         <div className="mt-6 space-y-4">
                             {bindings.length > 0 && (
                                 <div>
