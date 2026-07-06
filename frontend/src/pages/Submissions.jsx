@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import Breadcrumbs from "../components/Breadcrumbs";
 import Seo from "../components/Seo";
 import { Link } from "react-router-dom";
 import { CheckCircle2, FileText } from "lucide-react";
@@ -55,6 +56,7 @@ export default function Submissions() {
 
     return (
         <div data-testid="submissions-page">
+            <Breadcrumbs items={[{ label: "Author Submissions" }]} />
             <Seo
                 title="Author Submissions"
                 description="Submit your manuscript to Oakbridge Publishing. We welcome scholarly and professional proposals across law, tax, business, academic and reference subjects."

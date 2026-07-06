@@ -1,4 +1,5 @@
 import React from "react";
+import Breadcrumbs from "../components/Breadcrumbs";
 import { Link, useNavigate } from "react-router-dom";
 import { Minus, Plus, Trash2, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
@@ -29,6 +30,7 @@ export default function Cart() {
 
     return (
         <div data-testid="cart-page" className="px-6 md:px-12 lg:px-16 py-16">
+            <Breadcrumbs inset items={[{ label: "Cart" }]} />
             <div className="overline">Your Order</div>
             <h1 className="font-serif text-5xl md:text-6xl mt-4 text-[#002B5C] leading-none">
                 Shopping Cart

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import Breadcrumbs from "../components/Breadcrumbs";
 import { Link, useNavigate } from "react-router-dom";
 import { CheckCircle2, Tag, X } from "lucide-react";
 import { useCart } from "../context/CartContext";
@@ -203,6 +204,7 @@ export default function Checkout() {
 
     return (
         <div data-testid="checkout-page" className="px-6 md:px-12 lg:px-16 py-16">
+            <Breadcrumbs inset items={[{ label: "Cart", to: "/cart" }, { label: "Checkout" }]} />
             <div className="overline">Checkout</div>
             <h1 className="font-serif text-5xl md:text-6xl mt-4 text-[#002B5C] leading-none">
                 Almost yours.

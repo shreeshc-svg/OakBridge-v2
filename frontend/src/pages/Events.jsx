@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import Breadcrumbs from "../components/Breadcrumbs";
 import Seo from "../components/Seo";
 import { ArrowUpRight, Calendar, MapPin, Users, Sparkles, Mic, BookOpen, Award, Music, Smile, ShoppingBag, Brain, Building2 } from "lucide-react";
 
@@ -208,6 +209,7 @@ export default function Events() {
 
     return (
         <div data-testid="events-page">
+            <Breadcrumbs items={[{ label: "Events" }]} />
             <Seo
                 title="Events"
                 description="Oakbridge Publishing events — Vidhi Utsav, the ILATS summit, book launches, panels and roundtables with scholars and policymakers."

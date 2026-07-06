@@ -1,4 +1,5 @@
 import React from "react";
+import Breadcrumbs from "../components/Breadcrumbs";
 import Seo from "../components/Seo";
 import { Link } from "react-router-dom";
 import { BookOpen, Calendar, Cpu, GraduationCap, ArrowUpRight } from "lucide-react";
@@ -127,6 +128,7 @@ function VerticalCard({ v, reverse }) {
 export default function Verticals() {
     return (
         <div data-testid="verticals-page">
+            <Breadcrumbs items={[{ label: "What We Do" }]} />
             <Seo
                 title="What We Do"
                 description="Oakbridge Publishing's business verticals — publishing, events, digital solutions and professional training."

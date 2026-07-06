@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import Breadcrumbs from "../components/Breadcrumbs";
 import Seo from "../components/Seo";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { Minus, Plus, ShoppingBag, ArrowLeft, Star, GraduationCap } from "lucide-react";
@@ -122,6 +123,7 @@ export default function BookDetail() {
 
     return (
         <div data-testid="book-detail-page">
+            <Breadcrumbs items={[{ label: "Bookstore", to: "/books" }, { label: book.title }]} />
             <Seo
                 title={book.title}
                 description={seoDesc}

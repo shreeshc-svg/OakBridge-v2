@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import Breadcrumbs from "../components/Breadcrumbs";
 import Seo from "../components/Seo";
 import { useSearchParams } from "react-router-dom";
 import { Search, SlidersHorizontal, X } from "lucide-react";
@@ -65,6 +66,15 @@ export default function Catalog() {
 
     return (
         <div data-testid="catalog-page">
+            <Breadcrumbs
+                items={
+                    activeCat
+                        ? [{ label: "Bookstore", to: "/books" }, { label: activeCat.name }]
+                        : search
+                          ? [{ label: "Bookstore", to: "/books" }, { label: `Search: "${search}"` }]
+                          : [{ label: "Bookstore" }]
+                }
+            />
             <Seo
                 title={activeCat ? activeCat.name : search ? `Search: ${search}` : "Bookstore"}
                 description={activeCat ? activeCat.description : "Browse Oakbridge Publishing's full catalogue — law, tax, business, academic, reference, children's and test-prep titles."}

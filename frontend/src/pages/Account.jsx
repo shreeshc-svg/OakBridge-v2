@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import Breadcrumbs from "../components/Breadcrumbs";
 import { Link, useNavigate } from "react-router-dom";
 import { Package, LogOut, User } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
@@ -55,6 +56,7 @@ export default function Account() {
 
     return (
         <div data-testid="account-page" className="px-6 md:px-12 lg:px-16 py-16">
+            <Breadcrumbs inset items={[{ label: "My Account" }]} />
             {user && user.email_verified === false && (
                 <div
                     data-testid="verify-email-banner"

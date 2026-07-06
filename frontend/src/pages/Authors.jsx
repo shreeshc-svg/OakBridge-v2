@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import Breadcrumbs from "../components/Breadcrumbs";
 import Seo from "../components/Seo";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, ArrowUpRight } from "lucide-react";
@@ -117,6 +118,7 @@ function AuthorsIndex() {
 
     return (
         <div data-testid="authors-index">
+            <Breadcrumbs items={[{ label: "Authors" }]} />
             <Seo
                 title="Authors"
                 description="Meet the scholars, practitioners and subject-matter experts who write for Oakbridge Publishing."

@@ -1,4 +1,5 @@
 import React from "react";
+import Breadcrumbs from "../components/Breadcrumbs";
 import Seo from "../components/Seo";
 import { Link } from "react-router-dom";
 import { ArrowUpRight } from "lucide-react";
@@ -14,6 +15,7 @@ const milestones = [
 export default function About() {
     return (
         <div data-testid="about-page">
+            <Breadcrumbs items={[{ label: "About" }]} />
             <Seo
                 title="About"
                 description="Oakbridge Publishing is an independent scholarly press founded in 2017 by two veteran publishing professionals, producing authoritative law, tax, business and academic titles."

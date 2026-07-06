@@ -1,4 +1,5 @@
 import React from "react";
+import Breadcrumbs from "../components/Breadcrumbs";
 import Seo from "../components/Seo";
 import { Link, useParams } from "react-router-dom";
 import { ArrowUpRight, Check } from "lucide-react";
@@ -110,6 +111,7 @@ export default function Solutions() {
 
     return (
         <div data-testid="solutions-index">
+            <Breadcrumbs items={[{ label: "Solutions" }]} />
             <Seo
                 title="Solutions"
                 description="Institutional solutions from Oakbridge Publishing — for schools, colleges, educators and firms: bulk orders, adoptions and custom publishing."

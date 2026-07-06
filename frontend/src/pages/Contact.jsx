@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import Breadcrumbs from "../components/Breadcrumbs";
 import Seo from "../components/Seo";
 import { Mail, MapPin, Phone } from "lucide-react";
 import { submitContact } from "../lib/api";
@@ -39,6 +40,7 @@ export default function Contact() {
 
     return (
         <div data-testid="contact-page">
+            <Breadcrumbs items={[{ label: "Contact" }]} />
             <Seo
                 title="Contact"
                 description="Get in touch with Oakbridge Publishing about orders, manuscript submissions, rights, adoptions and partnerships."
