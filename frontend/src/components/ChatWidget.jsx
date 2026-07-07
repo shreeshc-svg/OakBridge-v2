@@ -35,7 +35,6 @@ export default function ChatWidget() {
         setMsgs(nextMsgs);
         setBusy(true);
         try {
-            // send prior turns (exclude the greeting) as history
             const history = nextMsgs
                 .slice(1, -1)
                 .map((m) => ({ role: m.role, content: m.content }));
@@ -64,7 +63,7 @@ export default function ChatWidget() {
                 onClick={() => setOpen((o) => !o)}
                 data-testid="chat-launcher"
                 aria-label={open ? "Close chat" : "Open chat"}
-                className="fixed z-50 bottom-5 right-5 w-14 h-14 rounded-full bg-[#002B5C] text-white shadow-lg flex items-center justify-center hover:bg-[#001F42] transition-colors"
+                className="fixed z-50 bottom-5 right-5 w-14 h-14 rounded-full bg-[#F59E0B] text-[#002B5C] shadow-lg flex items-center justify-center hover:bg-[#E08E00] transition-colors"
             >
                 {open ? <X size={22} strokeWidth={1.75} /> : <MessageCircle size={24} strokeWidth={1.75} />}
             </button>
@@ -75,9 +74,9 @@ export default function ChatWidget() {
                     data-testid="chat-panel"
                     className="fixed z-50 bottom-24 right-5 w-[92vw] max-w-[380px] h-[70vh] max-h-[560px] bg-white border border-[#E5E7EB] shadow-2xl flex flex-col overflow-hidden"
                 >
-                    <div className="bg-[#002B5C] text-white px-5 py-4">
+                    <div className="bg-[#F59E0B] text-[#002B5C] px-5 py-4">
                         <div className="font-serif text-lg leading-tight">Oakbridge Assistant</div>
-                        <div className="font-mono text-[10px] uppercase tracking-widest text-white/60 mt-1">
+                        <div className="font-mono text-[10px] uppercase tracking-widest text-[#002B5C]/70 mt-1">
                             FAQs &amp; help
                         </div>
                     </div>
@@ -116,7 +115,7 @@ export default function ChatWidget() {
                                     <button
                                         key={q}
                                         onClick={() => send(q)}
-                                        className="block w-full text-left text-xs text-[#002B5C] border border-[#E5E7EB] bg-white px-3 py-2 hover:border-[#002B5C]"
+                                        className="block w-full text-left text-xs text-[#002B5C] border border-[#E5E7EB] bg-white px-3 py-2 hover:border-[#F59E0B]"
                                     >
                                         {q}
                                     </button>
@@ -139,14 +138,14 @@ export default function ChatWidget() {
                             }}
                             placeholder="Ask a question…"
                             data-testid="chat-input"
-                            className="flex-1 border border-[#E5E7EB] px-3 py-2 text-sm outline-none focus:border-[#002B5C]"
+                            className="flex-1 border border-[#E5E7EB] px-3 py-2 text-sm outline-none focus:border-[#F59E0B]"
                         />
                         <button
                             onClick={() => send()}
                             disabled={busy || !input.trim()}
                             data-testid="chat-send"
                             aria-label="Send"
-                            className="bg-[#002B5C] text-white p-2.5 hover:bg-[#001F42] disabled:opacity-50"
+                            className="bg-[#F59E0B] text-[#002B5C] p-2.5 hover:bg-[#E08E00] disabled:opacity-50"
                         >
                             <Send size={16} strokeWidth={1.75} />
                         </button>
