@@ -12,6 +12,7 @@ const LINKS = [
     { to: "/admin/page-book", label: "Page: Book", icon: BookMarked },
     { to: "/admin/orders", label: "Orders", icon: ShoppingBag },
     { to: "/admin/coupons", label: "Coupons", icon: Tag },
+    { to: "/admin/messages", label: "Messages", icon: Mail },
     { to: "/admin/desk-copies", label: "Desk Copies", icon: Mail },
     { to: "/admin/submissions", label: "Submissions", icon: FileText },
     { to: "/admin/waitlists", label: "Waitlists", icon: Inbox },

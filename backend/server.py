@@ -484,6 +484,13 @@ async def contact_submit(payload: ContactMessage):
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.contact_messages.insert_one({**doc})
+    try:
+        from emailer import send_contact_admin_alert, send_contact_ack
+
+        await send_contact_admin_alert(doc)
+        await send_contact_ack(doc)
+    except Exception:  # noqa: BLE001
+        logger.exception("contact email failed for %s", doc.get("email"))
     return ContactResponse(
         id=doc["id"],
         name=doc["name"],

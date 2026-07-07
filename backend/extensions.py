@@ -694,6 +694,21 @@ async def admin_list_users():
     return users
 
 
+# ============== Contact / enquiry messages ==============
+
+@admin_router.get("/messages")
+async def admin_list_messages():
+    return await db.contact_messages.find({}, {"_id": 0}).sort([("created_at", -1)]).to_list(1000)
+
+
+@admin_router.delete("/messages/{msg_id}")
+async def admin_delete_message(msg_id: str):
+    r = await db.contact_messages.delete_one({"id": msg_id})
+    if not r.deleted_count:
+        raise HTTPException(status_code=404, detail="Message not found")
+    return {"ok": True}
+
+
 # ============== Waitlists ==============
 
 @admin_router.get("/waitlists")

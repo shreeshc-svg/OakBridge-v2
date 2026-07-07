@@ -623,3 +623,92 @@ async def send_cart_reminder(to: str, name: str, items: list, stage: str) -> boo
         "eom": "Last call \u2014 your cart is waiting",
     }
     return await send_email(to=to, subject=subjects.get(stage, subjects["12h"]), html=render_cart_reminder_html(name, items, stage))
+
+
+# ====== Contact / enquiry form ======
+
+def render_contact_admin_html(msg: dict) -> str:
+    body = (msg.get("message") or "").replace("<", "&lt;").replace(">", "&gt;").replace("\n", "<br>")
+    return f"""\
+<!DOCTYPE html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:24px;background-color:#FFFFFF;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:{BRAND_NAVY};">
+<table cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:600px;border:1px solid #E5E7EB;">
+  <tr><td style="background-color:{BRAND_NAVY};color:#FFFFFF;padding:18px 24px;">
+    <div style="font-family:monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:{BRAND_AMBER};">New enquiry</div>
+    <div style="font-family:Georgia,serif;font-size:20px;margin-top:4px;">{msg.get('subject','General Inquiry')}</div>
+  </td></tr>
+  <tr><td style="padding:24px;">
+    <table cellpadding="0" cellspacing="0" border="0" width="100%" style="font-size:13px;">
+      <tr><td style="color:{BRAND_GREY};padding:6px 0;width:90px;">From</td>
+          <td style="color:{BRAND_NAVY};padding:6px 0;">{msg.get('name','')}</td></tr>
+      <tr><td style="color:{BRAND_GREY};padding:6px 0;">Email</td>
+          <td style="padding:6px 0;"><a href="mailto:{msg.get('email','')}" style="color:{BRAND_NAVY};">{msg.get('email','')}</a></td></tr>
+    </table>
+    <div style="margin-top:16px;padding-top:16px;border-top:1px solid #E5E7EB;font-size:14px;line-height:1.6;color:{BRAND_NAVY};">{body}</div>
+    <div style="margin-top:18px;font-size:12px;color:{BRAND_GREY};">Reply directly to this email to respond to {msg.get('name','the sender')}.</div>
+  </td></tr>
+</table>
+</body></html>
+"""
+
+
+async def send_contact_admin_alert(msg: dict) -> bool:
+    """Notify the internal inbox of a new contact-form enquiry; reply-to is the sender."""
+    if not ADMIN_NOTIFY_EMAIL:
+        return False
+    subject = f"New enquiry — {msg.get('subject','General Inquiry')} (from {msg.get('name','')})"
+    return await send_email(
+        to=ADMIN_NOTIFY_EMAIL,
+        subject=subject,
+        html=render_contact_admin_html(msg),
+        reply_to=msg.get("email"),
+    )
+
+
+def render_contact_ack_html(msg: dict) -> str:
+    who = (msg.get("name") or "there").split(" ")[0]
+    body = (msg.get("message") or "").replace("<", "&lt;").replace(">", "&gt;").replace("\n", "<br>")
+    return f"""\
+<!DOCTYPE html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background-color:#F5F7FA;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:{BRAND_NAVY};">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#F5F7FA;padding:40px 16px;">
+  <tr><td align="center">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="560" style="max-width:560px;background-color:#FFFFFF;border:1px solid #E5E7EB;">
+      <tr><td style="background-color:{BRAND_NAVY};padding:28px 36px;color:#FFFFFF;">
+        <div style="font-family:Georgia,serif;font-size:22px;">Oakbridge <span style="color:{BRAND_AMBER};">Publishing</span></div>
+        <div style="font-family:monospace;text-transform:uppercase;letter-spacing:2px;font-size:11px;margin-top:6px;color:rgba(255,255,255,0.6);">We've received your message</div>
+      </td></tr>
+      <tr><td style="padding:36px 36px 8px;">
+        <h1 style="margin:0;font-family:Georgia,serif;font-weight:normal;font-size:24px;color:{BRAND_NAVY};">Hi {who},</h1>
+        <p style="margin:14px 0 0;font-size:15px;line-height:1.6;color:{BRAND_GREY};">
+          Thanks for reaching out to Oakbridge Publishing. We've received your message and a
+          member of our team will get back to you shortly.
+        </p>
+      </td></tr>
+      <tr><td style="padding:16px 36px 8px;">
+        <div style="font-family:monospace;text-transform:uppercase;letter-spacing:1.5px;font-size:10px;color:{BRAND_GREY};">Your message</div>
+        <div style="margin-top:8px;padding:14px 16px;background:#F5F7FA;border:1px solid #E5E7EB;font-size:14px;line-height:1.6;color:{BRAND_NAVY};">{body}</div>
+      </td></tr>
+      <tr><td style="padding:24px 36px 36px;">
+        <div style="border-top:1px solid #E5E7EB;padding-top:20px;font-size:12px;line-height:1.6;color:{BRAND_GREY};">
+          This is an automated confirmation — no need to reply. For anything urgent, write to
+          <a href="mailto:info@oakbridge.in" style="color:{BRAND_NAVY};">info@oakbridge.in</a>.
+        </div>
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+</body></html>
+"""
+
+
+async def send_contact_ack(msg: dict) -> bool:
+    """Send a short 'we got your message' acknowledgment to the person who wrote in."""
+    to = msg.get("email")
+    if not to:
+        return False
+    return await send_email(
+        to=to,
+        subject="We've received your message — Oakbridge Publishing",
+        html=render_contact_ack_html(msg),
+    )

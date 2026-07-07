@@ -99,6 +99,11 @@ export const fetchSettings = () => api.get("/settings").then((r) => r.data);
 export const adminSetSetting = (key, value) =>
     api.put("/admin/settings", { key, value }).then((r) => r.data);
 
+// Contact / enquiry messages (admin)
+export const adminListMessages = () => api.get("/admin/messages").then((r) => r.data);
+export const adminDeleteMessage = (id) =>
+    api.delete(`/admin/messages/${id}`).then((r) => r.data);
+
 // Legal / policy pages
 export const fetchLegal = () => api.get("/legal").then((r) => r.data);
 export const fetchLegalPage = (slug) => api.get(`/legal/${slug}`).then((r) => r.data);
