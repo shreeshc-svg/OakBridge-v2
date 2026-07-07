@@ -42,6 +42,7 @@ async function getRoutes() {
     const staticRoutes = [
         "/", "/books", "/authors", "/events", "/about", "/contact",
         "/submissions", "/academy", "/digital-solutions", "/what-we-do",
+        "/terms", "/privacy", "/refund-policy", "/shipping-policy",
     ];
     const dynamic = [];
     try {
@@ -50,6 +51,13 @@ async function getRoutes() {
         console.log(`Discovered ${books.length} book routes from the API.`);
     } catch (e) {
         console.warn("Could not reach API for book routes (static pages only):", e.message);
+    }
+    try {
+        const authors = await fetch(`${BACKEND}/api/authors`).then((r) => r.json());
+        for (const a of authors) dynamic.push(`/authors/${a.id}`);
+        console.log(`Discovered ${authors.length} author routes from the API.`);
+    } catch (e) {
+        console.warn("Could not reach API for author routes:", e.message);
     }
     return [...staticRoutes, ...dynamic];
 }

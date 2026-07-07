@@ -9,4 +9,9 @@
   <url><loc>https://oakbridge.in/submissions</loc><changefreq>monthly</changefreq><priority>0.5</priority></url>
   <url><loc>https://oakbridge.in/academy</loc><changefreq>monthly</changefreq><priority>0.4</priority></url>
   <url><loc>https://oakbridge.in/digital-solutions</loc><changefreq>monthly</changefreq><priority>0.4</priority></url>
+  <url><loc>https://oakbridge.in/what-we-do</loc><changefreq>monthly</changefreq><priority>0.5</priority></url>
+  <url><loc>https://oakbridge.in/terms</loc><changefreq>yearly</changefreq><priority>0.3</priority></url>
+  <url><loc>https://oakbridge.in/privacy</loc><changefreq>yearly</changefreq><priority>0.3</priority></url>
+  <url><loc>https://oakbridge.in/refund-policy</loc><changefreq>yearly</changefreq><priority>0.3</priority></url>
+  <url><loc>https://oakbridge.in/shipping-policy</loc><changefreq>yearly</changefreq><priority>0.3</priority></url>
 </urlset>
