@@ -90,3 +90,40 @@ async def generate(system: str, prompt: str, temperature: float = 0.7) -> str:
 def describe() -> str:
     """Human-readable provider summary (no secrets)."""
     return f"{LLM_MODEL} @ {LLM_BASE_URL}"
+
+
+def _chat(system: str, messages: list, temperature: float) -> str:
+    msgs = [{"role": "system", "content": system}]
+    for m in messages:
+        role = m.get("role") if isinstance(m, dict) else None
+        content = m.get("content") if isinstance(m, dict) else None
+        if content:
+            msgs.append({"role": "assistant" if role == "assistant" else "user", "content": content})
+    try:
+        resp = requests.post(
+            f"{LLM_BASE_URL}/chat/completions",
+            headers={"Authorization": f"Bearer {LLM_API_KEY}", "Content-Type": "application/json"},
+            json={"model": LLM_MODEL, "temperature": temperature, "messages": msgs},
+            timeout=LLM_TIMEOUT,
+        )
+    except requests.exceptions.ConnectionError as e:
+        raise LLMError(
+            f"Could not reach the LLM at {LLM_BASE_URL}. Is Ollama running "
+            f"(`ollama serve`) and the model pulled (`ollama pull {LLM_MODEL}`)?"
+        ) from e
+    except requests.exceptions.RequestException as e:
+        raise LLMError(f"LLM request failed: {e}") from e
+    if resp.status_code >= 400:
+        raise LLMError(f"LLM returned {resp.status_code}: {resp.text[:200]}")
+    try:
+        content = resp.json()["choices"][0]["message"]["content"]
+    except (ValueError, KeyError, IndexError) as e:
+        raise LLMError(f"Unexpected LLM response shape: {e}") from e
+    if not content or not content.strip():
+        raise LLMError("LLM returned an empty response.")
+    return content.strip()
+
+
+async def chat(system: str, messages: list, temperature: float = 0.4) -> str:
+    """Multi-turn chat completion. `messages` is [{role, content}, ...]."""
+    return await asyncio.to_thread(_chat, system, messages, temperature)

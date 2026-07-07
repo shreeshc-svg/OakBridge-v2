@@ -99,6 +99,10 @@ export const fetchSettings = () => api.get("/settings").then((r) => r.data);
 export const adminSetSetting = (key, value) =>
     api.put("/admin/settings", { key, value }).then((r) => r.data);
 
+// FAQ / website assistant chatbot
+export const sendChat = (message, history = []) =>
+    api.post("/chat", { message, history }).then((r) => r.data);
+
 // Contact / enquiry messages (admin)
 export const adminListMessages = () => api.get("/admin/messages").then((r) => r.data);
 export const adminDeleteMessage = (id) =>

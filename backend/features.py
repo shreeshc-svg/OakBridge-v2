@@ -1130,3 +1130,76 @@ async def set_legal_page(slug: str, payload: LegalSet):
         upsert=True,
     )
     return {"ok": True}
+
+
+# ===================== FAQ / website assistant (chatbot) =====================
+class ChatTurn(BaseModel):
+    role: str
+    content: str
+
+
+class ChatRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=1000)
+    history: list[ChatTurn] = Field(default_factory=list)
+
+
+async def _chat_system_prompt() -> str:
+    docs = await db.settings.find({}, {"_id": 0}).to_list(200)
+    s = {**SETTINGS_DEFAULTS, **{d["key"]: d["value"] for d in docs}}
+    try:
+        cats = await db.categories.find({}, {"_id": 0, "name": 1}).to_list(50)
+        cat_names = ", ".join(c.get("name", "") for c in cats if c.get("name"))
+    except Exception:  # noqa: BLE001
+        cat_names = ""
+    cat_names = cat_names or "law, tax, business, academic, reference and general titles"
+    free_thr = s.get("free_ship_threshold", 1500)
+    ship_flat = s.get("ship_flat", 60)
+    delivery = s.get("pdp_delivery", "3-7 business days")
+    returns = s.get("pdp_returns", "14-day returns")
+    return (
+        "You are \"Oaky\", the friendly assistant on the Oakbridge Publishing website "
+        "(oakbridge.in), a law and academic publishing house based in Gurugram, India.\n\n"
+        "RULES:\n"
+        "- Answer ONLY questions about Oakbridge, its books, ordering, shipping, returns, "
+        "events, training, and using this website. Politely decline anything unrelated.\n"
+        "- Be concise and warm (usually 2-4 sentences). Use plain English.\n"
+        "- NEVER invent specific book titles, authors, prices, stock or policies beyond the "
+        "facts below. If asked about a specific title, price or availability, tell them to "
+        "search the Bookstore at /books.\n"
+        "- For anything about a specific order's status, a personal account, refunds in "
+        "progress, or anything you're unsure of, direct them to email info@oakbridge.in.\n"
+        "- Do not make promises or quote timelines beyond the facts below.\n\n"
+        "FACTS ABOUT OAKBRIDGE:\n"
+        "- We are an independent law & academic publishing house. We publish books across "
+        f"{cat_names}. We also run Events, an Academy (professional training) and Digital Solutions.\n"
+        "- To order: browse the Bookstore (/books), add to cart, sign in or create an account "
+        "(email is verified with a one-time code), then pay securely via Razorpay "
+        "(UPI, cards, net-banking, wallets).\n"
+        f"- Shipping: free shipping on orders over Rs {free_thr}; otherwise a flat Rs {ship_flat}. "
+        f"Estimated delivery is {delivery} after dispatch.\n"
+        f"- Returns/refunds: {returns}. Full details on /refund-policy and /shipping-policy.\n"
+        "- A GST tax invoice (PDF) is emailed with every order confirmation.\n"
+        "- Educators can request a free desk copy from any book page.\n"
+        "- Contact: info@oakbridge.in, phone +91 88003 37299, office at B3 Tower, Spaze iTech "
+        "Park, Sector 49, Gurugram, Haryana 122018.\n"
+        "- Useful pages: Bookstore /books, Events /events, Academy /academy, Digital Solutions "
+        "/digital-solutions, Authors /authors, Contact /contact, Terms /terms, Privacy /privacy."
+    )
+
+
+@public_router.post("/chat")
+async def chat_endpoint(payload: ChatRequest):
+    from llm import chat as llm_chat, LLMError
+
+    system = await _chat_system_prompt()
+    history = [{"role": t.role, "content": t.content} for t in payload.history][-6:]
+    messages = history + [{"role": "user", "content": payload.message.strip()}]
+    try:
+        reply = await llm_chat(system, messages)
+    except LLMError:
+        log.exception("chatbot LLM call failed")
+        raise HTTPException(
+            status_code=503,
+            detail="The assistant is unavailable right now — please email info@oakbridge.in.",
+        )
+    return {"reply": reply}
