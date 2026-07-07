@@ -31,60 +31,52 @@ from extensions import db, get_current_user, require_admin
 
 log = logging.getLogger(__name__)
 
-# ============== OBJECT STORAGE ==============
-STORAGE_URL = "https://integrations.emergentagent.com/objstore/api/v1/storage"
+# ============== OBJECT STORAGE (local disk) ==============
+# Files are stored on the backend's own filesystem under STORAGE_DIR and served
+# via GET /api/files/{path}. No external service or API key required.
+# For a scaled production deploy, point STORAGE_DIR at a persistent disk (e.g.
+# a Render disk) or swap put_object/get_object for S3 later — callers are unchanged.
+STORAGE_DIR = os.path.abspath(
+    os.environ.get("STORAGE_DIR", os.path.join(os.path.dirname(__file__), "storage"))
+)
 APP_NAME = "oakbridge"
-_storage_key: Optional[str] = None
+
+
+def _resolve(path: str) -> str:
+    """Map a storage path to an absolute file path, blocking directory traversal."""
+    full = os.path.normpath(os.path.join(STORAGE_DIR, path))
+    if not (full == STORAGE_DIR or full.startswith(STORAGE_DIR + os.sep)):
+        raise HTTPException(status_code=400, detail="Invalid file path")
+    return full
 
 
 def _storage_ready() -> bool:
-    return bool(os.environ.get("EMERGENT_LLM_KEY"))
+    return True
 
 
 def init_storage() -> Optional[str]:
-    global _storage_key
-    if _storage_key:
-        return _storage_key
-    key = os.environ.get("EMERGENT_LLM_KEY")
-    if not key:
-        log.warning("EMERGENT_LLM_KEY not set; object storage disabled")
-        return None
-    try:
-        r = requests.post(f"{STORAGE_URL}/init", json={"emergent_key": key}, timeout=30)
-        r.raise_for_status()
-        _storage_key = r.json()["storage_key"]
-        log.info("Object storage initialized")
-        return _storage_key
-    except Exception as e:  # noqa: BLE001
-        log.error(f"Storage init failed: {e}")
-        return None
+    os.makedirs(STORAGE_DIR, exist_ok=True)
+    log.info("Local object storage at %s", STORAGE_DIR)
+    return STORAGE_DIR
 
 
 def put_object(path: str, data: bytes, content_type: str) -> dict:
-    key = init_storage()
-    if not key:
-        raise HTTPException(status_code=503, detail="Object storage unavailable")
-    r = requests.put(
-        f"{STORAGE_URL}/objects/{path}",
-        headers={"X-Storage-Key": key, "Content-Type": content_type},
-        data=data,
-        timeout=120,
-    )
-    r.raise_for_status()
-    return r.json()
+    full = _resolve(path)
+    os.makedirs(os.path.dirname(full), exist_ok=True)
+    with open(full, "wb") as f:
+        f.write(data)
+    return {"url": f"/api/files/{path}", "path": path, "size": len(data), "content_type": content_type}
 
 
 def get_object(path: str) -> tuple[bytes, str]:
-    key = init_storage()
-    if not key:
-        raise HTTPException(status_code=503, detail="Object storage unavailable")
-    r = requests.get(
-        f"{STORAGE_URL}/objects/{path}",
-        headers={"X-Storage-Key": key},
-        timeout=60,
-    )
-    r.raise_for_status()
-    return r.content, r.headers.get("Content-Type", "application/octet-stream")
+    import mimetypes
+
+    full = _resolve(path)
+    if not os.path.isfile(full):
+        raise HTTPException(status_code=404, detail="File not found")
+    ctype = mimetypes.guess_type(full)[0] or "application/octet-stream"
+    with open(full, "rb") as f:
+        return f.read(), ctype
 
 
 # ============== COUPON MODELS ==============

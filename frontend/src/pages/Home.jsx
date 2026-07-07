@@ -119,8 +119,8 @@ export default function Home() {
     return (
         <div data-testid="home-page">
             <Seo
-                title="Independent Scholarly Press"
-                description="Oakbridge Publishing — authoritative law, tax, business and academic titles, reference works, events and training for students, professionals and institutions."
+                title="Law Books & Academic Publishing House"
+                description="Oakbridge Publishing is a leading law and academic publishing house — authoritative law books, tax, business and reference titles, plus events, training and AI-powered digital solutions for students, professionals and institutions."
                 path="/"
             />
             {/* ============== HERO ============== */}

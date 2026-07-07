@@ -816,41 +816,29 @@ async def admin_download_invoice(order_id: str):
 
 @admin_router.post("/books/{book_id}/draft-author-bio")
 async def admin_draft_author_bio(book_id: str):
-    """Generate a polished 3-4 sentence author bio using the Emergent LLM key."""
+    """Generate a polished 3-4 sentence author bio using the configured LLM (Ollama by default)."""
     bio = await _draft_bio_for_book_id(book_id)
     return {"author_bio": bio}
 
 
 async def _draft_bio_for_book_id(book_id: str) -> str:
-    import os as _os
-    import uuid as _uuid
-
     book = await db.books.find_one({"id": book_id}, {"_id": 0})
     if not book:
         raise HTTPException(status_code=404, detail="Book not found")
 
-    key = _os.environ.get("EMERGENT_LLM_KEY")
-    if not key:
-        raise HTTPException(status_code=503, detail="EMERGENT_LLM_KEY not configured")
+    from llm import generate as llm_generate, LLMError  # provider-agnostic (Ollama/Groq/OpenAI)
 
-    from emergentintegrations.llm.chat import LlmChat, UserMessage  # noqa: E402
-
-    chat = LlmChat(
-        api_key=key,
-        session_id=f"bio-{book_id}-{_uuid.uuid4().hex[:8]}",
-        system_message=(
-            "You are a senior editorial copywriter for Oakbridge Publishing, a scholarly "
-            "press in New Delhi. Draft polished, factual-sounding author bios of about "
-            "60-90 words (3-4 sentences) for the back-flap of a serious reference title. "
-            "Use formal but readable Indian English. Mention plausible academic or "
-            "professional affiliations consistent with the subject. NEVER fabricate "
-            "specific awards, university appointments or institutional affiliations that "
-            "cannot be verified — keep claims general and plausible. End with a one-line "
-            "statement of editorial focus. Return ONLY the bio paragraph as plain text — "
-            "no quotation marks, no headings, no notes."
-        ),
-    ).with_model("gemini", "gemini-3-flash-preview")
-
+    system = (
+        "You are a senior editorial copywriter for Oakbridge Publishing, a scholarly "
+        "press in Gurugram, India. Draft polished, factual-sounding author bios of about "
+        "60-90 words (3-4 sentences) for the back-flap of a serious reference title. "
+        "Use formal but readable Indian English. Mention plausible academic or "
+        "professional affiliations consistent with the subject. NEVER fabricate "
+        "specific awards, university appointments or institutional affiliations that "
+        "cannot be verified — keep claims general and plausible. End with a one-line "
+        "statement of editorial focus. Return ONLY the bio paragraph as plain text — "
+        "no quotation marks, no headings, no notes."
+    )
     prompt = (
         f"Draft an author bio for the following book.\n\n"
         f"Title: {book.get('title', '')}\n"
@@ -860,8 +848,8 @@ async def _draft_bio_for_book_id(book_id: str) -> str:
         f"Description: {book.get('description', '')}\n"
     )
     try:
-        bio = await chat.send_message(UserMessage(text=prompt))
-    except Exception as e:  # noqa: BLE001
+        bio = await llm_generate(system, prompt)
+    except LLMError as e:
         log.exception("LLM bio drafting failed")
         raise HTTPException(status_code=502, detail=f"AI service error: {e}")
 
