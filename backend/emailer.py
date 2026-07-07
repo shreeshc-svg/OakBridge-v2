@@ -347,6 +347,48 @@ async def send_admin_paid_order(order: dict) -> bool:
     return await send_email(to=ADMIN_NOTIFY_EMAIL, subject=subject, html=html)
 
 
+def render_admin_failed_order_html(order: dict, reason: str = "") -> str:
+    reason_row = (
+        f'<tr><td style="color:{BRAND_GREY};padding:6px 0;">Reason</td>'
+        f'<td style="color:{BRAND_RED};padding:6px 0;">{reason}</td></tr>'
+        if reason else ""
+    )
+    return f"""\
+<!DOCTYPE html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:24px;background-color:#FFFFFF;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:{BRAND_NAVY};">
+<table cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:560px;border:1px solid #E5E7EB;">
+  <tr><td style="background-color:{BRAND_RED};color:#FFFFFF;padding:18px 24px;">
+    <div style="font-family:monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;">Payment failed — follow up</div>
+    <div style="font-family:Georgia,serif;font-size:22px;margin-top:4px;">{order.get('order_number','')}</div>
+  </td></tr>
+  <tr><td style="padding:24px;">
+    <table cellpadding="0" cellspacing="0" border="0" width="100%" style="font-size:13px;">
+      <tr><td style="color:{BRAND_GREY};padding:6px 0;width:140px;">Customer</td>
+          <td style="color:{BRAND_NAVY};padding:6px 0;">{order.get('full_name','')} &lt;{order.get('email','')}&gt;</td></tr>
+      <tr><td style="color:{BRAND_GREY};padding:6px 0;">Phone</td>
+          <td style="color:{BRAND_NAVY};padding:6px 0;">{order.get('phone','—')}</td></tr>
+      <tr><td style="color:{BRAND_GREY};padding:6px 0;">Order value</td>
+          <td style="color:{BRAND_NAVY};padding:6px 0;font-family:Georgia,serif;font-size:18px;">{_money(order.get('total',0))}</td></tr>
+      {reason_row}
+    </table>
+    <div style="margin-top:18px;padding-top:18px;border-top:1px solid #E5E7EB;font-size:12px;color:{BRAND_GREY};">
+      A customer tried to pay but the transaction didn't complete. Consider reaching out to help them finish.
+    </div>
+  </td></tr>
+</table>
+</body></html>
+"""
+
+
+async def send_admin_failed_order(order: dict, reason: str = "") -> bool:
+    """Alert the internal inbox when a customer's payment fails, so the team can follow up."""
+    if not ADMIN_NOTIFY_EMAIL:
+        return False
+    subject = f"⚠️ Payment failed — {order.get('order_number','')} · {_money(order.get('total',0))}"
+    html = render_admin_failed_order_html(order, reason or "")
+    return await send_email(to=ADMIN_NOTIFY_EMAIL, subject=subject, html=html)
+
+
 # ====== Back-in-stock notifications ======
 
 SITE_URL = os.environ.get("SITE_URL", "").rstrip("/")

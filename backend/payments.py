@@ -21,7 +21,7 @@ from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from extensions import db
-from emailer import send_admin_paid_order, send_order_failed, send_order_receipt
+from emailer import send_admin_failed_order, send_admin_paid_order, send_order_failed, send_order_receipt
 
 logger = logging.getLogger(__name__)
 
@@ -291,6 +291,7 @@ async def razorpay_webhook(
             if order_doc and order_doc.get("payment_status") != "paid":
                 reason = payment.get("error_description") or ""
                 await send_order_failed(order_doc, reason)
+                await send_admin_failed_order(order_doc, reason)
         except Exception:  # noqa: BLE001
             logger.exception("Webhook failure email failed for rzp_order_id=%s", rzp_order_id)
 
