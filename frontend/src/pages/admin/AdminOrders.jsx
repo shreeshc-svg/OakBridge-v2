@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from "react";
-import { MailCheck } from "lucide-react";
+import { MailCheck, FileDown } from "lucide-react";
 import {
     adminListOrders,
     adminResendReceipt,
+    adminDownloadInvoice,
     adminUpdateOrder,
     formatApiError,
     formatINR,
@@ -15,6 +16,7 @@ export default function AdminOrders() {
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
     const [resending, setResending] = useState(null);
+    const [downloading, setDownloading] = useState(null);
 
     const load = () => {
         setLoading(true);
@@ -52,6 +54,17 @@ export default function AdminOrders() {
             toast.error(formatApiError(err));
         } finally {
             setResending(null);
+        }
+    };
+
+    const onDownload = async (id, orderNumber) => {
+        setDownloading(id);
+        try {
+            await adminDownloadInvoice(id, orderNumber);
+        } catch (err) {
+            toast.error(formatApiError(err));
+        } finally {
+            setDownloading(null);
         }
     };
 
@@ -133,16 +146,28 @@ export default function AdminOrders() {
                                     </select>
                                 </td>
                                 <td className="px-4 py-3">
-                                    <button
-                                        onClick={() => onResend(o.id)}
-                                        disabled={resending === o.id}
-                                        data-testid={`order-resend-${o.id}`}
-                                        title="Re-send the order receipt to the customer"
-                                        className="inline-flex items-center gap-1.5 border border-[#E5E7EB] hover:border-[#002B5C] text-[#002B5C] px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50"
-                                    >
-                                        <MailCheck size={12} strokeWidth={1.5} />
-                                        {resending === o.id ? "Sending…" : "Resend"}
-                                    </button>
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            onClick={() => onResend(o.id)}
+                                            disabled={resending === o.id}
+                                            data-testid={`order-resend-${o.id}`}
+                                            title="Re-send the order receipt (with invoice) to the customer"
+                                            className="inline-flex items-center gap-1.5 border border-[#E5E7EB] hover:border-[#002B5C] text-[#002B5C] px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50"
+                                        >
+                                            <MailCheck size={12} strokeWidth={1.5} />
+                                            {resending === o.id ? "Sending…" : "Resend"}
+                                        </button>
+                                        <button
+                                            onClick={() => onDownload(o.id, o.order_number)}
+                                            disabled={downloading === o.id}
+                                            data-testid={`order-invoice-${o.id}`}
+                                            title="Download the tax invoice PDF"
+                                            className="inline-flex items-center gap-1.5 border border-[#E5E7EB] hover:border-[#002B5C] text-[#002B5C] px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50"
+                                        >
+                                            <FileDown size={12} strokeWidth={1.5} />
+                                            {downloading === o.id ? "…" : "Invoice"}
+                                        </button>
+                                    </div>
                                 </td>
                             </tr>
                         ))}

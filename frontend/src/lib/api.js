@@ -107,6 +107,17 @@ export const adminUpdateOrder = (id, status) =>
     api.patch(`/admin/orders/${id}`, { status }).then((r) => r.data);
 export const adminResendReceipt = (id) =>
     api.post(`/admin/orders/${id}/resend-receipt`).then((r) => r.data);
+export const adminDownloadInvoice = async (id, orderNumber) => {
+    const res = await api.get(`/admin/orders/${id}/invoice.pdf`, { responseType: "blob" });
+    const url = window.URL.createObjectURL(new Blob([res.data], { type: "application/pdf" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `Invoice-${orderNumber || id}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+};
 export const adminListWaitlists = (source) => {
     const q = source ? `?source=${encodeURIComponent(source)}` : "";
     return api.get(`/admin/waitlists${q}`).then((r) => r.data);

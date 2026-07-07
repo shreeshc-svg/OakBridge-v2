@@ -41,8 +41,13 @@ async def send_email(
     subject: str,
     html: str,
     reply_to: Optional[str] = None,
+    attachments: Optional[list] = None,
 ) -> bool:
-    """Send a transactional email. Returns True on success, False on failure. Never raises."""
+    """Send a transactional email. Returns True on success, False on failure. Never raises.
+
+    `attachments` is a list of (filename, bytes) tuples; each is base64-encoded
+    for Resend.
+    """
     if not RESEND_API_KEY:
         logger.warning("Skipping email — RESEND_API_KEY not set (to=%s, subject=%r)", to, subject)
         return False
@@ -55,6 +60,14 @@ async def send_email(
     }
     if reply_to:
         params["reply_to"] = reply_to
+    if attachments:
+        import base64
+
+        params["attachments"] = [
+            {"filename": fn, "content": base64.b64encode(data).decode("ascii")}
+            for fn, data in attachments
+            if data
+        ]
 
     try:
         result = await asyncio.to_thread(resend.Emails.send, params)
@@ -203,14 +216,20 @@ def render_order_receipt_html(order: dict) -> str:
 """
 
 
-async def send_order_receipt(order: dict) -> bool:
-    """Send the branded receipt email for a paid order."""
+async def send_order_receipt(order: dict, invoice_pdf: Optional[bytes] = None) -> bool:
+    """Send the branded receipt email for a paid order, with the tax invoice
+    attached as a PDF when provided."""
     to = order.get("email")
     if not to:
         return False
     html = render_order_receipt_html(order)
     subject = f"Your Oakbridge order — {order.get('order_number','')}"
-    return await send_email(to=to, subject=subject, html=html)
+    attachments = None
+    if invoice_pdf:
+        inv = order.get("invoice_no") or order.get("order_number", "invoice")
+        fname = f"Invoice-{str(inv).replace('/', '-')}.pdf"
+        attachments = [(fname, invoice_pdf)]
+    return await send_email(to=to, subject=subject, html=html, attachments=attachments)
 
 
 # ====== Waitlist welcome ======

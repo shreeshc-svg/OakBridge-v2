@@ -201,7 +201,10 @@ async def verify_payment(payload: VerifyPaymentRequest):
     try:
         refreshed = await db.orders.find_one({"id": order["id"]}, {"_id": 0})
         if refreshed:
-            await send_order_receipt(refreshed)
+            from invoice import build_order_invoice
+
+            pdf = await build_order_invoice(db, refreshed)
+            await send_order_receipt(refreshed, invoice_pdf=pdf or None)
             await send_admin_paid_order(refreshed)
     except Exception:  # noqa: BLE001
         logger.exception("Order receipt email failed for order %s", order["id"])
@@ -273,7 +276,10 @@ async def razorpay_webhook(
             order_doc = await db.orders.find_one({"rzp_order_id": rzp_order_id}, {"_id": 0})
             if order_doc:
                 await _apply_stock_decrement(order_doc["id"])
-                await send_order_receipt(order_doc)
+                from invoice import build_order_invoice
+
+                pdf = await build_order_invoice(db, order_doc)
+                await send_order_receipt(order_doc, invoice_pdf=pdf or None)
                 await send_admin_paid_order(order_doc)
         except Exception:  # noqa: BLE001
             logger.exception("Webhook receipt email failed for rzp_order_id=%s", rzp_order_id)

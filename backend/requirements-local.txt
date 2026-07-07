@@ -19,3 +19,4 @@ requests
 openpyxl
 razorpay
 resend
+reportlab

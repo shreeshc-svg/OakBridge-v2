@@ -754,8 +754,36 @@ async def admin_resend_receipt(order_id: str):
         raise HTTPException(status_code=404, detail="Order not found")
     if not order.get("email"):
         raise HTTPException(status_code=400, detail="Order has no email on file")
-    ok = await send_order_receipt(order)
+    from invoice import build_order_invoice
+
+    pdf = await build_order_invoice(db, order)
+    ok = await send_order_receipt(order, invoice_pdf=pdf or None)
     return {"ok": ok, "to": order["email"]}
+
+
+@admin_router.get("/orders/{order_id}/invoice.pdf")
+async def admin_download_invoice(order_id: str):
+    """Generate (or regenerate) the tax invoice PDF for an order and return it."""
+    from fastapi.responses import Response
+
+    order = await db.orders.find_one({"id": order_id}, {"_id": 0})
+    if not order:
+        order = await db.orders.find_one({"order_number": order_id}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    from invoice import build_order_invoice
+
+    pdf = await build_order_invoice(db, order)
+    if not pdf:
+        raise HTTPException(status_code=500, detail="Could not generate invoice")
+    inv = order.get("invoice_no") or order.get("order_number", "invoice")
+    filename = f"Invoice-{str(inv).replace('/', '-')}.pdf"
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 # ============== AI-drafted author bios ==============
