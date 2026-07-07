@@ -6,8 +6,10 @@ Stack: **MongoDB Atlas** (database) + **Render** (FastAPI backend) + **Vercel** 
 
 ## 0. Prerequisites (Monday)
 - MongoDB **Atlas** free cluster (region: Mumbai / `ap-south-1`), a DB user, and Network Access → Allow from anywhere (or Render's IPs). Copy the SRV connection string.
-- **Render**, **Vercel**, and **AWS S3** accounts.
+- **Render** and **Vercel** accounts.
 - **Razorpay** KYC submitted (live keys come after approval; use test keys until then).
+- **Groq** free account for the AI feature (author-bio drafting) — `console.groq.com` → free API key. (Local dev uses Ollama; see §5d.)
+- No S3/AWS account needed — file storage is now local disk (see §5c). Add S3 later only if you outgrow a persistent disk.
 
 ---
 
@@ -23,13 +25,16 @@ Create the service from `render.yaml` (New → Blueprint). Then set these env va
 | `SITE_URL` | `https://oakbridge.in` |
 | `ADMIN_EMAIL` | `info@oakbridge.in` |
 | `ADMIN_PASSWORD` | **strong value below** |
-| `RESEND_API_KEY` | your Resend key |
+| `RESEND_API_KEY` | your Resend key (from the account where oakbridge.in is verified) |
 | `SENDER_EMAIL` | `noreply@oakbridge.in` (after domain verified; until then `onboarding@resend.dev`) |
 | `SENDER_NAME` | `Oakbridge Publishing` |
 | `ADMIN_NOTIFY_EMAIL` | `info@oakbridge.in` |
 | `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` | test keys now → live keys after KYC |
 | `RAZORPAY_WEBHOOK_SECRET` | from the Razorpay webhook you create (step 4) |
-| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_REGION` / `S3_BUCKET` | after the S3 storage code lands (send me bucket + region) |
+| `STORAGE_DIR` | path to the mounted **persistent disk** (see §5c), e.g. `/var/data/storage` |
+| `LLM_BASE_URL` | `https://api.groq.com/openai/v1` (Groq) — see §5d |
+| `LLM_API_KEY` | your Groq API key (`gsk_…`) |
+| `LLM_MODEL` | `llama-3.1-8b-instant` |
 
 **Suggested production admin password** (rotate anytime):
 
@@ -38,7 +43,7 @@ _CC$cpYUuNb^YF5K6Qy3
 ```
 
 Build: `pip install -r requirements-local.txt` · Start: `uvicorn server:app --host 0.0.0.0 --port $PORT` · Health check: `/api`.
-Note: the app only seeds the admin if `ADMIN_PASSWORD` is set, and CORS now defaults to localhost only — so `CORS_ORIGINS` **must** be set in production.
+Note: the app only seeds the admin if `ADMIN_PASSWORD` is set, and CORS now defaults to localhost only — so `CORS_ORIGINS` **must** be set in production. `reportlab` (PDF invoices) is in `requirements-local.txt`, so it installs automatically.
 
 ---
 
@@ -64,8 +69,12 @@ Point `oakbridge.in` (and `www`) at Vercel (Vercel → Domains gives the exact A
 1. Dashboard → Settings → **Webhooks** → add `https://<render-url>/api/webhooks/razorpay`, events `payment.captured` + `payment.failed`, set a secret → put it in `RAZORPAY_WEBHOOK_SECRET`.
 2. Use **test** keys until KYC clears, then swap in **live** keys and redeploy.
 
+> The webhook drives the payment-failed emails (customer + admin). Without it, only the on-page/verify path fires.
+
+---
+
 ## 5. Resend (email domain)
-Resend → Domains → add `oakbridge.in` → add the DKIM/SPF/MX DNS records it gives you → Verify. Then set `SENDER_EMAIL=noreply@oakbridge.in`.
+Resend → Domains → add `oakbridge.in` → add the DKIM/SPF/MX DNS records it gives you → Verify **in the same account as your API key**. Then set `SENDER_EMAIL=noreply@oakbridge.in`. Until the domain is verified, Resend only delivers to the account owner's address.
 
 ---
 
@@ -81,12 +90,41 @@ The app persists logged-in users' carts and can email FOMO reminders at **12h, 1
 
 The endpoint is token-protected (403 without the correct `X-Task-Token`). You can also run it on demand from **Admin → Dashboard → "Run cart reminders"**.
 
+---
+
+## 5c. File storage (local disk)
+Uploaded book covers, eBooks and media are stored on the backend's own filesystem under `STORAGE_DIR` and served at `/api/files/{path}`. No S3 or external service needed.
+
+**Important — a Render web service's default disk is ephemeral** (wiped on every deploy/restart), so uploads would vanish. For production:
+1. Render → your web service → **Disks** → **Add Disk** (e.g. name `storage`, mount path `/var/data/storage`, size 1–5 GB).
+2. Set `STORAGE_DIR=/var/data/storage` in the service env.
+
+Locally (dev/UAT) leave `STORAGE_DIR` unset — it defaults to `backend/storage/` (gitignored, auto-created).
+
+> Outgrowing a single disk later? `put_object`/`get_object` in `backend/features.py` are the only two functions to swap for S3 — callers are untouched.
+
+---
+
+## 5d. AI (author-bio drafting)
+The admin "Draft author bio" feature calls a provider-agnostic, OpenAI-compatible LLM layer (`backend/llm.py`).
+
+- **Local dev:** install **Ollama**, `ollama pull llama3.1` (or `llama3.2:3b`), leave the `LLM_*` vars at their defaults (`http://localhost:11434/v1`). Free, offline, zero cost.
+- **Production (Render can't run Ollama):** point it at a hosted open model — **Groq free tier** works well:
+  `LLM_BASE_URL=https://api.groq.com/openai/v1` · `LLM_MODEL=llama-3.1-8b-instant` · `LLM_API_KEY=gsk_…`
+  (Or any OpenAI-compatible endpoint: OpenAI, OpenRouter, etc.) Switching providers is env-only — no code change.
+
+This feature is optional; if the LLM is unreachable, only bio-drafting returns a 502 — the rest of the app is unaffected.
+
+---
+
 ## 6. Go-live checklist
 - [ ] Backend healthy at `/api`; `/api/books` returns data (Atlas connected, seeded).
 - [ ] Frontend loads, talks to backend, admin login works.
 - [ ] `CORS_ORIGINS` = real domain; `ADMIN_PASSWORD` = strong; default password not in use.
-- [ ] Razorpay live keys + webhook; a real payment → confirmation → **inbox** receipt.
-- [ ] Resend domain verified (emails inbox, not spam).
-- [ ] S3 wired (if using cover/eBook uploads).
+- [ ] Razorpay live keys + webhook; a real payment → confirmation → **inbox** receipt **with PDF invoice**.
+- [ ] Resend domain verified (emails inbox, not spam); OTP, receipt, failure, contact emails all deliver.
+- [ ] Persistent disk attached + `STORAGE_DIR` set (else uploads vanish on redeploy).
+- [ ] AI: `LLM_BASE_URL`/`LLM_API_KEY`/`LLM_MODEL` set to Groq (or similar); draft-bio works.
 - [ ] Cart-reminders cron job created (`TASK_TOKEN` set on both web + cron).
+- [ ] Legal pages reviewed (Terms/Privacy/Refund/Shipping) — bracketed items filled in.
 - [ ] `main` updated from `Oak-v2-UAT`, release tagged.

@@ -11,6 +11,12 @@ services:
     startCommand: "uvicorn server:app --host 0.0.0.0 --port $PORT"
     healthCheckPath: /api
     autoDeploy: true
+    # Persistent disk for uploaded covers / eBooks / media (served at /api/files/*).
+    # Without this, uploads are wiped on every deploy.
+    disk:
+      name: storage
+      mountPath: /var/data/storage
+      sizeGB: 1
     envVars:
       - key: PYTHON_VERSION
         value: "3.12.7"
@@ -22,7 +28,13 @@ services:
         generateValue: true          # Render generates a strong secret
       - key: TASK_TOKEN
         generateValue: true          # secret for the cart-reminders cron endpoint
-      # --- set these in the dashboard ---
+      - key: STORAGE_DIR
+        value: /var/data/storage
+      - key: LLM_BASE_URL
+        value: https://api.groq.com/openai/v1
+      - key: LLM_MODEL
+        value: llama-3.1-8b-instant
+      # --- set these in the dashboard (secrets / environment-specific) ---
       - key: MONGO_URL              # Atlas SRV connection string
         sync: false
       - key: CORS_ORIGINS           # https://oakbridge.in,https://www.oakbridge.in
@@ -45,12 +57,5 @@ services:
         sync: false
       - key: RAZORPAY_WEBHOOK_SECRET
         sync: false
-      # --- S3 (once the storage code migration lands) ---
-      - key: AWS_ACCESS_KEY_ID
-        sync: false
-      - key: AWS_SECRET_ACCESS_KEY
-        sync: false
-      - key: AWS_REGION             # ap-south-1
-        sync: false
-      - key: S3_BUCKET
+      - key: LLM_API_KEY            # Groq key (gsk_...)
         sync: false
