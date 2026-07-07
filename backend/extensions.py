@@ -754,9 +754,13 @@ async def admin_resend_receipt(order_id: str):
         raise HTTPException(status_code=404, detail="Order not found")
     if not order.get("email"):
         raise HTTPException(status_code=400, detail="Order has no email on file")
-    from invoice import build_order_invoice
+    pdf = None
+    try:  # invoice is best-effort — never let it block the receipt email
+        from invoice import build_order_invoice
 
-    pdf = await build_order_invoice(db, order)
+        pdf = await build_order_invoice(db, order)
+    except Exception:  # noqa: BLE001
+        logging.getLogger(__name__).exception("Invoice build failed for %s", order_id)
     ok = await send_order_receipt(order, invoice_pdf=pdf or None)
     return {"ok": ok, "to": order["email"]}
 

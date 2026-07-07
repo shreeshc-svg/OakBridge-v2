@@ -201,9 +201,13 @@ async def verify_payment(payload: VerifyPaymentRequest):
     try:
         refreshed = await db.orders.find_one({"id": order["id"]}, {"_id": 0})
         if refreshed:
-            from invoice import build_order_invoice
+            pdf = None
+            try:  # invoice is best-effort — never let it block the receipt email
+                from invoice import build_order_invoice
 
-            pdf = await build_order_invoice(db, refreshed)
+                pdf = await build_order_invoice(db, refreshed)
+            except Exception:  # noqa: BLE001
+                logger.exception("Invoice build failed for order %s (sending receipt without it)", order["id"])
             await send_order_receipt(refreshed, invoice_pdf=pdf or None)
             await send_admin_paid_order(refreshed)
     except Exception:  # noqa: BLE001
@@ -276,9 +280,13 @@ async def razorpay_webhook(
             order_doc = await db.orders.find_one({"rzp_order_id": rzp_order_id}, {"_id": 0})
             if order_doc:
                 await _apply_stock_decrement(order_doc["id"])
-                from invoice import build_order_invoice
+                pdf = None
+                try:  # invoice is best-effort — never let it block the receipt email
+                    from invoice import build_order_invoice
 
-                pdf = await build_order_invoice(db, order_doc)
+                    pdf = await build_order_invoice(db, order_doc)
+                except Exception:  # noqa: BLE001
+                    logger.exception("Invoice build failed for %s (sending receipt without it)", rzp_order_id)
                 await send_order_receipt(order_doc, invoice_pdf=pdf or None)
                 await send_admin_paid_order(order_doc)
         except Exception:  # noqa: BLE001
