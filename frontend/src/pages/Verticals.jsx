@@ -65,7 +65,7 @@ const VERTICALS = [
     },
 ];
 
-function VerticalCard({ v, reverse }) {
+function VerticalCard({ v, reverse, site }) {
     return (
         <section
             data-testid={`vertical-${v.id}`}
@@ -111,7 +111,7 @@ function VerticalCard({ v, reverse }) {
             </div>
             <div className="lg:col-span-5 relative aspect-[4/3] bg-[#002B5C] overflow-hidden">
                 <img
-                    src={mediaUrl(site["verticals_" + v.id]) || v.image}
+                    src={mediaUrl(site?.["verticals_" + v.id]) || v.image}
                     alt={v.title}
                     className="absolute inset-0 w-full h-full object-cover opacity-90"
                 />
@@ -156,7 +156,7 @@ export default function Verticals() {
             </section>
             <div className="px-6 md:px-12 lg:px-16">
                 {VERTICALS.map((v, i) => (
-                    <VerticalCard key={v.id} v={v} reverse={i % 2 === 1} />
+                    <VerticalCard key={v.id} v={v} reverse={i % 2 === 1} site={site} />
                 ))}
             </div>
         </div>
