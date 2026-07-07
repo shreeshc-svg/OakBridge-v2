@@ -68,6 +68,7 @@ export default function Checkout() {
     const [applyingCoupon, setApplyingCoupon] = useState(false);
     const [couponMsg, setCouponMsg] = useState(null);
     const [submitting, setSubmitting] = useState(false);
+    const [agreed, setAgreed] = useState(false);
     const nav = useNavigate();
 
     const onChange = (e) =>
@@ -109,6 +110,10 @@ export default function Checkout() {
         e.preventDefault();
         if (items.length === 0) {
             toast.error("Your cart is empty.");
+            return;
+        }
+        if (!agreed) {
+            toast.error("Please accept the Terms and Privacy Policy to continue.");
             return;
         }
         setSubmitting(true);
@@ -399,11 +404,39 @@ export default function Checkout() {
                                 {formatINR(total)}
                             </span>
                         </div>
+                        <label
+                            htmlFor="checkout-consent"
+                            className="mt-6 flex items-start gap-3 text-xs text-[#4B5563] cursor-pointer"
+                        >
+                            <input
+                                id="checkout-consent"
+                                type="checkbox"
+                                checked={agreed}
+                                onChange={(e) => setAgreed(e.target.checked)}
+                                data-testid="checkout-consent"
+                                className="mt-0.5 accent-[#002B5C] w-4 h-4 flex-shrink-0"
+                            />
+                            <span>
+                                I agree to the{" "}
+                                <Link to="/terms" target="_blank" className="text-[#002B5C] underline">
+                                    Terms &amp; Conditions
+                                </Link>
+                                ,{" "}
+                                <Link to="/privacy" target="_blank" className="text-[#002B5C] underline">
+                                    Privacy Policy
+                                </Link>{" "}
+                                and{" "}
+                                <Link to="/refund-policy" target="_blank" className="text-[#002B5C] underline">
+                                    Refund Policy
+                                </Link>
+                                .
+                            </span>
+                        </label>
                         <button
                             type="submit"
-                            disabled={submitting}
+                            disabled={submitting || !agreed}
                             data-testid="place-order-button"
-                            className="mt-6 w-full bg-[#002B5C] text-[#FFFFFF] py-4 text-sm font-medium hover:bg-[#001F42] transition-colors disabled:opacity-60"
+                            className="mt-4 w-full bg-[#002B5C] text-[#FFFFFF] py-4 text-sm font-medium hover:bg-[#001F42] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                         >
                             {submitting ? "Processing…" : "Pay & Place Order"}
                         </button>
