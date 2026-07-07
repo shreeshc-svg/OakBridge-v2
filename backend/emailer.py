@@ -446,6 +446,80 @@ async def send_verification_otp(to: str, name: str, code: str) -> bool:
     return await send_email(to=to, subject="Your Oakbridge verification code", html=render_verification_otp_html(name, code))
 
 
+# ====== Order payment failed ======
+
+_FAILURE_REASONS = [
+    "The card was declined by your bank, or there were insufficient funds.",
+    "Card details (number, expiry or CVV) were entered incorrectly.",
+    "The bank OTP / 3-D Secure verification wasn't completed or timed out.",
+    "Online, international or high-value transactions are disabled on the card, or a daily limit was reached.",
+    "A UPI request expired or was declined in your payments app.",
+    "The payment window was closed, or the internet connection dropped before it finished.",
+]
+
+
+def render_order_failed_html(order: dict, reason: str = "") -> str:
+    who = (order.get("full_name") or "there").split(" ")[0]
+    order_no = order.get("order_number", "")
+    retry_url = f"{SITE_URL}/cart" if SITE_URL else "#"
+    reason_block = (
+        f'<tr><td style="padding:0 36px 8px;"><div style="background:#FFF5F5;border:1px solid #F3C6CE;'
+        f'padding:12px 14px;font-size:13px;color:{BRAND_NAVY};"><strong>Reason reported by the bank:</strong> '
+        f'{reason}</div></td></tr>'
+        if reason else ""
+    )
+    reasons_li = "".join(
+        f'<li style="margin:6px 0;">{r}</li>' for r in _FAILURE_REASONS
+    )
+    return f"""\
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background-color:#F5F7FA;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:{BRAND_NAVY};">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#F5F7FA;padding:40px 16px;">
+  <tr><td align="center">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="max-width:600px;background-color:#FFFFFF;border:1px solid #E5E7EB;">
+      <tr><td style="background-color:{BRAND_NAVY};padding:28px 36px;color:#FFFFFF;">
+        <div style="font-family:Georgia,serif;font-size:22px;">Oakbridge <span style="color:{BRAND_AMBER};">Publishing</span></div>
+        <div style="font-family:monospace;text-transform:uppercase;letter-spacing:2px;font-size:11px;margin-top:6px;color:{BRAND_AMBER};">Payment unsuccessful</div>
+      </td></tr>
+      <tr><td style="padding:36px 36px 8px;">
+        <h1 style="margin:0;font-family:Georgia,serif;font-weight:normal;font-size:24px;color:{BRAND_NAVY};">Hi {who},</h1>
+        <p style="margin:14px 0 0;font-size:15px;line-height:1.6;color:{BRAND_GREY};">
+          Your recent order <strong style="color:{BRAND_NAVY};">{order_no}</strong> couldn't be completed because the payment didn't go through.
+          <strong>You haven't been charged.</strong> If any amount was debited, your bank will reverse it automatically within 5-7 working days.
+        </p>
+      </td></tr>
+      {reason_block}
+      <tr><td style="padding:12px 36px 0;">
+        <div style="font-family:monospace;text-transform:uppercase;letter-spacing:1.5px;font-size:10px;color:{BRAND_GREY};">What could have gone wrong</div>
+        <ul style="margin:10px 0 0;padding-left:18px;font-size:14px;line-height:1.6;color:{BRAND_GREY};">
+          {reasons_li}
+        </ul>
+      </td></tr>
+      <tr><td style="padding:24px 36px 8px;">
+        <p style="margin:0 0 16px;font-size:14px;color:{BRAND_GREY};">Your items are still saved - you can pick up right where you left off:</p>
+        <a href="{retry_url}" style="display:inline-block;background-color:{BRAND_NAVY};color:#FFFFFF;text-decoration:none;font-size:14px;font-weight:600;padding:14px 28px;">Complete your order</a>
+      </td></tr>
+      <tr><td style="padding:32px 36px 36px;">
+        <div style="border-top:1px solid #E5E7EB;padding-top:20px;font-size:12px;line-height:1.6;color:{BRAND_GREY};">
+          Need a hand? Reply to this email or write to <a href="mailto:hello@oakbridge.in" style="color:{BRAND_NAVY};">hello@oakbridge.in</a> and we'll help you complete your order.
+        </div>
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+</body></html>
+"""
+
+
+async def send_order_failed(order: dict, reason: str = "") -> bool:
+    """Tell the customer their payment didn't go through, with likely causes and a retry link."""
+    to = order.get("email")
+    if not to:
+        return False
+    subject = f"Your Oakbridge order couldn't be completed - {order.get('order_number','')}"
+    return await send_email(to=to, subject=subject, html=render_order_failed_html(order, reason or ""))
+
+
 # ====== Abandoned-cart reminders ======
 
 _CART_COPY = {
