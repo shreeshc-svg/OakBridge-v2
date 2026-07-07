@@ -776,11 +776,18 @@ async def admin_download_invoice(order_id: str):
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
 
-    from invoice import build_order_invoice
+    pdf = b""
+    try:
+        from invoice import build_order_invoice
 
-    pdf = await build_order_invoice(db, order)
+        pdf = await build_order_invoice(db, order)
+    except Exception:  # noqa: BLE001
+        logging.getLogger(__name__).exception("Invoice generation failed for %s", order_id)
     if not pdf:
-        raise HTTPException(status_code=500, detail="Could not generate invoice")
+        raise HTTPException(
+            status_code=503,
+            detail="Invoice generator unavailable — is 'reportlab' installed on the server?",
+        )
     inv = order.get("invoice_no") or order.get("order_number", "invoice")
     filename = f"Invoice-{str(inv).replace('/', '-')}.pdf"
     return Response(
