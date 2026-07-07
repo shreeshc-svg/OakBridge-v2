@@ -1183,7 +1183,17 @@ async def _chat_system_prompt() -> str:
         "- Contact: info@oakbridge.in, phone +91 88003 37299, office at B3 Tower, Spaze iTech "
         "Park, Sector 49, Gurugram, Haryana 122018.\n"
         "- Useful pages: Bookstore /books, Events /events, Academy /academy, Digital Solutions "
-        "/digital-solutions, Authors /authors, Contact /contact, Terms /terms, Privacy /privacy."
+        "/digital-solutions, Authors /authors, Contact /contact, Terms /terms, Privacy /privacy.\n\n"
+        "NAVIGATION:\n"
+        "- If the user asks to open / go to / take me to / show me a section of the site, reply "
+        "with a SHORT confirmation and then, on its own final line, append a directive in EXACTLY "
+        "this format: [[go:/path]] — using ONLY one of these paths: /, /books, /events, /academy, "
+        "/digital-solutions, /authors, /about, /contact, /submissions, /cart, /terms, /privacy, "
+        "/refund-policy, /shipping-policy.\n"
+        "- Example — user: 'take me to the bookstore' -> 'Sure, taking you to the Bookstore now. "
+        "[[go:/books]]'.\n"
+        "- Only include the directive when the user actually wants to navigate. Never show a "
+        "[[go:...]] directive in an ordinary answer."
     )
 
 

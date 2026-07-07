@@ -1,17 +1,51 @@
 import React, { useState, useRef, useEffect } from "react";
-import { MessageCircle, X, Send } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { MessageCircle, X, Send, ArrowRight } from "lucide-react";
 import { sendChat } from "../lib/api";
 
 const GREETING =
-    "Hi! I'm Oaky, the Oakbridge assistant. Ask me about ordering, shipping, returns, or finding books.";
+    "Hi! I'm Oaky, the Oakbridge assistant. Ask me about ordering, shipping, returns, finding books — or say \"take me to the bookstore\" and I'll get you there.";
 const SUGGESTIONS = [
-    "How do I place an order?",
+    "Take me to the bookstore",
     "What are your shipping charges?",
     "What's your return policy?",
     "How do I request a desk copy?",
 ];
 
+// Only these destinations may be auto-navigated to.
+const ROUTES = {
+    "/": "Home",
+    "/books": "Bookstore",
+    "/events": "Events",
+    "/academy": "Academy",
+    "/digital-solutions": "Digital Solutions",
+    "/authors": "Authors",
+    "/about": "About",
+    "/contact": "Contact",
+    "/submissions": "Submissions",
+    "/cart": "Cart",
+    "/terms": "Terms",
+    "/privacy": "Privacy",
+    "/refund-policy": "Refund Policy",
+    "/shipping-policy": "Shipping Policy",
+    "/what-we-do": "What We Do",
+};
+
+function parseGo(reply) {
+    const m = (reply || "").match(/\[\[go:(\/[^\]\s]*)\]\]/i);
+    if (!m) return { text: reply, go: null };
+    const text = reply.replace(m[0], "").trim();
+    let path = m[1];
+    // allow /books?... variants; otherwise must be an exact known route
+    const base = path.split("?")[0];
+    const ok = base === "/books" || Object.prototype.hasOwnProperty.call(ROUTES, base);
+    return { text, go: ok ? path : null };
+}
+
+const labelFor = (path) => ROUTES[path.split("?")[0]] || "the page";
+
 export default function ChatWidget() {
+    const nav = useNavigate();
     const [open, setOpen] = useState(false);
     const [msgs, setMsgs] = useState([{ role: "assistant", content: GREETING }]);
     const [input, setInput] = useState("");
@@ -39,7 +73,12 @@ export default function ChatWidget() {
                 .slice(1, -1)
                 .map((m) => ({ role: m.role, content: m.content }));
             const res = await sendChat(message, history);
-            setMsgs((cur) => [...cur, { role: "assistant", content: res.reply }]);
+            const { text: clean, go } = parseGo(res.reply);
+            setMsgs((cur) => [
+                ...cur,
+                { role: "assistant", content: clean || (go ? `Taking you to ${labelFor(go)}…` : ""), go },
+            ]);
+            if (go) setTimeout(() => nav(go), 600); // widget lives in Layout, so chat stays open
         } catch (err) {
             const detail = err?.response?.data?.detail;
             setMsgs((cur) => [
@@ -85,7 +124,7 @@ export default function ChatWidget() {
                         {msgs.map((m, i) => (
                             <div
                                 key={i}
-                                className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
+                                className={`flex flex-col ${m.role === "user" ? "items-end" : "items-start"}`}
                             >
                                 <div
                                     className={`max-w-[85%] px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-line ${
@@ -96,6 +135,15 @@ export default function ChatWidget() {
                                 >
                                     {m.content}
                                 </div>
+                                {m.go && (
+                                    <button
+                                        onClick={() => nav(m.go)}
+                                        data-testid="chat-go"
+                                        className="mt-1.5 inline-flex items-center gap-1.5 text-xs font-medium bg-[#F59E0B] text-[#002B5C] px-3 py-1.5 hover:bg-[#E08E00]"
+                                    >
+                                        Go to {labelFor(m.go)} <ArrowRight size={12} strokeWidth={2} />
+                                    </button>
+                                )}
                             </div>
                         ))}
                         {busy && (
