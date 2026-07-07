@@ -1,6 +1,6 @@
 import React from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { LayoutDashboard, BookOpen, ShoppingBag, Mail, Users, LogOut, ExternalLink, Tag, PackageCheck, FileText, Inbox, Image, Settings, SlidersHorizontal, BookMarked } from "lucide-react";
+import { LayoutDashboard, BookOpen, ShoppingBag, Mail, Users, LogOut, ExternalLink, Tag, PackageCheck, FileText, Inbox, Image, Settings, SlidersHorizontal, BookMarked, Scale } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 
 const LINKS = [
@@ -16,6 +16,7 @@ const LINKS = [
     { to: "/admin/submissions", label: "Submissions", icon: FileText },
     { to: "/admin/waitlists", label: "Waitlists", icon: Inbox },
     { to: "/admin/users", label: "Users", icon: Users },
+    { to: "/admin/legal", label: "Legal", icon: Scale },
     { to: "/admin/settings", label: "Settings", icon: Settings },
 ];
 

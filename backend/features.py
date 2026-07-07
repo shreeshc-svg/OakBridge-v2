@@ -791,6 +791,7 @@ async def ensure_feature_indexes():
     await db.media.create_index("uploaded_at")
     await db.content_collections.create_index("key", unique=True)
     await db.settings.create_index("key", unique=True)
+    await db.legal.create_index("slug", unique=True)
 
 
 # ====== Server-side cart + abandoned-cart reminders ======
@@ -1083,5 +1084,57 @@ async def get_settings():
 async def set_setting(payload: SettingSet):
     await db.settings.update_one(
         {"key": payload.key}, {"$set": {"key": payload.key, "value": payload.value}}, upsert=True
+    )
+    return {"ok": True}
+
+
+# ===================== Legal / policy pages =====================
+from legal_defaults import LEGAL_DEFAULTS, LEGAL_META  # noqa: E402
+
+
+class LegalSet(BaseModel):
+    content: str
+
+
+async def _get_legal() -> dict:
+    docs = await db.legal.find({}, {"_id": 0}).to_list(50)
+    overrides = {d["slug"]: d for d in docs}
+    out = {}
+    for slug, title in LEGAL_META.items():
+        d = overrides.get(slug)
+        out[slug] = {
+            "slug": slug,
+            "title": title,
+            "content": (d.get("content") if d else None) or LEGAL_DEFAULTS[slug],
+            "updated_at": d.get("updated_at") if d else None,
+        }
+    return out
+
+
+@public_router.get("/legal")
+async def get_legal():
+    """All policy pages (defaults merged with any admin overrides)."""
+    return await _get_legal()
+
+
+@public_router.get("/legal/{slug}")
+async def get_legal_page(slug: str):
+    if slug not in LEGAL_META:
+        raise HTTPException(status_code=404, detail="Unknown legal page")
+    return (await _get_legal())[slug]
+
+
+@admin_router.put("/legal/{slug}")
+async def set_legal_page(slug: str, payload: LegalSet):
+    if slug not in LEGAL_META:
+        raise HTTPException(status_code=404, detail="Unknown legal page")
+    await db.legal.update_one(
+        {"slug": slug},
+        {"$set": {
+            "slug": slug,
+            "content": payload.content,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }},
+        upsert=True,
     )
     return {"ok": True}

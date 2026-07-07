@@ -147,12 +147,18 @@ export default function Footer() {
                         © {new Date().getFullYear()} Oakbridge Publishing Pvt.
                         Ltd. — ISBN Registrar 978-81-XXXX.
                     </div>
-                    <div className="flex gap-6">
-                        <Link to="/about#legal" className="hover:text-white">
+                    <div className="flex gap-6 flex-wrap">
+                        <Link to="/privacy" className="hover:text-white">
                             Privacy
                         </Link>
-                        <Link to="/about#legal" className="hover:text-white">
+                        <Link to="/terms" className="hover:text-white">
                             Terms
+                        </Link>
+                        <Link to="/refund-policy" className="hover:text-white">
+                            Refunds
+                        </Link>
+                        <Link to="/shipping-policy" className="hover:text-white">
+                            Shipping
                         </Link>
                         <Link to="/contact" className="hover:text-white">
                             Contact

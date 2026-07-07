@@ -30,8 +30,10 @@ import AdminMedia from "@/pages/admin/AdminMedia";
 import AdminSettings from "@/pages/admin/AdminSettings";
 import AdminPLP from "@/pages/admin/AdminPLP";
 import AdminPDP from "@/pages/admin/AdminPDP";
+import AdminLegal from "@/pages/admin/AdminLegal";
 import Submissions from "@/pages/Submissions";
 import Verticals from "@/pages/Verticals";
+import LegalPage from "@/pages/LegalPage";
 import Events from "@/pages/Events";
 import DigitalSolutions from "@/pages/DigitalSolutions";
 import Academy from "@/pages/Academy";
@@ -76,6 +78,10 @@ function App() {
                                 <Route path="/events" element={<Events />} />
                                 <Route path="/digital-solutions" element={<DigitalSolutions />} />
                                 <Route path="/academy" element={<Academy />} />
+                                <Route path="/terms" element={<LegalPage slug="terms" />} />
+                                <Route path="/privacy" element={<LegalPage slug="privacy" />} />
+                                <Route path="/refund-policy" element={<LegalPage slug="refund" />} />
+                                <Route path="/shipping-policy" element={<LegalPage slug="shipping" />} />
                                 <Route path="/login" element={<Login />} />
                                 <Route path="/register" element={<Register />} />
                                 <Route
@@ -109,6 +115,7 @@ function App() {
                                     <Route path="media" element={<AdminMedia />} />
                                     <Route path="page-bookstore" element={<AdminPLP />} />
                                     <Route path="page-book" element={<AdminPDP />} />
+                                    <Route path="legal" element={<AdminLegal />} />
                                     <Route path="settings" element={<AdminSettings />} />
                                 </Route>
                             </Route>
