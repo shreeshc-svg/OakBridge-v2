@@ -150,9 +150,18 @@ export default function Contact() {
                             <address className="not-italic text-sm text-[#002B5C] leading-relaxed">
                                 Oakbridge Publishing Pvt. Ltd.
                                 <br />
-                                14 Hauz Khas Village
-                                <br />
-                                New Delhi 110016, India
+                                <a
+                                    href="https://www.google.com/search?sca_esv=f08852b8ef6a6dca&sxsrf=APpeQnvRob4d_1aw52Yoz8qkOS9PKHpbHA:1783412885850&q=oakbridge+publishing+pvt.+ltd.+address&ludocid=6251122592004087756"
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="hover:text-[#CC0033]"
+                                >
+                                    B3 Tower, Spaze iTech Park
+                                    <br />
+                                    934, Sohna–Gurgaon Rd, Block S, Sector 49
+                                    <br />
+                                    Gurugram, Haryana 122018, India
+                                </a>
                             </address>
                         </div>
                         <div className="mt-5 flex gap-4">
@@ -162,10 +171,10 @@ export default function Contact() {
                                 className="text-[#CC0033] mt-0.5"
                             />
                             <a
-                                href="mailto:hello@oakbridge.in"
+                                href="mailto:info@oakbridge.in"
                                 className="text-sm text-[#002B5C] hover:text-[#CC0033]"
                             >
-                                hello@oakbridge.in
+                                info@oakbridge.in
                             </a>
                         </div>
                         <div className="mt-4 flex gap-4">
@@ -175,10 +184,10 @@ export default function Contact() {
                                 className="text-[#CC0033] mt-0.5"
                             />
                             <a
-                                href="tel:+911140000000"
+                                href="tel:+918800337299"
                                 className="text-sm text-[#002B5C] hover:text-[#CC0033]"
                             >
-                                +91 11 4000 0000
+                                +91 88003 37299
                             </a>
                         </div>
                     </div>

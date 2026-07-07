@@ -204,8 +204,8 @@ def render_order_receipt_html(order: dict) -> str:
       <!-- Footer -->
       <tr><td style="padding:40px 36px 36px;">
         <div style="border-top:1px solid #E5E7EB;padding-top:24px;font-size:12px;line-height:1.6;color:{BRAND_GREY};">
-          Questions? Reply to this email or write to us at <a href="mailto:hello@oakbridge.in" style="color:{BRAND_NAVY};">hello@oakbridge.in</a>.<br>
-          Oakbridge Publishing Pvt. Ltd. · 14 Hauz Khas Village, New Delhi 110016
+          Questions? Reply to this email or write to us at <a href="mailto:info@oakbridge.in" style="color:{BRAND_NAVY};">info@oakbridge.in</a>.<br>
+          Oakbridge Publishing Pvt. Ltd. · B3 Tower, Spaze iTech Park, Sector 49, Gurugram, Haryana 122018
         </div>
       </td></tr>
     </table>
@@ -278,8 +278,8 @@ def render_waitlist_welcome_html(program: dict, email: str) -> str:
       </td></tr>
       <tr><td style="padding:0 36px 36px;">
         <div style="border-top:1px solid #E5E7EB;padding-top:24px;font-size:12px;line-height:1.6;color:{BRAND_GREY};">
-          Questions? Reply to this email or write to <a href="mailto:hello@oakbridge.in" style="color:{BRAND_NAVY};">hello@oakbridge.in</a>.<br>
-          Oakbridge Publishing Pvt. Ltd. · 14 Hauz Khas Village, New Delhi 110016
+          Questions? Reply to this email or write to <a href="mailto:info@oakbridge.in" style="color:{BRAND_NAVY};">info@oakbridge.in</a>.<br>
+          Oakbridge Publishing Pvt. Ltd. · B3 Tower, Spaze iTech Park, Sector 49, Gurugram, Haryana 122018
         </div>
       </td></tr>
     </table>
@@ -543,7 +543,7 @@ def render_order_failed_html(order: dict, reason: str = "") -> str:
       </td></tr>
       <tr><td style="padding:32px 36px 36px;">
         <div style="border-top:1px solid #E5E7EB;padding-top:20px;font-size:12px;line-height:1.6;color:{BRAND_GREY};">
-          Need a hand? Reply to this email or write to <a href="mailto:hello@oakbridge.in" style="color:{BRAND_NAVY};">hello@oakbridge.in</a> and we'll help you complete your order.
+          Need a hand? Reply to this email or write to <a href="mailto:info@oakbridge.in" style="color:{BRAND_NAVY};">info@oakbridge.in</a> and we'll help you complete your order.
         </div>
       </td></tr>
     </table>

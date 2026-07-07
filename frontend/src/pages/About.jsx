@@ -130,9 +130,9 @@ export default function About() {
                             The fine print.
                         </h3>
                         <p className="text-sm text-[#4B5563] mt-4 leading-relaxed">
-                            Oakbridge Publishing Pvt. Ltd. — CIN
-                            U22100DL2017PTC000000 · Registered office: 14
-                            Hauz Khas Village, New Delhi 110016.
+                            Oakbridge Publishing Pvt. Ltd. — GSTIN 06AACCO5406D1ZW ·
+                            Office: B3 Tower, Spaze iTech Park, 934, Sohna–Gurgaon Rd,
+                            Sector 49, Gurugram, Haryana 122018.
                         </p>
                     </div>
                 </div>
