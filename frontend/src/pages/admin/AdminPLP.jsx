@@ -37,8 +37,10 @@ const move = (arr, i, dir) => {
 export default function AdminPLP() {
     const [sorts, setSorts] = useState(null);
     const [filters, setFilters] = useState(null);
-    const [picks, setPicks] = useState(null); // ordered book ids for bestsellers carousel
-    const [books, setBooks] = useState([]); // all books, for the picker
+    const [picks, setPicks] = useState(null);
+    const [books, setBooks] = useState([]);
+    const [carEnabled, setCarEnabled] = useState(true);
+    const [carSpeed, setCarSpeed] = useState(40); // px/sec
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
@@ -51,6 +53,8 @@ export default function AdminPLP() {
                 );
                 setFilters(Array.isArray(s?.plp_filters) ? s.plp_filters : DEFAULT_FILTERS);
                 setPicks(Array.isArray(s?.home_bestsellers) ? s.home_bestsellers : []);
+                setCarEnabled(s?.home_bestsellers_enabled !== false);
+                setCarSpeed(Number(s?.home_bestsellers_speed) || 40);
             })
             .catch(() => {
                 setSorts(DEFAULT_SORTS);
@@ -86,7 +90,6 @@ export default function AdminPLP() {
     };
     const removeFilter = (i) => setFilters((cur) => cur.filter((_, idx) => idx !== i));
 
-    // ---- bestsellers carousel ----
     const bookById = new Map(books.map((b) => [b.id, b]));
     const available = books.filter((b) => !picks.includes(b.id));
     const addPick = (id) => {
@@ -110,6 +113,8 @@ export default function AdminPLP() {
             await adminSetSetting("plp_sort_options", cleanSorts);
             await adminSetSetting("plp_filters", cleanFilters);
             await adminSetSetting("home_bestsellers", picks);
+            await adminSetSetting("home_bestsellers_enabled", carEnabled);
+            await adminSetSetting("home_bestsellers_speed", Number(carSpeed) || 40);
             toast.success("Bookstore page saved — live on the storefront.");
         } catch {
             toast.error("Could not save. Please try again.");
@@ -135,9 +140,35 @@ export default function AdminPLP() {
                 <div className="border border-[#E5E7EB] bg-white p-6">
                     <h2 className="font-serif text-xl text-[#002B5C]">Bestsellers carousel (homepage)</h2>
                     <p className="text-[11px] text-[#4B5563] mt-1">
-                        The auto-scrolling “What leaders are reading” row on the homepage. Pick the
-                        books and set their order. Leave empty to auto-fill from bestseller flags.
+                        The endless auto-scrolling “What leaders are reading” row on the homepage.
+                        Pick the books and set their order. Leave empty to auto-fill from bestseller flags.
                     </p>
+                    <div className="mt-4 flex flex-wrap items-center gap-x-8 gap-y-3">
+                        <label className="flex items-center gap-2 text-sm text-[#002B5C]">
+                            <input
+                                type="checkbox"
+                                checked={carEnabled}
+                                onChange={(e) => setCarEnabled(e.target.checked)}
+                                data-testid="plp-carousel-enabled"
+                                className="accent-[#002B5C] w-4 h-4"
+                            />
+                            Show carousel on homepage
+                        </label>
+                        <label className="flex items-center gap-3 text-sm text-[#4B5563]">
+                            Scroll speed
+                            <input
+                                type="range"
+                                min="10"
+                                max="120"
+                                step="5"
+                                value={carSpeed}
+                                onChange={(e) => setCarSpeed(Number(e.target.value))}
+                                data-testid="plp-carousel-speed"
+                                className="accent-[#002B5C]"
+                            />
+                            <span className="font-mono text-xs w-16 text-[#002B5C]">{carSpeed} px/s</span>
+                        </label>
+                    </div>
                     <div className="mt-4 flex items-center gap-2">
                         <select
                             data-testid="plp-bestseller-picker"
@@ -164,20 +195,10 @@ export default function AdminPLP() {
                             return (
                                 <div key={id} className="flex items-center gap-2">
                                     <div className="flex flex-col">
-                                        <button
-                                            onClick={() => setPicks((c) => move(c, i, -1))}
-                                            disabled={i === 0}
-                                            className={iconBtn + " !py-0.5"}
-                                            aria-label="Move up"
-                                        >
+                                        <button onClick={() => setPicks((c) => move(c, i, -1))} disabled={i === 0} className={iconBtn + " !py-0.5"} aria-label="Move up">
                                             <ArrowUp size={12} strokeWidth={1.5} />
                                         </button>
-                                        <button
-                                            onClick={() => setPicks((c) => move(c, i, 1))}
-                                            disabled={i === picks.length - 1}
-                                            className={iconBtn + " !py-0.5"}
-                                            aria-label="Move down"
-                                        >
+                                        <button onClick={() => setPicks((c) => move(c, i, 1))} disabled={i === picks.length - 1} className={iconBtn + " !py-0.5"} aria-label="Move down">
                                             <ArrowDown size={12} strokeWidth={1.5} />
                                         </button>
                                     </div>
@@ -185,11 +206,7 @@ export default function AdminPLP() {
                                         <span className="font-mono text-[10px] text-[#4B5563] mr-2">{i + 1}.</span>
                                         {b ? `${b.title} — ${b.author}` : id}
                                     </div>
-                                    <button
-                                        onClick={() => removePick(i)}
-                                        className={iconBtn + " text-[#CC0033]"}
-                                        aria-label="Remove"
-                                    >
+                                    <button onClick={() => removePick(i)} className={iconBtn + " text-[#CC0033]"} aria-label="Remove">
                                         <Trash2 size={14} strokeWidth={1.5} />
                                     </button>
                                 </div>
@@ -207,11 +224,7 @@ export default function AdminPLP() {
                 <div className="border border-[#E5E7EB] bg-white p-6">
                     <div className="flex items-center justify-between">
                         <h2 className="font-serif text-xl text-[#002B5C]">Sort options</h2>
-                        <button
-                            onClick={addSort}
-                            data-testid="plp-add-sort"
-                            className="inline-flex items-center gap-1.5 text-sm border border-[#002B5C] text-[#002B5C] px-3 py-1.5 hover:bg-[#F5F7FA]"
-                        >
+                        <button onClick={addSort} data-testid="plp-add-sort" className="inline-flex items-center gap-1.5 text-sm border border-[#002B5C] text-[#002B5C] px-3 py-1.5 hover:bg-[#F5F7FA]">
                             <Plus size={14} strokeWidth={1.5} /> Add sort
                         </button>
                     </div>

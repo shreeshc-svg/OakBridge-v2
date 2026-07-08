@@ -1,76 +1,58 @@
 import React, { useEffect, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
 import BookCard from "./BookCard";
 
-// Auto-scrolling product carousel. Advances one card every few seconds,
-// pauses on hover/touch, and has manual prev/next controls.
-export default function BestsellerCarousel({ books = [], interval = 2800 }) {
+// Endless, seamless marquee. Renders the list twice and translates the track by
+// exactly one copy (-50%), looping forever. `speed` is pixels/second; the track
+// pauses on hover so shoppers can click a card.
+export default function BestsellerCarousel({ books = [], speed = 40 }) {
     const trackRef = useRef(null);
+    const [dur, setDur] = useState(30);
     const [paused, setPaused] = useState(false);
 
-    const step = (dir) => {
-        const el = trackRef.current;
-        if (!el) return;
-        const card = el.firstElementChild;
-        const delta = (card ? card.offsetWidth : 220) + 24; // card + gap-6
-        const atEnd = el.scrollLeft + el.clientWidth >= el.scrollWidth - 8;
-        if (dir > 0 && atEnd) {
-            el.scrollTo({ left: 0, behavior: "smooth" });
-        } else {
-            el.scrollBy({ left: dir * delta, behavior: "smooth" });
-        }
-    };
-
     useEffect(() => {
-        if (!books.length) return undefined;
-        const id = setInterval(() => {
-            if (!paused) step(1);
-        }, interval);
-        return () => clearInterval(id);
-    }, [books, paused, interval]);
+        const measure = () => {
+            const el = trackRef.current;
+            if (!el) return;
+            const oneCopy = el.scrollWidth / 2; // half = a single set of books
+            const px = Math.max(5, Number(speed) || 40);
+            setDur(Math.max(6, oneCopy / px));
+        };
+        measure();
+        window.addEventListener("resize", measure);
+        return () => window.removeEventListener("resize", measure);
+    }, [books, speed]);
 
     if (!books.length) return null;
+    const loop = [...books, ...books];
 
     return (
         <div
-            className="relative"
+            className="relative overflow-hidden"
             onMouseEnter={() => setPaused(true)}
             onMouseLeave={() => setPaused(false)}
             onTouchStart={() => setPaused(true)}
+            onTouchEnd={() => setPaused(false)}
             data-testid="bestseller-carousel"
         >
+            <style>{`@keyframes oakMarquee{from{transform:translateX(0)}to{transform:translateX(-50%)}}`}</style>
             <div
                 ref={trackRef}
-                className="flex gap-6 overflow-x-auto scroll-smooth pb-2 snap-x [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                className="flex w-max"
+                style={{
+                    animation: `oakMarquee ${dur}s linear infinite`,
+                    animationPlayState: paused ? "paused" : "running",
+                }}
             >
-                {books.map((b, i) => (
+                {loop.map((b, i) => (
                     <div
-                        key={b.id}
-                        className="snap-start flex-none w-[46%] sm:w-[30%] md:w-[22%] lg:w-[16.2%]"
+                        key={i}
+                        aria-hidden={i >= books.length}
+                        className="flex-none w-[150px] sm:w-[175px] md:w-[200px] mr-6"
                     >
                         <BookCard book={b} index={i} compact />
                     </div>
                 ))}
             </div>
-
-            <button
-                type="button"
-                onClick={() => step(-1)}
-                aria-label="Previous"
-                data-testid="carousel-prev"
-                className="hidden md:flex absolute -left-4 top-[42%] -translate-y-1/2 w-9 h-9 items-center justify-center rounded-full bg-white border border-[#E5E7EB] shadow hover:border-[#002B5C] text-[#002B5C]"
-            >
-                <ChevronLeft size={18} strokeWidth={1.75} />
-            </button>
-            <button
-                type="button"
-                onClick={() => step(1)}
-                aria-label="Next"
-                data-testid="carousel-next"
-                className="hidden md:flex absolute -right-4 top-[42%] -translate-y-1/2 w-9 h-9 items-center justify-center rounded-full bg-white border border-[#E5E7EB] shadow hover:border-[#002B5C] text-[#002B5C]"
-            >
-                <ChevronRight size={18} strokeWidth={1.75} />
-            </button>
         </div>
     );
 }

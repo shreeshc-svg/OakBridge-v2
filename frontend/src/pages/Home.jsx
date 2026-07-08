@@ -111,6 +111,8 @@ export default function Home() {
         const pool = new Map([...featured, ...newRel, ...fallback].map((b) => [b.id, b]));
         return ids.map((id) => pool.get(id)).filter(Boolean);
     })();
+    const bestsellersEnabled = settings?.home_bestsellers_enabled !== false; // default on
+    const bestsellersSpeed = Number(settings?.home_bestsellers_speed) || 40; // px/sec
 
     // Compose the new-releases row: new releases first, then featured, then fallback — dedup by id and exclude any book already shown in the bestsellers row. Max 7.
     const newReleasesRow = (() => {
@@ -377,6 +379,7 @@ export default function Home() {
             </section>
 
             {/* ============== FEATURED BOOKS ============== */}
+            {bestsellersEnabled && carouselBooks.length > 0 && (
             <section className="px-6 md:px-12 lg:px-16 py-20 md:py-28 bg-[#F5F7FA] border-y border-[#E5E7EB]">
                 <div className="flex items-end justify-between mb-12">
                     <div>
@@ -393,8 +396,9 @@ export default function Home() {
                         View all bestsellers <ArrowUpRight size={14} strokeWidth={1.5} />
                     </Link>
                 </div>
-                <BestsellerCarousel books={carouselBooks} />
+                <BestsellerCarousel books={carouselBooks} speed={bestsellersSpeed} />
             </section>
+            )}
 
             {/* ============== SOLUTIONS ============== */}
             <section className="px-6 md:px-12 lg:px-16 py-24 md:py-32">
