@@ -1,9 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ArrowUp, ArrowDown, Trash2, Plus } from "lucide-react";
-import { fetchSettings, adminSetSetting } from "../../lib/api";
+import { fetchSettings, adminSetSetting, fetchBooks } from "../../lib/api";
 
-// Sort `value` must map to a server-supported key (server.py sort_map).
 const SORT_VALUES = [
     { value: "featured", label: "Featured" },
     { value: "price_asc", label: "Price — Low to High" },
@@ -12,12 +11,10 @@ const SORT_VALUES = [
     { value: "rating_desc", label: "Top Rated" },
     { value: "newest", label: "Newest" },
 ];
-// Filter `key` must map to a book flag the API understands.
 const FILTER_KEYS = [
     { key: "bestseller", label: "Bestsellers" },
     { key: "new_release", label: "New Releases" },
 ];
-
 const DEFAULT_SORTS = [
     { value: "featured", label: "Featured" },
     { value: "price_asc", label: "Price — Low to High" },
@@ -40,6 +37,8 @@ const move = (arr, i, dir) => {
 export default function AdminPLP() {
     const [sorts, setSorts] = useState(null);
     const [filters, setFilters] = useState(null);
+    const [picks, setPicks] = useState(null); // ordered book ids for bestsellers carousel
+    const [books, setBooks] = useState([]); // all books, for the picker
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
@@ -50,21 +49,21 @@ export default function AdminPLP() {
                         ? s.plp_sort_options
                         : DEFAULT_SORTS,
                 );
-                setFilters(
-                    Array.isArray(s?.plp_filters) ? s.plp_filters : DEFAULT_FILTERS,
-                );
+                setFilters(Array.isArray(s?.plp_filters) ? s.plp_filters : DEFAULT_FILTERS);
+                setPicks(Array.isArray(s?.home_bestsellers) ? s.home_bestsellers : []);
             })
             .catch(() => {
                 setSorts(DEFAULT_SORTS);
                 setFilters(DEFAULT_FILTERS);
+                setPicks([]);
             });
+        fetchBooks({ limit: 500 }).then(setBooks).catch(() => {});
     }, []);
 
-    if (!sorts || !filters) {
+    if (!sorts || !filters || picks === null) {
         return <div className="font-mono text-xs text-[#4B5563]">Loading…</div>;
     }
 
-    // ---- sort helpers ----
     const setSort = (i, patch) =>
         setSorts((cur) => cur.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
     const addSort = () => {
@@ -74,7 +73,6 @@ export default function AdminPLP() {
     };
     const removeSort = (i) => setSorts((cur) => cur.filter((_, idx) => idx !== i));
 
-    // ---- filter helpers ----
     const setFilter = (i, patch) =>
         setFilters((cur) => cur.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
     const addFilter = () => {
@@ -87,6 +85,14 @@ export default function AdminPLP() {
         setFilters((cur) => [...cur, { key: next.key, label: next.label, enabled: true }]);
     };
     const removeFilter = (i) => setFilters((cur) => cur.filter((_, idx) => idx !== i));
+
+    // ---- bestsellers carousel ----
+    const bookById = new Map(books.map((b) => [b.id, b]));
+    const available = books.filter((b) => !picks.includes(b.id));
+    const addPick = (id) => {
+        if (id && !picks.includes(id)) setPicks((cur) => [...cur, id]);
+    };
+    const removePick = (i) => setPicks((cur) => cur.filter((_, idx) => idx !== i));
 
     const save = async () => {
         setSaving(true);
@@ -103,7 +109,8 @@ export default function AdminPLP() {
                 }));
             await adminSetSetting("plp_sort_options", cleanSorts);
             await adminSetSetting("plp_filters", cleanFilters);
-            toast.success("Bookstore listing saved — live on the storefront.");
+            await adminSetSetting("home_bestsellers", picks);
+            toast.success("Bookstore page saved — live on the storefront.");
         } catch {
             toast.error("Could not save. Please try again.");
         } finally {
@@ -119,11 +126,83 @@ export default function AdminPLP() {
             <div className="overline">Page editor</div>
             <h1 className="font-serif text-4xl md:text-5xl mt-2 text-[#002B5C]">Bookstore (PLP)</h1>
             <p className="text-sm text-[#4B5563] mt-3 max-w-2xl">
-                Control the sort menu and filter toggles shown on the Bookstore listing page.
-                Add, remove, reorder and rename — changes go live immediately on save.
+                Control the homepage bestsellers carousel, and the sort menu and filter toggles on
+                the Bookstore listing. Add, remove, reorder — changes go live on save.
             </p>
 
             <section className="mt-10 max-w-3xl space-y-8">
+                {/* ---- BESTSELLERS CAROUSEL ---- */}
+                <div className="border border-[#E5E7EB] bg-white p-6">
+                    <h2 className="font-serif text-xl text-[#002B5C]">Bestsellers carousel (homepage)</h2>
+                    <p className="text-[11px] text-[#4B5563] mt-1">
+                        The auto-scrolling “What leaders are reading” row on the homepage. Pick the
+                        books and set their order. Leave empty to auto-fill from bestseller flags.
+                    </p>
+                    <div className="mt-4 flex items-center gap-2">
+                        <select
+                            data-testid="plp-bestseller-picker"
+                            defaultValue=""
+                            onChange={(e) => {
+                                addPick(e.target.value);
+                                e.target.value = "";
+                            }}
+                            className={rowBox + " flex-1"}
+                        >
+                            <option value="" disabled>
+                                {available.length ? "Add a book…" : "All books added"}
+                            </option>
+                            {available.map((b) => (
+                                <option key={b.id} value={b.id}>
+                                    {b.title} — {b.author}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                    <div className="mt-4 space-y-2">
+                        {picks.map((id, i) => {
+                            const b = bookById.get(id);
+                            return (
+                                <div key={id} className="flex items-center gap-2">
+                                    <div className="flex flex-col">
+                                        <button
+                                            onClick={() => setPicks((c) => move(c, i, -1))}
+                                            disabled={i === 0}
+                                            className={iconBtn + " !py-0.5"}
+                                            aria-label="Move up"
+                                        >
+                                            <ArrowUp size={12} strokeWidth={1.5} />
+                                        </button>
+                                        <button
+                                            onClick={() => setPicks((c) => move(c, i, 1))}
+                                            disabled={i === picks.length - 1}
+                                            className={iconBtn + " !py-0.5"}
+                                            aria-label="Move down"
+                                        >
+                                            <ArrowDown size={12} strokeWidth={1.5} />
+                                        </button>
+                                    </div>
+                                    <div className="flex-1 border border-[#E5E7EB] px-3 py-2 text-sm text-[#002B5C]">
+                                        <span className="font-mono text-[10px] text-[#4B5563] mr-2">{i + 1}.</span>
+                                        {b ? `${b.title} — ${b.author}` : id}
+                                    </div>
+                                    <button
+                                        onClick={() => removePick(i)}
+                                        className={iconBtn + " text-[#CC0033]"}
+                                        aria-label="Remove"
+                                    >
+                                        <Trash2 size={14} strokeWidth={1.5} />
+                                    </button>
+                                </div>
+                            );
+                        })}
+                        {picks.length === 0 && (
+                            <p className="text-sm text-[#4B5563]">
+                                No books selected — the carousel auto-fills from bestseller flags.
+                            </p>
+                        )}
+                    </div>
+                </div>
+
                 {/* ---- SORT OPTIONS ---- */}
                 <div className="border border-[#E5E7EB] bg-white p-6">
                     <div className="flex items-center justify-between">
@@ -143,54 +222,25 @@ export default function AdminPLP() {
                         {sorts.map((r, i) => (
                             <div key={i} className="flex items-center gap-2">
                                 <div className="flex flex-col">
-                                    <button
-                                        onClick={() => setSorts((c) => move(c, i, -1))}
-                                        disabled={i === 0}
-                                        className={iconBtn + " !py-0.5"}
-                                        aria-label="Move up"
-                                    >
+                                    <button onClick={() => setSorts((c) => move(c, i, -1))} disabled={i === 0} className={iconBtn + " !py-0.5"} aria-label="Move up">
                                         <ArrowUp size={12} strokeWidth={1.5} />
                                     </button>
-                                    <button
-                                        onClick={() => setSorts((c) => move(c, i, 1))}
-                                        disabled={i === sorts.length - 1}
-                                        className={iconBtn + " !py-0.5"}
-                                        aria-label="Move down"
-                                    >
+                                    <button onClick={() => setSorts((c) => move(c, i, 1))} disabled={i === sorts.length - 1} className={iconBtn + " !py-0.5"} aria-label="Move down">
                                         <ArrowDown size={12} strokeWidth={1.5} />
                                     </button>
                                 </div>
-                                <select
-                                    value={r.value}
-                                    onChange={(e) => setSort(i, { value: e.target.value })}
-                                    data-testid={`plp-sort-value-${i}`}
-                                    className={rowBox + " w-48"}
-                                >
+                                <select value={r.value} onChange={(e) => setSort(i, { value: e.target.value })} data-testid={`plp-sort-value-${i}`} className={rowBox + " w-48"}>
                                     {SORT_VALUES.map((o) => (
-                                        <option key={o.value} value={o.value}>
-                                            {o.value}
-                                        </option>
+                                        <option key={o.value} value={o.value}>{o.value}</option>
                                     ))}
                                 </select>
-                                <input
-                                    value={r.label ?? ""}
-                                    onChange={(e) => setSort(i, { label: e.target.value })}
-                                    data-testid={`plp-sort-label-${i}`}
-                                    placeholder="Label shown to shoppers"
-                                    className={rowBox + " flex-1"}
-                                />
-                                <button
-                                    onClick={() => removeSort(i)}
-                                    className={iconBtn + " text-[#CC0033]"}
-                                    aria-label="Remove"
-                                >
+                                <input value={r.label ?? ""} onChange={(e) => setSort(i, { label: e.target.value })} data-testid={`plp-sort-label-${i}`} placeholder="Label shown to shoppers" className={rowBox + " flex-1"} />
+                                <button onClick={() => removeSort(i)} className={iconBtn + " text-[#CC0033]"} aria-label="Remove">
                                     <Trash2 size={14} strokeWidth={1.5} />
                                 </button>
                             </div>
                         ))}
-                        {sorts.length === 0 && (
-                            <p className="text-sm text-[#4B5563]">No sort options — add at least one.</p>
-                        )}
+                        {sorts.length === 0 && <p className="text-sm text-[#4B5563]">No sort options — add at least one.</p>}
                     </div>
                 </div>
 
@@ -198,11 +248,7 @@ export default function AdminPLP() {
                 <div className="border border-[#E5E7EB] bg-white p-6">
                     <div className="flex items-center justify-between">
                         <h2 className="font-serif text-xl text-[#002B5C]">Filter toggles</h2>
-                        <button
-                            onClick={addFilter}
-                            data-testid="plp-add-filter"
-                            className="inline-flex items-center gap-1.5 text-sm border border-[#002B5C] text-[#002B5C] px-3 py-1.5 hover:bg-[#F5F7FA]"
-                        >
+                        <button onClick={addFilter} data-testid="plp-add-filter" className="inline-flex items-center gap-1.5 text-sm border border-[#002B5C] text-[#002B5C] px-3 py-1.5 hover:bg-[#F5F7FA]">
                             <Plus size={14} strokeWidth={1.5} /> Add filter
                         </button>
                     </div>
@@ -214,73 +260,33 @@ export default function AdminPLP() {
                         {filters.map((r, i) => (
                             <div key={i} className="flex items-center gap-2">
                                 <div className="flex flex-col">
-                                    <button
-                                        onClick={() => setFilters((c) => move(c, i, -1))}
-                                        disabled={i === 0}
-                                        className={iconBtn + " !py-0.5"}
-                                        aria-label="Move up"
-                                    >
+                                    <button onClick={() => setFilters((c) => move(c, i, -1))} disabled={i === 0} className={iconBtn + " !py-0.5"} aria-label="Move up">
                                         <ArrowUp size={12} strokeWidth={1.5} />
                                     </button>
-                                    <button
-                                        onClick={() => setFilters((c) => move(c, i, 1))}
-                                        disabled={i === filters.length - 1}
-                                        className={iconBtn + " !py-0.5"}
-                                        aria-label="Move down"
-                                    >
+                                    <button onClick={() => setFilters((c) => move(c, i, 1))} disabled={i === filters.length - 1} className={iconBtn + " !py-0.5"} aria-label="Move down">
                                         <ArrowDown size={12} strokeWidth={1.5} />
                                     </button>
                                 </div>
-                                <select
-                                    value={r.key}
-                                    onChange={(e) => setFilter(i, { key: e.target.value })}
-                                    data-testid={`plp-filter-key-${i}`}
-                                    className={rowBox + " w-48"}
-                                >
+                                <select value={r.key} onChange={(e) => setFilter(i, { key: e.target.value })} data-testid={`plp-filter-key-${i}`} className={rowBox + " w-48"}>
                                     {FILTER_KEYS.map((o) => (
-                                        <option key={o.key} value={o.key}>
-                                            {o.key}
-                                        </option>
+                                        <option key={o.key} value={o.key}>{o.key}</option>
                                     ))}
                                 </select>
-                                <input
-                                    value={r.label ?? ""}
-                                    onChange={(e) => setFilter(i, { label: e.target.value })}
-                                    data-testid={`plp-filter-label-${i}`}
-                                    placeholder="Label shown to shoppers"
-                                    className={rowBox + " flex-1"}
-                                />
+                                <input value={r.label ?? ""} onChange={(e) => setFilter(i, { label: e.target.value })} data-testid={`plp-filter-label-${i}`} placeholder="Label shown to shoppers" className={rowBox + " flex-1"} />
                                 <label className="flex items-center gap-1.5 text-xs text-[#4B5563] whitespace-nowrap px-1">
-                                    <input
-                                        type="checkbox"
-                                        checked={r.enabled !== false}
-                                        onChange={(e) => setFilter(i, { enabled: e.target.checked })}
-                                        data-testid={`plp-filter-enabled-${i}`}
-                                        className="accent-[#002B5C]"
-                                    />
+                                    <input type="checkbox" checked={r.enabled !== false} onChange={(e) => setFilter(i, { enabled: e.target.checked })} data-testid={`plp-filter-enabled-${i}`} className="accent-[#002B5C]" />
                                     Shown
                                 </label>
-                                <button
-                                    onClick={() => removeFilter(i)}
-                                    className={iconBtn + " text-[#CC0033]"}
-                                    aria-label="Remove"
-                                >
+                                <button onClick={() => removeFilter(i)} className={iconBtn + " text-[#CC0033]"} aria-label="Remove">
                                     <Trash2 size={14} strokeWidth={1.5} />
                                 </button>
                             </div>
                         ))}
-                        {filters.length === 0 && (
-                            <p className="text-sm text-[#4B5563]">No filter toggles configured.</p>
-                        )}
+                        {filters.length === 0 && <p className="text-sm text-[#4B5563]">No filter toggles configured.</p>}
                     </div>
                 </div>
 
-                <button
-                    onClick={save}
-                    disabled={saving}
-                    data-testid="plp-save"
-                    className="bg-[#002B5C] text-white px-6 py-3 text-sm font-medium hover:bg-[#001F42] disabled:opacity-60"
-                >
+                <button onClick={save} disabled={saving} data-testid="plp-save" className="bg-[#002B5C] text-white px-6 py-3 text-sm font-medium hover:bg-[#001F42] disabled:opacity-60">
                     {saving ? "Saving…" : "Save bookstore page"}
                 </button>
             </section>

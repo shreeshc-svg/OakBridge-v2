@@ -3,12 +3,14 @@ import Seo from "../components/Seo";
 import { Link } from "react-router-dom";
 import { ArrowUpRight, BookOpen, GraduationCap, Building2, Calendar, Cpu, Briefcase, Users } from "lucide-react";
 import BookCard from "../components/BookCard";
+import BestsellerCarousel from "../components/BestsellerCarousel";
 import {
     fetchBooks,
     fetchCategories,
     fetchFeatured,
     fetchNewReleases,
     fetchSiteContent,
+    fetchSettings,
     mediaUrl,
 } from "../lib/api";
 
@@ -74,14 +76,16 @@ export default function Home() {
     const [newRel, setNewRel] = useState([]);
     const [fallback, setFallback] = useState([]);
     const [site, setSite] = useState({});
+    const [settings, setSettings] = useState(null);
 
     useEffect(() => {
         fetchCategories().then(setCategories).catch(() => {});
         fetchSiteContent().then(setSite).catch(() => {});
         fetchFeatured().then(setFeatured).catch(() => {});
         fetchNewReleases().then(setNewRel).catch(() => {});
-        // Fallback feed in case bestseller / new-release flags are sparse
-        fetchBooks({ sort: "featured", limit: 24 }).then(setFallback).catch(() => {});
+        fetchSettings().then(setSettings).catch(() => {});
+        // Fallback feed in case bestseller / new-release flags are sparse (also the pool for the curated carousel)
+        fetchBooks({ sort: "featured", limit: 100 }).then(setFallback).catch(() => {});
     }, []);
 
     // Compose the bestseller row: bestsellers first, then new releases, then any other books — dedup by id, max 6.
@@ -98,6 +102,14 @@ export default function Home() {
             }
         }
         return out;
+    })();
+
+    // Carousel books: admin-curated order (Admin → Page: Bookstore) if set, else the auto row.
+    const carouselBooks = (() => {
+        const ids = Array.isArray(settings?.home_bestsellers) ? settings.home_bestsellers : [];
+        if (!ids.length) return bestsellerRow;
+        const pool = new Map([...featured, ...newRel, ...fallback].map((b) => [b.id, b]));
+        return ids.map((id) => pool.get(id)).filter(Boolean);
     })();
 
     // Compose the new-releases row: new releases first, then featured, then fallback — dedup by id and exclude any book already shown in the bestsellers row. Max 7.
@@ -381,11 +393,7 @@ export default function Home() {
                         View all bestsellers <ArrowUpRight size={14} strokeWidth={1.5} />
                     </Link>
                 </div>
-                <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-4 md:gap-6">
-                    {bestsellerRow.map((b, i) => (
-                        <BookCard key={b.id} book={b} index={i} compact />
-                    ))}
-                </div>
+                <BestsellerCarousel books={carouselBooks} />
             </section>
 
             {/* ============== SOLUTIONS ============== */}
