@@ -5,7 +5,7 @@ import { formatApiError } from "../../lib/api";
 import { toast } from "sonner";
 
 export default function Register() {
-    const [form, setForm] = useState({ name: "", email: "", password: "" });
+    const [form, setForm] = useState({ name: "", email: "", phone: "", password: "" });
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
     const { register } = useAuth();
@@ -72,6 +72,23 @@ export default function Register() {
                                     setForm({ ...form, email: e.target.value })
                                 }
                                 data-testid="register-email"
+                                className="w-full border border-[#E5E7EB] bg-white px-4 py-3 text-sm outline-none focus:border-[#002B5C]"
+                            />
+                        </div>
+                        <div>
+                            <label className="overline !text-[10px] block mb-2">
+                                Phone
+                            </label>
+                            <input
+                                type="tel"
+                                required
+                                minLength={6}
+                                value={form.phone}
+                                onChange={(e) =>
+                                    setForm({ ...form, phone: e.target.value })
+                                }
+                                data-testid="register-phone"
+                                placeholder="+91 98765 43210"
                                 className="w-full border border-[#E5E7EB] bg-white px-4 py-3 text-sm outline-none focus:border-[#002B5C]"
                             />
                         </div>

@@ -66,6 +66,7 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str = Field(min_length=6, max_length=128)
     name: str = Field(min_length=1, max_length=120)
+    phone: str = Field(min_length=6, max_length=20)
 
 
 class UserLogin(BaseModel):
@@ -78,6 +79,7 @@ class UserPublic(BaseModel):
     id: str
     email: EmailStr
     name: str
+    phone: Optional[str] = None
     role: str = "customer"
     created_at: str
     email_verified: bool = False
@@ -350,6 +352,7 @@ async def register(payload: UserCreate):
         "email": email,
         "password_hash": hash_password(payload.password),
         "name": payload.name.strip(),
+        "phone": payload.phone.strip(),
         "role": "customer",
         "created_at": now,
         "email_verified": False,
