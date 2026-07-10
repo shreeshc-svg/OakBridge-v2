@@ -9,8 +9,7 @@ import {
     formatApiError,
     formatINR,
     validateCoupon,
-    verifyPayment,
-} from "../lib/api";
+    verifyPayment, mediaUrl } from "../lib/api";
 import { toast } from "sonner";
 
 const RAZORPAY_SCRIPT = "https://checkout.razorpay.com/v1/checkout.js";
@@ -296,7 +295,7 @@ export default function Checkout() {
                                     className="flex gap-3 text-sm"
                                 >
                                     <img
-                                        src={i.cover_image}
+                                        src={mediaUrl(i.cover_image)}
                                         alt={i.title}
                                         className="w-12 h-16 object-cover border border-[#E5E7EB]"
                                     />

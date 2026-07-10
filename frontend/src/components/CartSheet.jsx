@@ -11,7 +11,7 @@ import {
     SheetDescription,
 } from "./ui/sheet";
 import { useCart } from "../context/CartContext";
-import { formatINR } from "../lib/api";
+import { formatINR, mediaUrl } from "../lib/api";
 
 export default function CartSheet() {
     const {
@@ -88,7 +88,7 @@ export default function CartSheet() {
                                     className="flex gap-4 border-b border-[#E5E7EB] pb-5"
                                 >
                                     <img
-                                        src={i.cover_image}
+                                        src={mediaUrl(i.cover_image)}
                                         alt={i.title}
                                         className="w-16 h-24 object-cover border border-[#E5E7EB]"
                                     />

@@ -5,7 +5,7 @@ import { Minus, Plus, Trash2, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
-import { formatINR } from "../lib/api";
+import { formatINR, mediaUrl } from "../lib/api";
 
 export default function Cart() {
     const nav = useNavigate();
@@ -70,7 +70,7 @@ export default function Cart() {
                             >
                                 <div className="col-span-6 flex gap-4">
                                     <img
-                                        src={i.cover_image}
+                                        src={mediaUrl(i.cover_image)}
                                         alt={i.title}
                                         className="w-20 h-28 object-cover border border-[#E5E7EB]"
                                     />

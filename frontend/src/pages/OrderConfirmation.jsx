@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { CheckCircle2 } from "lucide-react";
-import { fetchOrder, formatINR } from "../lib/api";
+import { fetchOrder, formatINR, mediaUrl } from "../lib/api";
 
 export default function OrderConfirmation() {
     const { id } = useParams();
@@ -128,7 +128,7 @@ export default function OrderConfirmation() {
                             className="flex gap-4 p-4 items-center"
                         >
                             <img
-                                src={i.cover_image}
+                                src={mediaUrl(i.cover_image)}
                                 alt={i.title}
                                 className="w-14 h-20 object-cover border border-[#E5E7EB]"
                             />

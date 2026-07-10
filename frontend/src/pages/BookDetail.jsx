@@ -6,7 +6,7 @@ import { Minus, Plus, ShoppingBag, ArrowLeft, Star, GraduationCap } from "lucide
 import BookCard from "../components/BookCard";
 import DeskCopyDialog from "../components/DeskCopyDialog";
 import ReviewsSection from "../components/ReviewsSection";
-import { fetchBook, fetchBooks, formatINR, notifyBackInStock, fetchSettings } from "../lib/api";
+import { fetchBook, fetchBooks, formatINR, notifyBackInStock, fetchSettings, mediaUrl } from "../lib/api";
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
 import { toast } from "sonner";
@@ -190,11 +190,11 @@ export default function BookDetail() {
                 {/* Cover */}
                 <div className="lg:col-span-5">
                     <div className="sticky top-24">
-                        <div className="relative aspect-[3/4] bg-[#F5F7FA] border border-[#E5E7EB] overflow-hidden">
+                        <div className="relative aspect-[2/3] bg-[#F5F7FA] border border-[#E5E7EB] overflow-hidden shadow-sm">
                             <img
-                                src={book.cover_image}
+                                src={mediaUrl(book.cover_image)}
                                 alt={book.title}
-                                className="absolute inset-0 w-full h-full object-cover"
+                                className="absolute inset-0 w-full h-full object-contain"
                             />
                             {book.bestseller && (
                                 <span className="absolute top-4 left-4 bg-[#002B5C] text-[#FFFFFF] text-[10px] font-mono uppercase tracking-widest px-2 py-1">
@@ -532,5 +532,5 @@ export default function BookDetail() {
                 </section>
             )}
         </div>
-    );
+          );
 }

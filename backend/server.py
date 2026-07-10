@@ -186,52 +186,22 @@ class Order(BaseModel):
 
 CATEGORIES_SEED = [
     {
-        "id": "law",
-        "name": "Law",
-        "description": "Our flagship legal list — constitutional, corporate, criminal, IP, family and contract law commentaries and practitioner guides.",
-        "image": "https://images.unsplash.com/photo-1589994965851-a8f479c573a9?auto=format&fit=crop&w=1200&q=85",
-    },
-    {
-        "id": "tax",
-        "name": "Taxation",
-        "description": "Authoritative tax titles across direct tax, GST, international taxation, audit and customs — updated for the latest Finance Act.",
-        "image": "https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&w=1200&q=85",
-    },
-    {
-        "id": "business",
-        "name": "Business & Management",
-        "description": "Finance, marketing, management, entrepreneurship and leadership titles for students and working professionals.",
-        "image": "https://images.unsplash.com/photo-1507842217343-583bb7270b66?auto=format&fit=crop&w=1200&q=85",
-    },
-    {
         "id": "academic",
         "name": "Academic",
-        "description": "Scholarly textbooks across economics, the sciences, mathematics, history and computer science for Indian undergraduate and postgraduate programmes.",
+        "description": "Scholarly textbooks and reference works for Civil Services, UPSC and university programmes — economics, psychology, history, geography, general studies and more.",
         "image": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=1200&q=85",
     },
     {
         "id": "professional",
-        "name": "Professional & STEM",
-        "description": "Practitioner references in medicine, technology and engineering for specialists and industry professionals.",
-        "image": "https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=1200&q=85",
+        "name": "Professional",
+        "description": "Authoritative law and tax titles — commentaries, treatises and practitioner guides across constitutional, corporate, IP, arbitration and taxation law.",
+        "image": "https://images.unsplash.com/photo-1589994965851-a8f479c573a9?auto=format&fit=crop&w=1200&q=85",
     },
     {
-        "id": "test-prep",
-        "name": "Test Prep",
-        "description": "Preparation guides for competitive and entrance exams — UPSC and General Studies, GMAT, and core physics, biology and quantitative/verbal aptitude.",
-        "image": "https://images.unsplash.com/photo-1491841550275-ad7854e35ca6?auto=format&fit=crop&w=1200&q=85",
-    },
-    {
-        "id": "children",
-        "name": "Children",
-        "description": "Picture books, early readers, folklore and illustrated science and geography for young learners.",
-        "image": "https://images.unsplash.com/photo-1589829085413-56de8ae18c73?auto=format&fit=crop&w=1200&q=85",
-    },
-    {
-        "id": "general-reference",
-        "name": "General & Reference",
-        "description": "Encyclopedias, dictionaries, atlases, yearbooks and everyday reference for every bookshelf.",
-        "image": "https://images.unsplash.com/photo-1495446815901-a7297e633e8d?auto=format&fit=crop&w=1200&q=85",
+        "id": "bgr",
+        "name": "Business & General",
+        "description": "Business, governance, leadership and general-interest titles — from management and public policy to biographies and general reading.",
+        "image": "https://images.unsplash.com/photo-1507842217343-583bb7270b66?auto=format&fit=crop&w=1200&q=85",
     },
 ]
 

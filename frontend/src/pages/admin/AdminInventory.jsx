@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { AlertTriangle, PackageX, Package, Search } from "lucide-react";
-import { adminLowStock, fetchBooks, adminUpdateBook, formatINR } from "../../lib/api";
+import { adminLowStock, fetchBooks, adminUpdateBook, formatINR, mediaUrl } from "../../lib/api";
 import { toast } from "sonner";
 
 export default function AdminInventory() {
@@ -254,7 +254,7 @@ function InventoryRow({ book, threshold, onSaved }) {
             <td className="px-4 py-3">
                 <div className="flex items-center gap-3">
                     <img
-                        src={book.cover_image}
+                        src={mediaUrl(book.cover_image)}
                         alt=""
                         className="w-8 h-11 object-cover border border-[#E5E7EB]"
                     />
@@ -305,7 +305,7 @@ function BookRow({ book, critical = false }) {
             className="flex items-center gap-4 p-4 border-b border-[#E5E7EB] last:border-b-0"
         >
             <img
-                src={book.cover_image}
+                src={mediaUrl(book.cover_image)}
                 alt=""
                 className="w-10 h-14 object-cover border border-[#E5E7EB]"
             />

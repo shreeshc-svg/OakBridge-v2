@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { formatINR, notifyBackInStock } from "../lib/api";
+import { formatINR, notifyBackInStock, mediaUrl } from "../lib/api";
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
 
@@ -48,7 +48,7 @@ export default function BookCard({ book, index = 0, compact = false }) {
             <Link to={`/books/${book.id}`} className="block">
                 <div className="relative aspect-[2/3] overflow-hidden bg-white border border-[#E5E7EB]">
                     <img
-                        src={book.cover_image}
+                        src={mediaUrl(book.cover_image)}
                         alt={book.title}
                         className={`absolute inset-0 w-full h-full object-contain book-tilt ${oos ? "opacity-40 grayscale" : ""}`}
                         loading="lazy"

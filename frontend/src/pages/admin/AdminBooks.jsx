@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { fetchSettings } from "../../lib/api";
+import { fetchSettings, mediaUrl } from "../../lib/api";
 import { Plus, Pencil, Trash2, X, FileUp, FileCheck2, Upload, ImagePlus, Trash, Sparkles } from "lucide-react";
 import {
     adminBulkDeleteBooks,
@@ -878,7 +878,7 @@ export default function AdminBooks() {
                                 <td className="px-4 py-3">
                                     <div className="flex items-center gap-3">
                                         <img
-                                            src={b.cover_image}
+                                            src={mediaUrl(b.cover_image)}
                                             alt=""
                                             className="w-8 h-12 object-cover border border-[#E5E7EB]"
                                         />

@@ -93,3 +93,6 @@ frontend/node_modules/.cache/default-development/0.pack
 
 # Local uploaded files (do not commit)
 backend/storage/
+
+# Bulk import staging (covers + spreadsheets) — not for git
+import/
