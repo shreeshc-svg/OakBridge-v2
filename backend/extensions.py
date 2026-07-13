@@ -362,13 +362,17 @@ async def register(payload: UserCreate):
     }
     await db.users.insert_one({**doc})
     try:
-        from emailer import send_verification_otp
-        await send_verification_otp(email, doc["name"], otp)
+        from sms import send_otp_sms, sms_configured
+        if sms_configured():
+            await send_otp_sms(doc["phone"], otp, doc["name"])
+        else:
+            from emailer import send_verification_otp
+            await send_verification_otp(email, doc["name"], otp)
     except Exception:  # noqa: BLE001
-        logging.getLogger(__name__).exception("verification OTP email failed for %s", email)
+        logging.getLogger(__name__).exception("verification OTP send failed for %s", email)
     token = create_access_token(user_id, email, "customer")
     return AuthResponse(
-        user=UserPublic(id=user_id, email=email, name=doc["name"], role="customer", created_at=now, email_verified=False),
+        user=UserPublic(id=user_id, email=email, name=doc["name"], phone=doc["phone"], role="customer", created_at=now, email_verified=False),
         access_token=token,
     )
 
@@ -385,6 +389,7 @@ async def login(payload: UserLogin):
             id=user["id"],
             email=user["email"],
             name=user["name"],
+            phone=user.get("phone"),
             role=user.get("role", "customer"),
             created_at=user["created_at"],
             email_verified=user.get("email_verified", False),
@@ -449,8 +454,12 @@ async def resend_otp(user: dict = Depends(get_current_user)):
         }},
     )
     try:
-        from emailer import send_verification_otp
-        await send_verification_otp(doc["email"], doc.get("name", ""), otp)
+        from sms import send_otp_sms, sms_configured
+        if sms_configured():
+            await send_otp_sms(doc.get("phone", ""), otp, doc.get("name", ""))
+        else:
+            from emailer import send_verification_otp
+            await send_verification_otp(doc["email"], doc.get("name", ""), otp)
     except Exception:  # noqa: BLE001
         logging.getLogger(__name__).exception("resend OTP failed for %s", doc.get("email"))
     return {"ok": True, "message": "A new code is on its way."}

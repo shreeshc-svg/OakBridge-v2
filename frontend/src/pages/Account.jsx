@@ -19,7 +19,7 @@ export default function Account() {
         setVerifying(true);
         try {
             await verifyOtp(otpCode);
-            toast.success("Email verified — thank you!");
+            toast.success("Account verified — thank you!");
             setOtpCode("");
             refresh();
         } catch (err) {
@@ -63,11 +63,10 @@ export default function Account() {
                     className="mb-8 border border-[#F59E0B] bg-[#F59E0B]/10 p-6"
                 >
                     <div className="font-serif text-xl text-[#002B5C]">
-                        Verify your email
+                        Verify your account
                     </div>
                     <p className="text-sm text-[#4B5563] mt-1">
-                        We emailed a 6-digit code to{" "}
-                        <span className="text-[#002B5C]">{user.email}</span>. Enter it below to
+                        We sent a 6-digit verification code. Enter it below to
                         verify your account.
                     </p>
                     <div className="mt-4 flex flex-wrap items-center gap-3">
