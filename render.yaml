@@ -59,3 +59,21 @@ services:
         sync: false
       - key: LLM_API_KEY            # Groq key (gsk_...)
         sync: false
+      # --- Phone OTP via MSG91 (SendOTP; signup verification) ---
+      - key: MSG91_AUTHKEY          # MSG91 account auth key
+        sync: false
+      - key: MSG91_OTP_TEMPLATE_ID  # DLT-approved SendOTP template id (SendOTP -> Templates)
+        sync: false
+      - key: MSG91_OTP_EXPIRY       # OTP validity in minutes
+        value: "10"
+      - key: MSG91_COUNTRY_CODE     # default country code for bare numbers
+        value: "91"
+      # --- Media storage on AWS S3 (private bucket; served via /api/files/*) ---
+      - key: S3_BUCKET              # your S3 bucket name
+        sync: false
+      - key: S3_REGION              # e.g. ap-south-1 (Mumbai)
+        sync: false
+      - key: AWS_ACCESS_KEY_ID      # IAM user access key (secret)
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY  # IAM user secret key (secret)
+        sync: false

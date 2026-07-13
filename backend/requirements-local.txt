@@ -20,3 +20,4 @@ openpyxl
 razorpay
 resend
 reportlab
+boto3>=1.34

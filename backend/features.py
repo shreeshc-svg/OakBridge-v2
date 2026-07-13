@@ -31,19 +31,55 @@ from extensions import db, get_current_user, require_admin
 
 log = logging.getLogger(__name__)
 
-# ============== OBJECT STORAGE (local disk) ==============
-# Files are stored on the backend's own filesystem under STORAGE_DIR and served
-# via GET /api/files/{path}. No external service or API key required.
-# For a scaled production deploy, point STORAGE_DIR at a persistent disk (e.g.
-# a Render disk) or swap put_object/get_object for S3 later — callers are unchanged.
+# ============== OBJECT STORAGE (S3, with local-disk fallback) ==============
+# put_object / get_object are the ONLY storage touchpoints; all callers and the
+# GET /api/files/{path} route are unchanged. When S3_BUCKET is set, a PRIVATE S3
+# bucket is used and files are streamed back through /api/files/* (URLs and DB
+# values stay identical). With no S3_BUCKET, files live on local disk under
+# STORAGE_DIR (dev / no-S3 deploys). AWS creds come from the standard env vars
+# AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY (never hardcoded).
 STORAGE_DIR = os.path.abspath(
     os.environ.get("STORAGE_DIR", os.path.join(os.path.dirname(__file__), "storage"))
 )
 APP_NAME = "oakbridge"
 
+S3_BUCKET = os.environ.get("S3_BUCKET") or os.environ.get("AWS_S3_BUCKET")
+S3_REGION = (
+    os.environ.get("S3_REGION")
+    or os.environ.get("AWS_S3_REGION")
+    or os.environ.get("AWS_REGION")
+)
+S3_PREFIX = (os.environ.get("S3_PREFIX", "") or "").strip("/")
+
+_s3_client = None
+
+
+def _s3_enabled() -> bool:
+    return bool(S3_BUCKET)
+
+
+def _s3():
+    """Lazy boto3 S3 client (imported only when S3 is actually used)."""
+    global _s3_client
+    if _s3_client is None:
+        import boto3
+
+        _s3_client = (
+            boto3.client("s3", region_name=S3_REGION) if S3_REGION else boto3.client("s3")
+        )
+    return _s3_client
+
+
+def _safe_key(path: str) -> str:
+    """Normalize a storage path into a safe S3 key, blocking directory traversal."""
+    p = os.path.normpath(path).replace("\\", "/").lstrip("/")
+    if p == ".." or p.startswith("../") or "/../" in p:
+        raise HTTPException(status_code=400, detail="Invalid file path")
+    return f"{S3_PREFIX}/{p}" if S3_PREFIX else p
+
 
 def _resolve(path: str) -> str:
-    """Map a storage path to an absolute file path, blocking directory traversal."""
+    """Map a storage path to an absolute local file path, blocking traversal."""
     full = os.path.normpath(os.path.join(STORAGE_DIR, path))
     if not (full == STORAGE_DIR or full.startswith(STORAGE_DIR + os.sep)):
         raise HTTPException(status_code=400, detail="Invalid file path")
@@ -55,21 +91,51 @@ def _storage_ready() -> bool:
 
 
 def init_storage() -> Optional[str]:
+    if _s3_enabled():
+        log.info(
+            "Object storage: S3 bucket %s (region=%s, prefix=%r)",
+            S3_BUCKET, S3_REGION, S3_PREFIX,
+        )
+        return f"s3://{S3_BUCKET}"
     os.makedirs(STORAGE_DIR, exist_ok=True)
-    log.info("Local object storage at %s", STORAGE_DIR)
+    log.info("Object storage: local disk at %s", STORAGE_DIR)
     return STORAGE_DIR
 
 
 def put_object(path: str, data: bytes, content_type: str) -> dict:
-    full = _resolve(path)
-    os.makedirs(os.path.dirname(full), exist_ok=True)
-    with open(full, "wb") as f:
-        f.write(data)
+    if _s3_enabled():
+        _s3().put_object(
+            Bucket=S3_BUCKET,
+            Key=_safe_key(path),
+            Body=data,
+            ContentType=content_type or "application/octet-stream",
+        )
+    else:
+        full = _resolve(path)
+        os.makedirs(os.path.dirname(full), exist_ok=True)
+        with open(full, "wb") as f:
+            f.write(data)
     return {"url": f"/api/files/{path}", "path": path, "size": len(data), "content_type": content_type}
 
 
 def get_object(path: str) -> tuple[bytes, str]:
     import mimetypes
+
+    if _s3_enabled():
+        try:
+            obj = _s3().get_object(Bucket=S3_BUCKET, Key=_safe_key(path))
+        except Exception as exc:  # botocore ClientError (NoSuchKey / 404)
+            err_code = ""
+            try:
+                err_code = exc.response.get("Error", {}).get("Code", "")  # type: ignore[attr-defined]
+            except Exception:  # noqa: BLE001
+                pass
+            if err_code in ("NoSuchKey", "NotFound", "404"):
+                raise HTTPException(status_code=404, detail="File not found")
+            log.error("S3 get_object failed for %s: %s", path, exc)
+            raise HTTPException(status_code=502, detail="Storage error")
+        ctype = obj.get("ContentType") or mimetypes.guess_type(path)[0] or "application/octet-stream"
+        return obj["Body"].read(), ctype
 
     full = _resolve(path)
     if not os.path.isfile(full):
