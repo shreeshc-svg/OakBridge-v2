@@ -1,10 +1,13 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Breadcrumbs from "../components/Breadcrumbs";
 import Seo from "../components/Seo";
 import { useSearchParams } from "react-router-dom";
 import { Search, SlidersHorizontal, X } from "lucide-react";
 import BookCard from "../components/BookCard";
 import { fetchBooks, fetchCategories, fetchSiteContent, fetchSettings, mediaUrl } from "../lib/api";
+
+// How many books to pull per infinite-scroll page.
+const PAGE_SIZE = 24;
 
 // Fallbacks used until settings load (mirror backend SETTINGS_DEFAULTS).
 const DEFAULT_SORTS = [
@@ -24,8 +27,14 @@ export default function Catalog() {
     const [cats, setCats] = useState([]);
     const [site, setSite] = useState({});
     const [settings, setSettings] = useState(null);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(true);       // initial page load
+    const [loadingMore, setLoadingMore] = useState(false); // subsequent pages
+    const [hasMore, setHasMore] = useState(true);
     const [showFilters, setShowFilters] = useState(false);
+
+    const skipRef = useRef(0);       // how many we've loaded so far
+    const busyRef = useRef(false);   // guards against overlapping fetches
+    const sentinelRef = useRef(null);
 
     const category = sp.get("category") || "";
     const search = sp.get("search") || "";
@@ -46,19 +55,79 @@ export default function Catalog() {
         fetchSettings().then(setSettings).catch(() => {});
     }, []);
 
-    useEffect(() => {
-        setLoading(true);
+    // Build the query params (category / search / active collection filters).
+    const buildParams = useCallback(() => {
         const params = { sort };
         if (category) params.category = category;
         if (search) params.search = search;
         enabledFilters.forEach((f) => {
             if (sp.get(f.key) === "true") params[f.key] = true;
         });
-        fetchBooks(params)
-            .then(setBooks)
-            .finally(() => setLoading(false));
+        return params;
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [sort, category, search, sp, settings]);
+
+    // Reset + load the first page whenever filters / sort / settings change.
+    useEffect(() => {
+        let cancelled = false;
+        busyRef.current = true;
+        setLoading(true);
+        setBooks([]);
+        setHasMore(true);
+        skipRef.current = 0;
+        fetchBooks({ ...buildParams(), skip: 0, limit: PAGE_SIZE })
+            .then((data) => {
+                if (cancelled) return;
+                setBooks(data);
+                skipRef.current = data.length;
+                setHasMore(data.length === PAGE_SIZE);
+            })
+            .catch(() => {
+                if (!cancelled) setHasMore(false);
+            })
+            .finally(() => {
+                if (!cancelled) {
+                    setLoading(false);
+                    busyRef.current = false;
+                }
+            });
+        return () => {
+            cancelled = true;
+        };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [sp, settings]);
+
+    // Load the next page (called by the IntersectionObserver sentinel).
+    const loadMore = useCallback(() => {
+        if (busyRef.current || !hasMore) return;
+        busyRef.current = true;
+        setLoadingMore(true);
+        fetchBooks({ ...buildParams(), skip: skipRef.current, limit: PAGE_SIZE })
+            .then((data) => {
+                setBooks((prev) => [...prev, ...data]);
+                skipRef.current += data.length;
+                setHasMore(data.length === PAGE_SIZE);
+            })
+            .catch(() => setHasMore(false))
+            .finally(() => {
+                setLoadingMore(false);
+                busyRef.current = false;
+            });
+    }, [buildParams, hasMore]);
+
+    // Observe the sentinel; fetch the next page as it nears the viewport.
+    useEffect(() => {
+        const el = sentinelRef.current;
+        if (!el) return;
+        const obs = new IntersectionObserver(
+            (entries) => {
+                if (entries[0].isIntersecting) loadMore();
+            },
+            { rootMargin: "800px 0px" }
+        );
+        obs.observe(el);
+        return () => obs.disconnect();
+    }, [loadMore]);
 
     const activeCat = cats.find((c) => c.id === category);
 
@@ -83,6 +152,10 @@ export default function Catalog() {
         return arr;
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [category, search, activeCat, sp, settings]);
+
+    const countLabel = loading
+        ? "—"
+        : `${books.length}${hasMore ? "+" : ""}`;
 
     return (
         <div data-testid="catalog-page">
@@ -166,7 +239,7 @@ export default function Catalog() {
                         >
                             <span>
                                 <span className="text-[#F59E0B] text-base font-sans tracking-tight mr-2">
-                                    {loading ? "—" : books.length}
+                                    {countLabel}
                                 </span>
                                 titles
                             </span>
@@ -286,7 +359,7 @@ export default function Catalog() {
                         >
                             {loading
                                 ? "Loading…"
-                                : `${books.length} title${books.length === 1 ? "" : "s"}`}
+                                : `${books.length}${hasMore ? "+" : ""} title${books.length === 1 ? "" : "s"}`}
                         </div>
                         <div className="flex items-center gap-3">
                             <button
@@ -346,6 +419,30 @@ export default function Catalog() {
                             <BookCard key={b.id} book={b} index={i} />
                         ))}
                     </div>
+
+                    {/* ============ INFINITE-SCROLL SENTINEL ============ */}
+                    <div ref={sentinelRef} aria-hidden="true" className="h-px w-full" />
+
+                    {loadingMore && (
+                        <div
+                            data-testid="catalog-loading-more"
+                            className="flex items-center justify-center gap-3 py-10 text-[#4B5563]"
+                        >
+                            <span className="inline-block h-4 w-4 border-2 border-[#002B5C] border-t-transparent rounded-full animate-spin" />
+                            <span className="font-mono text-xs uppercase tracking-widest">
+                                Loading more titles…
+                            </span>
+                        </div>
+                    )}
+
+                    {!loading && !hasMore && books.length > 0 && (
+                        <div
+                            data-testid="catalog-end"
+                            className="text-center py-10 font-mono text-xs uppercase tracking-widest text-[#4B5563]/70"
+                        >
+                            — You've reached the end —
+                        </div>
+                    )}
                 </section>
             </div>
         </div>

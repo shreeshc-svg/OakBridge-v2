@@ -52,6 +52,7 @@ export default function BookCard({ book, index = 0, compact = false }) {
                         alt={book.title}
                         className={`absolute inset-0 w-full h-full object-contain book-tilt ${oos ? "opacity-40 grayscale" : ""}`}
                         loading="lazy"
+                        decoding="async"
                     />
                     {oos && (
                         <span
