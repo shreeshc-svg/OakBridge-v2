@@ -174,6 +174,7 @@ export default function Checkout() {
                     } catch (err) {
                         toast.error(formatApiError(err) || "Payment verification failed.");
                         setSubmitting(false);
+                        nav(`/payment-failed/${order.id}`);
                     }
                 },
             });
@@ -182,6 +183,7 @@ export default function Checkout() {
                     `Payment failed: ${resp?.error?.description || "please try again."}`,
                 );
                 setSubmitting(false);
+                nav(`/payment-failed/${order.id}`);
             });
             checkout.open();
         } catch (err) {
