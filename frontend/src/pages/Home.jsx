@@ -9,6 +9,7 @@ import {
     fetchCategories,
     fetchFeatured,
     fetchNewReleases,
+    fetchBestsellers,
     fetchSiteContent,
     fetchSettings,
     mediaUrl,
@@ -75,6 +76,7 @@ export default function Home() {
     const [featured, setFeatured] = useState([]);
     const [newRel, setNewRel] = useState([]);
     const [fallback, setFallback] = useState([]);
+    const [bestsellers, setBestsellers] = useState([]);
     const [site, setSite] = useState({});
     const [settings, setSettings] = useState(null);
 
@@ -83,6 +85,7 @@ export default function Home() {
         fetchSiteContent().then(setSite).catch(() => {});
         fetchFeatured().then(setFeatured).catch(() => {});
         fetchNewReleases().then(setNewRel).catch(() => {});
+        fetchBestsellers(12).then(setBestsellers).catch(() => {});
         fetchSettings().then(setSettings).catch(() => {});
         // Fallback feed in case bestseller / new-release flags are sparse (also the pool for the curated carousel)
         fetchBooks({ sort: "featured", limit: 100 }).then(setFallback).catch(() => {});
@@ -104,13 +107,17 @@ export default function Home() {
         return out;
     })();
 
-    // Carousel books: admin-curated order (Admin → Page: Bookstore) if set, else the auto row.
-    const carouselBooks = (() => {
-        const ids = Array.isArray(settings?.home_bestsellers) ? settings.home_bestsellers : [];
-        if (!ids.length) return bestsellerRow;
-        const pool = new Map([...featured, ...newRel, ...fallback].map((b) => [b.id, b]));
-        return ids.map((id) => pool.get(id)).filter(Boolean);
-    })();
+    // Carousel books: real sales-ranked bestsellers from the API (which already layers in
+    // admin pins/exclusions + cold-start fallback). If unavailable, fall back to the
+    // admin-curated order, then the auto-composed row.
+    const carouselBooks = bestsellers.length
+        ? bestsellers
+        : (() => {
+              const ids = Array.isArray(settings?.home_bestsellers) ? settings.home_bestsellers : [];
+              if (!ids.length) return bestsellerRow;
+              const pool = new Map([...featured, ...newRel, ...fallback].map((b) => [b.id, b]));
+              return ids.map((id) => pool.get(id)).filter(Boolean);
+          })();
     const bestsellersEnabled = settings?.home_bestsellers_enabled !== false; // default on
     const bestsellersSpeed = Number(settings?.home_bestsellers_speed) || 40; // px/sec
 

@@ -8,7 +8,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict, EmailStr
 from typing import List, Optional
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 
 ROOT_DIR = Path(__file__).parent
@@ -413,6 +413,58 @@ async def new_release_books(limit: int = 8):
     cursor = db.books.find({"new_release": True}, {"_id": 0}).limit(limit)
     docs = await cursor.to_list(limit)
     return [_decorate_book(d) for d in docs]
+
+
+@api_router.get("/books/bestsellers", response_model=List[Book])
+async def bestseller_books(limit: int = 12, days: int = 90):
+    """Real bestsellers ranked by units actually sold (paid orders in the last `days`).
+    Admin curation is layered on top: any `home_bestsellers` ids are pinned to the front
+    and `home_bestsellers_excluded` ids are removed. Falls back to bestseller-flagged /
+    new / top-rated titles for cold start so the row is never empty."""
+    sdocs = await db.settings.find(
+        {"key": {"$in": ["home_bestsellers", "home_bestsellers_excluded"]}}, {"_id": 0}
+    ).to_list(10)
+    smap = {d["key"]: d["value"] for d in sdocs}
+    pinned = smap.get("home_bestsellers") or []
+    excluded = set(smap.get("home_bestsellers_excluded") or [])
+
+    # Sales ranking from paid orders within the window.
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    ranked_ids = []
+    try:
+        agg = await db.orders.aggregate([
+            {"$match": {"payment_status": "paid", "created_at": {"$gte": since}}},
+            {"$unwind": "$items"},
+            {"$group": {"_id": "$items.book_id", "units": {"$sum": "$items.quantity"}}},
+            {"$sort": {"units": -1}},
+            {"$limit": 60},
+        ]).to_list(60)
+        ranked_ids = [a["_id"] for a in agg if a.get("_id")]
+    except Exception:  # noqa: BLE001
+        ranked_ids = []
+
+    ordered, seen = [], set()
+    for bid in list(pinned) + ranked_ids:
+        if bid and bid not in seen and bid not in excluded:
+            seen.add(bid)
+            ordered.append(bid)
+
+    # Cold-start / top-up fallback.
+    if len(ordered) < limit:
+        fillers = await db.books.find(
+            {"id": {"$nin": list(seen | excluded)}}, {"_id": 0, "id": 1}
+        ).sort([("bestseller", -1), ("new_release", -1), ("rating", -1)]).limit(limit * 3).to_list(limit * 3)
+        for f in fillers:
+            if len(ordered) >= limit:
+                break
+            if f["id"] not in seen and f["id"] not in excluded:
+                seen.add(f["id"])
+                ordered.append(f["id"])
+
+    ordered = ordered[:limit]
+    docs = await db.books.find({"id": {"$in": ordered}}, {"_id": 0}).to_list(len(ordered) or 1)
+    by_id = {d["id"]: d for d in docs}
+    return [_decorate_book(by_id[i]) for i in ordered if i in by_id]
 
 
 @api_router.get("/books/{book_id}", response_model=Book)

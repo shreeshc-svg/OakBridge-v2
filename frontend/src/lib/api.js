@@ -22,6 +22,8 @@ export const fetchFeatured = () =>
     api.get("/books/featured").then((r) => r.data);
 export const fetchNewReleases = () =>
     api.get("/books/new-releases").then((r) => r.data);
+export const fetchBestsellers = (limit = 12) =>
+    api.get("/books/bestsellers", { params: { limit } }).then((r) => r.data);
 export const fetchBook = (id) => api.get(`/books/${id}`).then((r) => r.data);
 export const notifyBackInStock = (bookId, email) =>
     api.post(`/books/${bookId}/notify-me`, { email }).then((r) => r.data);
