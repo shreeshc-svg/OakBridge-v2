@@ -12,7 +12,7 @@ Swap providers with env vars only — no code changes:
   Groq free tier (cloud, open models, very fast):
     LLM_BASE_URL=https://api.groq.com/openai/v1
     LLM_API_KEY=gsk_...            (free key from console.groq.com)
-    LLM_MODEL=llama-3.1-8b-instant
+    LLM_MODEL=openai/gpt-oss-20b   (llama-3.1-8b-instant is deprecated on Groq)
 
   OpenAI / OpenRouter / any OpenAI-compatible endpoint:
     LLM_BASE_URL=https://api.openai.com/v1   (or https://openrouter.ai/api/v1)
