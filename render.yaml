@@ -33,7 +33,7 @@ services:
       - key: LLM_BASE_URL
         value: https://api.groq.com/openai/v1
       - key: LLM_MODEL
-        value: llama-3.1-8b-instant
+        value: openai/gpt-oss-20b
       # --- set these in the dashboard (secrets / environment-specific) ---
       - key: MONGO_URL              # Atlas SRV connection string
         sync: false
