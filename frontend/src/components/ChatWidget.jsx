@@ -122,7 +122,7 @@ export default function ChatWidget() {
                 onClick={() => setOpen((o) => !o)}
                 data-testid="chat-launcher"
                 aria-label={open ? "Close chat" : "Open chat"}
-                className="fixed z-50 bottom-5 right-5 w-14 h-14 rounded-full bg-[#F59E0B] text-[#002B5C] shadow-lg flex items-center justify-center hover:bg-[#E08E00] transition-colors"
+                className="fixed z-50 bottom-20 right-5 md:bottom-5 w-14 h-14 rounded-full bg-[#F59E0B] text-[#002B5C] shadow-lg flex items-center justify-center hover:bg-[#E08E00] transition-colors"
             >
                 {open ? <X size={22} strokeWidth={1.75} /> : <MessageCircle size={24} strokeWidth={1.75} />}
             </button>
@@ -132,7 +132,7 @@ export default function ChatWidget() {
                 <div
                     ref={panelRef}
                     data-testid="chat-panel"
-                    className="fixed z-50 bottom-24 right-5 w-[92vw] max-w-[380px] h-[70vh] max-h-[560px] bg-white border border-[#E5E7EB] shadow-2xl flex flex-col overflow-hidden"
+                    className="fixed z-50 bottom-36 right-5 md:bottom-24 w-[92vw] max-w-[380px] h-[70vh] max-h-[560px] bg-white border border-[#E5E7EB] shadow-2xl flex flex-col overflow-hidden"
                 >
                     <div className="bg-[#F59E0B] text-[#002B5C] px-5 py-4">
                         <div className="font-serif text-lg leading-tight">Oakbridge Assistant</div>
