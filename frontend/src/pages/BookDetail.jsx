@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Breadcrumbs from "../components/Breadcrumbs";
 import Seo from "../components/Seo";
 import { Link, useParams, useNavigate } from "react-router-dom";
-import { Minus, Plus, ShoppingBag, ArrowLeft, Star, GraduationCap } from "lucide-react";
+import { Minus, Plus, ShoppingBag, ArrowLeft, Star, GraduationCap, ChevronLeft, ChevronRight } from "lucide-react";
 import BookCard from "../components/BookCard";
 import DeskCopyDialog from "../components/DeskCopyDialog";
 import ReviewsSection from "../components/ReviewsSection";
@@ -15,6 +15,11 @@ export default function BookDetail() {
     const { id } = useParams();
     const [book, setBook] = useState(null);
     const [related, setRelated] = useState([]);
+    const relatedRef = useRef(null);
+    const scrollRelated = (dir) => {
+        const el = relatedRef.current;
+        if (el) el.scrollBy({ left: dir * el.clientWidth * 0.85, behavior: "smooth" });
+    };
     const [qty, setQty] = useState(1);
     const [loading, setLoading] = useState(true);
     const [tab, setTab] = useState("description");
@@ -34,9 +39,9 @@ export default function BookDetail() {
         fetchBook(id)
             .then((b) => {
                 setBook(b);
-                return fetchBooks({ category: b.category, limit: 8 });
+                return fetchBooks({ category: b.category, limit: 20 });
             })
-            .then((list) => setRelated(list.filter((x) => x.id !== id).slice(0, 4)))
+            .then((list) => setRelated(list.filter((x) => x.id !== id).slice(0, 12)))
             .catch(() => setBook(null))
             .finally(() => setLoading(false));
     }, [id]);
@@ -520,13 +525,29 @@ export default function BookDetail() {
             {/* Related */}
             {related.length > 0 && (
                 <section className="px-6 md:px-12 lg:px-16 py-20 bg-[#F5F7FA] border-y border-[#E5E7EB]">
-                    <div className="overline">Readers also explored</div>
-                    <h2 className="font-serif text-3xl md:text-4xl mt-3 mb-10 text-[#002B5C]">
-                        More from this shelf
-                    </h2>
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 md:gap-10">
+                    <div className="flex items-end justify-between mb-10 gap-4">
+                        <div>
+                            <div className="overline">Readers also explored</div>
+                            <h2 className="font-serif text-3xl md:text-4xl mt-3 text-[#002B5C]">
+                                More from this shelf
+                            </h2>
+                        </div>
+                        {related.length > 2 && (
+                            <div className="flex items-center gap-2 shrink-0">
+                                <button type="button" onClick={() => scrollRelated(-1)} aria-label="Scroll left" data-testid="related-scroll-left" className="w-10 h-10 flex items-center justify-center border border-[#002B5C] text-[#002B5C] bg-white hover:bg-[#002B5C] hover:text-white transition-colors">
+                                    <ChevronLeft size={18} strokeWidth={1.75} />
+                                </button>
+                                <button type="button" onClick={() => scrollRelated(1)} aria-label="Scroll right" data-testid="related-scroll-right" className="w-10 h-10 flex items-center justify-center border border-[#002B5C] text-[#002B5C] bg-white hover:bg-[#002B5C] hover:text-white transition-colors">
+                                    <ChevronRight size={18} strokeWidth={1.75} />
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                    <div ref={relatedRef} className="flex gap-6 md:gap-8 overflow-x-auto scroll-smooth snap-x pb-2 -mx-1 px-1">
                         {related.map((b, i) => (
-                            <BookCard key={b.id} book={b} index={i} />
+                            <div key={b.id} className="flex-none w-[46%] sm:w-[30%] md:w-[23%] lg:w-[18.5%] snap-start">
+                                <BookCard book={b} index={i} />
+                            </div>
                         ))}
                     </div>
                 </section>
