@@ -27,7 +27,7 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
-from extensions import db, get_current_user, require_admin
+from extensions import db, get_current_user, get_current_user_optional, require_admin
 
 log = logging.getLogger(__name__)
 
@@ -1210,7 +1210,7 @@ class ChatRequest(BaseModel):
     history: list[ChatTurn] = Field(default_factory=list)
 
 
-async def _chat_system_prompt() -> str:
+async def _chat_system_prompt(orders_ctx: str = "") -> str:
     docs = await db.settings.find({}, {"_id": 0}).to_list(200)
     s = {**SETTINGS_DEFAULTS, **{d["key"]: d["value"] for d in docs}}
     try:
@@ -1223,6 +1223,23 @@ async def _chat_system_prompt() -> str:
     ship_flat = s.get("ship_flat", 60)
     delivery = s.get("pdp_delivery", "3-7 business days")
     returns = s.get("pdp_returns", "14-day returns")
+    if orders_ctx:
+        order_rule = (
+            "- You MAY answer this signed-in customer's questions about THEIR OWN orders using the "
+            "CUSTOMER ORDERS data below. Use ONLY that data; never reveal, guess or discuss anyone "
+            "else's orders. For refunds in progress or details not shown below, direct them to "
+            "info@oakbridge.in.\n"
+        )
+        order_block = (
+            "\n\nCUSTOMER ORDERS (the signed-in user's own orders only — never share with anyone else):\n"
+            + orders_ctx + "\n"
+        )
+    else:
+        order_rule = (
+            "- For a specific order's status, a personal account or a refund in progress, ask the "
+            "user to sign in so you can look up their orders, or to email info@oakbridge.in.\n"
+        )
+        order_block = ""
     return (
         "You are \"Oaky\", the friendly assistant on the Oakbridge Publishing website "
         "(oakbridge.in), a law and academic publishing house based in Gurugram, India.\n\n"
@@ -1233,8 +1250,7 @@ async def _chat_system_prompt() -> str:
         "- NEVER invent specific book titles, authors, prices, stock or policies beyond the "
         "facts below. If asked about a specific title, price or availability, tell them to "
         "search the Bookstore at /books.\n"
-        "- For anything about a specific order's status, a personal account, refunds in "
-        "progress, or anything you're unsure of, direct them to email info@oakbridge.in.\n"
+        + order_rule +
         "- Do not make promises or quote timelines beyond the facts below.\n\n"
         "FACTS ABOUT OAKBRIDGE:\n"
         "- We are an independent law & academic publishing house. We publish books across "
@@ -1250,8 +1266,9 @@ async def _chat_system_prompt() -> str:
         "- Contact: info@oakbridge.in, phone +91 88003 37299, office at B3 Tower, Spaze iTech "
         "Park, Sector 49, Gurugram, Haryana 122018.\n"
         "- Useful pages: Bookstore /books, Events /events, Academy /academy, Digital Solutions "
-        "/digital-solutions, Authors /authors, Contact /contact, Terms /terms, Privacy /privacy.\n\n"
-        "NAVIGATION:\n"
+        "/digital-solutions, Authors /authors, Contact /contact, Terms /terms, Privacy /privacy.\n"
+        + order_block +
+        "\nNAVIGATION:\n"
         "- If the user asks to open / go to / take me to / show me a section of the site, reply "
         "with a SHORT confirmation and then, on its own final line, append a directive in EXACTLY "
         "this format: [[go:/path]] — using ONLY one of these paths: /, /books, /events, /academy, "
@@ -1264,11 +1281,40 @@ async def _chat_system_prompt() -> str:
     )
 
 
+async def _user_orders_context(user: dict) -> str:
+    """Compact summary of the signed-in user's own recent orders for the assistant."""
+    try:
+        orders = await db.orders.find(
+            {"user_id": user["id"]}, {"_id": 0}
+        ).sort([("created_at", -1)]).to_list(10)
+    except Exception:  # noqa: BLE001
+        return ""
+    if not orders:
+        return "This customer has no orders yet."
+    lines = []
+    for o in orders[:6]:
+        num = o.get("order_number", "-")
+        created = (o.get("created_at", "") or "")[:10]
+        status = o.get("status", "-")
+        pay = o.get("payment_status", "-")
+        total = o.get("total", 0)
+        items = o.get("items", []) or []
+        titles = "; ".join(
+            f"{it.get('title', '?')} x{it.get('quantity', 1)}" for it in items[:5]
+        ) or "-"
+        lines.append(
+            f"- Order {num} placed {created}: order-status={status}, payment={pay}, "
+            f"total=Rs {total}. Items: {titles}"
+        )
+    return "\n".join(lines)
+
+
 @public_router.post("/chat")
-async def chat_endpoint(payload: ChatRequest):
+async def chat_endpoint(payload: ChatRequest, user: Optional[dict] = Depends(get_current_user_optional)):
     from llm import chat as llm_chat, LLMError
 
-    system = await _chat_system_prompt()
+    orders_ctx = await _user_orders_context(user) if user else ""
+    system = await _chat_system_prompt(orders_ctx)
     history = [{"role": t.role, "content": t.content} for t in payload.history][-6:]
     messages = history + [{"role": "user", "content": payload.message.strip()}]
     try:
