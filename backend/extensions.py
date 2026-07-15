@@ -101,6 +101,8 @@ class BookAdminCreate(BaseModel):
     category: str
     subject: str
     grade: Optional[str] = None
+    binding: Optional[str] = None
+    size: Optional[str] = None
     description: str
     price: float
     original_price: Optional[float] = None
@@ -126,6 +128,8 @@ class BookAdminUpdate(BaseModel):
     category: Optional[str] = None
     subject: Optional[str] = None
     grade: Optional[str] = None
+    binding: Optional[str] = None
+    size: Optional[str] = None
     description: Optional[str] = None
     price: Optional[float] = None
     original_price: Optional[float] = None

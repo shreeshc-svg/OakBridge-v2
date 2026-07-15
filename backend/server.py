@@ -72,6 +72,8 @@ class Book(BaseModel):
     category: str  # school | higher-ed | professional | test-prep | children
     subject: str
     grade: Optional[str] = None
+    binding: Optional[str] = None  # read-only spec (e.g. "Hardcover"), shown in Specs tab
+    size: Optional[str] = None     # read-only spec (e.g. "6.5 x 9.5 in"), shown in Specs tab
     description: str
     price: float
     original_price: Optional[float] = None

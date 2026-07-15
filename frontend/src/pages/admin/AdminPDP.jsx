@@ -42,8 +42,9 @@ export default function AdminPDP() {
             <div className="overline">Page editor</div>
             <h1 className="font-serif text-4xl md:text-5xl mt-2 text-[#002B5C]">Book page (PDP)</h1>
             <p className="text-sm text-[#4B5563] mt-3 max-w-2xl">
-                The delivery / returns notes and the binding &amp; size choices shown on every book
-                detail page. Changes go live immediately on save.
+                The delivery / returns notes shown on every book page, plus the palette of
+                binding &amp; size choices used when building a book's price matrix. Changes go
+                live immediately on save.
             </p>
 
             <section className="mt-10 max-w-2xl space-y-8">
@@ -80,10 +81,13 @@ export default function AdminPDP() {
 
                 {/* ---- VARIANT OPTIONS ---- */}
                 <div className="border border-[#E5E7EB] bg-white p-6">
-                    <h2 className="font-serif text-xl text-[#002B5C]">Binding &amp; size options</h2>
+                    <h2 className="font-serif text-xl text-[#002B5C]">Binding &amp; size variant palette</h2>
                     <p className="text-sm text-[#4B5563] mt-1">
-                        The choices offered on the book page and in the Books price-matrix editor
-                        (comma-separated). Per-book prices are set in Admin → Books → Price matrix.
+                        The choices available when building a book's price matrix
+                        (comma-separated). A book shows binding/size <strong>selectors</strong> on its
+                        PDP only when it has price-matrix variants — by default none are shown. For a
+                        fixed binding/size shown as a read-only <strong>spec</strong>, set the
+                        Binding / Size fields on the individual book in Admin → Books.
                     </p>
                     <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>

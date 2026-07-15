@@ -90,12 +90,15 @@ export default function BookDetail() {
     const hasVariants = variants.length > 0;
     // Options: use the book's own matrix if present, else fall back to the
     // global Settings placeholders so PDPs always expose Binding/Size choices.
+    // Binding/Size *selectors* appear ONLY for books with a real variant matrix
+    // (admin-controlled per book). No global fallback — by default no slicing
+    // selectors show. Plain binding/size specs are shown in the Specs tab instead.
     const bindings = hasVariants
         ? [...new Set(variants.map((v) => v.binding).filter(Boolean))]
-        : Array.isArray(settings?.binding_options) ? settings.binding_options : [];
+        : [];
     const sizes = hasVariants
         ? [...new Set(variants.map((v) => v.size).filter(Boolean))]
-        : Array.isArray(settings?.size_options) ? settings.size_options : [];
+        : [];
     const hasOptions = bindings.length > 0 || sizes.length > 0;
     const activeVariant = hasVariants
         ? variants.find((v) => v.binding === binding && v.size === size) || null
@@ -466,6 +469,8 @@ export default function BookDetail() {
                                         ["Category", book.category],
                                         ["Subject", book.subject],
                                         ["Grade / Level", book.grade || "—"],
+                                        ...(book.binding ? [["Binding", book.binding]] : []),
+                                        ...(book.size ? [["Size", book.size]] : []),
                                     ].map(([k, v]) => (
                                         <div
                                             key={k}
