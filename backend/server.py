@@ -554,6 +554,13 @@ def _variant_price(bdoc: dict, binding, size) -> float:
 
 @api_router.post("/orders", response_model=Order)
 async def create_order(payload: OrderCreate, user: Optional[dict] = Depends(get_current_user_optional)):
+    # Fallback verification gate: a signed-in but unverified account must verify
+    # (email/phone OTP) before placing an order. Browsing stays fully open.
+    if user and not user.get("email_verified"):
+        raise HTTPException(
+            status_code=403,
+            detail="Please verify your account (check for your verification code) before placing an order.",
+        )
     if not payload.items:
         raise HTTPException(status_code=400, detail="Cart is empty")
 

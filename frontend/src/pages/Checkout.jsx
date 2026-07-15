@@ -9,7 +9,8 @@ import {
     formatApiError,
     formatINR,
     validateCoupon,
-    verifyPayment, mediaUrl } from "../lib/api";
+    verifyPayment, verifyOtp, resendOtp, mediaUrl } from "../lib/api";
+import { useAuth } from "../context/AuthContext";
 import { toast } from "sonner";
 
 const RAZORPAY_SCRIPT = "https://checkout.razorpay.com/v1/checkout.js";
@@ -68,6 +69,31 @@ export default function Checkout() {
     const [couponMsg, setCouponMsg] = useState(null);
     const [submitting, setSubmitting] = useState(false);
     const [agreed, setAgreed] = useState(false);
+    const { user, refresh } = useAuth();
+    const [otpCode, setOtpCode] = useState("");
+    const [verifyingAcc, setVerifyingAcc] = useState(false);
+    const notVerified = user && user.email_verified === false;
+    const onVerifyAccount = async () => {
+        setVerifyingAcc(true);
+        try {
+            await verifyOtp(otpCode);
+            toast.success("Account verified — you can place your order now.");
+            setOtpCode("");
+            refresh();
+        } catch (err) {
+            toast.error(formatApiError(err) || "Verification failed.");
+        } finally {
+            setVerifyingAcc(false);
+        }
+    };
+    const onResendCode = async () => {
+        try {
+            const res = await resendOtp();
+            toast.success(res?.message || "A new code is on its way.");
+        } catch {
+            toast.error("Could not resend the code.");
+        }
+    };
     const nav = useNavigate();
 
     const onChange = (e) =>
@@ -433,9 +459,49 @@ export default function Checkout() {
                                 .
                             </span>
                         </label>
+                        {notVerified && (
+                            <div
+                                data-testid="checkout-verify-gate"
+                                className="mt-4 border border-[#F59E0B] bg-[#F59E0B]/10 p-4"
+                            >
+                                <div className="font-serif text-base text-[#002B5C]">
+                                    Verify your account to continue
+                                </div>
+                                <p className="text-xs text-[#4B5563] mt-1">
+                                    For your security, enter the 6-digit code we sent to{" "}
+                                    <strong>{user?.email || "your email"}</strong> before placing your order.
+                                </p>
+                                <div className="mt-3 flex flex-wrap items-center gap-2">
+                                    <input
+                                        value={otpCode}
+                                        onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                                        inputMode="numeric"
+                                        placeholder="123456"
+                                        data-testid="checkout-otp-input"
+                                        className="w-28 border border-[#E5E7EB] bg-white px-3 py-2 text-sm tracking-[0.3em] text-center outline-none focus:border-[#002B5C]"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={onVerifyAccount}
+                                        disabled={verifyingAcc || otpCode.length !== 6}
+                                        data-testid="checkout-otp-verify"
+                                        className="bg-[#002B5C] text-white px-4 py-2 text-sm font-medium hover:bg-[#001F42] disabled:opacity-50"
+                                    >
+                                        {verifyingAcc ? "Verifying…" : "Verify"}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={onResendCode}
+                                        className="text-xs text-[#002B5C] underline"
+                                    >
+                                        Resend code
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                         <button
                             type="submit"
-                            disabled={submitting || !agreed}
+                            disabled={submitting || !agreed || notVerified}
                             data-testid="place-order-button"
                             className="mt-4 w-full bg-[#002B5C] text-[#FFFFFF] py-4 text-sm font-medium hover:bg-[#001F42] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                         >
