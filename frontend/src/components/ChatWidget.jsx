@@ -52,6 +52,25 @@ export default function ChatWidget() {
     const [busy, setBusy] = useState(false);
     const endRef = useRef(null);
     const inputRef = useRef(null);
+    const panelRef = useRef(null);
+    const launcherRef = useRef(null);
+
+    // Close the flyout when the user clicks / taps outside it (but not on the launcher).
+    useEffect(() => {
+        if (!open) return;
+        const onOutside = (e) => {
+            if (
+                panelRef.current &&
+                !panelRef.current.contains(e.target) &&
+                launcherRef.current &&
+                !launcherRef.current.contains(e.target)
+            ) {
+                setOpen(false);
+            }
+        };
+        document.addEventListener("pointerdown", onOutside);
+        return () => document.removeEventListener("pointerdown", onOutside);
+    }, [open]);
 
     useEffect(() => {
         if (open) endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -99,6 +118,7 @@ export default function ChatWidget() {
         <>
             {/* Launcher */}
             <button
+                ref={launcherRef}
                 onClick={() => setOpen((o) => !o)}
                 data-testid="chat-launcher"
                 aria-label={open ? "Close chat" : "Open chat"}
@@ -110,6 +130,7 @@ export default function ChatWidget() {
             {/* Panel */}
             {open && (
                 <div
+                    ref={panelRef}
                     data-testid="chat-panel"
                     className="fixed z-50 bottom-24 right-5 w-[92vw] max-w-[380px] h-[70vh] max-h-[560px] bg-white border border-[#E5E7EB] shadow-2xl flex flex-col overflow-hidden"
                 >
