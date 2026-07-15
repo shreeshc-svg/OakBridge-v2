@@ -12,6 +12,7 @@ const PAGE_SIZE = 24;
 // Fallbacks used until settings load (mirror backend SETTINGS_DEFAULTS).
 const DEFAULT_SORTS = [
     { value: "featured", label: "Featured" },
+    { value: "new_arrivals", label: "New Arrivals" },
     { value: "price_asc", label: "Price — Low to High" },
     { value: "price_desc", label: "Price — High to Low" },
     { value: "title", label: "Title A–Z" },

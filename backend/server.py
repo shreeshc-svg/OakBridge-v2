@@ -391,6 +391,7 @@ async def list_books(
         "title": [("title", 1)],
         "rating_desc": [("rating", -1)],
         "newest": [("created_at", -1)],
+        "new_arrivals": [("new_release", -1), ("created_at", -1)],
         "featured": [("bestseller", -1), ("new_release", -1), ("rating", -1)],
     }
     cursor = db.books.find(query, {"_id": 0}).sort(sort_map.get(sort, sort_map["featured"])).skip(skip).limit(limit)

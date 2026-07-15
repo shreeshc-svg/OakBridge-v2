@@ -69,7 +69,7 @@ export default function BookCard({ book, index = 0, compact = false }) {
                     )}
                     {!oos && book.new_release && !book.bestseller && (
                         <span className={`absolute top-2 left-2 bg-[#F59E0B] text-[#002B5C] font-mono uppercase tracking-widest px-1.5 py-0.5 ${compact ? "text-[8px]" : "text-[10px] top-3 left-3 px-2 py-1"}`}>
-                            New
+                            New Arrival
                         </span>
                     )}
                     {discount > 0 && (
