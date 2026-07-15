@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { AlertTriangle, PackageX, Package, Search } from "lucide-react";
-import { adminLowStock, fetchBooks, adminUpdateBook, formatINR, mediaUrl } from "../../lib/api";
+import { adminLowStock, fetchBooks, adminUpdateBook, formatINR, mediaUrl, syncInventoryFromSheet } from "../../lib/api";
 import { toast } from "sonner";
 
 export default function AdminInventory() {
@@ -12,6 +12,9 @@ export default function AdminInventory() {
     const [books, setBooks] = useState([]);
     const [booksLoading, setBooksLoading] = useState(true);
     const [query, setQuery] = useState("");
+
+    const [syncing, setSyncing] = useState(false);
+    const [syncResult, setSyncResult] = useState(null);
 
     const loadAlerts = () => {
         setLoading(true);
@@ -32,6 +35,27 @@ export default function AdminInventory() {
     const onStockSaved = (id, newStock) => {
         setBooks((prev) => prev.map((b) => (b.id === id ? { ...b, stock: newStock } : b)));
         loadAlerts(); // keep alert counts in sync
+    };
+
+    const doSync = async () => {
+        setSyncing(true);
+        setSyncResult(null);
+        try {
+            const res = await syncInventoryFromSheet();
+            setSyncResult(res);
+            toast.success(
+                `Synced from sheet — ${res.updated} updated, ${res.restocked} restocked.`,
+            );
+            loadBooks();
+            loadAlerts();
+        } catch (e) {
+            const msg =
+                e?.response?.data?.detail ||
+                "Sync failed. Check that INVENTORY_SHEET_CSV_URL is set on the server.";
+            toast.error(typeof msg === "string" ? msg : "Sync failed.");
+        } finally {
+            setSyncing(false);
+        }
     };
 
     const totals = useMemo(() => {
@@ -61,18 +85,47 @@ export default function AdminInventory() {
                         Inventory
                     </h1>
                 </div>
-                <label className="flex items-center gap-3 text-sm">
-                    <span className="overline !text-[10px]">Low stock threshold</span>
-                    <input
-                        type="number"
-                        min={1}
-                        value={threshold}
-                        onChange={(e) => setThreshold(Number(e.target.value) || 1)}
-                        data-testid="inventory-threshold"
-                        className="w-20 border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none focus:border-[#002B5C]"
-                    />
-                </label>
+                <div className="flex items-center gap-4">
+                    <button
+                        type="button"
+                        onClick={doSync}
+                        disabled={syncing}
+                        data-testid="inventory-sync-sheet"
+                        className="inline-flex items-center gap-2 bg-[#002B5C] text-white px-4 py-2 text-sm font-medium hover:bg-[#001F42] disabled:opacity-60"
+                    >
+                        {syncing ? "Syncing…" : "Sync from sheet"}
+                    </button>
+                    <label className="flex items-center gap-3 text-sm">
+                        <span className="overline !text-[10px]">Low stock threshold</span>
+                        <input
+                            type="number"
+                            min={1}
+                            value={threshold}
+                            onChange={(e) => setThreshold(Number(e.target.value) || 1)}
+                            data-testid="inventory-threshold"
+                            className="w-20 border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none focus:border-[#002B5C]"
+                        />
+                    </label>
+                </div>
             </div>
+
+            {syncResult && (
+                <div
+                    data-testid="inventory-sync-result"
+                    className="mt-6 bg-[#F5F7FA] border border-[#E5E7EB] px-5 py-4 text-sm text-[#4B5563]"
+                >
+                    <span className="text-[#002B5C] font-medium">Last sync:</span>{" "}
+                    {syncResult.updated} updated · {syncResult.restocked} restocked ·{" "}
+                    {syncResult.unmatched_count} unmatched ISBN
+                    {syncResult.unmatched_count === 1 ? "" : "s"}
+                    {syncResult.invalid_rows ? ` · ${syncResult.invalid_rows} bad rows` : ""}
+                    {syncResult.unmatched_count > 0 && (
+                        <span className="block mt-1 text-xs text-[#4B5563]/80">
+                            Unmatched: {(syncResult.unmatched_isbns || []).join(", ")}
+                        </span>
+                    )}
+                </div>
+            )}
 
             <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div
