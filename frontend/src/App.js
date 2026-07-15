@@ -85,6 +85,7 @@ function App() {
                                 <Route path="/privacy" element={<LegalPage slug="privacy" />} />
                                 <Route path="/refund-policy" element={<LegalPage slug="refund" />} />
                                 <Route path="/shipping-policy" element={<LegalPage slug="shipping" />} />
+                                <Route path="/cookie-policy" element={<LegalPage slug="cookie" />} />
                                 <Route path="/login" element={<Login />} />
                                 <Route path="/register" element={<Register />} />
                                 <Route path="/forgot-password" element={<ForgotPassword />} />

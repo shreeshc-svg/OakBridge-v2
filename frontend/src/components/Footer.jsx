@@ -160,6 +160,9 @@ export default function Footer() {
                         <Link to="/shipping-policy" className="hover:text-white">
                             Shipping
                         </Link>
+                        <Link to="/cookie-policy" className="hover:text-white">
+                            Cookies
+                        </Link>
                         <Link to="/contact" className="hover:text-white">
                             Contact
                         </Link>
