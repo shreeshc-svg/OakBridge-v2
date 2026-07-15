@@ -614,6 +614,8 @@ app.include_router(payments_router, prefix="/api")
 app.include_router(webhooks_router, prefix="/api")
 app.include_router(features_admin_router)
 app.include_router(features_tasks_router)
+from inventory_sync import inventory_router  # noqa: E402
+app.include_router(inventory_router)
 
 app.add_middleware(
     CORSMiddleware,
