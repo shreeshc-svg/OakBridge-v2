@@ -16,6 +16,8 @@ import Authors from "@/pages/Authors";
 import Account from "@/pages/Account";
 import Login from "@/pages/auth/Login";
 import Register from "@/pages/auth/Register";
+import ForgotPassword from "@/pages/auth/ForgotPassword";
+import ResetPassword from "@/pages/auth/ResetPassword";
 import AdminLayout from "@/pages/admin/AdminLayout";
 import AdminDashboard from "@/pages/admin/AdminDashboard";
 import AdminBooks from "@/pages/admin/AdminBooks";
@@ -85,6 +87,8 @@ function App() {
                                 <Route path="/shipping-policy" element={<LegalPage slug="shipping" />} />
                                 <Route path="/login" element={<Login />} />
                                 <Route path="/register" element={<Register />} />
+                                <Route path="/forgot-password" element={<ForgotPassword />} />
+                                <Route path="/reset-password" element={<ResetPassword />} />
                                 <Route
                                     path="/account"
                                     element={

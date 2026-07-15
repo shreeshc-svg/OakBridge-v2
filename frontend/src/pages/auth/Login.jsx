@@ -90,6 +90,16 @@ export default function Login() {
                             />
                         </div>
 
+                        <div className="text-right -mt-2">
+                            <Link
+                                to="/forgot-password"
+                                data-testid="login-forgot-link"
+                                className="text-xs text-[#4B5563] hover:text-[#002B5C] border-b border-transparent hover:border-[#002B5C] pb-0.5"
+                            >
+                                Forgot your password?
+                            </Link>
+                        </div>
+
                         {error && (
                             <div
                                 data-testid="login-error"

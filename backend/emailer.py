@@ -712,3 +712,131 @@ async def send_contact_ack(msg: dict) -> bool:
         subject="We've received your message — Oakbridge Publishing",
         html=render_contact_ack_html(msg),
     )
+
+
+# ====== Account welcome (on signup) ======
+
+def render_account_welcome_html(name: str) -> str:
+    who = (name or "there").split(" ")[0]
+    site = os.environ.get("SITE_URL", "https://oakbridge.in").rstrip("/")
+    return f"""\
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background-color:#F5F7FA;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:{BRAND_NAVY};">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#F5F7FA;padding:40px 16px;">
+  <tr><td align="center">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="560" style="max-width:560px;background-color:#FFFFFF;border:1px solid #E5E7EB;">
+      <tr><td style="background-color:{BRAND_NAVY};padding:28px 36px;color:#FFFFFF;">
+        <div style="font-family:Georgia,serif;font-size:22px;">Oakbridge <span style="color:{BRAND_AMBER};">Publishing</span></div>
+        <div style="font-family:monospace;text-transform:uppercase;letter-spacing:2px;font-size:11px;margin-top:6px;color:rgba(255,255,255,0.6);">Welcome</div>
+      </td></tr>
+      <tr><td style="padding:36px 36px 8px;">
+        <h1 style="margin:0;font-family:Georgia,serif;font-weight:normal;font-size:26px;color:{BRAND_NAVY};">Welcome, {who}.</h1>
+        <p style="margin:16px 0 0;font-size:15px;line-height:1.6;color:{BRAND_GREY};">Your Oakbridge account is ready. You can now track orders, reorder with one click, write reviews and request desk copies as an educator.</p>
+      </td></tr>
+      <tr><td style="padding:20px 36px 8px;">
+        <a href="{site}/books" style="display:inline-block;background-color:{BRAND_NAVY};color:#FFFFFF;text-decoration:none;font-size:14px;font-weight:600;padding:14px 28px;">Browse the bookstore</a>
+      </td></tr>
+      <tr><td style="padding:24px 36px 36px;">
+        <p style="margin:0;font-size:12px;color:{BRAND_GREY};">Questions? Reach us at <a href="mailto:info@oakbridge.in" style="color:{BRAND_NAVY};">info@oakbridge.in</a>. Oakbridge Publishing, B3 Tower, Spaze i-Tech Park, Sector 49, Gurugram, Haryana 122018.</p>
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+</body></html>
+"""
+
+
+async def send_account_welcome(to: str, name: str) -> bool:
+    """Welcome email sent right after signup. Best-effort."""
+    if not to:
+        return False
+    return await send_email(to=to, subject="Welcome to Oakbridge Publishing", html=render_account_welcome_html(name))
+
+
+# ====== Order status update (admin changes order status) ======
+
+_STATUS_COPY = {
+    "confirmed": ("Order confirmed", "Your order is confirmed and will be prepared for dispatch shortly."),
+    "processing": ("Your order is being prepared", "We're packing your books — they'll be on their way soon."),
+    "shipped": ("Your order has shipped", "Your books are on their way. You'll receive them shortly."),
+    "delivered": ("Delivered", "Your order has been delivered. We hope you enjoy your reading."),
+    "cancelled": ("Order cancelled", "Your order has been cancelled. If this wasn't expected, please contact us and we'll help."),
+}
+
+
+def render_order_status_update_html(order: dict) -> str:
+    who = (order.get("full_name") or "reader").split(" ")[0]
+    status = (order.get("status") or "").lower()
+    headline, message = _STATUS_COPY.get(status, ("Order update", f"Your order status is now: {status or 'updated'}."))
+    num = order.get("order_number", "")
+    return f"""\
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background-color:#F5F7FA;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:{BRAND_NAVY};">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#F5F7FA;padding:40px 16px;">
+  <tr><td align="center">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="560" style="max-width:560px;background-color:#FFFFFF;border:1px solid #E5E7EB;">
+      <tr><td style="background-color:{BRAND_NAVY};padding:28px 36px;color:#FFFFFF;">
+        <div style="font-family:Georgia,serif;font-size:22px;">Oakbridge <span style="color:{BRAND_AMBER};">Publishing</span></div>
+        <div style="font-family:monospace;text-transform:uppercase;letter-spacing:2px;font-size:11px;margin-top:6px;color:rgba(255,255,255,0.6);">Order {num}</div>
+      </td></tr>
+      <tr><td style="padding:36px 36px 8px;">
+        <h1 style="margin:0;font-family:Georgia,serif;font-weight:normal;font-size:24px;color:{BRAND_NAVY};">{headline}</h1>
+        <p style="margin:14px 0 0;font-size:15px;line-height:1.6;color:{BRAND_GREY};">Hi {who}, {message}</p>
+      </td></tr>
+      <tr><td style="padding:20px 36px 36px;">
+        <p style="margin:0;font-size:12px;color:{BRAND_GREY};">Order reference: <strong style="color:{BRAND_NAVY};">{num}</strong>. Questions? <a href="mailto:info@oakbridge.in" style="color:{BRAND_NAVY};">info@oakbridge.in</a></p>
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+</body></html>
+"""
+
+
+async def send_order_status_update(order: dict) -> bool:
+    """Email the customer when their order status changes. Best-effort."""
+    to = order.get("email")
+    if not to:
+        return False
+    num = order.get("order_number", "")
+    status = (order.get("status") or "updated").lower()
+    subject = f"Your Oakbridge order {num} — {status}"
+    return await send_email(to=to, subject=subject, html=render_order_status_update_html(order))
+
+
+# ====== Password reset ======
+
+def render_password_reset_html(name: str, reset_url: str) -> str:
+    who = (name or "there").split(" ")[0]
+    return f"""\
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background-color:#F5F7FA;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:{BRAND_NAVY};">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#F5F7FA;padding:40px 16px;">
+  <tr><td align="center">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="560" style="max-width:560px;background-color:#FFFFFF;border:1px solid #E5E7EB;">
+      <tr><td style="background-color:{BRAND_NAVY};padding:28px 36px;color:#FFFFFF;">
+        <div style="font-family:Georgia,serif;font-size:22px;">Oakbridge <span style="color:{BRAND_AMBER};">Publishing</span></div>
+        <div style="font-family:monospace;text-transform:uppercase;letter-spacing:2px;font-size:11px;margin-top:6px;color:rgba(255,255,255,0.6);">Password reset</div>
+      </td></tr>
+      <tr><td style="padding:36px 36px 8px;">
+        <h1 style="margin:0;font-family:Georgia,serif;font-weight:normal;font-size:24px;color:{BRAND_NAVY};">Hi {who},</h1>
+        <p style="margin:14px 0 0;font-size:15px;line-height:1.6;color:{BRAND_GREY};">We received a request to reset your Oakbridge password. Click below to choose a new one. This link expires in 30 minutes.</p>
+      </td></tr>
+      <tr><td style="padding:20px 36px 8px;">
+        <a href="{reset_url}" style="display:inline-block;background-color:{BRAND_NAVY};color:#FFFFFF;text-decoration:none;font-size:14px;font-weight:600;padding:14px 28px;">Reset password</a>
+      </td></tr>
+      <tr><td style="padding:24px 36px 36px;">
+        <p style="margin:0;font-size:12px;color:{BRAND_GREY};">If you didn't request this, you can safely ignore this email — your password won't change. If the button doesn't work, paste this link into your browser:<br><span style="color:{BRAND_NAVY};word-break:break-all;">{reset_url}</span></p>
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+</body></html>
+"""
+
+
+async def send_password_reset(to: str, name: str, reset_url: str) -> bool:
+    """Email a password-reset link. Best-effort."""
+    if not to:
+        return False
+    return await send_email(to=to, subject="Reset your Oakbridge password", html=render_password_reset_html(name, reset_url))

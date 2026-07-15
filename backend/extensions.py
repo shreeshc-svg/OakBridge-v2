@@ -370,6 +370,11 @@ async def register(payload: UserCreate):
             await send_verification_otp(email, doc["name"], otp)
     except Exception:  # noqa: BLE001
         logging.getLogger(__name__).exception("verification OTP send failed for %s", email)
+    try:
+        from emailer import send_account_welcome
+        await send_account_welcome(email, doc["name"])
+    except Exception:  # noqa: BLE001
+        logging.getLogger(__name__).exception("welcome email failed for %s", email)
     token = create_access_token(user_id, email, "customer")
     return AuthResponse(
         user=UserPublic(id=user_id, email=email, name=doc["name"], phone=doc["phone"], role="customer", created_at=now, email_verified=False),
@@ -463,6 +468,63 @@ async def resend_otp(user: dict = Depends(get_current_user)):
     except Exception:  # noqa: BLE001
         logging.getLogger(__name__).exception("resend OTP failed for %s", doc.get("email"))
     return {"ok": True, "message": "A new code is on its way."}
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    password: str = Field(min_length=6, max_length=128)
+
+
+@auth_router.post("/forgot-password")
+async def forgot_password(payload: ForgotPasswordRequest):
+    import hashlib
+    email = payload.email.lower().strip()
+    user = await db.users.find_one({"email": email})
+    # Always return ok — never reveal whether an account exists.
+    if user:
+        raw = secrets.token_urlsafe(32)
+        await db.users.update_one(
+            {"id": user["id"]},
+            {"$set": {
+                "reset_token_hash": hashlib.sha256(raw.encode()).hexdigest(),
+                "reset_expires_at": (datetime.now(timezone.utc) + timedelta(minutes=30)).isoformat(),
+            }},
+        )
+        site = os.environ.get("SITE_URL", "http://localhost:3000").rstrip("/")
+        reset_url = f"{site}/reset-password?token={raw}"
+        try:
+            from emailer import send_password_reset
+            await send_password_reset(user["email"], user.get("name", ""), reset_url)
+        except Exception:  # noqa: BLE001
+            logging.getLogger(__name__).exception("password reset email failed for %s", email)
+    return {"ok": True, "message": "If that email is registered, a reset link is on its way."}
+
+
+@auth_router.post("/reset-password")
+async def reset_password(payload: ResetPasswordRequest):
+    import hashlib
+    token = payload.token.strip()
+    if not token:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset link.")
+    thash = hashlib.sha256(token.encode()).hexdigest()
+    user = await db.users.find_one({"reset_token_hash": thash})
+    if not user:
+        raise HTTPException(status_code=400, detail="This reset link is invalid or has expired. Please request a new one.")
+    exp = user.get("reset_expires_at")
+    if exp and datetime.fromisoformat(exp) < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="This reset link has expired. Please request a new one.")
+    await db.users.update_one(
+        {"id": user["id"]},
+        {
+            "$set": {"password_hash": hash_password(payload.password)},
+            "$unset": {"reset_token_hash": "", "reset_expires_at": ""},
+        },
+    )
+    return {"ok": True}
 
 
 # ============== PUBLIC EXTRAS ROUTER ==============
@@ -679,6 +741,11 @@ async def admin_update_order(order_id: str, payload: OrderStatusUpdate):
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Order not found")
     order = await db.orders.find_one({"id": order_id}, {"_id": 0})
+    try:
+        from emailer import send_order_status_update
+        await send_order_status_update(order)
+    except Exception:  # noqa: BLE001
+        logging.getLogger(__name__).exception("order status email failed for %s", order_id)
     return order
 
 
