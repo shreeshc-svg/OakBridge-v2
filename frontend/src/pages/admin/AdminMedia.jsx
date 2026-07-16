@@ -161,7 +161,7 @@ export default function AdminMedia() {
                     <div className="overline !text-[10px] mt-6 mb-2">Imprint tiles (Five Imprints section)</div>
                     <div className="space-y-3">
                         <SlotRow label="Coffee Table Books" value={site.home_imprint_coffee_table} onSave={(v) => saveSite("home_imprint_coffee_table", v)} />
-                        <SlotRow label="Curated Books" value={site.home_imprint_curated} onSave={(v) => saveSite("home_imprint_curated", v)} />
+                        <SlotRow label="Bespoke Books" value={site.home_imprint_curated} onSave={(v) => saveSite("home_imprint_curated", v)} />
                     </div>
                 </PageGroup>
 
