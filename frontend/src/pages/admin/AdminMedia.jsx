@@ -158,6 +158,11 @@ export default function AdminMedia() {
 
                 <PageGroup title="Homepage" path="/">
                     <SlotRow label="Hero image" value={site.home_hero} onSave={(v) => saveSite("home_hero", v)} />
+                    <div className="overline !text-[10px] mt-6 mb-2">Imprint tiles (Five Imprints section)</div>
+                    <div className="space-y-3">
+                        <SlotRow label="Coffee Table Books" value={site.home_imprint_coffee_table} onSave={(v) => saveSite("home_imprint_coffee_table", v)} />
+                        <SlotRow label="Curated Books" value={site.home_imprint_curated} onSave={(v) => saveSite("home_imprint_curated", v)} />
+                    </div>
                 </PageGroup>
 
                 <PageGroup title="Bookstore — Product Listing (PLP)" path="/books">

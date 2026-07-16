@@ -386,11 +386,13 @@ export default function Home() {
                         {
                             name: "Coffee Table Books",
                             tag: "Imprint",
+                            slot: "home_imprint_coffee_table",
                             image: "https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=800&q=80",
                         },
                         {
                             name: "Curated Books",
                             tag: "Imprint",
+                            slot: "home_imprint_curated",
                             image: "https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&w=800&q=80",
                         },
                     ].map((imp) => (
@@ -401,7 +403,7 @@ export default function Home() {
                             className="group relative block overflow-hidden bg-[#002B5C] border border-[#E5E7EB] aspect-[3/4] hover:border-[#002B5C] transition-colors"
                         >
                             <img
-                                src={imp.image}
+                                src={mediaUrl(site[imp.slot]) || imp.image}
                                 alt={imp.name}
                                 className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                             />
