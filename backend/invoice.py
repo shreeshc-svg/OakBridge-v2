@@ -65,7 +65,7 @@ SELLER = {
     "gstin": "06AACCO5406D1ZW",
     "state": "Haryana",
     "state_code": "06",
-    "contact": "1244305970, 8800337299",
+    "contact": "01244305970, 8800337299",
     "email": "fpa@oakbridge.in",
 }
 BANK = {
@@ -219,7 +219,7 @@ def build_invoice_pdf(order: dict, isbn_map: dict | None = None) -> bytes:
     W = doc.width
     story = []
 
-    story.append(Paragraph("TAX INVOICE", p_title))
+    story.append(Paragraph("INVOICE", p_title))
     story.append(Spacer(1, 6))
 
     # ---- seller (left) + invoice meta (right) ----
@@ -238,6 +238,7 @@ def build_invoice_pdf(order: dict, isbn_map: dict | None = None) -> bytes:
 
     meta = Table(
         [
+            [Paragraph("Contact", p_small), Paragraph(f"<b>{SELLER['contact']}</b>", p_body)],
             [Paragraph("Invoice No.", p_small), Paragraph(f"<b>{invoice_no}</b>", p_body)],
             [Paragraph("Dated", p_small), Paragraph(f"<b>{dt.strftime('%d-%b-%y')}</b>", p_body)],
             [Paragraph("Order No.", p_small), Paragraph(order.get("order_number", ""), p_body)],

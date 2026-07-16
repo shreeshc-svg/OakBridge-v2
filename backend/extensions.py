@@ -199,6 +199,7 @@ class Author(BaseModel):
 
 class OrderStatusUpdate(BaseModel):
     status: str  # confirmed | processing | shipped | delivered | cancelled
+    reason: Optional[str] = None  # optional note, emailed to the customer on cancellation
 
 
 # ============== AUTH DEPENDENCIES ==============
@@ -619,6 +620,11 @@ async def create_review(book_id: str, payload: ReviewCreate, user: dict = Depend
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.reviews.insert_one({**doc})
+    try:
+        from emailer import send_review_submitted
+        await send_review_submitted(user.get("email"), user.get("name", ""), book.get("title", "your book"), payload.rating)
+    except Exception:  # noqa: BLE001
+        logging.getLogger(__name__).exception("review confirmation email failed")
     return Review(**doc)
 
 
@@ -741,13 +747,20 @@ async def admin_update_order(order_id: str, payload: OrderStatusUpdate):
     allowed = {"confirmed", "processing", "shipped", "delivered", "cancelled"}
     if payload.status not in allowed:
         raise HTTPException(status_code=400, detail=f"Invalid status. Use one of {sorted(allowed)}")
-    result = await db.orders.update_one({"id": order_id}, {"$set": {"status": payload.status}})
+    updates = {"status": payload.status}
+    if payload.status == "cancelled" and payload.reason:
+        updates["cancel_reason"] = payload.reason.strip()
+    result = await db.orders.update_one({"id": order_id}, {"$set": updates})
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Order not found")
     order = await db.orders.find_one({"id": order_id}, {"_id": 0})
     try:
-        from emailer import send_order_status_update
-        await send_order_status_update(order)
+        if payload.status == "cancelled":
+            from emailer import send_order_cancelled
+            await send_order_cancelled(order, payload.reason or "")
+        else:
+            from emailer import send_order_status_update
+            await send_order_status_update(order)
     except Exception:  # noqa: BLE001
         logging.getLogger(__name__).exception("order status email failed for %s", order_id)
     return order

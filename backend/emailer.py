@@ -840,3 +840,85 @@ async def send_password_reset(to: str, name: str, reset_url: str) -> bool:
     if not to:
         return False
     return await send_email(to=to, subject="Reset your Oakbridge password", html=render_password_reset_html(name, reset_url))
+
+
+# ====== Review submitted (thank-you to reviewer) ======
+
+def render_review_submitted_html(name: str, book_title: str, rating: int) -> str:
+    who = (name or "there").split(" ")[0]
+    stars = "★" * int(rating or 0) + "☆" * (5 - int(rating or 0))
+    return f"""\
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background-color:#F5F7FA;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:{BRAND_NAVY};">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#F5F7FA;padding:40px 16px;">
+  <tr><td align="center">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="560" style="max-width:560px;background-color:#FFFFFF;border:1px solid #E5E7EB;">
+      <tr><td style="background-color:{BRAND_NAVY};padding:28px 36px;color:#FFFFFF;">
+        <div style="font-family:Georgia,serif;font-size:22px;">Oakbridge <span style="color:{BRAND_AMBER};">Publishing</span></div>
+        <div style="font-family:monospace;text-transform:uppercase;letter-spacing:2px;font-size:11px;margin-top:6px;color:rgba(255,255,255,0.6);">Review received</div>
+      </td></tr>
+      <tr><td style="padding:36px 36px 8px;">
+        <h1 style="margin:0;font-family:Georgia,serif;font-weight:normal;font-size:24px;color:{BRAND_NAVY};">Thank you, {who}.</h1>
+        <p style="margin:14px 0 0;font-size:15px;line-height:1.6;color:{BRAND_GREY};">We've received your review of <strong style="color:{BRAND_NAVY};">{book_title}</strong>. Your rating:</p>
+        <div style="font-size:22px;color:{BRAND_AMBER};letter-spacing:3px;margin-top:10px;">{stars}</div>
+        <p style="margin:16px 0 0;font-size:13px;color:{BRAND_GREY};">Reviews help other readers choose with confidence — we appreciate you taking the time.</p>
+      </td></tr>
+      <tr><td style="padding:24px 36px 36px;">
+        <p style="margin:0;font-size:12px;color:{BRAND_GREY};">Questions? Reach us at <a href="mailto:info@oakbridge.in" style="color:{BRAND_NAVY};">info@oakbridge.in</a>.</p>
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+</body></html>
+"""
+
+
+async def send_review_submitted(to: str, name: str, book_title: str, rating: int) -> bool:
+    """Thank-you email when a customer submits a review. Best-effort."""
+    if not to:
+        return False
+    return await send_email(to=to, subject="Thanks for your review", html=render_review_submitted_html(name, book_title, rating))
+
+
+# ====== Order cancelled (with reason) ======
+
+def render_order_cancelled_html(order: dict, reason: str = "") -> str:
+    who = (order.get("full_name") or "reader").split(" ")[0]
+    num = order.get("order_number", "")
+    reason_line = (
+        f"<p style=\"margin:14px 0 0;font-size:14px;line-height:1.6;color:{BRAND_GREY};\">Reason: <strong style=\"color:{BRAND_NAVY};\">{reason}</strong></p>"
+        if reason else ""
+    )
+    return f"""\
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background-color:#F5F7FA;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:{BRAND_NAVY};">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#F5F7FA;padding:40px 16px;">
+  <tr><td align="center">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="560" style="max-width:560px;background-color:#FFFFFF;border:1px solid #E5E7EB;">
+      <tr><td style="background-color:{BRAND_NAVY};padding:28px 36px;color:#FFFFFF;">
+        <div style="font-family:Georgia,serif;font-size:22px;">Oakbridge <span style="color:{BRAND_AMBER};">Publishing</span></div>
+        <div style="font-family:monospace;text-transform:uppercase;letter-spacing:2px;font-size:11px;margin-top:6px;color:rgba(255,255,255,0.6);">Order {num} · Cancelled</div>
+      </td></tr>
+      <tr><td style="padding:36px 36px 8px;">
+        <h1 style="margin:0;font-family:Georgia,serif;font-weight:normal;font-size:24px;color:{BRAND_NAVY};">Your order has been cancelled</h1>
+        <p style="margin:14px 0 0;font-size:15px;line-height:1.6;color:{BRAND_GREY};">Hi {who}, your order <strong style="color:{BRAND_NAVY};">{num}</strong> has been cancelled.</p>
+        {reason_line}
+        <p style="margin:16px 0 0;font-size:14px;line-height:1.6;color:{BRAND_GREY};">If you were charged, any eligible refund is processed to your original payment method, typically within 5–7 business days. If this was unexpected, please contact us and we'll help.</p>
+      </td></tr>
+      <tr><td style="padding:24px 36px 36px;">
+        <p style="margin:0;font-size:12px;color:{BRAND_GREY};">Questions? Email <a href="mailto:info@oakbridge.in" style="color:{BRAND_NAVY};">info@oakbridge.in</a> with your order number.</p>
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+</body></html>
+"""
+
+
+async def send_order_cancelled(order: dict, reason: str = "") -> bool:
+    """Email the customer when their order is cancelled, with an optional reason."""
+    to = order.get("email")
+    if not to:
+        return False
+    num = order.get("order_number", "")
+    return await send_email(to=to, subject=f"Your Oakbridge order {num} was cancelled", html=render_order_cancelled_html(order, reason))
