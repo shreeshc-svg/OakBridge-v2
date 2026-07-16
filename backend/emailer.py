@@ -565,9 +565,9 @@ async def send_order_failed(order: dict, reason: str = "") -> bool:
 # ====== Abandoned-cart reminders ======
 
 _CART_COPY = {
-    "12h": ("Still on your mind?", "The title below is waiting in your cart. Prices and stock can change \u2014 secure it before it slips away."),
-    "1w": ("Don\u2019t let it get away", "It\u2019s been a week and your pick is still in your cart. Popular titles sell out \u2014 now\u2019s a good time to complete your order."),
-    "eom": ("Last call this month", "Final reminder \u2014 the book below is still in your cart. Complete your order before the month closes out."),
+    "12h": ("Your next chapter awaits", "The book below is still waiting in your cart. Popular titles move fast and prices can change without notice \u2014 claim it before someone else does."),
+    "1w": ("Don\u2019t let this one slip away", "It\u2019s been a week, and sought-after titles like this don\u2019t stay on the shelf for long. Complete your order now \u2014 before it sells out and you miss the chapter."),
+    "eom": ("Last call \u2014 before it\u2019s gone", "Final reminder: your book is still in your cart, but stock is limited and the month is closing out. Secure it now, or risk missing out for good."),
 }
 
 
@@ -618,9 +618,9 @@ def render_cart_reminder_html(name: str, items: list, stage: str) -> str:
 
 async def send_cart_reminder(to: str, name: str, items: list, stage: str) -> bool:
     subjects = {
-        "12h": "You left something in your cart",
-        "1w": "Still in your cart \u2014 don\u2019t miss out",
-        "eom": "Last call \u2014 your cart is waiting",
+        "12h": "Your cart is waiting \u2014 don\u2019t miss out",
+        "1w": "Going fast \u2014 still in your cart",
+        "eom": "Last call \u2014 before it\u2019s gone for good",
     }
     return await send_email(to=to, subject=subjects.get(stage, subjects["12h"]), html=render_cart_reminder_html(name, items, stage))
 
