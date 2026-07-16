@@ -41,6 +41,7 @@ export default function AdminPLP() {
     const [books, setBooks] = useState([]);
     const [carEnabled, setCarEnabled] = useState(true);
     const [carSpeed, setCarSpeed] = useState(40); // px/sec
+    const [bookSearch, setBookSearch] = useState("");
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
@@ -91,11 +92,15 @@ export default function AdminPLP() {
     const removeFilter = (i) => setFilters((cur) => cur.filter((_, idx) => idx !== i));
 
     const bookById = new Map(books.map((b) => [b.id, b]));
-    const available = books.filter((b) => !picks.includes(b.id));
-    const addPick = (id) => {
-        if (id && !picks.includes(id)) setPicks((cur) => [...cur, id]);
-    };
     const removePick = (i) => setPicks((cur) => cur.filter((_, idx) => idx !== i));
+    const togglePick = (id) =>
+        setPicks((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
+    const _q = bookSearch.trim().toLowerCase();
+    const filteredBooks = _q
+        ? books.filter((b) =>
+              `${b.title} ${b.author} ${b.isbn || ""}`.toLowerCase().includes(_q),
+          )
+        : books;
 
     const save = async () => {
         setSaving(true);
@@ -140,8 +145,9 @@ export default function AdminPLP() {
                 <div className="border border-[#E5E7EB] bg-white p-6">
                     <h2 className="font-serif text-xl text-[#002B5C]">Bestsellers carousel (homepage)</h2>
                     <p className="text-[11px] text-[#4B5563] mt-1">
-                        The endless auto-scrolling “What leaders are reading” row on the homepage.
-                        Pick the books and set their order. Leave empty to auto-fill from bestseller flags.
+                        The auto-scrolling “What leaders are reading” row on the homepage. Tick the
+                        books you want to feature; reorder them below. If none are selected, the
+                        carousel is hidden.
                     </p>
                     <div className="mt-4 flex flex-wrap items-center gap-x-8 gap-y-3">
                         <label className="flex items-center gap-2 text-sm text-[#002B5C]">
@@ -169,27 +175,41 @@ export default function AdminPLP() {
                             <span className="font-mono text-xs w-16 text-[#002B5C]">{carSpeed} px/s</span>
                         </label>
                     </div>
-                    <div className="mt-4 flex items-center gap-2">
-                        <select
-                            data-testid="plp-bestseller-picker"
-                            defaultValue=""
-                            onChange={(e) => {
-                                addPick(e.target.value);
-                                e.target.value = "";
-                            }}
-                            className={rowBox + " flex-1"}
-                        >
-                            <option value="" disabled>
-                                {available.length ? "Add a book…" : "All books added"}
-                            </option>
-                            {available.map((b) => (
-                                <option key={b.id} value={b.id}>
-                                    {b.title} — {b.author}
-                                </option>
+                    <div className="mt-5">
+                        <input
+                            value={bookSearch}
+                            onChange={(e) => setBookSearch(e.target.value)}
+                            placeholder="Search books to add to the carousel…"
+                            data-testid="plp-book-search"
+                            className={rowBox + " w-full"}
+                        />
+                        <div className="mt-1 text-[11px] text-[#4B5563]">{picks.length} selected</div>
+                        <div className="mt-2 max-h-72 overflow-y-auto border border-[#E5E7EB] divide-y divide-[#E5E7EB]">
+                            {filteredBooks.map((b) => (
+                                <label
+                                    key={b.id}
+                                    className="flex items-center gap-3 px-3 py-2 text-sm hover:bg-[#F5F7FA] cursor-pointer"
+                                >
+                                    <input
+                                        type="checkbox"
+                                        checked={picks.includes(b.id)}
+                                        onChange={() => togglePick(b.id)}
+                                        data-testid={`plp-book-check-${b.id}`}
+                                        className="accent-[#002B5C] w-4 h-4 flex-shrink-0"
+                                    />
+                                    <span className="flex-1 text-[#002B5C] truncate">{b.title}</span>
+                                    <span className="text-xs text-[#4B5563] truncate max-w-[140px]">{b.author}</span>
+                                </label>
                             ))}
-                        </select>
+                            {filteredBooks.length === 0 && (
+                                <p className="px-3 py-3 text-sm text-[#4B5563]">No matching books.</p>
+                            )}
+                        </div>
                     </div>
                     <div className="mt-4 space-y-2">
+                        {picks.length > 0 && (
+                            <div className="overline !text-[10px] text-[#4B5563]">Selected — carousel order</div>
+                        )}
                         {picks.map((id, i) => {
                             const b = bookById.get(id);
                             return (
@@ -214,7 +234,7 @@ export default function AdminPLP() {
                         })}
                         {picks.length === 0 && (
                             <p className="text-sm text-[#4B5563]">
-                                No books selected — the carousel auto-fills from bestseller flags.
+                                No books selected — the carousel stays hidden until you tick some above.
                             </p>
                         )}
                     </div>

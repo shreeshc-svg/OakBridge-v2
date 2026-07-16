@@ -82,10 +82,11 @@ export default function Footer() {
                         <div className="overline !text-white/50">
                             Est. 2017 · New Delhi
                         </div>
-                        <h3 className="font-serif text-4xl md:text-5xl mt-4 leading-none">
-                            Books that teach.
-                            <br />
-                            Ideas that travel.
+                        <h3 className="font-serif text-2xl md:text-3xl mt-4 leading-snug max-w-lg">
+                            We believe a{" "}
+                            <span className="text-[#F59E0B]">book</span> is a
+                            conversation, not a monument. It should change with
+                            its readers — and the country they are inheriting.
                         </h3>
                         <p className="mt-6 text-white/70 text-sm max-w-md leading-relaxed">
                             Oakbridge Publishing crafts scholarly and

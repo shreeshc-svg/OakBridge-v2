@@ -107,17 +107,17 @@ export default function Home() {
         return out;
     })();
 
-    // Carousel books: real sales-ranked bestsellers from the API (which already layers in
-    // admin pins/exclusions + cold-start fallback). If unavailable, fall back to the
-    // admin-curated order, then the auto-composed row.
-    const carouselBooks = bestsellers.length
-        ? bestsellers
-        : (() => {
-              const ids = Array.isArray(settings?.home_bestsellers) ? settings.home_bestsellers : [];
-              if (!ids.length) return bestsellerRow;
-              const pool = new Map([...featured, ...newRel, ...fallback].map((b) => [b.id, b]));
-              return ids.map((id) => pool.get(id)).filter(Boolean);
-          })();
+    // "What leaders are reading" shows ONLY the books the admin has explicitly
+    // selected (home_bestsellers), in the admin's order — never the whole catalogue.
+    // If nothing is selected (or the carousel is disabled), it doesn't render.
+    const carouselBooks = (() => {
+        const ids = Array.isArray(settings?.home_bestsellers) ? settings.home_bestsellers : [];
+        if (!ids.length) return [];
+        const pool = new Map(
+            [...bestsellers, ...featured, ...newRel, ...fallback].map((b) => [b.id, b]),
+        );
+        return ids.map((id) => pool.get(id)).filter(Boolean);
+    })();
     const bestsellersEnabled = settings?.home_bestsellers_enabled !== false; // default on
     const bestsellersSpeed = Number(settings?.home_bestsellers_speed) || 40; // px/sec
 
@@ -382,6 +382,29 @@ export default function Home() {
                             </Link>
                         );
                     })}
+                    {[
+                        { name: "Coffee Table Books", tag: "Imprint" },
+                        { name: "Curated Books", tag: "Imprint" },
+                    ].map((imp) => (
+                        <Link
+                            key={imp.name}
+                            to="/books"
+                            data-testid={`imprint-tile-${imp.name.toLowerCase().replace(/\s+/g, "-")}`}
+                            className="group relative block overflow-hidden bg-[#002B5C] border border-[#002B5C] aspect-[3/4] hover:border-[#F59E0B] transition-colors"
+                        >
+                            <div className="absolute inset-0 bg-gradient-to-t from-[#001F42] via-[#002B5C] to-[#002B5C]" />
+                            <div className="absolute inset-0 p-5 flex flex-col justify-between text-[#FFFFFF]">
+                                <span className="overline !text-[9px] !text-[#F59E0B]">{imp.tag}</span>
+                                <div>
+                                    <h3 className="font-serif text-xl leading-tight">{imp.name}</h3>
+                                    <div className="mt-3 inline-flex items-center gap-1 text-[11px] font-mono uppercase tracking-widest border-b border-[#F59E0B] pb-0.5 text-[#F59E0B]">
+                                        Explore
+                                        <ArrowUpRight size={11} strokeWidth={1.5} />
+                                    </div>
+                                </div>
+                            </div>
+                        </Link>
+                    ))}
                 </div>
             </section>
 
