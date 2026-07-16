@@ -543,9 +543,10 @@ export default function Home() {
                 <div className="relative z-10 max-w-3xl">
                     <div className="overline !text-white/50">Manifesto</div>
                     <p className="font-serif text-3xl md:text-5xl mt-6 leading-tight">
-                        "We believe a textbook is a conversation, not a
-                        monument. It should change with its readers — and the
-                        country they are inheriting."
+                        "We believe a{" "}
+                        <span className="text-[#F59E0B]">book</span> is a
+                        conversation, not a monument. It should change with its
+                        readers — and the country they are inheriting."
                     </p>
                     <div className="mt-8 font-mono text-sm text-white/60">
                         — The Oakbridge Editorial Charter, 2017
