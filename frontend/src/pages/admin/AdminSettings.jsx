@@ -17,12 +17,25 @@ export default function AdminSettings() {
 
     const set = (k, v) => setS((cur) => ({ ...cur, [k]: v }));
 
+    const lines = Array.isArray(s.contact_direct_lines) ? s.contact_direct_lines : [];
+    const setLines = (arr) => set("contact_direct_lines", arr);
+    const updateLine = (i, key, val) =>
+        setLines(lines.map((l, idx) => (idx === i ? { ...l, [key]: val } : l)));
+    const addLine = () => setLines([...lines, { label: "", email: "" }]);
+    const removeLine = (i) => setLines(lines.filter((_, idx) => idx !== i));
+
     const save = async () => {
         setSaving(true);
         try {
             await adminSetSetting("tax_percent", Number(s.tax_percent) || 0);
             await adminSetSetting("free_ship_threshold", Number(s.free_ship_threshold) || 0);
             await adminSetSetting("ship_flat", Number(s.ship_flat) || 0);
+            await adminSetSetting(
+                "contact_direct_lines",
+                lines
+                    .map((l) => ({ label: (l.label || "").trim(), email: (l.email || "").trim() }))
+                    .filter((l) => l.label && l.email),
+            );
             toast.success("Settings saved — live on the storefront.");
         } catch {
             toast.error("Could not save settings.");
@@ -61,6 +74,51 @@ export default function AdminSettings() {
                     <p className="text-[11px] text-[#4B5563] mt-3">
                         Tax and shipping are recomputed on the server at checkout using these values.
                     </p>
+                </div>
+
+                <div className="border border-[#E5E7EB] bg-white p-6" data-testid="direct-lines-editor">
+                    <div className="flex items-center justify-between">
+                        <h2 className="font-serif text-xl text-[#002B5C]">Contact — Direct Lines</h2>
+                        <button
+                            type="button"
+                            onClick={addLine}
+                            data-testid="direct-line-add"
+                            className="text-xs border border-[#002B5C] text-[#002B5C] px-3 py-1.5 hover:bg-[#F5F7FA]"
+                        >
+                            + Add line
+                        </button>
+                    </div>
+                    <p className="text-[11px] text-[#4B5563] mt-1">
+                        Shown in the “Direct Lines” box on the Contact page.
+                    </p>
+                    <div className="mt-4 space-y-3">
+                        {lines.map((l, i) => (
+                            <div key={i} className="flex gap-3 items-center">
+                                <input
+                                    value={l.label || ""}
+                                    onChange={(e) => updateLine(i, "label", e.target.value)}
+                                    placeholder="Label (e.g. Press)"
+                                    className="flex-1 border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none focus:border-[#002B5C]"
+                                />
+                                <input
+                                    value={l.email || ""}
+                                    onChange={(e) => updateLine(i, "email", e.target.value)}
+                                    placeholder="email@oakbridge.in"
+                                    className="flex-1 border border-[#E5E7EB] bg-white px-3 py-2 text-sm font-mono outline-none focus:border-[#002B5C]"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => removeLine(i)}
+                                    className="text-[#CC0033] text-xs px-2 hover:underline"
+                                >
+                                    Remove
+                                </button>
+                            </div>
+                        ))}
+                        {lines.length === 0 && (
+                            <p className="text-sm text-[#4B5563]">No direct lines yet — click “Add line”.</p>
+                        )}
+                    </div>
                 </div>
 
                 <div className="border border-dashed border-[#E5E7EB] bg-[#F5F7FA] p-6">

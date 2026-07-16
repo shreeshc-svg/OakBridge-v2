@@ -1125,6 +1125,13 @@ SETTINGS_DEFAULTS = {
         {"key": "bestseller", "label": "Bestsellers", "enabled": True},
         {"key": "new_release", "label": "New Releases", "enabled": True},
     ],
+    # Contact page "Direct Lines" — admin-editable list of {label, email}.
+    "contact_direct_lines": [
+        {"label": "Institutional Sales", "email": "schools@oakbridge.in"},
+        {"label": "Submissions", "email": "editorial@oakbridge.in"},
+        {"label": "Press", "email": "press@oakbridge.in"},
+        {"label": "Careers", "email": "careers@oakbridge.in"},
+    ],
 }
 
 

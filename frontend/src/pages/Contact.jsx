@@ -1,8 +1,8 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Breadcrumbs from "../components/Breadcrumbs";
 import Seo from "../components/Seo";
 import { Mail, MapPin, Phone } from "lucide-react";
-import { submitContact } from "../lib/api";
+import { submitContact, fetchSettings } from "../lib/api";
 import { toast } from "sonner";
 
 export default function Contact() {
@@ -13,6 +13,20 @@ export default function Contact() {
         message: "",
     });
     const [submitting, setSubmitting] = useState(false);
+    const [settings, setSettings] = useState(null);
+    useEffect(() => {
+        fetchSettings().then(setSettings).catch(() => {});
+    }, []);
+    const DEFAULT_LINES = [
+        { label: "Institutional Sales", email: "schools@oakbridge.in" },
+        { label: "Submissions", email: "editorial@oakbridge.in" },
+        { label: "Press", email: "press@oakbridge.in" },
+        { label: "Careers", email: "careers@oakbridge.in" },
+    ];
+    const directLines =
+        Array.isArray(settings?.contact_direct_lines) && settings.contact_direct_lines.length
+            ? settings.contact_direct_lines
+            : DEFAULT_LINES;
 
     const onChange = (e) =>
         setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
@@ -195,32 +209,19 @@ export default function Contact() {
                     <div className="border border-[#E5E7EB] p-8 bg-white">
                         <div className="overline">Direct Lines</div>
                         <dl className="mt-4 space-y-3 text-sm">
-                            <div className="flex justify-between border-b border-[#E5E7EB] pb-3">
-                                <dt className="text-[#4B5563]">
-                                    Institutional Sales
-                                </dt>
-                                <dd className="font-mono text-[#002B5C]">
-                                    schools@oakbridge.in
-                                </dd>
-                            </div>
-                            <div className="flex justify-between border-b border-[#E5E7EB] pb-3">
-                                <dt className="text-[#4B5563]">Submissions</dt>
-                                <dd className="font-mono text-[#002B5C]">
-                                    editorial@oakbridge.in
-                                </dd>
-                            </div>
-                            <div className="flex justify-between border-b border-[#E5E7EB] pb-3">
-                                <dt className="text-[#4B5563]">Press</dt>
-                                <dd className="font-mono text-[#002B5C]">
-                                    press@oakbridge.in
-                                </dd>
-                            </div>
-                            <div className="flex justify-between">
-                                <dt className="text-[#4B5563]">Careers</dt>
-                                <dd className="font-mono text-[#002B5C]">
-                                    careers@oakbridge.in
-                                </dd>
-                            </div>
+                            {directLines.map((l, i) => (
+                                <div
+                                    key={i}
+                                    className={`flex justify-between ${i < directLines.length - 1 ? "border-b border-[#E5E7EB] pb-3" : ""}`}
+                                >
+                                    <dt className="text-[#4B5563]">{l.label}</dt>
+                                    <dd className="font-mono text-[#002B5C]">
+                                        <a href={`mailto:${l.email}`} className="hover:underline">
+                                            {l.email}
+                                        </a>
+                                    </dd>
+                                </div>
+                            ))}
                         </dl>
                     </div>
                 </aside>
