@@ -396,8 +396,22 @@ async def list_books(
         "new_arrivals": [("new_release", -1), ("created_at", -1)],
         "featured": [("bestseller", -1), ("new_release", -1), ("rating", -1)],
     }
-    cursor = db.books.find(query, {"_id": 0}).sort(sort_map.get(sort, sort_map["featured"])).skip(skip).limit(limit)
-    docs = await cursor.to_list(limit)
+    chosen = sort_map.get(sort, sort_map["featured"])
+    # In-stock books always rank above out-of-stock ones, then the chosen sort
+    # applies within each group. Works across every category and sort option,
+    # and stays correct across skip/limit pagination (infinite scroll).
+    sort_stage = {"_in_stock": -1}
+    for field, direction in chosen:
+        sort_stage[field] = direction
+    pipeline = [
+        {"$match": query},
+        {"$addFields": {"_in_stock": {"$cond": [{"$gt": [{"$ifNull": ["$stock", 0]}, 0]}, 1, 0]}}},
+        {"$sort": sort_stage},
+        {"$skip": skip},
+        {"$limit": limit},
+        {"$project": {"_id": 0, "_in_stock": 0}},
+    ]
+    docs = await db.books.aggregate(pipeline).to_list(limit)
     return [_decorate_book(d) for d in docs]
 
 
