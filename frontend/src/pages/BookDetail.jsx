@@ -10,6 +10,7 @@ import { fetchBook, fetchBooks, formatINR, notifyBackInStock, fetchSettings, med
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
 import { toast } from "sonner";
+import VerifyNotice from "../components/VerifyNotice";
 
 export default function BookDetail() {
     const { id } = useParams();
@@ -396,6 +397,8 @@ export default function BookDetail() {
                             </button>
                         </div>
                     )}
+
+                    <VerifyNotice className="mt-6 max-w-md" />
 
                     {/* Educator CTA */}
                     <button

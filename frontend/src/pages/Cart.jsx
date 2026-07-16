@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
 import { formatINR, mediaUrl } from "../lib/api";
+import VerifyNotice from "../components/VerifyNotice";
 
 export default function Cart() {
     const nav = useNavigate();
@@ -169,6 +170,7 @@ export default function Cart() {
                                     {formatINR(total)}
                                 </span>
                             </div>
+                            <VerifyNotice className="mt-6" />
                             <button
                                 type="button"
                                 onClick={proceedToCheckout}

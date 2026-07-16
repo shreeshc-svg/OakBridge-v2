@@ -4,6 +4,7 @@ import Header from "./Header";
 import Footer from "./Footer";
 import ChatWidget from "./ChatWidget";
 import BottomTray from "./BottomTray";
+import CookieConsent from "./CookieConsent";
 import { Toaster } from "./ui/sonner";
 
 export default function Layout() {
@@ -22,6 +23,7 @@ export default function Layout() {
             <div className="h-16 md:hidden" aria-hidden="true" />
             <ChatWidget />
             <BottomTray />
+            <CookieConsent />
             <Toaster position="bottom-right" />
         </div>
     );

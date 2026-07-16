@@ -12,6 +12,7 @@ import {
 } from "./ui/sheet";
 import { useCart } from "../context/CartContext";
 import { formatINR, mediaUrl } from "../lib/api";
+import VerifyNotice from "./VerifyNotice";
 
 export default function CartSheet() {
     const {
@@ -172,6 +173,7 @@ export default function CartSheet() {
                             <p className="text-xs text-[#4B5563] mt-1">
                                 Shipping & taxes calculated at checkout.
                             </p>
+                            <VerifyNotice className="mt-4" />
                             <div className="grid grid-cols-2 gap-3 mt-4">
                                 <button
                                     onClick={goCart}
