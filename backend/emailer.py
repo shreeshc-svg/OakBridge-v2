@@ -731,7 +731,13 @@ def render_account_welcome_html(name: str) -> str:
       </td></tr>
       <tr><td style="padding:36px 36px 8px;">
         <h1 style="margin:0;font-family:Georgia,serif;font-weight:normal;font-size:26px;color:{BRAND_NAVY};">Welcome, {who}.</h1>
-        <p style="margin:16px 0 0;font-size:15px;line-height:1.6;color:{BRAND_GREY};">Your Oakbridge account is ready. You can now track orders, reorder with one click, write reviews and request desk copies as an educator.</p>
+        <p style="margin:16px 0 0;font-size:15px;line-height:1.6;color:{BRAND_GREY};">Your Oakbridge account is ready — welcome to a library built for the intellectually curious. Here's what you can do from here:</p>
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:16px 0 4px;">
+          <tr><td style="color:{BRAND_AMBER};font-size:16px;vertical-align:top;padding:0 10px 8px 0;line-height:1.5;">&#10003;</td><td style="font-size:15px;line-height:1.5;color:{BRAND_GREY};padding-bottom:8px;"><strong style="color:{BRAND_NAVY};">Order</strong> your favourite law, tax, academic &amp; reference titles</td></tr>
+          <tr><td style="color:{BRAND_AMBER};font-size:16px;vertical-align:top;padding:0 10px 8px 0;line-height:1.5;">&#10003;</td><td style="font-size:15px;line-height:1.5;color:{BRAND_GREY};padding-bottom:8px;"><strong style="color:{BRAND_NAVY};">Rate &amp; review</strong> the books you read — and guide fellow readers</td></tr>
+          <tr><td style="color:{BRAND_AMBER};font-size:16px;vertical-align:top;padding:0 10px 0 0;line-height:1.5;">&#10003;</td><td style="font-size:15px;line-height:1.5;color:{BRAND_GREY};"><strong style="color:{BRAND_NAVY};">Track &amp; reorder</strong> — follow every order and restock your shelf in one click</td></tr>
+        </table>
+        <p style="margin:18px 0 0;font-size:15px;line-height:1.6;color:{BRAND_GREY};">Your next great read is a click away.</p>
       </td></tr>
       <tr><td style="padding:20px 36px 8px;">
         <a href="{site}/books" style="display:inline-block;background-color:{BRAND_NAVY};color:#FFFFFF;text-decoration:none;font-size:14px;font-weight:600;padding:14px 28px;">Browse the bookstore</a>
