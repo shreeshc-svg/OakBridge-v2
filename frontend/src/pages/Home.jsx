@@ -383,16 +383,29 @@ export default function Home() {
                         );
                     })}
                     {[
-                        { name: "Coffee Table Books", tag: "Imprint" },
-                        { name: "Curated Books", tag: "Imprint" },
+                        {
+                            name: "Coffee Table Books",
+                            tag: "Imprint",
+                            image: "https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=800&q=80",
+                        },
+                        {
+                            name: "Curated Books",
+                            tag: "Imprint",
+                            image: "https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&w=800&q=80",
+                        },
                     ].map((imp) => (
                         <Link
                             key={imp.name}
                             to="/books"
                             data-testid={`imprint-tile-${imp.name.toLowerCase().replace(/\s+/g, "-")}`}
-                            className="group relative block overflow-hidden bg-[#002B5C] border border-[#002B5C] aspect-[3/4] hover:border-[#F59E0B] transition-colors"
+                            className="group relative block overflow-hidden bg-[#002B5C] border border-[#E5E7EB] aspect-[3/4] hover:border-[#002B5C] transition-colors"
                         >
-                            <div className="absolute inset-0 bg-gradient-to-t from-[#001F42] via-[#002B5C] to-[#002B5C]" />
+                            <img
+                                src={imp.image}
+                                alt={imp.name}
+                                className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-t from-[#002B5C]/90 via-[#002B5C]/30 to-transparent" />
                             <div className="absolute inset-0 p-5 flex flex-col justify-between text-[#FFFFFF]">
                                 <span className="overline !text-[9px] !text-[#F59E0B]">{imp.tag}</span>
                                 <div>
