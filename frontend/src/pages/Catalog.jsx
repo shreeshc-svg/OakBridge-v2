@@ -50,6 +50,21 @@ export default function Catalog() {
         Array.isArray(settings?.plp_filters) ? settings.plp_filters : DEFAULT_FILTERS
     ).filter((f) => f && f.key && f.enabled !== false);
 
+    // First landing on the bookstore defaults to the Professional category
+    // (fresh mount, no category/search already in the URL). Users can still
+    // switch to "All Categories" afterwards without it snapping back.
+    const didDefaultCat = useRef(false);
+    useEffect(() => {
+        if (didDefaultCat.current) return;
+        didDefaultCat.current = true;
+        if (!sp.get("category") && !sp.get("search")) {
+            const next = new URLSearchParams(sp);
+            next.set("category", "professional");
+            setSp(next, { replace: true });
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
     useEffect(() => {
         fetchCategories().then(setCats).catch(() => {});
         fetchSiteContent().then(setSite).catch(() => {});
