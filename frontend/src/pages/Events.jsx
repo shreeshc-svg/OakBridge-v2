@@ -188,6 +188,7 @@ export default function Events() {
     const [site, setSite] = useState({});
     const [vidhiSpeakers, setVidhiSpeakers] = useState(VIDHI_SPEAKERS);
     const [summitSpeakers, setSummitSpeakers] = useState(SUMMIT_SPEAKERS);
+    const [flagship, setFlagship] = useState([]);
     useEffect(() => {
         fetchSiteContent().then(setSite).catch(() => {});
         fetchCollection("events_vidhi_speakers")
@@ -202,12 +203,24 @@ export default function Events() {
                     setSummitSpeakers(d.items.map((x) => ({ ...x, photo: mediaUrl(x.photo) })));
             })
             .catch(() => {});
+        fetchCollection("events_flagship")
+            .then((d) => setFlagship(d?.items || []))
+            .catch(() => {});
     }, []);
-    const flagshipEvents = FLAGSHIP_EVENTS.map((e) => ({
+    const resolveImg = (e) =>
+        mediaUrl(
+            (e.id === "vidhi-utsav" && site.events_vidhi_banner) ||
+                (e.id === "law-ai-tech-summit" && site.events_summit_banner) ||
+                e.image,
+        ) || e.image;
+    const flagshipEvents = (flagship.length ? flagship : FLAGSHIP_EVENTS).map((e) => ({
         ...e,
-        image:
-            mediaUrl(e.id === "vidhi-utsav" ? site.events_vidhi_banner : site.events_summit_banner) ||
-            e.image,
+        chips: Array.isArray(e.chips)
+            ? e.chips
+            : typeof e.chips === "string"
+              ? e.chips.split(",").map((c) => c.trim()).filter(Boolean)
+              : [],
+        image: resolveImg(e),
     }));
     const HERO_BANNERS = [
         {

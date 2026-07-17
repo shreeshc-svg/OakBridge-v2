@@ -201,7 +201,8 @@ export default function AdminMedia() {
                 </PageGroup>
 
                 <PageGroup title="Events" path="/events">
-                    <div className="overline !text-[10px] mb-2">Flagship banners (also power the rotating hero)</div>
+                    <FlagshipEventsEditor />
+                    <div className="overline !text-[10px] mb-2 mt-8 pt-8 border-t border-[#E5E7EB]">Flagship banners (also power the rotating hero)</div>
                     <div className="space-y-3">
                         <SlotRow label="Vidhi Utsav banner" value={site["events_vidhi_banner"]} onSave={(v) => saveSite("events_vidhi_banner", v)} />
                         <SlotRow label="India Law, AI & Tech Summit banner" value={site["events_summit_banner"]} onSave={(v) => saveSite("events_summit_banner", v)} />
@@ -308,6 +309,167 @@ function SlotRow({ label, value, onSave }) {
             <button onClick={() => save()} disabled={!changed || saving} className="text-xs font-medium border border-[#002B5C] px-4 py-2 hover:bg-[#F5F7FA] disabled:opacity-40 flex-shrink-0">
                 {saving ? "…" : "Save"}
             </button>
+        </div>
+    );
+}
+
+const DEFAULT_FLAGSHIP = [
+    {
+        id: "vidhi-utsav",
+        eyebrow: "An Oakbridge Initiative · 4th Edition",
+        title: "Vidhi Utsav 2027",
+        subtitle: "The Legal Literature Festival",
+        tagline: "Kanoon aur Kala ka Utsav, ek Naye Rang Mein.",
+        description:
+            "A unique festival that celebrates Law, Legal Literature and Legal Luminaries — a confluence of eminent judges, jurists, writers, lawyers, corporate counsels, leaders and artists.",
+        date: "Coming soon · Feb – Mar 2027",
+        venue: "New Delhi",
+        time: "Two-day premium festival",
+        href: "https://www.vidhiutsav.com",
+        cta: "Visit vidhiutsav.com",
+        image: "",
+        chips: ["Law", "Literature", "Luminaries", "Awards", "Music", "Comedy"],
+    },
+    {
+        id: "law-ai-tech-summit",
+        eyebrow: "An Oakbridge Initiative",
+        title: "India Law, AI & Tech Summit",
+        subtitle: "Forging the Future of Law, AI & Tech",
+        tagline: "Where Law meets Innovation.",
+        description:
+            "India's premier annual forum for legal innovation — a dynamic experience designed for maximum engagement and unparalleled access, celebrating Law, AI & Tech pioneers, leaders and innovators.",
+        date: "Coming soon · Next edition 2026",
+        venue: "New Delhi",
+        time: "Full-day premium summit",
+        href: "https://www.oakbridge.events",
+        cta: "Visit oakbridge.events",
+        image: "",
+        chips: ["Legal Tech", "AI", "Innovation", "Networking"],
+    },
+];
+
+const EVENT_FIELDS = [
+    { key: "eyebrow", label: "Eyebrow (small label above title)" },
+    { key: "title", label: "Title" },
+    { key: "subtitle", label: "Subtitle" },
+    { key: "tagline", label: "Tagline (shown in quotes)" },
+    { key: "date", label: "Dates" },
+    { key: "venue", label: "Venue" },
+    { key: "time", label: "Format" },
+    { key: "cta", label: "Button label" },
+    { key: "href", label: "Button link (URL)" },
+];
+
+function FlagshipEventsEditor() {
+    const [items, setItems] = useState(null);
+    const [saving, setSaving] = useState(false);
+    const norm = (arr) =>
+        arr.map((it) => ({ ...it, chips: Array.isArray(it.chips) ? it.chips.join(", ") : it.chips || "" }));
+    useEffect(() => {
+        fetchCollection("events_flagship")
+            .then((d) => setItems(norm(d?.items?.length ? d.items : DEFAULT_FLAGSHIP)))
+            .catch(() => setItems(norm(DEFAULT_FLAGSHIP)));
+    }, []);
+    if (!items) return null;
+
+    const update = (i, key, val) => setItems((arr) => arr.map((it, idx) => (idx === i ? { ...it, [key]: val } : it)));
+    const move = (i, dir) =>
+        setItems((arr) => {
+            const j = i + dir;
+            if (j < 0 || j >= arr.length) return arr;
+            const c = [...arr];
+            [c[i], c[j]] = [c[j], c[i]];
+            return c;
+        });
+    const add = () =>
+        setItems((arr) => [
+            ...arr,
+            { id: "event-" + Date.now(), eyebrow: "", title: "New event", subtitle: "", tagline: "", description: "", date: "", venue: "", time: "", href: "", cta: "Learn more", image: "", chips: "" },
+        ]);
+    const remove = (i) => setItems((arr) => arr.filter((_, idx) => idx !== i));
+    const uploadImg = async (i, fileList) => {
+        const file = Array.from(fileList || []).find((x) => x.type.startsWith("image/"));
+        if (!file) return;
+        try {
+            const m = await adminUploadMedia(file);
+            update(i, "image", m.url);
+            toast.success("Image uploaded — click Save all to publish.");
+        } catch {
+            toast.error("Upload failed — object storage (S3) may not be configured.");
+        }
+    };
+    const save = async () => {
+        setSaving(true);
+        try {
+            const payload = items.map((it) => ({
+                ...it,
+                chips: String(it.chips || "").split(",").map((c) => c.trim()).filter(Boolean),
+            }));
+            await adminSaveCollection("events_flagship", payload);
+            toast.success("Events saved — live on the site.");
+        } catch {
+            toast.error("Could not save.");
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    return (
+        <div className="mb-2">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+                <div>
+                    <div className="overline !text-[10px]">Flagship events ({items.length})</div>
+                    <p className="text-xs text-[#4B5563] mt-1">The top event shows first on the page — move the next upcoming event to the top.</p>
+                </div>
+                <div className="flex gap-2">
+                    <button onClick={add} className="inline-flex items-center gap-1 text-xs border border-[#E5E7EB] px-3 py-1 hover:bg-[#F5F7FA]"><Plus size={12} strokeWidth={1.5} /> Add event</button>
+                    <button onClick={save} disabled={saving} className="text-xs font-medium border border-[#002B5C] px-3 py-1 hover:bg-[#F5F7FA] disabled:opacity-40">{saving ? "…" : "Save all"}</button>
+                </div>
+            </div>
+            <div className="mt-4 space-y-4">
+                {items.map((it, i) => (
+                    <div key={i} className="border border-[#E5E7EB] bg-white p-4">
+                        <div className="flex items-center justify-between mb-3">
+                            <div className="overline !text-[10px] !text-[#002B5C]">
+                                #{i + 1}{i === 0 ? <span className="text-[#CC0033]"> · shows first</span> : null}
+                            </div>
+                            <div className="flex gap-1">
+                                <button onClick={() => move(i, -1)} disabled={i === 0} className="border border-[#E5E7EB] p-1 hover:bg-[#F5F7FA] disabled:opacity-30" aria-label="Move up"><ArrowUp size={12} /></button>
+                                <button onClick={() => move(i, 1)} disabled={i === items.length - 1} className="border border-[#E5E7EB] p-1 hover:bg-[#F5F7FA] disabled:opacity-30" aria-label="Move down"><ArrowDown size={12} /></button>
+                                <button onClick={() => remove(i)} className="border border-[#CC0033] text-[#CC0033] p-1 hover:bg-[#CC0033]/5" aria-label="Remove"><X size={12} /></button>
+                            </div>
+                        </div>
+                        <div className="flex gap-3">
+                            <label
+                                onDragOver={(e) => e.preventDefault()}
+                                onDrop={(e) => { e.preventDefault(); uploadImg(i, e.dataTransfer.files); }}
+                                title="Drag & drop or click to upload banner"
+                                className="w-28 h-20 bg-[#F5F7FA] border border-[#E5E7EB] overflow-hidden flex-shrink-0 cursor-pointer flex items-center justify-center"
+                            >
+                                {it.image ? <img src={mediaUrl(it.image)} alt="" className="w-full h-full object-cover" /> : <UploadCloud size={16} strokeWidth={1.5} className="text-[#4B5563]" />}
+                                <input type="file" accept="image/*" onChange={(e) => uploadImg(i, e.target.files)} className="hidden" />
+                            </label>
+                            <div className="flex-1 min-w-0 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                {EVENT_FIELDS.slice(0, 4).map((fl) => (
+                                    <input key={fl.key} value={it[fl.key] || ""} onChange={(e) => update(i, fl.key, e.target.value)} placeholder={fl.label} className="border border-[#E5E7EB] bg-white px-2 py-1.5 text-sm outline-none focus:border-[#002B5C]" />
+                                ))}
+                            </div>
+                        </div>
+                        <textarea value={it.description || ""} onChange={(e) => update(i, "description", e.target.value)} placeholder="Description" rows={3} className="mt-2 w-full border border-[#E5E7EB] bg-white px-2 py-1.5 text-sm outline-none focus:border-[#002B5C]" />
+                        <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                            {EVENT_FIELDS.slice(4, 7).map((fl) => (
+                                <input key={fl.key} value={it[fl.key] || ""} onChange={(e) => update(i, fl.key, e.target.value)} placeholder={fl.label} className="border border-[#E5E7EB] bg-white px-2 py-1.5 text-sm outline-none focus:border-[#002B5C]" />
+                            ))}
+                        </div>
+                        <input value={it.chips || ""} onChange={(e) => update(i, "chips", e.target.value)} placeholder="Tags (comma-separated) — e.g. Law, AI, Innovation" className="mt-2 w-full border border-[#E5E7EB] bg-white px-2 py-1.5 text-sm outline-none focus:border-[#002B5C]" />
+                        <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            {EVENT_FIELDS.slice(7).map((fl) => (
+                                <input key={fl.key} value={it[fl.key] || ""} onChange={(e) => update(i, fl.key, e.target.value)} placeholder={fl.label} className="border border-[#E5E7EB] bg-white px-2 py-1.5 text-sm outline-none focus:border-[#002B5C]" />
+                            ))}
+                        </div>
+                    </div>
+                ))}
+            </div>
         </div>
     );
 }
