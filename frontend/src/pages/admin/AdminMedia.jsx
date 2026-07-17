@@ -229,33 +229,83 @@ function PageGroup({ title, path, children }) {
 function SlotRow({ label, value, onSave }) {
     const [val, setVal] = useState(value || "");
     const [saving, setSaving] = useState(false);
+    const [uploading, setUploading] = useState(false);
+    const [dragOver, setDragOver] = useState(false);
+    const inputRef = useRef(null);
     useEffect(() => setVal(value || ""), [value]);
     const changed = (val || "") !== (value || "");
-    const save = async () => {
+    const save = async (override) => {
+        const next = ((override ?? val) || "").trim();
         setSaving(true);
         try {
-            await onSave((val || "").trim());
+            await onSave(next);
         } catch {
             toast.error("Could not save.");
         } finally {
             setSaving(false);
         }
     };
+    const handleFiles = async (fileList) => {
+        const f = Array.from(fileList || []).find((x) => x.type.startsWith("image/"));
+        if (!f) return;
+        setUploading(true);
+        try {
+            const m = await adminUploadMedia(f);
+            setVal(m.url);
+            await save(m.url); // auto-save this slot to the freshly uploaded image
+        } catch {
+            toast.error("Upload failed — object storage (S3) may not be configured yet.");
+        } finally {
+            setUploading(false);
+            if (inputRef.current) inputRef.current.value = "";
+        }
+    };
     return (
         <div className="flex items-center gap-4 border border-[#E5E7EB] bg-white p-3">
-            <div className="w-24 h-16 bg-[#F5F7FA] border border-[#E5E7EB] overflow-hidden flex-shrink-0">
-                {val ? <img src={mediaUrl(val)} alt="" className="w-full h-full object-cover" /> : null}
-            </div>
+            <label
+                onDragOver={(e) => {
+                    e.preventDefault();
+                    setDragOver(true);
+                }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={(e) => {
+                    e.preventDefault();
+                    setDragOver(false);
+                    handleFiles(e.dataTransfer.files);
+                }}
+                title="Drag & drop an image here, or click to upload"
+                className={`relative w-24 h-16 bg-[#F5F7FA] border overflow-hidden flex-shrink-0 cursor-pointer flex items-center justify-center ${
+                    dragOver ? "border-[#002B5C] border-dashed bg-[#F5F7FA]" : "border-[#E5E7EB]"
+                }`}
+            >
+                {val ? (
+                    <img src={mediaUrl(val)} alt="" className="w-full h-full object-cover" />
+                ) : (
+                    <UploadCloud size={16} strokeWidth={1.5} className="text-[#4B5563]" />
+                )}
+                {uploading && (
+                    <div className="absolute inset-0 bg-white/75 flex items-center justify-center text-[10px] font-medium text-[#002B5C]">
+                        Uploading…
+                    </div>
+                )}
+                <input
+                    ref={inputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => handleFiles(e.target.files)}
+                    className="hidden"
+                />
+            </label>
             <div className="flex-1 min-w-0">
                 <div className="overline !text-[10px]">{label}</div>
                 <input
                     value={val}
                     onChange={(e) => setVal(e.target.value)}
-                    placeholder="Image URL"
+                    placeholder="Drag an image onto the thumbnail, or paste a URL"
                     className="mt-1 w-full border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none focus:border-[#002B5C]"
                 />
             </div>
-            <button onClick={save} disabled={!changed || saving} className="text-xs font-medium border border-[#002B5C] px-4 py-2 hover:bg-[#F5F7FA] disabled:opacity-40 flex-shrink-0">
+            <button onClick={() => save()} disabled={!changed || saving} className="text-xs font-medium border border-[#002B5C] px-4 py-2 hover:bg-[#F5F7FA] disabled:opacity-40 flex-shrink-0">
                 {saving ? "…" : "Save"}
             </button>
         </div>
