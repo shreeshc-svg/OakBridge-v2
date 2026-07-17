@@ -85,11 +85,11 @@ function FlagshipCard({ ev, i }) {
             className="group relative grid grid-cols-1 lg:grid-cols-12 gap-0 border border-[#E5E7EB] bg-white overflow-hidden fade-up"
             style={{ animationDelay: `${i * 120}ms` }}
         >
-            <div className="lg:col-span-5 relative min-h-[280px] lg:min-h-[480px] bg-[#002B5C] flex items-center justify-center p-4">
+            <div className="lg:col-span-5 relative min-h-[280px] lg:min-h-[480px] bg-[#002B5C] overflow-hidden">
                 <img
                     src={ev.image}
                     alt={ev.title}
-                    className="max-w-full max-h-full w-auto h-auto object-contain"
+                    className="absolute inset-0 w-full h-full object-cover"
                 />
                 <div className="absolute top-5 left-5 right-5 flex items-start justify-between pointer-events-none">
                     <span className="overline !text-white/85 !text-[10px] tracking-widest bg-[#002B5C]/80 px-2 py-1 backdrop-blur-sm">
