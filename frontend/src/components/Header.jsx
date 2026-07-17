@@ -1,11 +1,12 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { ShoppingBag, Search, Menu, X, User, LogOut } from "lucide-react";
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
 import CartSheet from "./CartSheet";
+import { fetchCollection } from "../lib/api";
 
-const NAV = [
+const DEFAULT_NAV = [
     { to: "/what-we-do", label: "What We Do" },
     { to: "/books", label: "Bookstore" },
     { to: "/events", label: "Events" },
@@ -21,7 +22,19 @@ export default function Header() {
     const [mobileOpen, setMobileOpen] = useState(false);
     const [accountOpen, setAccountOpen] = useState(false);
     const [q, setQ] = useState("");
+    const [navItems, setNavItems] = useState(DEFAULT_NAV);
     const nav = useNavigate();
+
+    useEffect(() => {
+        fetchCollection("site_nav")
+            .then((d) => {
+                const items = (d?.items || []).filter(
+                    (n) => n && n.to && n.label && !n.hidden,
+                );
+                if (items.length) setNavItems(items);
+            })
+            .catch(() => {});
+    }, []);
 
     const onSearch = (e) => {
         e.preventDefault();
@@ -51,7 +64,7 @@ export default function Header() {
                     </Link>
 
                     <nav className="hidden xl:flex items-center gap-5">
-                        {NAV.map((n) => (
+                        {navItems.map((n) => (
                             <NavLink
                                 key={n.to}
                                 to={n.to}
@@ -179,7 +192,7 @@ export default function Header() {
                 {mobileOpen && (
                     <div className="lg:hidden border-t border-[#002B5C]/10 bg-[#FFFFFF]">
                         <nav className="flex flex-col px-6 py-4 gap-3">
-                            {NAV.map((n) => (
+                            {navItems.map((n) => (
                                 <NavLink
                                     key={n.to}
                                     to={n.to}

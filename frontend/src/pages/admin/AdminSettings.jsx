@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
-import { fetchSettings, adminSetSetting } from "../../lib/api";
+import { fetchSettings, adminSetSetting, fetchCollection, adminSaveCollection } from "../../lib/api";
+import { ArrowUp, ArrowDown, X, Plus, Eye, EyeOff } from "lucide-react";
 
 export default function AdminSettings() {
     const [s, setS] = useState(null);
@@ -121,6 +122,8 @@ export default function AdminSettings() {
                     </div>
                 </div>
 
+                <NavEditor />
+
                 <div className="border border-dashed border-[#E5E7EB] bg-[#F5F7FA] p-6">
                     <h2 className="font-serif text-xl text-[#002B5C]">Page editors</h2>
                     <p className="text-sm text-[#4B5563] mt-1">
@@ -151,6 +154,91 @@ export default function AdminSettings() {
                     {saving ? "Saving…" : "Save settings"}
                 </button>
             </section>
+        </div>
+    );
+}
+
+
+const DEFAULT_NAV = [
+    { to: "/what-we-do", label: "What We Do", hidden: false },
+    { to: "/books", label: "Bookstore", hidden: false },
+    { to: "/events", label: "Events", hidden: false },
+    { to: "/academy", label: "Academy", hidden: false },
+    { to: "/digital-solutions", label: "Digital Solutions", hidden: false },
+    { to: "/authors", label: "Authors", hidden: false },
+    { to: "/about", label: "About", hidden: false },
+];
+
+function NavEditor() {
+    const [items, setItems] = useState(null);
+    const [saving, setSaving] = useState(false);
+    useEffect(() => {
+        fetchCollection("site_nav")
+            .then((d) => setItems(d?.items?.length ? d.items : DEFAULT_NAV))
+            .catch(() => setItems(DEFAULT_NAV));
+    }, []);
+    if (!items) return null;
+
+    const update = (i, k, v) => setItems((a) => a.map((it, idx) => (idx === i ? { ...it, [k]: v } : it)));
+    const move = (i, dir) =>
+        setItems((a) => {
+            const j = i + dir;
+            if (j < 0 || j >= a.length) return a;
+            const c = [...a];
+            [c[i], c[j]] = [c[j], c[i]];
+            return c;
+        });
+    const add = () => setItems((a) => [...a, { label: "New link", to: "/", hidden: false }]);
+    const remove = (i) => setItems((a) => a.filter((_, idx) => idx !== i));
+    const save = async () => {
+        setSaving(true);
+        try {
+            const payload = items
+                .map((it) => ({ label: (it.label || "").trim(), to: (it.to || "").trim(), hidden: !!it.hidden }))
+                .filter((it) => it.label && it.to);
+            await adminSaveCollection("site_nav", payload);
+            toast.success("Navigation saved — live on the site.");
+        } catch {
+            toast.error("Could not save navigation.");
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    return (
+        <div className="border border-[#E5E7EB] bg-white p-6" data-testid="nav-editor">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+                <div>
+                    <h2 className="font-serif text-xl text-[#002B5C]">Header navigation</h2>
+                    <p className="text-[11px] text-[#4B5563] mt-1">
+                        Rename, reorder, hide or add the links in the top menu. Use internal paths like <span className="font-mono">/about</span>. Order here = order on the site.
+                    </p>
+                </div>
+                <div className="flex gap-2">
+                    <button type="button" onClick={add} className="inline-flex items-center gap-1 text-xs border border-[#E5E7EB] px-3 py-1.5 hover:bg-[#F5F7FA]">
+                        <Plus size={12} strokeWidth={1.5} /> Add link
+                    </button>
+                    <button type="button" onClick={save} disabled={saving} className="text-xs font-medium border border-[#002B5C] px-3 py-1.5 hover:bg-[#F5F7FA] disabled:opacity-40">
+                        {saving ? "…" : "Save nav"}
+                    </button>
+                </div>
+            </div>
+            <div className="mt-4 space-y-2">
+                {items.map((it, i) => (
+                    <div key={i} className={`flex items-center gap-2 border border-[#E5E7EB] p-2 ${it.hidden ? "bg-[#F5F7FA] opacity-70" : "bg-white"}`}>
+                        <div className="flex flex-col">
+                            <button type="button" onClick={() => move(i, -1)} disabled={i === 0} className="border border-[#E5E7EB] p-0.5 hover:bg-[#F5F7FA] disabled:opacity-30" aria-label="Move up"><ArrowUp size={11} /></button>
+                            <button type="button" onClick={() => move(i, 1)} disabled={i === items.length - 1} className="border border-[#E5E7EB] p-0.5 hover:bg-[#F5F7FA] disabled:opacity-30" aria-label="Move down"><ArrowDown size={11} /></button>
+                        </div>
+                        <input value={it.label || ""} onChange={(e) => update(i, "label", e.target.value)} placeholder="Label" className="flex-1 min-w-0 border border-[#E5E7EB] bg-white px-2 py-1.5 text-sm outline-none focus:border-[#002B5C]" />
+                        <input value={it.to || ""} onChange={(e) => update(i, "to", e.target.value)} placeholder="/path" className="flex-1 min-w-0 border border-[#E5E7EB] bg-white px-2 py-1.5 text-sm font-mono outline-none focus:border-[#002B5C]" />
+                        <button type="button" onClick={() => update(i, "hidden", !it.hidden)} title={it.hidden ? "Hidden — click to show" : "Visible — click to hide"} className="border border-[#E5E7EB] p-1.5 hover:bg-[#F5F7FA]">
+                            {it.hidden ? <EyeOff size={14} strokeWidth={1.5} className="text-[#4B5563]" /> : <Eye size={14} strokeWidth={1.5} className="text-[#002B5C]" />}
+                        </button>
+                        <button type="button" onClick={() => remove(i)} className="border border-[#CC0033] text-[#CC0033] p-1.5 hover:bg-[#CC0033]/5" aria-label="Remove"><X size={14} /></button>
+                    </div>
+                ))}
+            </div>
         </div>
     );
 }
