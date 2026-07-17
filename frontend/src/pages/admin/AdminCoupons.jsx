@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Plus, Pencil, Trash2, X, Tag } from "lucide-react";
 import {
     adminCreateCoupon,
@@ -9,6 +9,7 @@ import {
     formatINR,
 } from "../../lib/api";
 import { toast } from "sonner";
+import AdminToolbar from "../../components/AdminToolbar";
 
 const BLANK = {
     code: "",
@@ -217,6 +218,9 @@ export default function AdminCoupons() {
     const [items, setItems] = useState([]);
     const [editing, setEditing] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [q, setQ] = useState("");
+    const [status, setStatus] = useState("all");
+    const [sort, setSort] = useState("newest");
 
     const load = () => {
         setLoading(true);
@@ -227,6 +231,24 @@ export default function AdminCoupons() {
     useEffect(() => {
         load();
     }, []);
+
+    const view = useMemo(() => {
+        const needle = q.trim().toLowerCase();
+        let a = items.filter(
+            (c) =>
+                !needle ||
+                `${c.code || ""} ${c.description || ""}`.toLowerCase().includes(needle),
+        );
+        if (status === "active") a = a.filter((c) => c.active);
+        else if (status === "inactive") a = a.filter((c) => !c.active);
+        const t = (c) => new Date(c.created_at || 0).getTime();
+        a = [...a].sort((x, y) => {
+            if (sort === "code") return (x.code || "").localeCompare(y.code || "");
+            if (sort === "used") return (y.used_count || 0) - (x.used_count || 0);
+            return t(y) - t(x);
+        });
+        return a;
+    }, [items, q, status, sort]);
 
     const onDelete = async (id, code) => {
         if (!window.confirm(`Delete coupon "${code}"?`)) return;
@@ -257,19 +279,41 @@ export default function AdminCoupons() {
                 </button>
             </div>
 
-            <div className="mt-8 bg-white border border-[#E5E7EB]">
+            <AdminToolbar
+                query={q}
+                onQuery={setQ}
+                placeholder="Search code or description…"
+                filter={status}
+                onFilter={setStatus}
+                filterOptions={[
+                    { value: "all", label: "All coupons" },
+                    { value: "active", label: "Active" },
+                    { value: "inactive", label: "Inactive" },
+                ]}
+                sort={sort}
+                onSort={setSort}
+                sortOptions={[
+                    { value: "newest", label: "Newest first" },
+                    { value: "code", label: "Code A–Z" },
+                    { value: "used", label: "Most used" },
+                ]}
+                count={view.length}
+                total={items.length}
+            />
+
+            <div className="mt-6 bg-white border border-[#E5E7EB]">
                 {loading && (
                     <div className="p-8 text-center text-sm text-[#4B5563]">Loading…</div>
                 )}
-                {!loading && items.length === 0 && (
+                {!loading && view.length === 0 && (
                     <div className="p-16 text-center">
                         <Tag size={32} strokeWidth={1} className="mx-auto text-[#4B5563]" />
                         <h3 className="font-serif text-2xl mt-4 text-[#002B5C]">
-                            No coupons yet.
+                            {items.length === 0 ? "No coupons yet." : "No coupons match your search."}
                         </h3>
                     </div>
                 )}
-                {items.map((c) => (
+                {view.map((c) => (
                     <div
                         key={c.id}
                         data-testid={`admin-coupon-${c.code}`}

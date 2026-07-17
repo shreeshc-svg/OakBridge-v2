@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
     adminListSubmissions,
     adminUpdateSubmission,
     formatApiError,
 } from "../../lib/api";
 import { toast } from "sonner";
+import AdminToolbar from "../../components/AdminToolbar";
 
 const STATUSES = ["received", "reviewing", "shortlisted", "declined", "accepted"];
 
@@ -19,6 +20,8 @@ const STATUS_COLORS = {
 export default function AdminSubmissions() {
     const [items, setItems] = useState([]);
     const [filter, setFilter] = useState("all");
+    const [q, setQ] = useState("");
+    const [sort, setSort] = useState("newest");
     const [loading, setLoading] = useState(true);
 
     const load = () => {
@@ -43,7 +46,20 @@ export default function AdminSubmissions() {
         }
     };
 
-    const filtered = filter === "all" ? items : items.filter((s) => s.status === filter);
+    const filtered = useMemo(() => {
+        const needle = q.trim().toLowerCase();
+        let a = items.filter(
+            (s) =>
+                !needle ||
+                `${s.name || ""} ${s.working_title || ""} ${s.email || ""} ${s.affiliation || ""} ${s.category || ""}`
+                    .toLowerCase()
+                    .includes(needle),
+        );
+        if (filter !== "all") a = a.filter((s) => s.status === filter);
+        const t = (s) => new Date(s.created_at || 0).getTime();
+        a = [...a].sort((x, y) => (sort === "oldest" ? t(x) - t(y) : t(y) - t(x)));
+        return a;
+    }, [items, q, filter, sort]);
 
     return (
         <div data-testid="admin-submissions-page">
@@ -54,20 +70,26 @@ export default function AdminSubmissions() {
                         Manuscript Submissions ({items.length})
                     </h1>
                 </div>
-                <select
-                    value={filter}
-                    onChange={(e) => setFilter(e.target.value)}
-                    data-testid="submissions-filter"
-                    className="border border-[#E5E7EB] bg-white px-3 py-2 text-sm"
-                >
-                    <option value="all">All submissions</option>
-                    {STATUSES.map((s) => (
-                        <option key={s} value={s}>
-                            {s}
-                        </option>
-                    ))}
-                </select>
             </div>
+            <AdminToolbar
+                query={q}
+                onQuery={setQ}
+                placeholder="Search title, author, email or category…"
+                filter={filter}
+                onFilter={setFilter}
+                filterOptions={[
+                    { value: "all", label: "All submissions" },
+                    ...STATUSES.map((s) => ({ value: s, label: s })),
+                ]}
+                sort={sort}
+                onSort={setSort}
+                sortOptions={[
+                    { value: "newest", label: "Newest first" },
+                    { value: "oldest", label: "Oldest first" },
+                ]}
+                count={filtered.length}
+                total={items.length}
+            />
 
             <div className="mt-8 space-y-4">
                 {loading && (

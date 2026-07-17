@@ -1,9 +1,13 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { adminListUsers } from "../../lib/api";
+import AdminToolbar from "../../components/AdminToolbar";
 
 export default function AdminUsers() {
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [q, setQ] = useState("");
+    const [role, setRole] = useState("all");
+    const [sort, setSort] = useState("newest");
 
     useEffect(() => {
         adminListUsers()
@@ -11,13 +15,53 @@ export default function AdminUsers() {
             .finally(() => setLoading(false));
     }, []);
 
+    const view = useMemo(() => {
+        const needle = q.trim().toLowerCase();
+        let a = users.filter(
+            (u) =>
+                !needle ||
+                `${u.name || ""} ${u.email || ""} ${u.role || ""}`.toLowerCase().includes(needle),
+        );
+        if (role !== "all") a = a.filter((u) => u.role === role);
+        const t = (u) => new Date(u.created_at || 0).getTime();
+        a = [...a].sort((x, y) => {
+            if (sort === "oldest") return t(x) - t(y);
+            if (sort === "name") return (x.name || "").localeCompare(y.name || "");
+            if (sort === "role") return (x.role || "").localeCompare(y.role || "");
+            return t(y) - t(x);
+        });
+        return a;
+    }, [users, q, role, sort]);
+
     return (
         <div data-testid="admin-users-page">
             <div className="overline">Accounts</div>
             <h1 className="font-serif text-4xl mt-2 text-[#002B5C]">
                 Users ({users.length})
             </h1>
-            <div className="mt-8 bg-white border border-[#E5E7EB]">
+            <AdminToolbar
+                query={q}
+                onQuery={setQ}
+                placeholder="Search name, email or role…"
+                filter={role}
+                onFilter={setRole}
+                filterOptions={[
+                    { value: "all", label: "All roles" },
+                    { value: "admin", label: "Admins" },
+                    { value: "customer", label: "Customers" },
+                ]}
+                sort={sort}
+                onSort={setSort}
+                sortOptions={[
+                    { value: "newest", label: "Newest first" },
+                    { value: "oldest", label: "Oldest first" },
+                    { value: "name", label: "Name A–Z" },
+                    { value: "role", label: "Role" },
+                ]}
+                count={view.length}
+                total={users.length}
+            />
+            <div className="mt-6 bg-white border border-[#E5E7EB]">
                 <table className="w-full text-sm">
                     <thead className="bg-[#F5F7FA] text-[10px] font-mono uppercase tracking-widest text-[#4B5563]">
                         <tr>
@@ -35,7 +79,7 @@ export default function AdminUsers() {
                                 </td>
                             </tr>
                         )}
-                        {users.map((u) => (
+                        {view.map((u) => (
                             <tr
                                 key={u.id}
                                 className="border-t border-[#E5E7EB]"

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { MailCheck, FileDown } from "lucide-react";
 import {
     adminListOrders,
@@ -9,6 +9,7 @@ import {
     formatINR,
 } from "../../lib/api";
 import { toast } from "sonner";
+import AdminToolbar from "../../components/AdminToolbar";
 
 const STATUSES = ["pending", "confirmed", "processing", "shipped", "delivered", "cancelled"];
 
@@ -17,6 +18,9 @@ export default function AdminOrders() {
     const [loading, setLoading] = useState(true);
     const [resending, setResending] = useState(null);
     const [downloading, setDownloading] = useState(null);
+    const [q, setQ] = useState("");
+    const [status, setStatus] = useState("all");
+    const [sort, setSort] = useState("newest");
 
     const load = () => {
         setLoading(true);
@@ -68,14 +72,55 @@ export default function AdminOrders() {
         }
     };
 
+    const view = useMemo(() => {
+        const needle = q.trim().toLowerCase();
+        let a = orders.filter(
+            (o) =>
+                !needle ||
+                `${o.order_number || ""} ${o.full_name || ""} ${o.email || ""}`
+                    .toLowerCase()
+                    .includes(needle),
+        );
+        if (status !== "all") a = a.filter((o) => o.status === status);
+        const t = (o) => new Date(o.created_at || 0).getTime();
+        a = [...a].sort((x, y) => {
+            if (sort === "oldest") return t(x) - t(y);
+            if (sort === "total_desc") return (y.total || 0) - (x.total || 0);
+            if (sort === "total_asc") return (x.total || 0) - (y.total || 0);
+            return t(y) - t(x);
+        });
+        return a;
+    }, [orders, q, status, sort]);
+
     return (
         <div data-testid="admin-orders-page">
             <div className="overline">Fulfilment</div>
             <h1 className="font-serif text-4xl mt-2 text-[#002B5C]">
                 Orders ({orders.length})
             </h1>
+            <AdminToolbar
+                query={q}
+                onQuery={setQ}
+                placeholder="Search order #, customer or email…"
+                filter={status}
+                onFilter={setStatus}
+                filterOptions={[
+                    { value: "all", label: "All statuses" },
+                    ...STATUSES.map((s) => ({ value: s, label: s })),
+                ]}
+                sort={sort}
+                onSort={setSort}
+                sortOptions={[
+                    { value: "newest", label: "Newest first" },
+                    { value: "oldest", label: "Oldest first" },
+                    { value: "total_desc", label: "Total: high → low" },
+                    { value: "total_asc", label: "Total: low → high" },
+                ]}
+                count={view.length}
+                total={orders.length}
+            />
 
-            <div className="mt-8 bg-white border border-[#E5E7EB] overflow-x-auto">
+            <div className="mt-6 bg-white border border-[#E5E7EB] overflow-x-auto">
                 <table className="w-full text-sm">
                     <thead className="bg-[#F5F7FA] text-[10px] font-mono uppercase tracking-widest text-[#4B5563]">
                         <tr>
@@ -96,14 +141,14 @@ export default function AdminOrders() {
                                 </td>
                             </tr>
                         )}
-                        {!loading && orders.length === 0 && (
+                        {!loading && view.length === 0 && (
                             <tr>
                                 <td colSpan={7} className="px-4 py-10 text-center text-[#4B5563]">
-                                    No orders yet.
+                                    {orders.length === 0 ? "No orders yet." : "No orders match your search."}
                                 </td>
                             </tr>
                         )}
-                        {orders.map((o) => (
+                        {view.map((o) => (
                             <tr
                                 key={o.id}
                                 data-testid={`admin-order-row-${o.id}`}

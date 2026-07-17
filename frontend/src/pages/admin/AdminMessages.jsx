@@ -1,12 +1,29 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Trash2, CornerUpLeft } from "lucide-react";
 import { adminListMessages, adminDeleteMessage, formatApiError } from "../../lib/api";
+import AdminToolbar from "../../components/AdminToolbar";
 
 export default function AdminMessages() {
     const [msgs, setMsgs] = useState([]);
     const [loading, setLoading] = useState(true);
     const [busy, setBusy] = useState(null);
+    const [q, setQ] = useState("");
+    const [sort, setSort] = useState("newest");
+
+    const view = useMemo(() => {
+        const needle = q.trim().toLowerCase();
+        let a = msgs.filter(
+            (m) =>
+                !needle ||
+                `${m.name || ""} ${m.email || ""} ${m.subject || ""} ${m.message || ""}`
+                    .toLowerCase()
+                    .includes(needle),
+        );
+        const t = (m) => new Date(m.created_at || 0).getTime();
+        a = [...a].sort((x, y) => (sort === "oldest" ? t(x) - t(y) : t(y) - t(x)));
+        return a;
+    }, [msgs, q, sort]);
 
     const load = () => {
         setLoading(true);
@@ -47,6 +64,22 @@ export default function AdminMessages() {
                 (reply-to is the sender), so you can respond straight from your inbox.
             </p>
 
+            {!loading && msgs.length > 0 && (
+                <AdminToolbar
+                    query={q}
+                    onQuery={setQ}
+                    placeholder="Search sender, subject or message…"
+                    sort={sort}
+                    onSort={setSort}
+                    sortOptions={[
+                        { value: "newest", label: "Newest first" },
+                        { value: "oldest", label: "Oldest first" },
+                    ]}
+                    count={view.length}
+                    total={msgs.length}
+                />
+            )}
+
             {loading && <p className="mt-8 font-mono text-xs text-[#4B5563]">Loading…</p>}
             {!loading && msgs.length === 0 && (
                 <div className="mt-8 border border-dashed border-[#E5E7EB] p-12 text-center text-[#4B5563]">
@@ -55,7 +88,7 @@ export default function AdminMessages() {
             )}
 
             <div className="mt-8 space-y-4 max-w-4xl">
-                {msgs.map((m) => (
+                {view.map((m) => (
                     <div
                         key={m.id}
                         data-testid={`admin-message-${m.id}`}

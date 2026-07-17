@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { fetchSettings, mediaUrl } from "../../lib/api";
 import { Plus, Pencil, Trash2, X, FileUp, FileCheck2, Upload, ImagePlus, Trash, Sparkles } from "lucide-react";
 import {
@@ -667,6 +667,8 @@ export default function AdminBooks() {
     const [csvOpen, setCsvOpen] = useState(false);
     const [loading, setLoading] = useState(true);
     const [query, setQuery] = useState("");
+    const [catFilter, setCatFilter] = useState("all");
+    const [sort, setSort] = useState("newest");
     const [selected, setSelected] = useState(() => new Set());
     const [deleteAllOpen, setDeleteAllOpen] = useState(false);
     const [bulkDraftingBios, setBulkDraftingBios] = useState(false);
@@ -749,13 +751,30 @@ export default function AdminBooks() {
         }
     };
 
-    const filtered = books.filter(
-        (b) =>
-            !query ||
-            b.title.toLowerCase().includes(query.toLowerCase()) ||
-            b.author.toLowerCase().includes(query.toLowerCase()) ||
-            b.isbn.includes(query),
+    const bookCats = useMemo(
+        () => Array.from(new Set(books.map((b) => b.category).filter(Boolean))).sort(),
+        [books],
     );
+    const filtered = useMemo(() => {
+        const needle = query.trim().toLowerCase();
+        let a = books.filter(
+            (b) =>
+                !needle ||
+                (b.title || "").toLowerCase().includes(needle) ||
+                (b.author || "").toLowerCase().includes(needle) ||
+                (b.isbn || "").includes(query.trim()),
+        );
+        if (catFilter !== "all") a = a.filter((b) => b.category === catFilter);
+        const t = (b) => new Date(b.created_at || 0).getTime();
+        a = [...a].sort((x, y) => {
+            if (sort === "title") return (x.title || "").localeCompare(y.title || "");
+            if (sort === "price_asc") return (x.price || 0) - (y.price || 0);
+            if (sort === "price_desc") return (y.price || 0) - (x.price || 0);
+            if (sort === "stock") return (x.stock || 0) - (y.stock || 0);
+            return t(y) - t(x);
+        });
+        return a;
+    }, [books, query, catFilter, sort]);
 
     const allFilteredSelected = filtered.length > 0 && filtered.every((r) => selected.has(r.id));
 
@@ -776,6 +795,31 @@ export default function AdminBooks() {
                         data-testid="admin-books-search"
                         className="border border-[#E5E7EB] bg-white px-4 py-2 text-sm w-72 outline-none focus:border-[#002B5C]"
                     />
+                    <select
+                        value={catFilter}
+                        onChange={(e) => setCatFilter(e.target.value)}
+                        data-testid="admin-books-category"
+                        className="border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none focus:border-[#002B5C]"
+                    >
+                        <option value="all">All categories</option>
+                        {bookCats.map((c) => (
+                            <option key={c} value={c}>
+                                {c}
+                            </option>
+                        ))}
+                    </select>
+                    <select
+                        value={sort}
+                        onChange={(e) => setSort(e.target.value)}
+                        data-testid="admin-books-sort"
+                        className="border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none focus:border-[#002B5C]"
+                    >
+                        <option value="newest">Newest</option>
+                        <option value="title">Title A–Z</option>
+                        <option value="price_asc">Price: low → high</option>
+                        <option value="price_desc">Price: high → low</option>
+                        <option value="stock">Stock: low → high</option>
+                    </select>
                     <button
                         onClick={() => setCsvOpen(true)}
                         data-testid="admin-import-csv-button"

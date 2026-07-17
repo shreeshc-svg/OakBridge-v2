@@ -1,7 +1,8 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Download, Users } from "lucide-react";
 import { toast } from "sonner";
 import { adminListWaitlists, API, formatApiError } from "../../lib/api";
+import AdminToolbar from "../../components/AdminToolbar";
 
 const PRESETS = [
     { key: "", label: "All signups" },
@@ -29,6 +30,22 @@ export default function AdminWaitlists() {
     const [filter, setFilter] = useState("");
     const [data, setData] = useState({ summary: [], entries: [] });
     const [loading, setLoading] = useState(true);
+    const [q, setQ] = useState("");
+    const [sort, setSort] = useState("newest");
+
+    const entries = useMemo(() => {
+        const needle = q.trim().toLowerCase();
+        let a = (data.entries || []).filter(
+            (e) => !needle || `${e.email || ""} ${e.source || ""}`.toLowerCase().includes(needle),
+        );
+        const t = (e) => new Date(e.created_at || 0).getTime();
+        a = [...a].sort((x, y) => {
+            if (sort === "oldest") return t(x) - t(y);
+            if (sort === "email") return (x.email || "").localeCompare(y.email || "");
+            return t(y) - t(x);
+        });
+        return a;
+    }, [data.entries, q, sort]);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -117,8 +134,23 @@ export default function AdminWaitlists() {
                 })}
             </div>
 
+            <AdminToolbar
+                query={q}
+                onQuery={setQ}
+                placeholder="Search email…"
+                sort={sort}
+                onSort={setSort}
+                sortOptions={[
+                    { value: "newest", label: "Newest first" },
+                    { value: "oldest", label: "Oldest first" },
+                    { value: "email", label: "Email A–Z" },
+                ]}
+                count={entries.length}
+                total={(data.entries || []).length}
+            />
+
             {/* Table */}
-            <div className="mt-12 overflow-hidden border border-[#E5E7EB] bg-white">
+            <div className="mt-6 overflow-hidden border border-[#E5E7EB] bg-white">
                 <table className="w-full text-sm">
                     <thead className="bg-[#F5F7FA] text-[10px] font-mono uppercase tracking-widest text-[#4B5563]">
                         <tr>
@@ -135,7 +167,7 @@ export default function AdminWaitlists() {
                                 </td>
                             </tr>
                         )}
-                        {!loading && data.entries.length === 0 && (
+                        {!loading && entries.length === 0 && (
                             <tr>
                                 <td colSpan={3} className="px-4 py-16 text-center text-[#4B5563]">
                                     <Users size={24} strokeWidth={1.5} className="mx-auto text-[#E5E7EB]" />
@@ -143,7 +175,7 @@ export default function AdminWaitlists() {
                                 </td>
                             </tr>
                         )}
-                        {data.entries.map((e) => (
+                        {entries.map((e) => (
                             <tr
                                 key={e.id}
                                 data-testid={`waitlist-row-${e.id}`}
