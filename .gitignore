@@ -96,3 +96,8 @@ backend/storage/
 
 # Bulk import staging (covers + spreadsheets) — not for git
 import/
+
+# Local ops artefacts (kept on disk, not in the repo)
+/*.webp
+/Oakbridge-Titles-Publish-Dates.xlsx
+/oakbridge.in.txt

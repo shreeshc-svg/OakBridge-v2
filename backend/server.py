@@ -387,14 +387,16 @@ async def list_books(
             {"isbn": {"$regex": search, "$options": "i"}},
         ]
 
+    # `_rank` is the publisher's release order (1 = most recent). Books without a
+    # rank fall to the end rather than jumping to the front on an ascending sort.
     sort_map = {
         "price_asc": [("price", 1)],
         "price_desc": [("price", -1)],
         "title": [("title", 1)],
         "rating_desc": [("rating", -1)],
-        "newest": [("created_at", -1)],
-        "new_arrivals": [("new_release", -1), ("created_at", -1)],
-        "featured": [("bestseller", -1), ("new_release", -1), ("rating", -1)],
+        "newest": [("_rank", 1)],
+        "new_arrivals": [("_rank", 1)],
+        "featured": [("bestseller", -1), ("_rank", 1), ("rating", -1)],
     }
     chosen = sort_map.get(sort, sort_map["featured"])
     # In-stock books always rank above out-of-stock ones, then the chosen sort
@@ -405,11 +407,16 @@ async def list_books(
         sort_stage[field] = direction
     pipeline = [
         {"$match": query},
-        {"$addFields": {"_in_stock": {"$cond": [{"$gt": [{"$ifNull": ["$stock", 0]}, 0]}, 1, 0]}}},
+        {
+            "$addFields": {
+                "_in_stock": {"$cond": [{"$gt": [{"$ifNull": ["$stock", 0]}, 0]}, 1, 0]},
+                "_rank": {"$ifNull": ["$release_rank", 10**6]},
+            }
+        },
         {"$sort": sort_stage},
         {"$skip": skip},
         {"$limit": limit},
-        {"$project": {"_id": 0, "_in_stock": 0}},
+        {"$project": {"_id": 0, "_in_stock": 0, "_rank": 0}},
     ]
     docs = await db.books.aggregate(pipeline).to_list(limit)
     return [_decorate_book(d) for d in docs]
