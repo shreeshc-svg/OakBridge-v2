@@ -4,7 +4,12 @@ import Seo from "../components/Seo";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, ArrowUpRight } from "lucide-react";
 import BookCard from "../components/BookCard";
-import { fetchAuthor, fetchAuthorBooks, fetchAuthors } from "../lib/api";
+import { fetchAuthor, fetchAuthorBooks, fetchAuthors, fetchSiteContent } from "../lib/api";
+
+const AUTHORS_DEFAULTS = {
+    overline: "Our Authors",
+    title: "The scholars, teachers\nand storytellers\nbehind our list.",
+};
 
 function AuthorDetail({ id }) {
     const [author, setAuthor] = useState(null);
@@ -112,8 +117,10 @@ function AuthorDetail({ id }) {
 
 function AuthorsIndex() {
     const [authors, setAuthors] = useState([]);
+    const [site, setSite] = useState({});
     useEffect(() => {
         fetchAuthors().then(setAuthors);
+        fetchSiteContent().then(setSite).catch(() => {});
     }, []);
 
     return (
@@ -125,13 +132,9 @@ function AuthorsIndex() {
                 path="/authors"
             />
             <section className="px-6 md:px-12 lg:px-16 pt-20 pb-16 border-b border-[#E5E7EB]">
-                <div className="overline">Our Authors</div>
-                <h1 className="font-serif text-5xl md:text-7xl mt-4 text-[#002B5C] leading-[0.95] max-w-3xl">
-                    The scholars, teachers
-                    <br />
-                    and storytellers
-                    <br />
-                    behind our list.
+                <div className="overline">{site.authors_overline || AUTHORS_DEFAULTS.overline}</div>
+                <h1 className="font-serif text-5xl md:text-7xl mt-4 text-[#002B5C] leading-[0.95] max-w-3xl whitespace-pre-line">
+                    {site.authors_title || AUTHORS_DEFAULTS.title}
                 </h1>
             </section>
             <section className="px-6 md:px-12 lg:px-16 py-20 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">

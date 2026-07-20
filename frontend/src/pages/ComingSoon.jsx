@@ -73,7 +73,7 @@ export default function ComingSoon({
                         </div>
                     </div>
 
-                    <h1 className="font-serif text-5xl md:text-6xl lg:text-7xl mt-8 leading-[0.95] fade-up">
+                    <h1 className="font-serif text-5xl md:text-6xl lg:text-7xl mt-8 leading-[0.95] fade-up whitespace-pre-line">
                         {headline}
                         {headlineAccent && (
                             <>
@@ -87,7 +87,7 @@ export default function ComingSoon({
 
                     {body && (
                         <p
-                            className="mt-8 max-w-2xl text-base md:text-lg text-white/80 leading-relaxed fade-up"
+                            className="mt-8 max-w-2xl text-base md:text-lg text-white/80 leading-relaxed fade-up whitespace-pre-line"
                             style={{ animationDelay: "100ms" }}
                         >
                             {body}
@@ -158,7 +158,7 @@ export default function ComingSoon({
                     <div className="max-w-3xl mb-16">
                         <div className="overline">{featuresKicker}</div>
                         {featuresHeadline && (
-                            <h2 className="font-serif text-4xl md:text-5xl mt-4 text-[#002B5C] leading-[1.05]">
+                            <h2 className="font-serif text-4xl md:text-5xl mt-4 text-[#002B5C] leading-[1.05] whitespace-pre-line">
                                 {featuresHeadline}
                             </h2>
                         )}
