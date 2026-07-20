@@ -1,15 +1,16 @@
 import React from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { LayoutDashboard, BookOpen, ShoppingBag, Mail, Users, LogOut, ExternalLink, Tag, PackageCheck, FileText, Inbox, Image, Settings, SlidersHorizontal, BookMarked, Scale } from "lucide-react";
+import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
+import { LayoutDashboard, BookOpen, ShoppingBag, Mail, Users, LogOut, ExternalLink, Tag, PackageCheck, FileText, Inbox, Image, Settings, SlidersHorizontal, BookMarked, Scale, LayoutTemplate, Navigation } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
+import { Toaster } from "../../components/ui/sonner";
 
 const LINKS = [
     { to: "/admin", end: true, label: "Dashboard", icon: LayoutDashboard },
     { to: "/admin/books", label: "Books", icon: BookOpen },
     { to: "/admin/inventory", label: "Inventory", icon: PackageCheck },
-    { to: "/admin/media", label: "Media", icon: Image },
-    { to: "/admin/page-bookstore", label: "Page: Bookstore", icon: SlidersHorizontal },
-    { to: "/admin/page-book", label: "Page: Book", icon: BookMarked },
+    { to: "/admin/pages", label: "Pages", icon: LayoutTemplate },
+    { to: "/admin/navigation", label: "Navigation", icon: Navigation },
+    { to: "/admin/media", label: "Media Library", icon: Image },
     { to: "/admin/orders", label: "Orders", icon: ShoppingBag },
     { to: "/admin/coupons", label: "Coupons", icon: Tag },
     { to: "/admin/messages", label: "Messages", icon: Mail },
@@ -24,10 +25,14 @@ const LINKS = [
 export default function AdminLayout() {
     const { user, logout } = useAuth();
     const nav = useNavigate();
+    const loc = useLocation();
+    React.useEffect(() => {
+        window.scrollTo(0, 0);
+    }, [loc.pathname]);
     return (
         <div
             data-testid="admin-layout"
-            className="min-h-[calc(100vh-4rem)] grid grid-cols-1 lg:grid-cols-[260px_1fr] bg-[#F5F7FA]"
+            className="min-h-screen grid grid-cols-1 lg:grid-cols-[260px_1fr] bg-[#F5F7FA]"
         >
             <aside className="bg-[#002B5C] text-[#FFFFFF] p-6 lg:min-h-full">
                 <div className="overline !text-white/50">Oakbridge · Admin</div>
@@ -70,6 +75,7 @@ export default function AdminLayout() {
             <main className="p-6 md:p-10">
                 <Outlet />
             </main>
+            <Toaster position="bottom-right" />
         </div>
     );
 }

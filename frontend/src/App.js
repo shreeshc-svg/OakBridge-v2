@@ -30,6 +30,8 @@ import AdminCoupons from "@/pages/admin/AdminCoupons";
 import AdminInventory from "@/pages/admin/AdminInventory";
 import AdminSubmissions from "@/pages/admin/AdminSubmissions";
 import AdminMedia from "@/pages/admin/AdminMedia";
+import AdminPages from "@/pages/admin/AdminPages";
+import AdminNavigation from "@/pages/admin/AdminNavigation";
 import AdminSettings from "@/pages/admin/AdminSettings";
 import AdminPLP from "@/pages/admin/AdminPLP";
 import AdminPDP from "@/pages/admin/AdminPDP";
@@ -100,33 +102,35 @@ function App() {
                                         </ProtectedRoute>
                                     }
                                 />
+                            </Route>
+                            <Route
+                                path="/admin"
+                                element={
+                                    <ProtectedRoute requireAdmin>
+                                        <AdminLayout />
+                                    </ProtectedRoute>
+                                }
+                            >
+                                <Route index element={<AdminDashboard />} />
+                                <Route path="books" element={<AdminBooks />} />
+                                <Route path="orders" element={<AdminOrders />} />
                                 <Route
-                                    path="/admin"
-                                    element={
-                                        <ProtectedRoute requireAdmin>
-                                            <AdminLayout />
-                                        </ProtectedRoute>
-                                    }
-                                >
-                                    <Route index element={<AdminDashboard />} />
-                                    <Route path="books" element={<AdminBooks />} />
-                                    <Route path="orders" element={<AdminOrders />} />
-                                    <Route
-                                        path="desk-copies"
-                                        element={<AdminDeskCopies />}
-                                    />
-                                    <Route path="users" element={<AdminUsers />} />
-                                    <Route path="waitlists" element={<AdminWaitlists />} />
-                                    <Route path="coupons" element={<AdminCoupons />} />
-                                    <Route path="inventory" element={<AdminInventory />} />
-                                    <Route path="submissions" element={<AdminSubmissions />} />
-                                    <Route path="media" element={<AdminMedia />} />
-                                    <Route path="page-bookstore" element={<AdminPLP />} />
-                                    <Route path="page-book" element={<AdminPDP />} />
-                                    <Route path="messages" element={<AdminMessages />} />
-                                    <Route path="legal" element={<AdminLegal />} />
-                                    <Route path="settings" element={<AdminSettings />} />
-                                </Route>
+                                    path="desk-copies"
+                                    element={<AdminDeskCopies />}
+                                />
+                                <Route path="users" element={<AdminUsers />} />
+                                <Route path="waitlists" element={<AdminWaitlists />} />
+                                <Route path="coupons" element={<AdminCoupons />} />
+                                <Route path="inventory" element={<AdminInventory />} />
+                                <Route path="submissions" element={<AdminSubmissions />} />
+                                <Route path="pages" element={<AdminPages />} />
+                                <Route path="navigation" element={<AdminNavigation />} />
+                                <Route path="media" element={<AdminMedia />} />
+                                <Route path="page-bookstore" element={<AdminPLP />} />
+                                <Route path="page-book" element={<AdminPDP />} />
+                                <Route path="messages" element={<AdminMessages />} />
+                                <Route path="legal" element={<AdminLegal />} />
+                                <Route path="settings" element={<AdminSettings />} />
                             </Route>
                         </Routes>
                     </BrowserRouter>
