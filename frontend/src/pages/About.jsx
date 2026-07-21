@@ -42,7 +42,6 @@ const DEFAULT_MILESTONES = [
 const DEFAULT_COLUMNS = [
     { id: "careers", overline: "Careers", title: "Join our list.", text: "We hire editors, designers, and field specialists who believe publishing is a craft of public service. Send us your work.", link_label: "careers@oakbridge.in", link_to: "/contact" },
     { id: "press", overline: "Press", title: "Media inquiries.", text: "For review copies, interviews with our authors or editorial briefings, reach out to our press team.", link_label: "press@oakbridge.in", link_to: "/contact" },
-    { id: "legal", overline: "Legal", title: "The fine print.", text: "Oakbridge Publishing Pvt. Ltd. — GSTIN 06AACCO5406D1ZW · Office: B3 Tower, Spaze iTech Park, 934, Sohna–Gurgaon Rd, Sector 49, Gurugram, Haryana 122018.", link_label: "", link_to: "" },
 ];
 
 const DEFAULT_TEAM = [
@@ -187,7 +186,7 @@ export default function About() {
             )}
 
             <section id="careers" className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-24">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 lg:gap-12 max-w-4xl">
                     {cols.map((col, i) => (
                         <div key={col.id || i} id={col.id || undefined}>
                             <div className="overline">{col.overline}</div>

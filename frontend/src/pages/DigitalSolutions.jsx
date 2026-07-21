@@ -15,11 +15,9 @@ const DEFAULTS = {
     features_headline: "Three products.\nOne trusted source.",
 };
 
-const DEFAULT_FEATURES = [
-    { icon: "Sparkles", title: "Semantic search", text: "Ask plain-English questions across 500+ of our scholarly titles, with verified citations to the page." },
-    { icon: "Bot", title: "AI research copilots", text: "Practitioner-grade assistants for Tax, Corporate Law, M&A and GST research — grounded in Oakbridge sources only." },
-    { icon: "Database", title: "Licensed APIs", text: "Stream our editorial taxonomy, abstracts and commentary into your firm's research stack." },
-];
+// Offerings intentionally not listed yet — the page is a pure "coming soon" +
+// waitlist. Add cards via Admin -> Pages -> Digital Solutions when ready.
+const DEFAULT_FEATURES = [];
 
 const DEFAULT_STATS = [
     { value: "500+", label: "Titles indexed" },

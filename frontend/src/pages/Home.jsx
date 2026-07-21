@@ -63,7 +63,7 @@ const VERTICALS = [
         num: "04",
         icon: GraduationCap,
         title: "Training & Certification",
-        tagline: "CPD programmes for practitioners",
+        tagline: "Training programmes for practitioners",
         lede: "Certification tracks and in-house workshops in Law, Tax and Corporate Governance — delivered by our authors.",
         to: "/academy",
         cta: "Get early access",

@@ -8,6 +8,9 @@ import { BookOpen, Calendar, Cpu, GraduationCap, ArrowUpRight } from "lucide-rea
 // Icons are referenced by name so admin-editable cards can pick one.
 const ICONS = { BookOpen, Calendar, Cpu, GraduationCap };
 
+const DEFAULT_HERO_IMAGE =
+    "https://images.unsplash.com/photo-1507842217343-583bb7270b66?auto=format&fit=crop&w=1600&q=85";
+
 const DEFAULT_HERO = {
     overline: "What We Do",
     title: "Four businesses.\nOne scholarly",
@@ -67,9 +70,9 @@ const DEFAULT_VERTICALS = [
         icon: "GraduationCap",
         kicker: "04 · Training & Certification",
         title: "Programs for Practitioners",
-        lede: "CPD-accredited training programs, certification courses and in-house workshops — drawing from the same authors that write our books.",
+        lede: "Training programmes, certification courses and in-house workshops — drawing from the same authors that write our books.",
         bullets: [
-            "Advocate and Chartered Accountant CPD programmes",
+            "Programmes for Advocates and Chartered Accountants",
             "In-house workshops for law firms and corporates",
             "Certification tracks in Tax, Corporate Law and Governance",
         ],
@@ -161,6 +164,7 @@ export default function Verticals() {
         body: site.wwd_body || DEFAULT_HERO.body,
     };
     const verticals = cards.length ? cards : DEFAULT_VERTICALS;
+    const heroImage = mediaUrl(site.wwd_hero) || site.wwd_hero || DEFAULT_HERO_IMAGE;
 
     return (
         <div data-testid="verticals-page">
@@ -170,20 +174,39 @@ export default function Verticals() {
                 description="Oakbridge Publishing's business verticals — publishing, events, digital solutions and professional training."
                 path="/what-we-do"
             />
-            <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 pt-20 pb-12 border-b border-[#E5E7EB]">
-                <div className="overline">{hero.overline}</div>
-                <h1 className="font-serif text-5xl md:text-7xl mt-4 text-[#002B5C] leading-[0.95] max-w-4xl whitespace-pre-line">
-                    {hero.title}
-                    {hero.highlight ? (
-                        <>
-                            <br />
-                            <em className="text-[#CC0033] not-italic">{hero.highlight}</em>
-                        </>
-                    ) : null}
-                </h1>
-                <p className="mt-10 max-w-xl text-[#4B5563] leading-relaxed whitespace-pre-line">
-                    {hero.body}
-                </p>
+            <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 pt-16 md:pt-20 pb-12 border-b border-[#E5E7EB]">
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-14 items-center">
+                    <div className="lg:col-span-7">
+                        <div className="overline">{hero.overline}</div>
+                        <h1 className="font-serif text-5xl md:text-6xl xl:text-7xl mt-4 text-[#002B5C] leading-[0.95] whitespace-pre-line">
+                            {hero.title}
+                            {hero.highlight ? (
+                                <>
+                                    <br />
+                                    <em className="text-[#CC0033] not-italic">{hero.highlight}</em>
+                                </>
+                            ) : null}
+                        </h1>
+                        <p className="mt-8 max-w-xl text-[#4B5563] leading-relaxed whitespace-pre-line">
+                            {hero.body}
+                        </p>
+                    </div>
+                    <div className="lg:col-span-5">
+                        <div className="relative aspect-[4/3] lg:aspect-[4/5] bg-[#002B5C] overflow-hidden">
+                            <img
+                                src={heroImage}
+                                alt=""
+                                aria-hidden="true"
+                                className="absolute inset-0 w-full h-full object-cover opacity-90"
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-tr from-[#002B5C]/70 via-[#002B5C]/20 to-transparent" />
+                            <span
+                                aria-hidden="true"
+                                className="absolute bottom-0 left-0 h-1 w-24 bg-[#F59E0B]"
+                            />
+                        </div>
+                    </div>
+                </div>
             </section>
             <div className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40">
                 {verticals.map((v, i) => (

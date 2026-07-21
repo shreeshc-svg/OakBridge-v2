@@ -92,6 +92,7 @@ export default function AdminPages() {
                 <PageGroup title="What We Do" path="/what-we-do">
                     <div className="overline !text-[10px] mb-2">Hero</div>
                     <div className="space-y-3">
+                        <SlotRow label="Hero image (right-hand panel)" value={site.wwd_hero} onSave={(v) => saveSite("wwd_hero", v)} />
                         <TextSlotRow label="Overline" value={site.wwd_overline} onSave={(v) => saveSite("wwd_overline", v)} />
                         <TextSlotRow label="Title (line breaks allowed)" value={site.wwd_title} onSave={(v) => saveSite("wwd_title", v)} multiline />
                         <TextSlotRow label="Title highlight (red)" value={site.wwd_highlight} onSave={(v) => saveSite("wwd_highlight", v)} />
@@ -144,7 +145,7 @@ export default function AdminPages() {
                         <TextSlotRow label="Section headline (line breaks allowed)" value={site.ac_features_headline} onSave={(v) => saveSite("ac_features_headline", v)} multiline />
                     </div>
                     <div className="mt-4">
-                        <ListEditor collectionKey="page_ac_features" defaults={AC_FEATURES_DEFAULT} iconOptions={["GraduationCap", "BadgeCheck", "BookOpen", "Award"]} fields={[{ key: "title", label: "Title" }, { key: "text", label: "Text", type: "textarea" }]} blank={{ icon: "GraduationCap", title: "", text: "" }} />
+                        <ListEditor collectionKey="page_ac_features" defaults={AC_FEATURES_DEFAULT} iconOptions={["MonitorPlay", "GraduationCap", "BookOpen", "Award"]} fields={[{ key: "title", label: "Title" }, { key: "text", label: "Text", type: "textarea" }]} blank={{ icon: "GraduationCap", title: "", text: "" }} />
                     </div>
                 </PageGroup>
 
@@ -275,16 +276,14 @@ const WWD_CARDS_DEFAULT = [
     { id: "publishing", icon: "BookOpen", kicker: "01 · Publishing", title: "Scholarly & Professional Books", lede: "Our flagship business — authoritative books across Academic, Law, Tax, Business, General, Coffee Table and Curated Works.", bullets: ["500+ titles across 5 publishing programs", "Distribution across India and 18 international markets", "Print, eBook and institutional licensing"], cta_label: "Browse the bookstore", cta_to: "/books", coming_soon: false, image: "" },
     { id: "events", icon: "Calendar", kicker: "02 · Events", title: "Forums, Launches & Conferences", lede: "Book launches, thought-leadership forums and policy roundtables — convening the scholars, practitioners and policymakers shaping India.", bullets: ["Flagship India Law Forum and annual Tax Conclave", "Intimate book launches with senior authors", "Curated meet-and-greet series with Supreme Court jurists"], cta_label: "Partner on an event", cta_to: "/contact", coming_soon: false, image: "" },
     { id: "digital-solutions", icon: "Cpu", kicker: "03 · Digital Solutions", title: "AI-Powered Knowledge Products", lede: "Next-generation digital platforms built on our scholarly content — semantic search, research assistants, subscription databases and institutional APIs.", bullets: ["Semantic search across 500+ legal and tax titles", "AI research copilots for practitioners", "Licensed APIs for law firms, universities and fintechs"], cta_label: "Get early access", cta_to: "/contact", coming_soon: true, image: "" },
-    { id: "training", icon: "GraduationCap", kicker: "04 · Training & Certification", title: "Programs for Practitioners", lede: "CPD-accredited training programs, certification courses and in-house workshops — drawing from the same authors that write our books.", bullets: ["Advocate and Chartered Accountant CPD programmes", "In-house workshops for law firms and corporates", "Certification tracks in Tax, Corporate Law and Governance"], cta_label: "See upcoming cohorts", cta_to: "/contact", coming_soon: false, image: "" },
+    { id: "training", icon: "GraduationCap", kicker: "04 · Training & Certification", title: "Programs for Practitioners", lede: "Training programmes, certification courses and in-house workshops — drawing from the same authors that write our books.", bullets: ["Programmes for Advocates and Chartered Accountants", "In-house workshops for law firms and corporates", "Certification tracks in Tax, Corporate Law and Governance"], cta_label: "See upcoming cohorts", cta_to: "/contact", coming_soon: false, image: "" },
 ];
 
 // Generic list editor for simple repeating content (features, stats, sections…).
 
-const DS_FEATURES_DEFAULT = [
-    { icon: "Sparkles", title: "Semantic search", text: "Ask plain-English questions across 500+ of our scholarly titles, with verified citations to the page." },
-    { icon: "Bot", title: "AI research copilots", text: "Practitioner-grade assistants for Tax, Corporate Law, M&A and GST research — grounded in Oakbridge sources only." },
-    { icon: "Database", title: "Licensed APIs", text: "Stream our editorial taxonomy, abstracts and commentary into your firm's research stack." },
-];
+// Empty by design — Digital Solutions is a pure "coming soon" page for now.
+// Add cards here when the offerings are ready to announce.
+const DS_FEATURES_DEFAULT = [];
 
 const DS_STATS_DEFAULT = [
     { value: "500+", label: "Titles indexed" },
@@ -293,14 +292,14 @@ const DS_STATS_DEFAULT = [
 ];
 
 const AC_FEATURES_DEFAULT = [
+    { icon: "MonitorPlay", title: "Self-paced e-learning programmes", text: "Structured online modules you can work through on your own schedule — built from the same practitioner-authors who write our reference titles." },
     { icon: "GraduationCap", title: "Certification tracks", text: "Multi-week certification programmes in Tax, Corporate Law, GST and Governance — taught by leading practitioners and our authors." },
-    { icon: "BadgeCheck", title: "CPD-accredited programmes", text: "Continuing Professional Development credits for Advocates, Chartered Accountants and Company Secretaries." },
     { icon: "BookOpen", title: "In-house workshops", text: "Bespoke training delivered on-site for law firms, in-house legal teams and corporates — built around your priorities." },
 ];
 
 const AC_STATS_DEFAULT = [
     { value: "12+", label: "Tracks in development" },
-    { value: "CPD", label: "Accredited" },
+    { value: "Online", label: "Self-paced & live" },
     { value: "Q4", label: "First cohort target" },
 ];
 
@@ -321,7 +320,6 @@ const ABOUT_MILESTONES_DEFAULT = [
 const ABOUT_COLUMNS_DEFAULT = [
     { id: "careers", overline: "Careers", title: "Join our list.", text: "We hire editors, designers, and field specialists who believe publishing is a craft of public service. Send us your work.", link_label: "careers@oakbridge.in", link_to: "/contact" },
     { id: "press", overline: "Press", title: "Media inquiries.", text: "For review copies, interviews with our authors or editorial briefings, reach out to our press team.", link_label: "press@oakbridge.in", link_to: "/contact" },
-    { id: "legal", overline: "Legal", title: "The fine print.", text: "Oakbridge Publishing Pvt. Ltd. — GSTIN 06AACCO5406D1ZW · Office: B3 Tower, Spaze iTech Park, 934, Sohna–Gurgaon Rd, Sector 49, Gurugram, Haryana 122018.", link_label: "", link_to: "" },
 ];
 
 

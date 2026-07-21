@@ -24,20 +24,27 @@ from motor.motor_asyncio import AsyncIOMotorClient
 
 async def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--pdf", required=True, help="path to the preview PDF")
+    ap.add_argument("--pdf", help="path to the preview PDF (omit when using --remove)")
     ap.add_argument("--isbn", help="ISBN of the book to attach to")
     ap.add_argument("--book-id", help="book id (alternative to --isbn)")
     ap.add_argument("--max-pages", type=int, default=40)
+    ap.add_argument("--remove", action="store_true", help="detach the preview from this book")
+    ap.add_argument("--mongo-url", help="override MONGO_URL (e.g. to target Atlas from a local .env)")
+    ap.add_argument("--db-name", help="override DB_NAME")
     args = ap.parse_args()
 
     if not args.isbn and not args.book_id:
         print("ERROR: pass --isbn or --book-id")
         return 1
 
-    pdf = Path(args.pdf)
-    if not pdf.exists():
-        print(f"ERROR: {pdf} not found")
-        return 1
+    if not args.remove:
+        if not args.pdf:
+            print("ERROR: --pdf is required (or use --remove)")
+            return 1
+        pdf = Path(args.pdf)
+        if not pdf.exists():
+            print(f"ERROR: {pdf} not found")
+            return 1
 
     # Load backend/.env so this always targets the SAME database the API uses.
     # (Explicit environment variables still win, for one-off overrides.)
@@ -50,8 +57,8 @@ async def main() -> int:
     except ImportError:
         pass
 
-    mongo_url = re.sub(r"\s+#.*$", "", os.environ.get("MONGO_URL", "")).strip()
-    db_name = re.sub(r"\s+#.*$", "", os.environ.get("DB_NAME", "")).strip()
+    mongo_url = args.mongo_url or re.sub(r"\s+#.*$", "", os.environ.get("MONGO_URL", "")).strip()
+    db_name = args.db_name or re.sub(r"\s+#.*$", "", os.environ.get("DB_NAME", "")).strip()
     if not mongo_url or not db_name:
         print("ERROR: MONGO_URL and DB_NAME must be set (in backend/.env or the environment).")
         return 1
@@ -73,6 +80,14 @@ async def main() -> int:
     if not book:
         print("ERROR: book not found")
         return 1
+
+    if args.remove:
+        res = await db.books.update_one(
+            {"id": book["id"]},
+            {"$unset": {"preview_paths": "", "preview_filename": "", "preview_source_pages": "", "preview_uploaded_at": ""}},
+        )
+        print(f"Removed preview from: {book['title']}  ({res.modified_count} updated)")
+        return 0
 
     print(f"Attaching preview to: {book['title']}  [{book.get('isbn')}]")
     data = pdf.read_bytes()
