@@ -3,7 +3,7 @@ import Breadcrumbs from "../components/Breadcrumbs";
 import Seo from "../components/Seo";
 import { Link } from "react-router-dom";
 import { ArrowUpRight } from "lucide-react";
-import { fetchSiteContent, fetchCollection } from "../lib/api";
+import { fetchSiteContent, fetchCollection, mediaUrl } from "../lib/api";
 
 /**
  * Renders admin-editable copy. Text wrapped in *asterisks* is shown in the
@@ -45,15 +45,34 @@ const DEFAULT_COLUMNS = [
     { id: "legal", overline: "Legal", title: "The fine print.", text: "Oakbridge Publishing Pvt. Ltd. — GSTIN 06AACCO5406D1ZW · Office: B3 Tower, Spaze iTech Park, 934, Sohna–Gurgaon Rd, Sector 49, Gurugram, Haryana 122018.", link_label: "", link_to: "" },
 ];
 
+const DEFAULT_TEAM = [
+    {
+        id: "shreesh-chandra",
+        name: "Shreesh Chandra",
+        role: "Co-Founder, Director",
+        photo: "/team/shreesh-chandra.jpg",
+        bio: "Shreesh has over 25 years of experience cutting across the publishing and education industry. Having started his publishing career with McGraw Hill Education, he has worked with leading publishing companies like Macmillan, Wolters Kluwer and LexisNexis. In between his stints at publishing outfits, he also has the credit of setting up the franchise business for Hughes Escorts Communication Limited and Triumphant Institute of Management Education. With well-rounded experience in leadership roles across Sales, Marketing, Product and Solutions Development, he enjoys the reputation of setting up new businesses and turning around old ones.\n\nHaving won various international awards for his contributions at work, he has been instrumental in the growth journey of most organisations he has worked for. Shreesh holds an executive MBA from IIM Bangalore.",
+    },
+    {
+        id: "vikesh-dhyani",
+        name: "Vikesh Dhyani",
+        role: "Co-Founder, Director",
+        photo: "/team/vikesh-dhyani.jpg",
+        bio: "Vikesh Dhyani has worked in various strategic and operational sales, marketing, product and business development roles with three of the world's largest higher and professional education, learning and analytic research solution companies over the last 25 years. Vikesh started his career with McGraw-Hill Education in sales and went on to head marketing for Pearson before joining LexisNexis/RELX Group to lead Marketing and Innovation functions.\n\nHe is a customer-centric leader, passionate about building strategic win-win partnerships, driving market and business transformation and improving customer experience. He has been instrumental in securing several awards and global accolades for business by leveraging content and technology with robust omni-channel marketing. Vikesh has done his Executive Management Program from IIM Bangalore and is a certified Pragmatic Marketing Professional. He also hosts two podcasts, 'iAspire' and 'Marketing Demystified', on YouTube.",
+    },
+];
+
 export default function About() {
     const [site, setSite] = useState({});
     const [milestones, setMilestones] = useState([]);
     const [columns, setColumns] = useState([]);
+    const [team, setTeam] = useState([]);
 
     useEffect(() => {
         fetchSiteContent().then(setSite).catch(() => {});
         fetchCollection("page_about_milestones").then((d) => setMilestones(d?.items || [])).catch(() => {});
         fetchCollection("page_about_columns").then((d) => setColumns(d?.items || [])).catch(() => {});
+        fetchCollection("page_about_team").then((d) => setTeam(d?.items || [])).catch(() => {});
     }, []);
 
     const c = {
@@ -66,6 +85,7 @@ export default function About() {
     };
     const items = milestones.length ? milestones : DEFAULT_MILESTONES;
     const cols = columns.length ? columns : DEFAULT_COLUMNS;
+    const people = team.length ? team : DEFAULT_TEAM;
 
     return (
         <div data-testid="about-page">
@@ -119,6 +139,52 @@ export default function About() {
                     </div>
                 </div>
             </section>
+
+            {people.length > 0 && (
+                <section
+                    id="team"
+                    data-testid="about-management-team"
+                    className="px-6 md:px-12 lg:px-16 py-24 border-b border-[#E5E7EB]"
+                >
+                    <div className="max-w-3xl mb-16">
+                        <div className="overline">{site.about_team_overline || "Our Management Team"}</div>
+                        <h2 className="font-serif text-4xl md:text-5xl mt-4 text-[#002B5C] leading-[1.05] whitespace-pre-line">
+                            {renderRich(site.about_team_title || "The people behind\nthe imprint.")}
+                        </h2>
+                    </div>
+                    <div className="space-y-16">
+                        {people.map((p, i) => (
+                            <div
+                                key={p.id || i}
+                                data-testid={`team-member-${p.id || i}`}
+                                className={`grid grid-cols-1 lg:grid-cols-12 gap-10 items-start ${i % 2 === 1 ? "lg:[&>div:first-child]:order-2" : ""}`}
+                            >
+                                <div className="lg:col-span-4">
+                                    <div className="aspect-square overflow-hidden bg-[#F5F7FA] border border-[#E5E7EB]">
+                                        {p.photo ? (
+                                            <img
+                                                src={mediaUrl(p.photo) || p.photo}
+                                                alt={p.name}
+                                                loading="lazy"
+                                                className="w-full h-full object-cover"
+                                            />
+                                        ) : null}
+                                    </div>
+                                </div>
+                                <div className="lg:col-span-8">
+                                    <h3 className="font-serif text-3xl md:text-4xl text-[#002B5C] leading-tight">
+                                        {p.name}
+                                    </h3>
+                                    <div className="overline !text-[10px] !text-[#CC0033] mt-2">{p.role}</div>
+                                    <p className="mt-5 text-[#4B5563] leading-relaxed whitespace-pre-line">
+                                        {p.bio}
+                                    </p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </section>
+            )}
 
             <section id="careers" className="px-6 md:px-12 lg:px-16 py-24">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-8">

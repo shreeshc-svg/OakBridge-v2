@@ -172,6 +172,25 @@ export default function AdminPages() {
                     <div className="mt-4">
                         <ListEditor collectionKey="page_about_milestones" defaults={ABOUT_MILESTONES_DEFAULT} fields={[{ key: "year", label: "Year" }, { key: "text", label: "Milestone text", type: "textarea" }]} blank={{ year: "", text: "" }} />
                     </div>
+                    <div className="overline !text-[10px] mb-2 mt-8 pt-8 border-t border-[#E5E7EB]">Management team</div>
+                    <div className="space-y-3">
+                        <TextSlotRow label="Section overline" value={site.about_team_overline} onSave={(v) => saveSite("about_team_overline", v)} />
+                        <TextSlotRow label="Section headline (line breaks + *highlight*)" value={site.about_team_title} onSave={(v) => saveSite("about_team_title", v)} multiline />
+                    </div>
+                    <div className="mt-4">
+                        <ListEditor
+                            collectionKey="page_about_team"
+                            defaults={ABOUT_TEAM_DEFAULT}
+                            fields={[
+                                { key: "name", label: "Name" },
+                                { key: "role", label: "Role (e.g. Co-Founder, Director)" },
+                                { key: "photo", label: "Photo path or URL (e.g. /team/name.jpg)" },
+                                { key: "bio", label: "Bio — blank line for a paragraph break", type: "textarea" },
+                            ]}
+                            blank={{ name: "", role: "", photo: "", bio: "" }}
+                        />
+                    </div>
+
                     <div className="overline !text-[10px] mb-2 mt-8 pt-8 border-t border-[#E5E7EB]">Bottom columns (Careers · Press · Legal)</div>
                     <ListEditor collectionKey="page_about_columns" defaults={ABOUT_COLUMNS_DEFAULT} fields={[{ key: "overline", label: "Overline" }, { key: "title", label: "Title" }, { key: "text", label: "Text", type: "textarea" }, { key: "link_label", label: "Link label (leave blank for no link)" }, { key: "link_to", label: "Link target (/path)" }]} blank={{ overline: "", title: "", text: "", link_label: "", link_to: "/contact" }} />
                 </PageGroup>
@@ -285,6 +304,11 @@ const AC_STATS_DEFAULT = [
     { value: "Q4", label: "First cohort target" },
 ];
 
+
+const ABOUT_TEAM_DEFAULT = [
+    { id: "shreesh-chandra", name: "Shreesh Chandra", role: "Co-Founder, Director", photo: "/team/shreesh-chandra.jpg", bio: "" },
+    { id: "vikesh-dhyani", name: "Vikesh Dhyani", role: "Co-Founder, Director", photo: "/team/vikesh-dhyani.jpg", bio: "" },
+];
 
 const ABOUT_MILESTONES_DEFAULT = [
     { year: "2017", text: "Oakbridge Publishing founded in New Delhi by two veteran publishing professionals with leadership experience at some of the world's most respected publishing houses." },
