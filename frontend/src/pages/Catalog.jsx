@@ -203,7 +203,7 @@ export default function Catalog() {
                     <div className="absolute inset-0 bg-gradient-to-r from-[#002B5C]/95 via-[#002B5C]/70 to-[#002B5C]/35" />
                     <div className="absolute inset-0 bg-gradient-to-t from-[#002B5C]/30 to-transparent" />
 
-                    <div className="relative px-6 md:px-12 lg:px-16 py-16 md:py-24 lg:py-28 text-white max-w-5xl">
+                    <div className="relative px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-16 md:py-24 lg:py-28 text-white max-w-5xl">
                         <div className="overline !text-white/70 !text-[11px] fade-up">
                             {activeCat
                                 ? "Imprint"
@@ -266,7 +266,7 @@ export default function Catalog() {
                 </div>
             </section>
 
-            <div className="px-6 md:px-12 lg:px-16 py-10 grid grid-cols-1 lg:grid-cols-12 gap-10">
+            <div className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-10 grid grid-cols-1 lg:grid-cols-12 gap-10">
                 {/* ============ FILTERS SIDEBAR ============ */}
                 <aside
                     className={`lg:col-span-3 ${showFilters ? "block" : "hidden"} lg:block`}

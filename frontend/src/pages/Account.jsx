@@ -55,7 +55,7 @@ export default function Account() {
     if (!user) return null;
 
     return (
-        <div data-testid="account-page" className="px-6 md:px-12 lg:px-16 py-16">
+        <div data-testid="account-page" className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-16">
             <Breadcrumbs inset items={[{ label: "My Account" }]} />
             {user && user.email_verified === false && (
                 <div

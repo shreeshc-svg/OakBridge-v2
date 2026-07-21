@@ -50,7 +50,7 @@ export default function Header() {
                 data-testid="site-header"
                 className="sticky top-0 z-40 border-b border-[#002B5C]/10 bg-[#FFFFFF]/85 backdrop-blur-xl"
             >
-                <div className="flex items-center justify-between gap-4 px-6 md:px-12 lg:px-16 h-20">
+                <div className="flex items-center justify-between gap-4 px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 h-20">
                     <Link
                         to="/"
                         data-testid="brand-logo"
@@ -190,7 +190,7 @@ export default function Header() {
                 </div>
 
                 {mobileOpen && (
-                    <div className="lg:hidden border-t border-[#002B5C]/10 bg-[#FFFFFF]">
+                    <div className="xl:hidden border-t border-[#002B5C]/10 bg-[#FFFFFF]">
                         <nav className="flex flex-col px-6 py-4 gap-3">
                             {navItems.map((n) => (
                                 <NavLink

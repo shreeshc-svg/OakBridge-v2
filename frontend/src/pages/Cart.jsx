@@ -31,7 +31,7 @@ export default function Cart() {
     } = useCart();
 
     return (
-        <div data-testid="cart-page" className="px-6 md:px-12 lg:px-16 py-16">
+        <div data-testid="cart-page" className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-16">
             <Breadcrumbs inset items={[{ label: "Cart" }]} />
             <div className="overline">Your Order</div>
             <h1 className="font-serif text-5xl md:text-6xl mt-4 text-[#002B5C] leading-none">

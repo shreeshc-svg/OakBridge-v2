@@ -100,6 +100,13 @@ export const adminDeleteMedia = (id) =>
 export const adminUpdateCategoryImage = (id, image) =>
     api.patch(`/admin/categories/${id}`, { image }).then((r) => r.data);
 export const mediaUrl = (u) => (u && u.startsWith("/api/") ? `${BACKEND_URL}${u}` : u);
+export const fetchBookPreview = (id) => api.get(`/books/${id}/preview`).then((r) => r.data);
+export const adminUploadBookPreview = (id, file) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return api.post(`/admin/books/${id}/preview`, fd).then((r) => r.data);
+};
+export const adminRemoveBookPreview = (id) => api.delete(`/admin/books/${id}/preview`).then((r) => r.data);
 export const fetchCollection = (key) => api.get(`/collections/${key}`).then((r) => r.data);
 export const adminSaveCollection = (key, items) =>
     api.put(`/admin/collections/${key}`, { items }).then((r) => r.data);

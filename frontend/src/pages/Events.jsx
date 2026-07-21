@@ -287,7 +287,7 @@ export default function Events() {
                         </div>
                     </div>
 
-                    <div className="relative px-6 md:px-12 lg:px-16 py-20 md:py-28 text-white max-w-5xl">
+                    <div className="relative px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 md:py-28 text-white max-w-5xl">
                         <div className="overline !text-white/70 !text-[11px] fade-up">
                             Oakbridge Events
                         </div>
@@ -323,7 +323,7 @@ export default function Events() {
             </section>
 
             {/* FLAGSHIP EVENTS */}
-            <section className="px-6 md:px-12 lg:px-16 py-20 md:py-28">
+            <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 md:py-28">
                 <div className="max-w-3xl mb-16">
                     <div className="overline">Flagship Events</div>
                     <h2 className="font-serif text-4xl md:text-5xl mt-4 text-[#002B5C] leading-[1.05]">
@@ -346,7 +346,7 @@ export default function Events() {
             </section>
 
             {/* WHAT TO EXPECT */}
-            <section className="px-6 md:px-12 lg:px-16 py-20 md:py-28 bg-[#F5F7FA] border-t border-b border-[#E5E7EB]">
+            <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 md:py-28 bg-[#F5F7FA] border-t border-b border-[#E5E7EB]">
                 <div className="max-w-3xl mb-16">
                     <div className="overline">The Experience</div>
                     <h2 className="font-serif text-4xl md:text-5xl mt-4 text-[#002B5C] leading-[1.05]">
@@ -382,7 +382,7 @@ export default function Events() {
             </section>
 
             {/* SPEAKERS — VIDHI UTSAV */}
-            <section className="px-6 md:px-12 lg:px-16 py-20 md:py-28">
+            <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 md:py-28">
                 <div className="flex items-end justify-between mb-12 flex-wrap gap-4">
                     <div>
                         <div className="overline">Vidhi Utsav Speakers</div>
@@ -408,7 +408,7 @@ export default function Events() {
             </section>
 
             {/* SPEAKERS — SUMMIT */}
-            <section className="px-6 md:px-12 lg:px-16 py-20 md:py-28 bg-[#002B5C] text-white">
+            <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 md:py-28 bg-[#002B5C] text-white">
                 <div className="flex items-end justify-between mb-12 flex-wrap gap-4">
                     <div>
                         <div className="overline !text-white/60">Summit Speakers</div>
@@ -447,7 +447,7 @@ export default function Events() {
             </section>
 
             {/* WHO ATTENDS */}
-            <section className="px-6 md:px-12 lg:px-16 py-20 md:py-28 border-b border-[#E5E7EB]">
+            <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 md:py-28 border-b border-[#E5E7EB]">
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
                     <div className="lg:col-span-5">
                         <div className="overline">Who attends</div>
@@ -482,7 +482,7 @@ export default function Events() {
             </section>
 
             {/* CTA */}
-            <section className="relative px-6 md:px-12 lg:px-16 py-24 md:py-32 bg-[#F5F7FA] text-[#002B5C]">
+            <section className="relative px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-24 md:py-32 bg-[#F5F7FA] text-[#002B5C]">
                 <div className="relative z-10 max-w-3xl">
                     <div className="overline">Get involved</div>
                     <h2 className="font-serif text-4xl md:text-6xl mt-4 leading-[1.05]">

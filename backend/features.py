@@ -443,6 +443,112 @@ async def admin_upload_ebook(book_id: str, file: UploadFile = File(...)):
     return {"ok": True, "path": result["path"], "size": result.get("size", len(data))}
 
 
+# ---------------------------------------------------------------- book preview
+# "Look inside": the preview PDF is rendered to page IMAGES on upload and only
+# those images are ever served. The source PDF is never exposed, so the preview
+# can't be downloaded or re-assembled — the approach Amazon/Google Preview use.
+PREVIEW_MAX_PAGES = int(os.environ.get("PREVIEW_MAX_PAGES", "40"))
+
+
+def _render_pdf_pages(data: bytes, book_id: str, max_pages: int) -> list[str]:
+    """Render a PDF to web-sized JPEGs in storage. Returns the stored paths.
+
+    Uses pypdfium2 (Apache-2.0/BSD) rather than PyMuPDF, which is AGPL and would
+    impose source-disclosure obligations on a commercial site.
+    """
+    try:
+        import io
+
+        import pypdfium2 as pdfium
+        from PIL import Image  # noqa: F401  (pypdfium2 renders via Pillow)
+    except ImportError as exc:  # pragma: no cover - dependency guard
+        raise HTTPException(
+            status_code=500,
+            detail="pypdfium2/Pillow not installed on the server (pip install pypdfium2 pillow)",
+        ) from exc
+
+    doc = pdfium.PdfDocument(data)
+    total = min(len(doc), max_pages)
+    batch = uuid.uuid4().hex[:8]
+    paths: list[str] = []
+    for i in range(total):
+        pil = doc[i].render(scale=150 / 72).to_pil().convert("RGB")
+        buf = io.BytesIO()
+        pil.save(buf, "JPEG", quality=82, optimize=True, progressive=True)
+        path = f"{APP_NAME}/previews/{book_id}/{batch}/p{i + 1:03d}.jpg"
+        put_object(path, buf.getvalue(), "image/jpeg")
+        paths.append(path)
+    doc.close()
+    return paths
+
+
+@public_router.get("/books/{book_id}/preview")
+async def get_book_preview(book_id: str):
+    """Public: the page images for a book's preview (empty list if none)."""
+    book = await db.books.find_one({"id": book_id}, {"_id": 0})
+    if not book:
+        raise HTTPException(status_code=404, detail="Book not found")
+    paths = book.get("preview_paths") or []
+    return {
+        "book_id": book_id,
+        "title": book.get("title"),
+        "page_count": len(paths),
+        "total_pages": book.get("preview_source_pages") or len(paths),
+        "pages": [f"/api/files/{p}" for p in paths],
+    }
+
+
+@admin_router.post("/books/{book_id}/preview")
+async def admin_upload_preview(book_id: str, file: UploadFile = File(...), max_pages: int = PREVIEW_MAX_PAGES):
+    book = await db.books.find_one({"id": book_id}, {"_id": 0})
+    if not book:
+        raise HTTPException(status_code=404, detail="Book not found")
+    if not file.filename or not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF files are accepted")
+    data = await file.read()
+    if len(data) > 60 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File too large (max 60 MB)")
+
+    try:
+        import pypdfium2 as pdfium
+
+        source_pages = len(pdfium.PdfDocument(data))
+    except ImportError:
+        source_pages = 0
+
+    paths = _render_pdf_pages(data, book_id, max(1, int(max_pages)))
+    await db.books.update_one(
+        {"id": book_id},
+        {
+            "$set": {
+                "preview_paths": paths,
+                "preview_filename": file.filename,
+                "preview_source_pages": source_pages,
+                "preview_uploaded_at": datetime.now(timezone.utc).isoformat(),
+            }
+        },
+    )
+    return {"ok": True, "pages": len(paths), "source_pages": source_pages}
+
+
+@admin_router.delete("/books/{book_id}/preview")
+async def admin_remove_preview(book_id: str):
+    r = await db.books.update_one(
+        {"id": book_id},
+        {
+            "$unset": {
+                "preview_paths": "",
+                "preview_filename": "",
+                "preview_source_pages": "",
+                "preview_uploaded_at": "",
+            }
+        },
+    )
+    if r.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Book not found")
+    return {"ok": True}
+
+
 @admin_router.delete("/books/{book_id}/ebook")
 async def admin_remove_ebook(book_id: str):
     # Soft-delete by clearing the reference in Mongo (storage has no delete API).

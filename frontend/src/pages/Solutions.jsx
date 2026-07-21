@@ -56,7 +56,7 @@ function SolutionDetail({ slug }) {
     if (!s) return null;
     return (
         <div>
-            <section className="px-6 md:px-12 lg:px-16 pt-20 pb-12 border-b border-[#E5E7EB]">
+            <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 pt-20 pb-12 border-b border-[#E5E7EB]">
                 <Link
                     to="/solutions"
                     className="inline-flex items-center gap-1 text-xs font-mono uppercase tracking-widest text-[#4B5563] hover:text-[#002B5C]"
@@ -71,7 +71,7 @@ function SolutionDetail({ slug }) {
                     {s.lede}
                 </p>
             </section>
-            <section className="px-6 md:px-12 lg:px-16 py-24 grid grid-cols-1 lg:grid-cols-12 gap-10">
+            <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-24 grid grid-cols-1 lg:grid-cols-12 gap-10">
                 <div className="lg:col-span-5 relative aspect-[4/3] border border-[#E5E7EB] overflow-hidden">
                     <img
                         src={mediaUrl(site["solutions_" + slug]) || s.image}
@@ -122,7 +122,7 @@ export default function Solutions() {
                 description="Institutional solutions from Oakbridge Publishing — for schools, colleges, educators and firms: bulk orders, adoptions and custom publishing."
                 path="/solutions"
             />
-            <section className="px-6 md:px-12 lg:px-16 pt-20 pb-12 border-b border-[#E5E7EB]">
+            <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 pt-20 pb-12 border-b border-[#E5E7EB]">
                 <div className="overline">Institutional Solutions</div>
                 <h1 className="font-serif text-5xl md:text-7xl mt-6 text-[#002B5C] leading-[0.95] max-w-4xl">
                     Partners to
@@ -132,7 +132,7 @@ export default function Solutions() {
                     and institutions.
                 </h1>
             </section>
-            <section className="px-6 md:px-12 lg:px-16 py-20">
+            <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-0 border border-[#E5E7EB] bg-white">
                     {Object.entries(SOLUTIONS).map(([slug, s], idx) => (
                         <Link

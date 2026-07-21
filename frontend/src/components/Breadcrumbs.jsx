@@ -14,7 +14,7 @@ export default function Breadcrumbs({ items = [], inset = false }) {
         <nav
             aria-label="Breadcrumb"
             data-testid="breadcrumbs"
-            className={inset ? "pt-2 pb-6" : "px-6 md:px-12 lg:px-16 pt-6 pb-2"}
+            className={inset ? "pt-2 pb-6" : "px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 pt-6 pb-2"}
         >
             <ol className="flex flex-wrap items-center gap-1.5 text-[11px] font-mono uppercase tracking-widest text-[#4B5563]">
                 {trail.map((it, i) => {

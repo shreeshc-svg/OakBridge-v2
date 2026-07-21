@@ -60,7 +60,7 @@ export default function Contact() {
                 description="Get in touch with Oakbridge Publishing about orders, manuscript submissions, rights, adoptions and partnerships."
                 path="/contact"
             />
-            <section className="px-6 md:px-12 lg:px-16 pt-20 pb-16 border-b border-[#E5E7EB]">
+            <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 pt-20 pb-16 border-b border-[#E5E7EB]">
                 <div className="overline">Get in Touch</div>
                 <h1 className="font-serif text-5xl md:text-7xl mt-6 text-[#002B5C] leading-[0.95] max-w-3xl">
                     We read every letter.
@@ -72,7 +72,7 @@ export default function Contact() {
                 </p>
             </section>
 
-            <section className="px-6 md:px-12 lg:px-16 py-20 grid grid-cols-1 lg:grid-cols-12 gap-12">
+            <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 grid grid-cols-1 lg:grid-cols-12 gap-12">
                 <div className="lg:col-span-7">
                     <form
                         onSubmit={onSubmit}

@@ -41,7 +41,7 @@ export default function OrderConfirmation() {
     return (
         <div
             data-testid="order-confirmation-page"
-            className="px-6 md:px-12 lg:px-16 py-20"
+            className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20"
         >
             <div className="max-w-3xl mx-auto text-center">
                 <CheckCircle2

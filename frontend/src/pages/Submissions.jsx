@@ -62,7 +62,7 @@ export default function Submissions() {
                 description="Submit your manuscript to Oakbridge Publishing. We welcome scholarly and professional proposals across law, tax, business, academic and reference subjects."
                 path="/submissions"
             />
-            <section className="px-6 md:px-12 lg:px-16 pt-20 pb-16 border-b border-[#E5E7EB]">
+            <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 pt-20 pb-16 border-b border-[#E5E7EB]">
                 <div className="overline">Author Submissions</div>
                 <h1 className="font-serif text-5xl md:text-7xl mt-4 text-[#002B5C] leading-[0.95] max-w-3xl">
                     We read every
@@ -77,7 +77,7 @@ export default function Submissions() {
                 </p>
             </section>
 
-            <section className="px-6 md:px-12 lg:px-16 py-16 grid grid-cols-1 lg:grid-cols-12 gap-12">
+            <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-16 grid grid-cols-1 lg:grid-cols-12 gap-12">
                 <aside className="lg:col-span-4">
                     <div className="sticky top-24 border border-[#E5E7EB] bg-white p-6 space-y-5">
                         <div>

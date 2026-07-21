@@ -59,7 +59,7 @@ export default function ComingSoon({
                             "radial-gradient(circle at 20% 20%, #F59E0B 0, transparent 35%), radial-gradient(circle at 80% 70%, #CC0033 0, transparent 35%)",
                     }}
                 />
-                <div className="relative px-6 md:px-12 lg:px-16 py-24 md:py-36 max-w-5xl">
+                <div className="relative px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-24 md:py-36 max-w-5xl">
                     <div className="flex items-center gap-3 flex-wrap">
                         <span
                             data-testid="coming-soon-pill"
@@ -154,7 +154,7 @@ export default function ComingSoon({
 
             {/* WHAT'S COMING */}
             {features.length > 0 && (
-                <section className="px-6 md:px-12 lg:px-16 py-20 md:py-28">
+                <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 md:py-28">
                     <div className="max-w-3xl mb-16">
                         <div className="overline">{featuresKicker}</div>
                         {featuresHeadline && (
@@ -191,7 +191,7 @@ export default function ComingSoon({
             )}
 
             {/* CTA STRIP */}
-            <section className="px-6 md:px-12 lg:px-16 py-16 bg-[#F5F7FA] border-t border-[#E5E7EB]">
+            <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-16 bg-[#F5F7FA] border-t border-[#E5E7EB]">
                 <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 max-w-6xl">
                     <div>
                         <div className="flex items-center gap-2">

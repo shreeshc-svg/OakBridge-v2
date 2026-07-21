@@ -170,7 +170,7 @@ export default function Verticals() {
                 description="Oakbridge Publishing's business verticals — publishing, events, digital solutions and professional training."
                 path="/what-we-do"
             />
-            <section className="px-6 md:px-12 lg:px-16 pt-20 pb-12 border-b border-[#E5E7EB]">
+            <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 pt-20 pb-12 border-b border-[#E5E7EB]">
                 <div className="overline">{hero.overline}</div>
                 <h1 className="font-serif text-5xl md:text-7xl mt-4 text-[#002B5C] leading-[0.95] max-w-4xl whitespace-pre-line">
                     {hero.title}
@@ -185,7 +185,7 @@ export default function Verticals() {
                     {hero.body}
                 </p>
             </section>
-            <div className="px-6 md:px-12 lg:px-16">
+            <div className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40">
                 {verticals.map((v, i) => (
                     <VerticalCard key={v.id || i} v={v} reverse={i % 2 === 1} site={site} />
                 ))}

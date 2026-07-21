@@ -216,7 +216,7 @@ export default function AdminInventory() {
                             onChange={(e) => setQuery(e.target.value)}
                             placeholder="Search title, author, ISBN, category"
                             data-testid="inventory-search"
-                            className="w-72 border border-[#E5E7EB] bg-white pl-9 pr-3 py-2 text-sm outline-none focus:border-[#002B5C]"
+                            className="w-full sm:w-72 border border-[#E5E7EB] bg-white pl-9 pr-3 py-2 text-sm outline-none focus:border-[#002B5C]"
                         />
                     </div>
                 </div>
@@ -312,10 +312,10 @@ function InventoryRow({ book, threshold, onSaved }) {
                         className="w-8 h-11 object-cover border border-[#E5E7EB]"
                     />
                     <div className="min-w-0">
-                        <div className="font-serif text-[#002B5C] truncate max-w-[240px]">
+                        <div className="font-serif text-[#002B5C] truncate max-w-full sm:w-[240px]">
                             {book.title}
                         </div>
-                        <div className="text-xs text-[#4B5563] truncate max-w-[240px]">
+                        <div className="text-xs text-[#4B5563] truncate max-w-full sm:w-[240px]">
                             {book.author}
                         </div>
                     </div>

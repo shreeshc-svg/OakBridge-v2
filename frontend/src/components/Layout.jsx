@@ -3,6 +3,7 @@ import { Outlet, useLocation } from "react-router-dom";
 import Header from "./Header";
 import Footer from "./Footer";
 import ChatWidget from "./ChatWidget";
+import BackToTop from "./BackToTop";
 import BottomTray from "./BottomTray";
 import CookieConsent from "./CookieConsent";
 import { Toaster } from "./ui/sonner";
@@ -21,6 +22,7 @@ export default function Layout() {
             <Footer />
             {/* Spacer so page content clears the mobile bottom tray */}
             <div className="h-16 md:hidden" aria-hidden="true" />
+            <BackToTop />
             <ChatWidget />
             <BottomTray />
             <CookieConsent />

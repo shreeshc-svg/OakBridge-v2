@@ -147,7 +147,7 @@ export default function Home() {
             {/* ============== HERO ============== */}
             <section className="relative overflow-hidden border-b border-[#002B5C]/10">
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-0">
-                    <div className="lg:col-span-7 px-6 md:px-12 lg:px-16 pt-20 pb-20 lg:pt-32 lg:pb-36 relative">
+                    <div className="lg:col-span-7 px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 pt-20 pb-20 lg:pt-32 lg:pb-36 relative">
                         <div className="overline fade-up">
                             Est. 2017 · Independent Scholarly Press
                         </div>
@@ -241,7 +241,7 @@ export default function Home() {
             {/* ============== BUSINESS VERTICALS (prominent, directly after hero) ============== */}
             <section
                 data-testid="home-verticals"
-                className="px-6 md:px-12 lg:px-16 py-20 md:py-24 border-b border-[#E5E7EB]"
+                className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 md:py-24 border-b border-[#E5E7EB]"
             >
                 <div className="flex flex-wrap items-end justify-between gap-4 mb-12">
                     <div>
@@ -323,7 +323,7 @@ export default function Home() {
             </section>
 
             {/* ============== CATEGORIES BENTO ============== */}
-            <section className="px-6 md:px-12 lg:px-16 py-24 md:py-32">
+            <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-24 md:py-32">
                 <div className="flex items-end justify-between mb-12">
                     <div>
                         <div className="overline">The Catalogue</div>
@@ -425,7 +425,7 @@ export default function Home() {
 
             {/* ============== FEATURED BOOKS ============== */}
             {bestsellersEnabled && carouselBooks.length > 0 && (
-            <section className="px-6 md:px-12 lg:px-16 py-20 md:py-28 bg-[#F5F7FA] border-y border-[#E5E7EB]">
+            <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 md:py-28 bg-[#F5F7FA] border-y border-[#E5E7EB]">
                 <div className="flex items-end justify-between mb-12">
                     <div>
                         <div className="overline">Bestsellers</div>
@@ -446,7 +446,7 @@ export default function Home() {
             )}
 
             {/* ============== SOLUTIONS ============== */}
-            <section className="px-6 md:px-12 lg:px-16 py-24 md:py-32">
+            <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-24 md:py-32">
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
                     <div className="lg:col-span-4">
                         <div className="overline">Solutions</div>
@@ -514,7 +514,7 @@ export default function Home() {
 
             {/* ============== NEW RELEASES ============== */}
             {newReleasesRow.length > 0 && (
-                <section className="px-6 md:px-12 lg:px-16 py-20 md:py-28 border-t border-[#E5E7EB]">
+                <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 md:py-28 border-t border-[#E5E7EB]">
                     <div className="flex items-end justify-between mb-12">
                         <div>
                             <div className="overline">Freshly Pressed</div>
@@ -539,7 +539,7 @@ export default function Home() {
             )}
 
             {/* ============== EDITORIAL CTA ============== */}
-            <section className="relative px-6 md:px-12 lg:px-16 py-24 md:py-32 bg-[#002B5C] text-[#FFFFFF] overflow-hidden">
+            <section className="relative px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-24 md:py-32 bg-[#002B5C] text-[#FFFFFF] overflow-hidden">
                 <div className="relative z-10 max-w-3xl">
                     <div className="overline !text-white/50">Manifesto</div>
                     <p className="font-serif text-3xl md:text-5xl mt-6 leading-tight">

@@ -104,7 +104,7 @@ export default function LegalPage({ slug }) {
         <div data-testid={`legal-page-${slug}`}>
             <Breadcrumbs items={[{ label: title }]} />
             <Seo title={title} description={`${title} — Oakbridge Publishing.`} path={`/${slug}`} />
-            <section className="px-6 md:px-12 lg:px-16 pt-16 pb-24 max-w-3xl">
+            <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 pt-16 pb-24 max-w-3xl">
                 <div className="overline">Legal</div>
                 <h1 className="font-serif text-4xl md:text-5xl mt-3 text-[#002B5C] leading-tight">
                     {title}

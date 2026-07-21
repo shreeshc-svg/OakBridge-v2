@@ -1,5 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { fetchSettings, mediaUrl } from "../../lib/api";
+import { fetchSettings, mediaUrl,
+    adminUploadBookPreview,
+    adminRemoveBookPreview,
+} from "../../lib/api";
 import { Plus, Pencil, Trash2, X, FileUp, FileCheck2, Upload, ImagePlus, Trash, Sparkles } from "lucide-react";
 import {
     adminBulkDeleteBooks,
@@ -259,6 +262,89 @@ function CsvImportDialog({ onClose, onDone }) {
                     </button>
                 </div>
             </div>
+        </div>
+    );
+}
+
+function PreviewManager({ bookId, pageCount, filename, onChange }) {
+    const [uploading, setUploading] = useState(false);
+    const [count, setCount] = useState(pageCount || 0);
+    const [currentName, setCurrentName] = useState(filename || "");
+
+    const onFile = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (!file.name.toLowerCase().endsWith(".pdf")) {
+            toast.error("Only PDF files are accepted");
+            return;
+        }
+        setUploading(true);
+        try {
+            const res = await adminUploadBookPreview(bookId, file);
+            toast.success(`Preview ready — ${res.pages} pages rendered.`);
+            setCount(res.pages);
+            setCurrentName(file.name);
+            onChange && onChange();
+        } catch (err) {
+            toast.error(formatApiError(err));
+        } finally {
+            setUploading(false);
+            e.target.value = "";
+        }
+    };
+
+    const onRemove = async () => {
+        if (!window.confirm("Remove the 'Look inside' preview?")) return;
+        try {
+            await adminRemoveBookPreview(bookId);
+            toast.success("Preview removed.");
+            setCount(0);
+            setCurrentName("");
+            onChange && onChange();
+        } catch (err) {
+            toast.error(formatApiError(err));
+        }
+    };
+
+    return (
+        <div data-testid="preview-manager" className="mt-6 border border-[#002B5C]/30 bg-[#F5F7FA] p-4">
+            <div className="overline">“Look inside” preview (PDF)</div>
+            <p className="text-[11px] text-[#4B5563] mt-1">
+                Upload a sample PDF. Pages are rendered to images on upload, so the file itself is
+                never downloadable from the site.
+            </p>
+            {count > 0 ? (
+                <div className="mt-3 flex flex-wrap items-center gap-4">
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <FileCheck2 size={20} strokeWidth={1.5} className="text-[#002B5C]" />
+                        <div className="truncate">
+                            <div className="font-serif text-base text-[#002B5C] truncate">
+                                {currentName || "preview.pdf"}
+                            </div>
+                            <div className="text-xs text-[#4B5563]">{count} pages live on the book page</div>
+                        </div>
+                    </div>
+                    <label className="text-xs border border-[#002B5C] px-3 py-2 cursor-pointer hover:bg-white">
+                        {uploading ? "Rendering…" : "Replace"}
+                        <input type="file" accept="application/pdf,.pdf" onChange={onFile} className="hidden" />
+                    </label>
+                    <button
+                        type="button"
+                        onClick={onRemove}
+                        className="text-xs border border-[#E5E7EB] px-3 py-2 hover:bg-white text-[#CC0033]"
+                    >
+                        Remove
+                    </button>
+                </div>
+            ) : (
+                <div className="mt-3">
+                    <label className="inline-flex items-center gap-2 bg-[#002B5C] text-[#FFFFFF] px-4 py-2 text-sm cursor-pointer hover:bg-[#001F42]">
+                        <FileUp size={14} strokeWidth={1.5} />
+                        {uploading ? "Rendering pages…" : "Upload preview PDF"}
+                        <input type="file" accept="application/pdf,.pdf" onChange={onFile} className="hidden" />
+                    </label>
+                </div>
+            )}
         </div>
     );
 }
@@ -582,14 +668,21 @@ function BookForm({ initial, categories, onClose, onSaved }) {
                     </div>
                 </div>
 
-                {/* eBook management — only for existing books */}
+                {/* Preview + eBook management — only for existing books */}
                 {isEdit && (
-                    <EbookManager
-                        bookId={initial.id}
-                        hasEbook={!!initial.has_ebook || !!initial.ebook_filename}
-                        filename={initial.ebook_filename}
-                        onChange={() => onSaved()}
-                    />
+                    <>
+                        <PreviewManager
+                            bookId={initial.id}
+                            pageCount={(initial.preview_paths || []).length}
+                            filename={initial.preview_filename}
+                        />
+                        <EbookManager
+                            bookId={initial.id}
+                            hasEbook={!!initial.has_ebook || !!initial.ebook_filename}
+                            filename={initial.ebook_filename}
+                            onChange={() => onSaved()}
+                        />
+                    </>
                 )}
 
                 <div className="mt-8 border-t border-[#E5E7EB] pt-6">
@@ -787,13 +880,13 @@ export default function AdminBooks() {
                         Books ({books.length})
                     </h1>
                 </div>
-                <div className="flex gap-3">
+                <div className="flex flex-wrap gap-3 w-full sm:w-auto">
                     <input
                         placeholder="Search title / author / ISBN"
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
                         data-testid="admin-books-search"
-                        className="border border-[#E5E7EB] bg-white px-4 py-2 text-sm w-72 outline-none focus:border-[#002B5C]"
+                        className="border border-[#E5E7EB] bg-white px-4 py-2 text-sm w-full sm:w-72 outline-none focus:border-[#002B5C]"
                     />
                     <select
                         value={catFilter}

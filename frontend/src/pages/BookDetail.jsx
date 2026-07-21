@@ -1,18 +1,23 @@
 import React, { useEffect, useRef, useState } from "react";
 import Breadcrumbs from "../components/Breadcrumbs";
+import BookPreview from "../components/BookPreview";
 import Seo from "../components/Seo";
 import { Link, useParams, useNavigate } from "react-router-dom";
-import { Minus, Plus, ShoppingBag, ArrowLeft, Star, GraduationCap, ChevronLeft, ChevronRight } from "lucide-react";
+import { Minus, Plus, ShoppingBag, ArrowLeft, Star, GraduationCap, ChevronLeft, ChevronRight, BookOpen } from "lucide-react";
 import BookCard from "../components/BookCard";
 import DeskCopyDialog from "../components/DeskCopyDialog";
 import ReviewsSection from "../components/ReviewsSection";
-import { fetchBook, fetchBooks, formatINR, notifyBackInStock, fetchSettings, mediaUrl } from "../lib/api";
+import { fetchBook, fetchBooks, formatINR, notifyBackInStock, fetchSettings, mediaUrl,
+    fetchBookPreview,
+} from "../lib/api";
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
 import { toast } from "sonner";
 import VerifyNotice from "../components/VerifyNotice";
 
 export default function BookDetail() {
+    const [preview, setPreview] = useState({ pages: [], page_count: 0 });
+    const [previewOpen, setPreviewOpen] = useState(false);
     const { id } = useParams();
     const [book, setBook] = useState(null);
     const [related, setRelated] = useState([]);
@@ -52,6 +57,13 @@ export default function BookDetail() {
     }, []);
 
     useEffect(() => {
+        setPreview({ pages: [], page_count: 0 });
+        fetchBookPreview(id)
+            .then((p) => setPreview(p || { pages: [], page_count: 0 }))
+            .catch(() => {});
+    }, [id]);
+
+    useEffect(() => {
         const vs = book && Array.isArray(book.variants) ? book.variants : [];
         if (vs.length) {
             setBinding(vs[0].binding || null);
@@ -64,14 +76,14 @@ export default function BookDetail() {
 
     if (loading) {
         return (
-            <div className="px-6 md:px-12 lg:px-16 py-32 text-center text-sm font-mono text-[#4B5563]">
+            <div className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-32 text-center text-sm font-mono text-[#4B5563]">
                 Loading…
             </div>
         );
     }
     if (!book) {
         return (
-            <div className="px-6 md:px-12 lg:px-16 py-32 text-center">
+            <div className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-32 text-center">
                 <h1 className="font-serif text-4xl text-[#002B5C]">Book not found.</h1>
                 <Link
                     to="/books"
@@ -185,7 +197,7 @@ export default function BookDetail() {
                 type="book"
                 jsonLd={[bookLd, crumbLd]}
             />
-            <div className="px-6 md:px-12 lg:px-16 pt-10 pb-8">
+            <div className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 pt-10 pb-8">
                 <Link
                     to="/books"
                     data-testid="back-to-catalog-link"
@@ -195,11 +207,11 @@ export default function BookDetail() {
                 </Link>
             </div>
 
-            <section className="px-6 md:px-12 lg:px-16 grid grid-cols-1 lg:grid-cols-12 gap-12 pb-20">
+            <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 grid grid-cols-1 lg:grid-cols-12 gap-12 pb-20">
                 {/* Cover */}
                 <div className="lg:col-span-5">
-                    <div className="sticky top-24">
-                        <div className="relative aspect-[2/3] bg-[#F5F7FA] border border-[#E5E7EB] overflow-hidden shadow-sm">
+                    <div className="sticky top-24 max-w-[300px] sm:max-w-[340px] lg:max-w-none mx-auto lg:mx-0">
+                        <div className="relative aspect-[2/3] bg-[#F5F7FA] border border-[#E5E7EB] overflow-hidden shadow-sm group">
                             <img
                                 src={mediaUrl(book.cover_image)}
                                 alt={book.title}
@@ -210,7 +222,32 @@ export default function BookDetail() {
                                     Bestseller
                                 </span>
                             )}
+                            {preview.page_count > 0 && (
+                                <button
+                                    type="button"
+                                    onClick={() => setPreviewOpen(true)}
+                                    data-testid="look-inside-cover"
+                                    aria-label="Look inside this book"
+                                    className="absolute inset-0 flex items-end justify-center bg-[#002B5C]/0 hover:bg-[#002B5C]/20 transition-colors"
+                                >
+                                    <span className="mb-5 inline-flex items-center gap-2 bg-[#F59E0B] text-[#002B5C] text-[11px] font-mono uppercase tracking-widest px-4 py-2 shadow-lg translate-y-0 group-hover:-translate-y-1 transition-transform">
+                                        <BookOpen size={13} strokeWidth={2} />
+                                        Look inside
+                                    </span>
+                                </button>
+                            )}
                         </div>
+                        {preview.page_count > 0 && (
+                            <button
+                                type="button"
+                                onClick={() => setPreviewOpen(true)}
+                                data-testid="look-inside-button"
+                                className="mt-4 w-full inline-flex items-center justify-center gap-2 border border-[#002B5C] text-[#002B5C] px-5 py-3 text-sm font-medium hover:bg-[#F5F7FA] transition-colors"
+                            >
+                                <BookOpen size={15} strokeWidth={1.5} />
+                                Look inside · {preview.page_count} pages
+                            </button>
+                        )}
                     </div>
                 </div>
 
@@ -532,7 +569,7 @@ export default function BookDetail() {
 
             {/* Related */}
             {related.length > 0 && (
-                <section className="px-6 md:px-12 lg:px-16 py-20 bg-[#F5F7FA] border-y border-[#E5E7EB]">
+                <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 bg-[#F5F7FA] border-y border-[#E5E7EB]">
                     <div className="flex items-end justify-between mb-10 gap-4">
                         <div>
                             <div className="overline">Readers also explored</div>
@@ -560,6 +597,14 @@ export default function BookDetail() {
                     </div>
                 </section>
             )}
+
+            <BookPreview
+                open={previewOpen}
+                onClose={() => setPreviewOpen(false)}
+                pages={preview.pages || []}
+                title={book.title}
+                totalPages={preview.total_pages}
+            />
         </div>
           );
 }

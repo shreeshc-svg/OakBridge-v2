@@ -52,7 +52,7 @@ function AuthorDetail({ id }) {
 
     return (
         <div data-testid="author-detail">
-            <div className="px-6 md:px-12 lg:px-16 pt-10">
+            <div className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 pt-10">
                 <Link
                     to="/authors"
                     className="inline-flex items-center gap-2 text-xs font-mono uppercase tracking-widest text-[#4B5563] hover:text-[#002B5C]"
@@ -60,7 +60,7 @@ function AuthorDetail({ id }) {
                     <ArrowLeft size={12} strokeWidth={1.5} /> All authors
                 </Link>
             </div>
-            <section className="px-6 md:px-12 lg:px-16 py-16 grid grid-cols-1 lg:grid-cols-12 gap-12">
+            <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-16 grid grid-cols-1 lg:grid-cols-12 gap-12">
                 <div className="lg:col-span-4">
                     <div className="sticky top-24">
                         <div className="aspect-[3/4] bg-[#F5F7FA] border border-[#E5E7EB] overflow-hidden">
@@ -131,13 +131,13 @@ function AuthorsIndex() {
                 description="Meet the scholars, practitioners and subject-matter experts who write for Oakbridge Publishing."
                 path="/authors"
             />
-            <section className="px-6 md:px-12 lg:px-16 pt-20 pb-16 border-b border-[#E5E7EB]">
+            <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 pt-20 pb-16 border-b border-[#E5E7EB]">
                 <div className="overline">{site.authors_overline || AUTHORS_DEFAULTS.overline}</div>
                 <h1 className="font-serif text-5xl md:text-7xl mt-4 text-[#002B5C] leading-[0.95] max-w-3xl whitespace-pre-line">
                     {site.authors_title || AUTHORS_DEFAULTS.title}
                 </h1>
             </section>
-            <section className="px-6 md:px-12 lg:px-16 py-20 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+            <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
                 {authors.map((a, idx) => (
                     <Link
                         key={a.id}

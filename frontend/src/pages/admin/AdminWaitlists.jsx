@@ -150,7 +150,7 @@ export default function AdminWaitlists() {
             />
 
             {/* Table */}
-            <div className="mt-6 overflow-hidden border border-[#E5E7EB] bg-white">
+            <div className="overflow-x-auto mt-6 border border-[#E5E7EB] bg-white">
                 <table className="w-full text-sm">
                     <thead className="bg-[#F5F7FA] text-[10px] font-mono uppercase tracking-widest text-[#4B5563]">
                         <tr>

@@ -61,7 +61,7 @@ export default function AdminUsers() {
                 count={view.length}
                 total={users.length}
             />
-            <div className="mt-6 bg-white border border-[#E5E7EB]">
+            <div className="overflow-x-auto mt-6 bg-white border border-[#E5E7EB]">
                 <table className="w-full text-sm">
                     <thead className="bg-[#F5F7FA] text-[10px] font-mono uppercase tracking-widest text-[#4B5563]">
                         <tr>

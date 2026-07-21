@@ -95,7 +95,7 @@ export default function About() {
                 description="Oakbridge Publishing is an independent scholarly press founded in 2017 by two veteran publishing professionals, producing authoritative law, tax, business and academic titles."
                 path="/about"
             />
-            <section className="px-6 md:px-12 lg:px-16 pt-20 pb-24 border-b border-[#E5E7EB]">
+            <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 pt-20 pb-24 border-b border-[#E5E7EB]">
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
                     <div className="lg:col-span-7">
                         <div className="overline">{c.overline}</div>
@@ -112,7 +112,7 @@ export default function About() {
                 </div>
             </section>
 
-            <section className="px-6 md:px-12 lg:px-16 py-24 bg-[#F5F7FA] border-b border-[#E5E7EB]">
+            <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-24 bg-[#F5F7FA] border-b border-[#E5E7EB]">
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
                     <div className="lg:col-span-4">
                         <div className="overline">{c.timeline_overline}</div>
@@ -144,7 +144,7 @@ export default function About() {
                 <section
                     id="team"
                     data-testid="about-management-team"
-                    className="px-6 md:px-12 lg:px-16 py-24 border-b border-[#E5E7EB]"
+                    className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-24 border-b border-[#E5E7EB]"
                 >
                     <div className="max-w-3xl mb-16">
                         <div className="overline">{site.about_team_overline || "Our Management Team"}</div>
@@ -160,7 +160,7 @@ export default function About() {
                                 className={`grid grid-cols-1 lg:grid-cols-12 gap-10 items-start ${i % 2 === 1 ? "lg:[&>div:first-child]:order-2" : ""}`}
                             >
                                 <div className="lg:col-span-4">
-                                    <div className="aspect-square overflow-hidden bg-[#F5F7FA] border border-[#E5E7EB]">
+                                    <div className="aspect-square overflow-hidden bg-[#F5F7FA] border border-[#E5E7EB] max-w-[280px] sm:max-w-[340px] lg:max-w-none mx-auto lg:mx-0">
                                         {p.photo ? (
                                             <img
                                                 src={mediaUrl(p.photo) || p.photo}
@@ -186,7 +186,7 @@ export default function About() {
                 </section>
             )}
 
-            <section id="careers" className="px-6 md:px-12 lg:px-16 py-24">
+            <section id="careers" className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-24">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                     {cols.map((col, i) => (
                         <div key={col.id || i} id={col.id || undefined}>
