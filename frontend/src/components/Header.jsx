@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { ShoppingBag, Menu, X, User, LogOut } from "lucide-react";
 import { useCart } from "../context/CartContext";
@@ -24,6 +24,34 @@ export default function Header() {
     const [accountOpen, setAccountOpen] = useState(false);
     const [navItems, setNavItems] = useState(DEFAULT_NAV);
     const nav = useNavigate();
+    const accountRef = useRef(null);
+
+    /*
+     * Close the account menu on an outside click rather than on the trigger's
+     * blur. The old `onBlur` + setTimeout closed the menu 150ms after focus
+     * left the button — so on any click slower than that, the <Link> unmounted
+     * between mousedown and mouseup and the navigation never fired. Clicking
+     * "Admin Dashboard" or "My Orders" appeared to do nothing, with no error.
+     *
+     * `mousedown` on the item still runs before this handler's own close, and
+     * React Router's click handler fires on mouseup against a link that is
+     * still mounted.
+     */
+    useEffect(() => {
+        if (!accountOpen) return undefined;
+        const onDown = (e) => {
+            if (accountRef.current && !accountRef.current.contains(e.target)) {
+                setAccountOpen(false);
+            }
+        };
+        const onKey = (e) => e.key === "Escape" && setAccountOpen(false);
+        document.addEventListener("mousedown", onDown);
+        document.addEventListener("keydown", onKey);
+        return () => {
+            document.removeEventListener("mousedown", onDown);
+            document.removeEventListener("keydown", onKey);
+        };
+    }, [accountOpen]);
 
     useEffect(() => {
         fetchCollection("site_nav")
@@ -92,11 +120,12 @@ export default function Header() {
 
                         {/* Account */}
                         {isAuthenticated ? (
-                            <div className="relative hidden md:block">
+                            <div className="relative hidden md:block" ref={accountRef}>
                                 <button
                                     onClick={() => setAccountOpen((o) => !o)}
-                                    onBlur={() => setTimeout(() => setAccountOpen(false), 150)}
                                     data-testid="header-account-button"
+                                    aria-haspopup="menu"
+                                    aria-expanded={accountOpen}
                                     className="p-2 hover:bg-[#F5F7FA] transition-colors"
                                     aria-label="Account"
                                 >
@@ -114,6 +143,7 @@ export default function Header() {
                                         </div>
                                         <Link
                                             to="/account"
+                                            onClick={() => setAccountOpen(false)}
                                             data-testid="header-my-account-link"
                                             className="block px-4 py-2 text-sm hover:bg-[#F5F7FA]"
                                         >
@@ -122,6 +152,7 @@ export default function Header() {
                                         {isAdmin && (
                                             <Link
                                                 to="/admin"
+                                                onClick={() => setAccountOpen(false)}
                                                 data-testid="header-admin-link"
                                                 className="block px-4 py-2 text-sm hover:bg-[#F5F7FA] text-[#CC0033]"
                                             >
@@ -130,6 +161,7 @@ export default function Header() {
                                         )}
                                         <button
                                             onClick={() => {
+                                                setAccountOpen(false);
                                                 logout();
                                                 nav("/");
                                             }}

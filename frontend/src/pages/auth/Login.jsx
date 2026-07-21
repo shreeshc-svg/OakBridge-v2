@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { formatApiError } from "../../lib/api";
 import { toast } from "sonner";
@@ -12,7 +12,11 @@ export default function Login() {
     const { login } = useAuth();
     const nav = useNavigate();
     const loc = useLocation();
-    const from = loc.state?.from?.pathname || "/account";
+    const [sp] = useSearchParams();
+    // `next`/`expired` are set by the 401 handler in lib/api.js; router state is
+    // used by the in-app checkout gate. Either can send us back where we were.
+    const expired = sp.get("expired") === "1";
+    const from = sp.get("next") || loc.state?.from?.pathname || "/account";
 
     const onSubmit = async (e) => {
         e.preventDefault();
@@ -61,6 +65,15 @@ export default function Login() {
                     <p className="text-sm text-[#4B5563] mt-4">
                         Access your orders, desk copy requests and reviews.
                     </p>
+
+                    {expired && (
+                        <div
+                            data-testid="login-session-expired"
+                            className="mt-6 border-l-2 border-[#F59E0B] bg-[#FFFBEB] pl-3 py-2.5 pr-3 text-sm text-[#002B5C]"
+                        >
+                            Your session expired. Please sign in again — nothing has been lost.
+                        </div>
+                    )}
 
                     <form onSubmit={onSubmit} className="mt-10 space-y-5">
                         <div>

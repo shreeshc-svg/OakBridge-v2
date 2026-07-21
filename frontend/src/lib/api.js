@@ -14,6 +14,34 @@ api.interceptors.request.use((config) => {
     return config;
 });
 
+/*
+ * Tokens live 7 days, and they also stop working if JWT_SECRET is rotated on the
+ * server. Without this handler an expired token produced a silent dead end:
+ * Account, Orders and Admin all failed their fetches and rendered empty, with no
+ * hint that the fix was simply to sign in again.
+ *
+ * On a 401 we drop the stale token and send the user to /login with a `next`
+ * param so they land back where they were. Failures from the auth endpoints
+ * themselves are passed through untouched — a wrong password is also a 401, and
+ * that has to reach the login form as an error rather than trigger a redirect.
+ */
+api.interceptors.response.use(
+    (r) => r,
+    (error) => {
+        const status = error?.response?.status;
+        const url = error?.config?.url || "";
+        const isAuthCall = url.startsWith("/auth/");
+        if (status === 401 && !isAuthCall && typeof window !== "undefined") {
+            localStorage.removeItem("oakbridge_token");
+            const here = window.location.pathname + window.location.search;
+            if (!window.location.pathname.startsWith("/login")) {
+                window.location.assign(`/login?expired=1&next=${encodeURIComponent(here)}`);
+            }
+        }
+        return Promise.reject(error);
+    },
+);
+
 // Public
 export const fetchCategories = () => api.get("/categories").then((r) => r.data);
 export const fetchBooks = (params = {}) =>
