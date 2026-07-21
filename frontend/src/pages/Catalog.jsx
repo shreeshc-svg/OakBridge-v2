@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Breadcrumbs from "../components/Breadcrumbs";
 import Seo from "../components/Seo";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { Search, SlidersHorizontal, X } from "lucide-react";
 import BookCard from "../components/BookCard";
-import { fetchBooks, fetchCategories, fetchSiteContent, fetchSettings, mediaUrl } from "../lib/api";
+import { fetchBooks, fetchCategories, fetchSiteContent, fetchSettings, mediaUrl, logSearch, fetchSuggestIndex } from "../lib/api";
 
 // How many books to pull per infinite-scroll page.
 const PAGE_SIZE = 24;
@@ -83,6 +83,10 @@ export default function Catalog() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [sort, category, search, sp, settings]);
 
+    // Catalogue index (titles + authors) used for "did you mean" when a search
+    // returns nothing. Loaded lazily — only when we actually need it.
+    const [indexBooks, setIndexBooks] = useState([]);
+
     // Reset + load the first page whenever filters / sort / settings change.
     useEffect(() => {
         let cancelled = false;
@@ -97,6 +101,7 @@ export default function Catalog() {
                 setBooks(data);
                 skipRef.current = data.length;
                 setHasMore(data.length === PAGE_SIZE);
+                if (search) logSearch(search, data.length, category || null);
             })
             .catch(() => {
                 if (!cancelled) setHasMore(false);
@@ -157,6 +162,41 @@ export default function Catalog() {
     const clearFilters = () => {
         setSp(new URLSearchParams(), { replace: true });
     };
+
+    useEffect(() => {
+        if (!loading && search && books.length === 0 && indexBooks.length === 0) {
+            fetchSuggestIndex()
+                .then((d) => setIndexBooks(d?.books || []))
+                .catch(() => {});
+        }
+    }, [loading, search, books.length, indexBooks.length]);
+
+    // Cheap similarity: shared-prefix + token overlap. Good enough to catch
+    // typos and partial titles without pulling in a fuzzy-match dependency.
+    const didYouMean = useMemo(() => {
+        const term = (search || "").toLowerCase().trim();
+        if (!term || indexBooks.length === 0) return [];
+        const tokens = term.split(/\s+/).filter((t) => t.length > 2);
+        const score = (s) => {
+            const v = (s || "").toLowerCase();
+            let n = 0;
+            for (const t of tokens) if (v.includes(t)) n += 2;
+            // forgiving prefix match catches "moneylaunder" -> "money laundering"
+            for (let len = Math.min(term.length, 8); len >= 4; len--) {
+                if (v.includes(term.slice(0, len))) {
+                    n += len / 4;
+                    break;
+                }
+            }
+            return n;
+        };
+        return indexBooks
+            .map((b) => ({ b, s: score(b.t) + score(b.a) * 0.6 }))
+            .filter((x) => x.s > 0)
+            .sort((a, b) => b.s - a.s)
+            .slice(0, 4)
+            .map((x) => x.b);
+    }, [search, indexBooks]);
 
     const activeFilters = useMemo(() => {
         const arr = [];
@@ -368,29 +408,37 @@ export default function Catalog() {
 
                 {/* ============ GRID ============ */}
                 <section className="lg:col-span-9">
-                    <div className="flex items-center justify-between border-b border-[#E5E7EB] pb-4 mb-8">
+                    {/*
+                      Phone: the count sits on its own line and the two controls
+                      share a full-width row, so "24+ titles" can't wrap and the
+                      buttons keep a 44px touch target. From sm up it collapses
+                      back to a single justified row.
+                    */}
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-[#E5E7EB] pb-4 mb-8">
                         <div
                             data-testid="catalog-count"
-                            className="font-mono text-xs text-[#4B5563]"
+                            className="font-mono text-xs text-[#4B5563] whitespace-nowrap"
                         >
                             {loading
                                 ? "Loading…"
                                 : `${books.length}${hasMore ? "+" : ""} title${books.length === 1 ? "" : "s"}`}
                         </div>
-                        <div className="flex items-center gap-3">
+                        <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:gap-3">
                             <button
                                 onClick={() => setShowFilters((s) => !s)}
                                 data-testid="toggle-filters-mobile"
-                                className="lg:hidden inline-flex items-center gap-2 text-sm border border-[#E5E7EB] px-3 py-1.5"
+                                aria-expanded={showFilters}
+                                className="lg:hidden inline-flex items-center justify-center gap-2 text-sm border border-[#E5E7EB] bg-white px-3 h-11 sm:h-9 min-w-0"
                             >
-                                <SlidersHorizontal size={14} strokeWidth={1.5} />
+                                <SlidersHorizontal size={14} strokeWidth={1.5} className="flex-shrink-0" />
                                 Filters
                             </button>
                             <select
                                 value={sort}
                                 onChange={(e) => update("sort", e.target.value)}
                                 data-testid="catalog-sort"
-                                className="bg-white border border-[#E5E7EB] text-sm px-3 py-1.5 outline-none focus:border-[#002B5C]"
+                                aria-label="Sort books"
+                                className="bg-white border border-[#E5E7EB] text-sm px-3 h-11 sm:h-9 w-full sm:w-auto min-w-0 outline-none focus:border-[#002B5C]"
                             >
                                 {sortOptions.map((s) => (
                                     <option key={s.value} value={s.value}>
@@ -419,14 +467,66 @@ export default function Catalog() {
                     {!loading && books.length === 0 && (
                         <div
                             data-testid="catalog-empty"
-                            className="text-center py-20 border border-dashed border-[#E5E7EB]"
+                            className="py-14 px-6 md:px-10 border border-dashed border-[#E5E7EB] text-center"
                         >
                             <h3 className="font-serif text-3xl text-[#002B5C]">
-                                No titles found.
+                                {search ? <>No titles match “{search}”.</> : "No titles found."}
                             </h3>
                             <p className="text-sm text-[#4B5563] mt-2">
-                                Try adjusting your filters.
+                                {search
+                                    ? "It may be spelled differently, or we may not publish it yet."
+                                    : "Try adjusting your filters."}
                             </p>
+
+                            {didYouMean.length > 0 && (
+                                <div className="mt-8">
+                                    <div className="overline !text-[10px]">Did you mean</div>
+                                    <div className="mt-3 flex flex-wrap justify-center gap-2">
+                                        {didYouMean.map((b) => (
+                                            <Link
+                                                key={b.id}
+                                                to={`/books/${b.id}`}
+                                                data-testid={`did-you-mean-${b.id}`}
+                                                className="max-w-full inline-flex items-center gap-2 border border-[#002B5C] px-4 py-2 text-sm text-[#002B5C] hover:bg-[#F5F7FA] transition-colors"
+                                            >
+                                                <span className="truncate">{b.t}</span>
+                                            </Link>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {cats.length > 0 && (
+                                <div className="mt-8">
+                                    <div className="overline !text-[10px]">Or browse a category</div>
+                                    <div className="mt-3 flex flex-wrap justify-center gap-2">
+                                        {cats.slice(0, 6).map((c) => (
+                                            <Link
+                                                key={c.id}
+                                                to={`/books?category=${encodeURIComponent(c.slug || c.id)}`}
+                                                className="border border-[#E5E7EB] px-4 py-2 text-sm text-[#4B5563] hover:border-[#002B5C] hover:text-[#002B5C] transition-colors"
+                                            >
+                                                {c.name}
+                                            </Link>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="mt-8 flex flex-wrap justify-center gap-3">
+                                <Link
+                                    to="/books"
+                                    className="inline-flex items-center bg-[#002B5C] text-white px-6 py-3 text-sm font-medium hover:bg-[#001F42] transition-colors"
+                                >
+                                    Clear search &amp; browse all
+                                </Link>
+                                <Link
+                                    to="/contact"
+                                    className="inline-flex items-center border border-[#002B5C] text-[#002B5C] px-6 py-3 text-sm font-medium hover:bg-[#F5F7FA] transition-colors"
+                                >
+                                    Ask us about a title
+                                </Link>
+                            </div>
                         </div>
                     )}
 

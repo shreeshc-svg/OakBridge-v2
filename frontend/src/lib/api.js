@@ -100,6 +100,11 @@ export const adminDeleteMedia = (id) =>
 export const adminUpdateCategoryImage = (id, image) =>
     api.patch(`/admin/categories/${id}`, { image }).then((r) => r.data);
 export const mediaUrl = (u) => (u && u.startsWith("/api/") ? `${BACKEND_URL}${u}` : u);
+export const fetchSuggestIndex = () => api.get("/books/suggest-index").then((r) => r.data);
+export const logSearch = (q, results, category) =>
+    api.post("/search/log", { q, results, category: category || null }).catch(() => {});
+export const adminSearchLogs = (days = 30) =>
+    api.get(`/admin/search-logs?days=${days}`).then((r) => r.data);
 export const fetchBookPreview = (id) => api.get(`/books/${id}/preview`).then((r) => r.data);
 export const adminUploadBookPreview = (id, file) => {
     const fd = new FormData();

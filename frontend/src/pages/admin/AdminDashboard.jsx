@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { BookOpen, ShoppingBag, Users, Mail, TrendingUp, FileText, Inbox, AlertTriangle, Sparkles } from "lucide-react";
-import { adminStats, adminRunCartReminders, formatINR } from "../../lib/api";
+import { BookOpen, ShoppingBag, Users, Mail, TrendingUp, FileText, Inbox, AlertTriangle, Sparkles, Search as SearchIcon } from "lucide-react";
+import { adminStats, adminRunCartReminders, formatINR, adminSearchLogs } from "../../lib/api";
 import { toast } from "sonner";
 
 function Stat({ label, value, icon: Icon, accent }) {
@@ -22,9 +22,11 @@ function Stat({ label, value, icon: Icon, accent }) {
 export default function AdminDashboard() {
     const [stats, setStats] = useState(null);
     const [reminding, setReminding] = useState(false);
+    const [searchInsight, setSearchInsight] = useState(null);
 
     useEffect(() => {
         adminStats().then(setStats).catch(() => {});
+        adminSearchLogs(30).then(setSearchInsight).catch(() => {});
     }, []);
 
     const runReminders = async () => {
@@ -178,6 +180,72 @@ export default function AdminDashboard() {
                         </div>
                     ))}
                 </div>
+            </section>
+
+            {/* What customers are searching for — anonymous query log */}
+            <section className="mt-12" data-testid="search-insights">
+                <div className="flex items-end justify-between flex-wrap gap-3">
+                    <div>
+                        <div className="overline">Search insight · last 30 days</div>
+                        <h2 className="font-serif text-2xl mt-2 text-[#002B5C]">
+                            What people are looking for
+                        </h2>
+                    </div>
+                    {searchInsight && (
+                        <div className="font-mono text-xs text-[#4B5563]">
+                            {searchInsight.total_searches} searches ·{" "}
+                            <span className={searchInsight.zero_result_searches > 0 ? "text-[#CC0033]" : ""}>
+                                {searchInsight.zero_result_searches} with no results
+                            </span>
+                        </div>
+                    )}
+                </div>
+
+                {!searchInsight || searchInsight.total_searches === 0 ? (
+                    <div className="mt-4 border border-dashed border-[#E5E7EB] bg-white p-8 text-center">
+                        <SearchIcon size={22} strokeWidth={1.5} className="mx-auto text-[#E5E7EB]" />
+                        <p className="text-sm text-[#4B5563] mt-3">
+                            No searches recorded yet. Queries are logged anonymously — the term and
+                            the number of results, never who searched.
+                        </p>
+                    </div>
+                ) : (
+                    <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div className="bg-white border border-[#E5E7EB]">
+                            <div className="px-5 py-3 border-b border-[#E5E7EB] overline !text-[10px]">
+                                Most searched
+                            </div>
+                            {searchInsight.top_queries.length === 0 ? (
+                                <p className="p-5 text-sm text-[#4B5563]">Nothing yet.</p>
+                            ) : (
+                                searchInsight.top_queries.map((r) => (
+                                    <div key={r.q} className="flex items-center justify-between gap-4 px-5 py-2.5 border-b border-[#E5E7EB] last:border-b-0">
+                                        <span className="text-sm text-[#002B5C] truncate">{r.q}</span>
+                                        <span className="font-mono text-xs text-[#4B5563] flex-shrink-0">{r.count}×</span>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+
+                        <div className="bg-white border border-[#CC0033]/30">
+                            <div className="px-5 py-3 border-b border-[#E5E7EB] overline !text-[10px] !text-[#CC0033]">
+                                Found nothing — demand you aren't meeting
+                            </div>
+                            {searchInsight.zero_result_queries.length === 0 ? (
+                                <p className="p-5 text-sm text-[#4B5563]">
+                                    Every search returned results. Good sign.
+                                </p>
+                            ) : (
+                                searchInsight.zero_result_queries.map((r) => (
+                                    <div key={r.q} className="flex items-center justify-between gap-4 px-5 py-2.5 border-b border-[#E5E7EB] last:border-b-0">
+                                        <span className="text-sm text-[#002B5C] truncate">{r.q}</span>
+                                        <span className="font-mono text-xs text-[#CC0033] flex-shrink-0">{r.count}×</span>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    </div>
+                )}
             </section>
         </div>
     );

@@ -443,6 +443,93 @@ async def admin_upload_ebook(book_id: str, file: UploadFile = File(...)):
     return {"ok": True, "path": result["path"], "size": result.get("size", len(data))}
 
 
+# ----------------------------------------------------------------- search logs
+# Anonymous by design: we store the QUERY and the RESULT COUNT, never a user id,
+# session id or IP. That keeps this out of personal-data territory under the DPDP
+# Act while still answering the only questions worth asking — what are people
+# looking for, and what are they failing to find?
+
+
+class SearchLog(BaseModel):
+    q: str
+    results: int = 0
+    category: Optional[str] = None
+
+
+@public_router.post("/search/log")
+async def log_search(payload: SearchLog):
+    """Record a search. Fire-and-forget from the client; never blocks the UI."""
+    q = (payload.q or "").strip()
+    if not q or len(q) > 120:
+        return {"ok": True}  # ignore empties and junk, silently
+    await db.search_logs.insert_one(
+        {
+            "q": q,
+            "q_lower": q.lower(),
+            "results": int(payload.results or 0),
+            "category": payload.category or None,
+            "at": datetime.now(timezone.utc),
+        }
+    )
+    return {"ok": True}
+
+
+@public_router.get("/books/suggest-index")
+async def suggest_index():
+    """Minimal title/author list for client-side autocomplete.
+
+    The whole catalogue is a couple of hundred titles, so the browser can hold it
+    and match locally — instant suggestions with no request per keystroke.
+    """
+    docs = (
+        await db.books.find(
+            {}, {"_id": 0, "id": 1, "title": 1, "author": 1, "category": 1, "release_rank": 1}
+        )
+        .sort("release_rank", 1)
+        .to_list(None)
+    )
+    return {
+        "count": len(docs),
+        "books": [
+            {
+                "id": b["id"],
+                "t": b.get("title") or "",
+                "a": b.get("author") or "",
+                "c": b.get("category") or "",
+            }
+            for b in docs
+        ],
+    }
+
+
+@admin_router.get("/search-logs")
+async def admin_search_logs(days: int = 30, limit: int = 20):
+    """Aggregated search insight: what people look for, and what they don't find."""
+    since = datetime.now(timezone.utc) - timedelta(days=max(1, days))
+    base = {"at": {"$gte": since}}
+
+    async def top(match):
+        cur = db.search_logs.aggregate(
+            [
+                {"$match": match},
+                {"$group": {"_id": "$q_lower", "n": {"$sum": 1}, "results": {"$max": "$results"}}},
+                {"$sort": {"n": -1}},
+                {"$limit": limit},
+            ]
+        )
+        return [{"q": r["_id"], "count": r["n"], "results": r.get("results", 0)} async for r in cur]
+
+    total = await db.search_logs.count_documents(base)
+    zero = await db.search_logs.count_documents({**base, "results": 0})
+    return {
+        "days": days,
+        "total_searches": total,
+        "zero_result_searches": zero,
+        "top_queries": await top(base),
+        "zero_result_queries": await top({**base, "results": 0}),
+    }
+
+
 # ---------------------------------------------------------------- book preview
 # "Look inside": the preview PDF is rendered to page IMAGES on upload and only
 # those images are ever served. The source PDF is never exposed, so the preview

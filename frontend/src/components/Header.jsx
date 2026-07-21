@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
-import { ShoppingBag, Search, Menu, X, User, LogOut } from "lucide-react";
+import { ShoppingBag, Menu, X, User, LogOut } from "lucide-react";
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
 import CartSheet from "./CartSheet";
+import SearchBox from "./SearchBox";
 import { fetchCollection } from "../lib/api";
 
 const DEFAULT_NAV = [
@@ -21,7 +22,6 @@ export default function Header() {
     const { isAuthenticated, isAdmin, user, logout } = useAuth();
     const [mobileOpen, setMobileOpen] = useState(false);
     const [accountOpen, setAccountOpen] = useState(false);
-    const [q, setQ] = useState("");
     const [navItems, setNavItems] = useState(DEFAULT_NAV);
     const nav = useNavigate();
 
@@ -36,13 +36,6 @@ export default function Header() {
             .catch(() => {});
     }, []);
 
-    const onSearch = (e) => {
-        e.preventDefault();
-        if (q.trim()) {
-            nav(`/books?search=${encodeURIComponent(q.trim())}`);
-            setMobileOpen(false);
-        }
-    };
 
     return (
         <>
@@ -79,23 +72,7 @@ export default function Header() {
                     </nav>
 
                     <div className="flex items-center gap-2 flex-shrink-0">
-                        <form
-                            onSubmit={onSearch}
-                            className="hidden md:flex items-center border border-[#E5E7EB] bg-white px-3 h-9 w-44 xl:w-52"
-                        >
-                            <Search
-                                size={16}
-                                strokeWidth={1.5}
-                                className="text-[#4B5563]"
-                            />
-                            <input
-                                data-testid="header-search-input"
-                                value={q}
-                                onChange={(e) => setQ(e.target.value)}
-                                placeholder="Search titles, authors, ISBN"
-                                className="bg-transparent text-sm px-2 w-full outline-none placeholder:text-[#4B5563]/60"
-                            />
-                        </form>
+                        <SearchBox className="hidden md:block w-44 xl:w-52" />
                         <button
                             onClick={() => setIsOpen(true)}
                             data-testid="open-cart-button"
@@ -231,22 +208,12 @@ export default function Header() {
                                     Sign in
                                 </NavLink>
                             )}
-                            <form
-                                onSubmit={onSearch}
-                                className="flex border border-[#E5E7EB] bg-white px-3 h-10 mt-2"
-                            >
-                                <Search
-                                    size={16}
-                                    strokeWidth={1.5}
-                                    className="self-center text-[#4B5563]"
-                                />
-                                <input
-                                    value={q}
-                                    onChange={(e) => setQ(e.target.value)}
-                                    placeholder="Search books"
-                                    className="bg-transparent text-sm px-2 w-full outline-none"
-                                />
-                            </form>
+                            <SearchBox
+                                className="mt-2"
+                                inputClassName="h-10"
+                                placeholder="Search books"
+                                onNavigate={() => setMobileOpen(false)}
+                            />
                         </nav>
                     </div>
                 )}
