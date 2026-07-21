@@ -48,7 +48,7 @@ const DEFAULT_TEAM = [
     {
         id: "shreesh-chandra",
         name: "Shreesh Chandra",
-        role: "Co-Founder, Director",
+        role: "Founder, Director",
         photo: "/team/shreesh-chandra.jpg",
         bio: "Shreesh has over 25 years of experience cutting across the publishing and education industry. Having started his publishing career with McGraw Hill Education, he has worked with leading publishing companies like Macmillan, Wolters Kluwer and LexisNexis. In between his stints at publishing outfits, he also has the credit of setting up the franchise business for Hughes Escorts Communication Limited and Triumphant Institute of Management Education. With well-rounded experience in leadership roles across Sales, Marketing, Product and Solutions Development, he enjoys the reputation of setting up new businesses and turning around old ones.\n\nHaving won various international awards for his contributions at work, he has been instrumental in the growth journey of most organisations he has worked for. Shreesh holds an executive MBA from IIM Bangalore.",
     },

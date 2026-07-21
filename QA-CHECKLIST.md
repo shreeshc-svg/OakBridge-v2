@@ -115,6 +115,39 @@ Legend: 🛒 storefront · 🔐 auth · 💳 payments · 📧 email · 🛠️ a
 - [ ] Floating **chatbot** answers basic questions and can navigate to sections.
 - [ ] Abandoned-cart reminder cron endpoint responds (token-protected) — test via Admin "Run cart reminders".
 
+### 10a. Menus, popovers and overlays — **click slowly**
+
+> Why this section exists: the account menu closed itself 150 ms after the trigger lost
+> focus, so any click slower than that unmounted the link mid-click. "Admin Dashboard"
+> and "My Orders" silently did nothing — **no console error, no failed request**. Fast
+> clicking and synthetic test clicks both passed. Deliberate, unhurried clicks are the
+> only way to catch this class of bug.
+
+For **every** menu, dropdown and overlay below: open it, pause for a second, then click an
+item slowly (press, hold briefly, release). It must navigate or act every time.
+
+- [ ] Header **account menu** → My Orders (arrives at `/account`)
+- [ ] Header **account menu** → Admin Dashboard (arrives at `/admin`)
+- [ ] Header **account menu** → Sign out (signs out and returns home)
+- [ ] Header **account menu** closes on outside click and on `Esc`
+- [ ] **Search autocomplete**: type 3+ letters, pause, click a suggestion slowly → opens that book
+- [ ] Search autocomplete → "See all results for…" row
+- [ ] Search **recent searches** row (focus the empty box after a prior search)
+- [ ] **Mobile drawer** (hamburger): every nav link, at 375px and at 1024–1279px
+- [ ] **Cart drawer**: quantity +/−, remove, "Checkout" button
+- [ ] **PLP Filters** panel on mobile: toggle, apply, "Clear all"
+- [ ] **Sort** dropdown on mobile (select opens, choice applies)
+- [ ] **Authors carousel**: prev/next arrows, and a tile click after scrolling
+- [ ] **Admin drawer nav** below `lg`: every section link
+- [ ] **Book preview** modal (if re-enabled): page arrows, thumbnails, close
+
+### 10b. Session expiry
+- [ ] With a stale/invalid token (clear `oakbridge_token` in Local Storage, or wait out the
+      7-day TTL), visiting `/account`, `/admin` or `/orders` redirects to `/login` showing
+      "Your session expired" — **not** a blank or silently empty page.
+- [ ] After signing in from that prompt, you land back on the page you originally wanted.
+- [ ] A wrong password still shows an inline error on the login form (no redirect loop).
+
 ---
 
 ## Known pre-launch dependencies (not bugs)
