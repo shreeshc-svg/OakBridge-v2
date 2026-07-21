@@ -1,10 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Breadcrumbs from "../components/Breadcrumbs";
 import Seo from "../components/Seo";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, ArrowUpRight } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, ChevronLeft, ChevronRight } from "lucide-react";
 import BookCard from "../components/BookCard";
-import { fetchAuthor, fetchAuthorBooks, fetchAuthors, fetchSiteContent } from "../lib/api";
+import { fetchAuthor, fetchAuthorBooks, fetchAuthors, fetchSiteContent, fetchSettings } from "../lib/api";
 
 const AUTHORS_DEFAULTS = {
     overline: "Our Authors",
@@ -115,13 +115,72 @@ function AuthorDetail({ id }) {
     );
 }
 
+// Tailwind can't see class names built at runtime, so the per-row counts are
+// spelled out here for the JIT compiler to pick up.
+const AUTHOR_GRID_COLS = {
+    3: "grid-cols-2 sm:grid-cols-2 lg:grid-cols-3",
+    4: "grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4",
+    5: "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5",
+};
+
+function AuthorTile({ a, idx }) {
+    return (
+        <Link
+            to={`/authors/${a.id}`}
+            data-testid={`author-tile-${a.id}`}
+            className="group block"
+        >
+            <div className="relative aspect-[3/4] bg-[#F5F7FA] border border-[#E5E7EB] overflow-hidden">
+                <img
+                    src={a.photo}
+                    alt={a.name}
+                    loading="lazy"
+                    className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                />
+                <div className="absolute top-3 left-3 font-mono text-[10px] text-white/90 uppercase tracking-widest bg-[#002B5C]/70 px-2 py-1">
+                    {String(idx + 1).padStart(2, "0")}
+                </div>
+            </div>
+            <div className="mt-3">
+                <div className="overline !text-[10px]">{a.specialty}</div>
+                <h3 className="font-serif text-xl xl:text-2xl mt-1.5 text-[#002B5C] group-hover:text-[#CC0033] transition-colors">
+                    {a.name}
+                </h3>
+                <p className="text-xs text-[#4B5563] mt-1">{a.affiliation}</p>
+                <span className="mt-3 inline-flex items-center gap-1 text-xs font-medium border-b border-[#002B5C] pb-0.5">
+                    Read more <ArrowUpRight size={12} strokeWidth={1.5} />
+                </span>
+            </div>
+        </Link>
+    );
+}
+
 function AuthorsIndex() {
     const [authors, setAuthors] = useState([]);
     const [site, setSite] = useState({});
+    const [settings, setSettings] = useState({});
+    const railRef = useRef(null);
+
     useEffect(() => {
         fetchAuthors().then(setAuthors);
         fetchSiteContent().then(setSite).catch(() => {});
+        fetchSettings().then(setSettings).catch(() => {});
     }, []);
+
+    const perRow = AUTHOR_GRID_COLS[settings.authors_per_row] ? settings.authors_per_row : 4;
+    const gridRows = Number.isFinite(settings.authors_grid_rows)
+        ? Math.max(0, settings.authors_grid_rows)
+        : 2;
+    // 0 rows means "no carousel" — show the whole list as a grid.
+    const gridCount = gridRows === 0 ? authors.length : perRow * gridRows;
+    const gridAuthors = authors.slice(0, gridCount);
+    const railAuthors = authors.slice(gridCount);
+
+    const scrollRail = (dir) => {
+        const el = railRef.current;
+        if (!el) return;
+        el.scrollBy({ left: dir * el.clientWidth * 0.9, behavior: "smooth" });
+    };
 
     return (
         <div data-testid="authors-index">
@@ -137,41 +196,61 @@ function AuthorsIndex() {
                     {site.authors_title || AUTHORS_DEFAULTS.title}
                 </h1>
             </section>
-            <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-                {authors.map((a, idx) => (
-                    <Link
-                        key={a.id}
-                        to={`/authors/${a.id}`}
-                        data-testid={`author-tile-${a.id}`}
-                        className="group block"
-                    >
-                        <div className="relative aspect-[3/4] bg-[#F5F7FA] border border-[#E5E7EB] overflow-hidden">
-                            <img
-                                src={a.photo}
-                                alt={a.name}
-                                className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                            />
-                            <div className="absolute top-4 left-4 font-mono text-[10px] text-white/90 uppercase tracking-widest bg-[#002B5C]/70 px-2 py-1">
-                                {String(idx + 1).padStart(2, "0")}
-                            </div>
-                        </div>
-                        <div className="mt-4">
-                            <div className="overline !text-[10px]">
-                                {a.specialty}
-                            </div>
-                            <h3 className="font-serif text-2xl mt-2 text-[#002B5C] group-hover:text-[#CC0033] transition-colors">
-                                {a.name}
-                            </h3>
-                            <p className="text-xs text-[#4B5563] mt-1">
-                                {a.affiliation}
-                            </p>
-                            <span className="mt-4 inline-flex items-center gap-1 text-xs font-medium border-b border-[#002B5C] pb-0.5">
-                                Read more <ArrowUpRight size={12} strokeWidth={1.5} />
-                            </span>
-                        </div>
-                    </Link>
+            <section
+                data-testid="authors-grid"
+                className={`px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 pt-16 ${railAuthors.length ? "pb-10" : "pb-20"} grid gap-x-6 gap-y-10 xl:gap-x-8 ${AUTHOR_GRID_COLS[perRow]}`}
+            >
+                {gridAuthors.map((a, idx) => (
+                    <AuthorTile key={a.id} a={a} idx={idx} />
                 ))}
             </section>
+
+            {railAuthors.length > 0 && (
+                <section
+                    data-testid="authors-carousel"
+                    className="pb-20 border-t border-[#E5E7EB] pt-10"
+                >
+                    <div className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 flex items-end justify-between gap-4">
+                        <h2 className="font-serif text-2xl md:text-3xl text-[#002B5C]">
+                            {settings.authors_carousel_title || "More from our list"}
+                        </h2>
+                        {/* Arrows are a desktop affordance; touch devices swipe. */}
+                        <div className="hidden md:flex items-center gap-2">
+                            <button
+                                onClick={() => scrollRail(-1)}
+                                aria-label="Scroll left"
+                                className="p-2 border border-[#E5E7EB] hover:border-[#002B5C] transition-colors"
+                            >
+                                <ChevronLeft size={16} strokeWidth={1.5} />
+                            </button>
+                            <button
+                                onClick={() => scrollRail(1)}
+                                aria-label="Scroll right"
+                                className="p-2 border border-[#E5E7EB] hover:border-[#002B5C] transition-colors"
+                            >
+                                <ChevronRight size={16} strokeWidth={1.5} />
+                            </button>
+                        </div>
+                    </div>
+                    {/*
+                      Scroll padding matches the page gutters so the first and last
+                      tiles line up with the grid above instead of hugging the edge.
+                    */}
+                    <div
+                        ref={railRef}
+                        className="mt-6 flex gap-6 xl:gap-8 overflow-x-auto snap-x snap-mandatory scroll-smooth px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 pb-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                    >
+                        {railAuthors.map((a, i) => (
+                            <div
+                                key={a.id}
+                                className="snap-start flex-shrink-0 w-[46%] sm:w-[38%] lg:w-[30%] xl:w-[23%]"
+                            >
+                                <AuthorTile a={a} idx={gridCount + i} />
+                            </div>
+                        ))}
+                    </div>
+                </section>
+            )}
         </div>
     );
 }

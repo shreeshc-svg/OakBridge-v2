@@ -97,8 +97,9 @@ function VerticalCard({ v, reverse, site }) {
     const ctaLabel = v.cta_label || v.cta?.label || "Learn more";
     return (
         <section
+            id={`vertical-${v.id}`}
             data-testid={`vertical-${v.id}`}
-            className={`grid grid-cols-1 lg:grid-cols-12 gap-10 py-20 border-t border-[#E5E7EB] ${reverse ? "lg:[&>div:first-child]:order-2" : ""}`}
+            className={`scroll-mt-24 grid grid-cols-1 lg:grid-cols-12 gap-10 py-20 border-t border-[#E5E7EB] ${reverse ? "lg:[&>div:first-child]:order-2" : ""}`}
         >
             <div className="lg:col-span-7">
                 <div className="flex items-center gap-3 flex-wrap">
@@ -164,7 +165,15 @@ export default function Verticals() {
         body: site.wwd_body || DEFAULT_HERO.body,
     };
     const verticals = cards.length ? cards : DEFAULT_VERTICALS;
-    const heroImage = mediaUrl(site.wwd_hero) || site.wwd_hero || DEFAULT_HERO_IMAGE;
+    // Four tiles for the hero. Falls back to the old single hero image if a
+    // vertical has no picture of its own, so the grid is never patchy.
+    const heroFallback = mediaUrl(site.wwd_hero) || site.wwd_hero || DEFAULT_HERO_IMAGE;
+    const heroTiles = verticals.slice(0, 4).map((v) => ({
+        id: v.id,
+        img: mediaUrl(site?.["verticals_" + v.id]) || mediaUrl(v.image) || v.image || heroFallback,
+        // "01 · Publishing" -> "Publishing"; the number is already implied by position.
+        label: (v.kicker || v.title || "").split("·").pop().trim(),
+    }));
 
     return (
         <div data-testid="verticals-page">
@@ -191,19 +200,39 @@ export default function Verticals() {
                             {hero.body}
                         </p>
                     </div>
+                    {/*
+                      One tile per business, so the headline's "four businesses"
+                      is visible before you scroll. Each tile reuses that
+                      vertical's own image key, so editing the picture in the
+                      section below updates this grid too — no second place to
+                      keep in sync.
+                    */}
                     <div className="lg:col-span-5">
-                        <div className="relative aspect-[4/3] lg:aspect-[4/5] bg-[#002B5C] overflow-hidden">
-                            <img
-                                src={heroImage}
-                                alt=""
-                                aria-hidden="true"
-                                className="absolute inset-0 w-full h-full object-cover opacity-90"
-                            />
-                            <div className="absolute inset-0 bg-gradient-to-tr from-[#002B5C]/70 via-[#002B5C]/20 to-transparent" />
-                            <span
-                                aria-hidden="true"
-                                className="absolute bottom-0 left-0 h-1 w-24 bg-[#F59E0B]"
-                            />
+                        <div className="grid grid-cols-2 gap-3" data-testid="wwd-hero-grid">
+                            {heroTiles.map((t) => (
+                                <a
+                                    key={t.id}
+                                    href={`#vertical-${t.id}`}
+                                    className="group relative aspect-square bg-[#002B5C] overflow-hidden block"
+                                    data-testid={`wwd-hero-tile-${t.id}`}
+                                >
+                                    <img
+                                        src={t.img}
+                                        alt=""
+                                        aria-hidden="true"
+                                        loading="lazy"
+                                        className="absolute inset-0 w-full h-full object-cover opacity-90 transition-transform duration-500 group-hover:scale-105"
+                                    />
+                                    <div className="absolute inset-0 bg-gradient-to-t from-[#002B5C]/85 via-[#002B5C]/25 to-transparent" />
+                                    <span className="absolute inset-x-0 bottom-0 p-3 font-mono text-[10px] uppercase tracking-widest text-white/90 leading-tight">
+                                        {t.label}
+                                    </span>
+                                    <span
+                                        aria-hidden="true"
+                                        className="absolute bottom-0 left-0 h-0.5 w-0 bg-[#F59E0B] transition-all duration-500 group-hover:w-full"
+                                    />
+                                </a>
+                            ))}
                         </div>
                     </div>
                 </div>

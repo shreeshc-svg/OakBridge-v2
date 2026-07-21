@@ -16,9 +16,12 @@ _EMAIL = "info@oakbridge.in"
 _PHONE = "+91 88003 37299"
 _SITE = "https://oakbridge.in"
 _GRIEVANCE = "[Grievance Officer name]"
+# Effective date shown at the top of every policy. Update when a policy materially
+# changes — the Consumer Protection (E-Commerce) Rules expect a dated version.
+_UPDATED = "24 July 2026"
 
 TERMS = f"""\
-_Last updated: [DATE]_
+_Last updated: {_UPDATED}_
 
 These Terms & Conditions ("Terms") govern your use of {_SITE} (the "Site") and any
 purchase you make from **{_ENTITY}** ("Oakbridge", "we", "us"). By using the Site
@@ -108,7 +111,7 @@ page. Questions? Email {_EMAIL}.
 """
 
 PRIVACY = f"""\
-_Last updated: [DATE]_
+_Last updated: {_UPDATED}_
 
 This Privacy Policy explains how **{_ENTITY}** ("we", "us"), as the Data
 Fiduciary, collects, uses, shares and protects your personal data when you use
@@ -220,7 +223,7 @@ For any privacy question or request, contact us at {_EMAIL}, {_ENTITY}, {_ADDR}.
 """
 
 REFUND = f"""\
-_Last updated: [DATE]_
+_Last updated: {_UPDATED}_
 
 This Refund & Cancellation Policy applies to purchases from {_SITE}, operated by
 **{_ENTITY}**, and should be read with our
@@ -268,7 +271,7 @@ call {_PHONE}.
 """
 
 SHIPPING = f"""\
-_Last updated: [DATE]_
+_Last updated: {_UPDATED}_
 
 This Shipping & Delivery Policy applies to orders placed on {_SITE}, operated by
 **{_ENTITY}**.
@@ -304,7 +307,7 @@ For any delivery question, contact us at {_EMAIL} or {_PHONE}.
 """
 
 COOKIE = f"""\
-_Last updated: [DATE]_
+_Last updated: {_UPDATED}_
 
 This Cookie Policy explains how {_SITE}, operated by **{_ENTITY}**, uses cookies
 and similar browser storage technologies.

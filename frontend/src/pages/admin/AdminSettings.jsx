@@ -30,6 +30,15 @@ export default function AdminSettings() {
             await adminSetSetting("tax_percent", Number(s.tax_percent) || 0);
             await adminSetSetting("free_ship_threshold", Number(s.free_ship_threshold) || 0);
             await adminSetSetting("ship_flat", Number(s.ship_flat) || 0);
+            await adminSetSetting("authors_per_row", Number(s.authors_per_row) || 4);
+            await adminSetSetting(
+                "authors_grid_rows",
+                Math.max(0, Number(s.authors_grid_rows) || 0),
+            );
+            await adminSetSetting(
+                "authors_carousel_title",
+                (s.authors_carousel_title || "").trim() || "More from our list",
+            );
             await adminSetSetting(
                 "contact_direct_lines",
                 lines
@@ -73,6 +82,41 @@ export default function AdminSettings() {
                     </div>
                     <p className="text-[11px] text-[#4B5563] mt-3">
                         Tax and shipping are recomputed on the server at checkout using these values.
+                    </p>
+                </div>
+
+                <div className="border border-[#E5E7EB] bg-white p-6" data-testid="authors-layout-settings">
+                    <h2 className="font-serif text-xl text-[#002B5C]">Authors page layout</h2>
+                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label className="overline !text-[10px] block mb-1">Authors per row</label>
+                            <select
+                                value={s.authors_per_row ?? 4}
+                                onChange={(e) => set("authors_per_row", Number(e.target.value))}
+                                data-testid="setting-authors_per_row"
+                                className="w-full border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none focus:border-[#002B5C]"
+                            >
+                                <option value={3}>3 across</option>
+                                <option value={4}>4 across</option>
+                                <option value={5}>5 across</option>
+                            </select>
+                            <div className="text-[11px] text-[#4B5563] mt-1">
+                                Widest screens only — phones show 2 and tablets step down automatically.
+                            </div>
+                        </div>
+                        <Field
+                            label="Rows before carousel"
+                            k="authors_grid_rows"
+                            type="number"
+                            hint="0 puts every author in the grid and hides the carousel."
+                        />
+                    </div>
+                    <div className="mt-4">
+                        <Field label="Carousel heading" k="authors_carousel_title" />
+                    </div>
+                    <p className="text-[11px] text-[#4B5563] mt-3">
+                        With 4 across and 2 rows, the first 8 authors show as a grid and the rest
+                        become a swipeable row below.
                     </p>
                 </div>
 

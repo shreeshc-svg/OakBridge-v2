@@ -474,12 +474,16 @@ async def log_search(payload: SearchLog):
     return {"ok": True}
 
 
-@public_router.get("/books/suggest-index")
+@public_router.get("/search/suggest-index")
 async def suggest_index():
     """Minimal title/author list for client-side autocomplete.
 
     The whole catalogue is a couple of hundred titles, so the browser can hold it
     and match locally — instant suggestions with no request per keystroke.
+
+    Deliberately NOT under /books/: server.py's `api_router` is registered before
+    this router and owns `/books/{book_id}`, so a literal path added here would be
+    swallowed by that catch-all and 404 as "book not found".
     """
     docs = (
         await db.books.find(
@@ -1318,6 +1322,13 @@ SETTINGS_DEFAULTS = {
         {"key": "bestseller", "label": "Bestsellers", "enabled": True},
         {"key": "new_release", "label": "New Releases", "enabled": True},
     ],
+    # Authors index layout. `authors_per_row` is the widest breakpoint's column
+    # count (phones and tablets always step down). `authors_grid_rows` is how
+    # many rows stay as a static grid before the rest move into the carousel;
+    # set it to 0 to put every author in the grid and hide the carousel.
+    "authors_per_row": 4,
+    "authors_grid_rows": 2,
+    "authors_carousel_title": "More from our list",
     # Contact page "Direct Lines" — admin-editable list of {label, email}.
     "contact_direct_lines": [
         {"label": "Institutional Sales", "email": "schools@oakbridge.in"},
