@@ -210,7 +210,7 @@ export default function BookDetail() {
             <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 grid grid-cols-1 lg:grid-cols-12 gap-12 pb-20">
                 {/* Cover */}
                 <div className="lg:col-span-5">
-                    <div className="sticky top-24 max-w-[300px] sm:max-w-[340px] lg:max-w-none mx-auto lg:mx-0">
+                    <div className="sticky top-24 max-w-[300px] sm:max-w-[340px] lg:max-w-[380px] mx-auto lg:mx-0">
                         <div className="relative aspect-[2/3] bg-[#F5F7FA] border border-[#E5E7EB] overflow-hidden shadow-sm group">
                             <img
                                 src={mediaUrl(book.cover_image)}
