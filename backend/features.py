@@ -701,6 +701,20 @@ async def admin_upload_cover(file: UploadFile = File(...)):
     return {"url": f"/api/files/{path}", "path": path, "size": len(data)}
 
 
+@admin_router.post("/uploads/author-photo")
+async def admin_upload_author_photo(file: UploadFile = File(...)):
+    """Upload an author photo. Returns a /api/files URL to store on the author record."""
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Only image files are accepted")
+    data = await file.read()
+    if len(data) > 8 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Photo too large (max 8 MB)")
+    ext = (file.filename or "photo").rsplit(".", 1)[-1].lower()[:8] or "jpg"
+    path = f"{APP_NAME}/authors/{uuid.uuid4()}.{ext}"
+    put_object(path, data, file.content_type)
+    return {"url": f"/api/files/{path}", "path": path, "size": len(data)}
+
+
 CSV_REQUIRED_COLUMNS = {
     "title", "author", "isbn", "category", "subject", "description", "price", "cover_image",
 }
@@ -1363,6 +1377,13 @@ SETTINGS_DEFAULTS = {
     "authors_per_row": 4,
     "authors_grid_rows": 2,
     "authors_carousel_title": "More from our list",
+    "authors_order": "alpha",  # "alpha" (A–Z) or "custom" (admin drag order)
+    # Trust badges under the price on every book page. Fully admin-managed:
+    # reorder, edit label/value, hide (enabled:false), remove, or add new ones.
+    "pdp_badges": [
+        {"label": "Free Shipping", "value": "On all orders", "enabled": True},
+        {"label": "Delivery", "value": "3–7 business days", "enabled": True},
+    ],
     # Contact page "Direct Lines" — admin-editable list of {label, email}.
     "contact_direct_lines": [
         {"label": "Institutional Sales", "email": "schools@oakbridge.in"},

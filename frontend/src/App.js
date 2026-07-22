@@ -35,6 +35,7 @@ import AdminNavigation from "@/pages/admin/AdminNavigation";
 import AdminSettings from "@/pages/admin/AdminSettings";
 import AdminPLP from "@/pages/admin/AdminPLP";
 import AdminPDP from "@/pages/admin/AdminPDP";
+import AdminAuthors from "@/pages/admin/AdminAuthors";
 import AdminLegal from "@/pages/admin/AdminLegal";
 import AdminMessages from "@/pages/admin/AdminMessages";
 import Submissions from "@/pages/Submissions";
@@ -128,6 +129,7 @@ function App() {
                                 <Route path="media" element={<AdminMedia />} />
                                 <Route path="page-bookstore" element={<AdminPLP />} />
                                 <Route path="page-book" element={<AdminPDP />} />
+                                <Route path="authors" element={<AdminAuthors />} />
                                 <Route path="messages" element={<AdminMessages />} />
                                 <Route path="legal" element={<AdminLegal />} />
                                 <Route path="settings" element={<AdminSettings />} />

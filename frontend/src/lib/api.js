@@ -225,6 +225,26 @@ export const adminUploadCover = (file) => {
         })
         .then((r) => r.data);
 };
+
+// ---- Authors admin ----
+export const adminListAuthors = () => api.get("/admin/authors").then((r) => r.data);
+export const adminCreateAuthor = (payload) => api.post("/admin/authors", payload).then((r) => r.data);
+export const adminUpdateAuthor = (id, payload) =>
+    api.patch(`/admin/authors/${id}`, payload).then((r) => r.data);
+export const adminDeleteAuthor = (id) => api.delete(`/admin/authors/${id}`).then((r) => r.data);
+export const adminReorderAuthors = (ids) =>
+    api.put("/admin/authors-order", { ids }).then((r) => r.data);
+export const adminSetAuthorOrderMode = (mode) =>
+    api.put(`/admin/authors-order-mode?mode=${mode}`).then((r) => r.data);
+export const adminUploadAuthorPhoto = (file) => {
+    const form = new FormData();
+    form.append("file", file);
+    return api
+        .post(`/admin/uploads/author-photo`, form, {
+            headers: { "Content-Type": "multipart/form-data" },
+        })
+        .then((r) => r.data);
+};
 export const adminBulkImportBooks = (file) => {
     const form = new FormData();
     form.append("file", file);

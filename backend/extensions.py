@@ -9,9 +9,11 @@ Bundles:
 from __future__ import annotations
 
 import os
+import re
 import uuid
 import logging
 import secrets
+import unicodedata
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 
@@ -195,6 +197,23 @@ class Author(BaseModel):
     affiliation: str
     specialty: str
     title_count: int = 0
+    enabled: bool = True
+    order: int = 0
+
+
+class AuthorWrite(BaseModel):
+    # All optional so PATCH can send just the changed fields.
+    name: Optional[str] = None
+    bio: Optional[str] = None
+    photo: Optional[str] = None
+    affiliation: Optional[str] = None
+    specialty: Optional[str] = None
+    enabled: Optional[bool] = None
+    order: Optional[int] = None
+
+
+class AuthorOrder(BaseModel):
+    ids: List[str]
 
 
 class OrderStatusUpdate(BaseModel):
@@ -536,11 +555,20 @@ async def reset_password(payload: ResetPasswordRequest):
 extras_router = APIRouter(prefix="/api", tags=["extras"])
 
 
+async def _authors_order_mode() -> str:
+    doc = await db.settings.find_one({"key": "authors_order"}, {"_id": 0, "value": 1})
+    return (doc or {}).get("value") or "alpha"
+
+
 @extras_router.get("/authors", response_model=List[Author])
 async def list_authors():
-    # No cap — the real roster is 143 and grows. A hardcoded 100 silently
-    # dropped 43 authors off the end of the page.
-    authors = await db.authors.find({}, {"_id": 0}).sort("name", 1).to_list(None)
+    # Public page: hidden authors excluded, ordered per admin choice.
+    # No cap — the roster is 140+ and grows.
+    authors = await db.authors.find({"enabled": {"$ne": False}}, {"_id": 0}).to_list(None)
+    if await _authors_order_mode() == "custom":
+        authors.sort(key=lambda a: (a.get("order", 10**6), (a.get("name") or "").lower()))
+    else:
+        authors.sort(key=lambda a: (a.get("name") or "").lower())
     return authors
 
 
@@ -640,6 +668,96 @@ async def my_orders(user: dict = Depends(get_current_user)):
 
 # ============== ADMIN ROUTER ==============
 admin_router = APIRouter(prefix="/api/admin", tags=["admin"], dependencies=[Depends(require_admin)])
+
+
+# ---- Authors management ----
+def _author_slug(name: str) -> str:
+    s = unicodedata.normalize("NFKD", name or "").encode("ascii", "ignore").decode()
+    s = re.sub(r"[^a-zA-Z0-9]+", "-", s).strip("-").lower()
+    return s or "author"
+
+
+@admin_router.get("/authors")
+async def admin_list_authors():
+    """Full roster including hidden authors, in the site's current order."""
+    authors = await db.authors.find({}, {"_id": 0}).to_list(None)
+    mode = await _authors_order_mode()
+    if mode == "custom":
+        authors.sort(key=lambda a: (a.get("order", 10**6), (a.get("name") or "").lower()))
+    else:
+        authors.sort(key=lambda a: (a.get("name") or "").lower())
+    return {"authors": authors, "order_mode": mode}
+
+
+@admin_router.put("/authors-order-mode")
+async def admin_set_author_order_mode(mode: str = "alpha"):
+    mode = "custom" if mode == "custom" else "alpha"
+    await db.settings.update_one(
+        {"key": "authors_order"}, {"$set": {"key": "authors_order", "value": mode}}, upsert=True
+    )
+    return {"ok": True, "order_mode": mode}
+
+
+@admin_router.put("/authors-order")
+async def admin_reorder_authors(payload: AuthorOrder):
+    """Persist a custom order and switch the site to custom ordering."""
+    for i, aid in enumerate(payload.ids):
+        await db.authors.update_one({"id": aid}, {"$set": {"order": i}})
+    await db.settings.update_one(
+        {"key": "authors_order"}, {"$set": {"key": "authors_order", "value": "custom"}}, upsert=True
+    )
+    return {"ok": True, "count": len(payload.ids)}
+
+
+@admin_router.post("/authors")
+async def admin_create_author(payload: AuthorWrite):
+    if not (payload.name or "").strip():
+        raise HTTPException(status_code=400, detail="Name is required")
+    base = _author_slug(payload.name)
+    aid = base
+    n = 2
+    while await db.authors.find_one({"id": aid}):
+        aid = f"{base}-{n}"
+        n += 1
+    last = await db.authors.find({}, {"_id": 0, "order": 1}).sort("order", -1).limit(1).to_list(1)
+    nxt = (last[0].get("order", 0) + 1) if last else 0
+    doc = {
+        "id": aid,
+        "name": payload.name.strip(),
+        "bio": (payload.bio or "").strip(),
+        "photo": (payload.photo or "").strip(),
+        "affiliation": (payload.affiliation or "").strip(),
+        "specialty": (payload.specialty or "").strip(),
+        "title_count": 0,
+        "enabled": True if payload.enabled is None else payload.enabled,
+        "order": nxt,
+    }
+    await db.authors.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@admin_router.patch("/authors/{author_id}")
+async def admin_update_author(author_id: str, payload: AuthorWrite):
+    existing = await db.authors.find_one({"id": author_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Author not found")
+    updates = {k: v for k, v in payload.model_dump(exclude_none=True).items()}
+    for str_field in ("name", "bio", "photo", "affiliation", "specialty"):
+        if str_field in updates:
+            updates[str_field] = str(updates[str_field]).strip()
+    if updates:
+        await db.authors.update_one({"id": author_id}, {"$set": updates})
+    doc = await db.authors.find_one({"id": author_id}, {"_id": 0})
+    return doc
+
+
+@admin_router.delete("/authors/{author_id}")
+async def admin_delete_author(author_id: str):
+    res = await db.authors.delete_one({"id": author_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Author not found")
+    return {"ok": True}
 
 
 @admin_router.get("/stats")

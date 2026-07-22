@@ -8,12 +8,26 @@ import BookCard from "../components/BookCard";
 import DeskCopyDialog from "../components/DeskCopyDialog";
 import ReviewsSection from "../components/ReviewsSection";
 import { fetchBook, fetchBooks, formatINR, notifyBackInStock, fetchSettings, mediaUrl,
-    fetchBookPreview, shippingPromise,
+    fetchBookPreview,
 } from "../lib/api";
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
 import { toast } from "sonner";
 import VerifyNotice from "../components/VerifyNotice";
+
+// Trust badges under the price. Admin-managed via Settings key `pdp_badges`;
+// this is only the fallback when nothing is saved yet. Spelled-out column
+// classes so Tailwind's JIT keeps them.
+const DEFAULT_PDP_BADGES = [
+    { label: "Free Shipping", value: "On all orders", enabled: true },
+    { label: "Delivery", value: "3–7 business days", enabled: true },
+];
+const PDP_BADGE_COLS = {
+    1: "sm:grid-cols-2",
+    2: "sm:grid-cols-2",
+    3: "sm:grid-cols-3",
+    4: "sm:grid-cols-4",
+};
 
 export default function BookDetail() {
     const [preview, setPreview] = useState({ pages: [], page_count: 0 });
@@ -101,6 +115,10 @@ export default function BookDetail() {
 
     const variants = Array.isArray(book.variants) ? book.variants : [];
     const hasVariants = variants.length > 0;
+
+    // Admin-managed trust badges; drop any hidden or empty ones.
+    const pdpBadges = (Array.isArray(settings?.pdp_badges) ? settings.pdp_badges : DEFAULT_PDP_BADGES)
+        .filter((b) => b && b.enabled !== false && (b.label || b.value));
     // Options: use the book's own matrix if present, else fall back to the
     // global Settings placeholders so PDPs always expose Binding/Size choices.
     // Binding/Size *selectors* appear ONLY for books with a real variant matrix
@@ -457,26 +475,19 @@ export default function BookDetail() {
                         </span>
                     </button>
 
-                    <div className="mt-10 grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs font-mono text-[#4B5563]">
-                        <div>
-                            <div className="overline !text-[10px]">Free Shipping</div>
-                            <div className="mt-1 text-[#002B5C]">
-                                {shippingPromise(settings, { short: true })}
-                            </div>
+                    {pdpBadges.length > 0 && (
+                        <div
+                            data-testid="pdp-badges"
+                            className={`mt-10 grid grid-cols-2 ${PDP_BADGE_COLS[Math.min(pdpBadges.length, 4)]} gap-4 text-xs font-mono text-[#4B5563]`}
+                        >
+                            {pdpBadges.map((b, i) => (
+                                <div key={i}>
+                                    <div className="overline !text-[10px]">{b.label}</div>
+                                    <div className="mt-1 text-[#002B5C]">{b.value}</div>
+                                </div>
+                            ))}
                         </div>
-                        <div>
-                            <div className="overline !text-[10px]">Delivery</div>
-                            <div className="mt-1 text-[#002B5C]">{settings?.pdp_delivery ?? "3-7 days"}</div>
-                        </div>
-                        <div>
-                            <div className="overline !text-[10px]">Returns</div>
-                            <div className="mt-1 text-[#002B5C]">{settings?.pdp_returns ?? "14 days"}</div>
-                        </div>
-                        <div>
-                            <div className="overline !text-[10px]">Invoice</div>
-                            <div className="mt-1 text-[#002B5C]">GST included</div>
-                        </div>
-                    </div>
+                    )}
 
                     {/* Tabs */}
                     <div className="mt-14 border-t border-[#E5E7EB] pt-10">

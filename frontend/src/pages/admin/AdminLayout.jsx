@@ -9,6 +9,7 @@ const LINKS = [
     { to: "/admin/books", label: "Books", icon: BookOpen },
     { to: "/admin/inventory", label: "Inventory", icon: PackageCheck },
     { to: "/admin/pages", label: "Pages", icon: LayoutTemplate },
+    { to: "/admin/authors", label: "Authors", icon: Users },
     { to: "/admin/navigation", label: "Navigation", icon: Navigation },
     { to: "/admin/media", label: "Media Library", icon: Image },
     { to: "/admin/orders", label: "Orders", icon: ShoppingBag },
