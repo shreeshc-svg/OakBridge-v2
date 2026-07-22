@@ -454,6 +454,47 @@ async def send_back_in_stock(to: str, book: dict) -> bool:
     return await send_email(to=to, subject=subject, html=html)
 
 
+def render_stock_signup_html(book: dict) -> str:
+    title = book.get("title", "this title")
+    author = book.get("author", "")
+    book_url = f"{SITE_URL}/books/{book.get('id','')}" if SITE_URL else "#"
+    return f"""\
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background-color:#F5F7FA;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:{BRAND_NAVY};">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#F5F7FA;padding:40px 16px;">
+  <tr><td align="center">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="560" style="max-width:560px;background-color:#FFFFFF;border:1px solid #E5E7EB;">
+      <tr><td style="background-color:{BRAND_NAVY};padding:28px 36px;color:#FFFFFF;">
+        <div style="font-family:Georgia,serif;font-size:22px;">Oakbridge <span style="color:{BRAND_AMBER};">Publishing</span></div>
+        <div style="font-family:monospace;text-transform:uppercase;letter-spacing:2px;font-size:11px;margin-top:6px;color:rgba(255,255,255,0.6);">You're on the list</div>
+      </td></tr>
+      <tr><td style="padding:36px 36px 8px;">
+        <h1 style="margin:0;font-family:Georgia,serif;font-weight:normal;font-size:24px;line-height:1.3;color:{BRAND_NAVY};">We'll let you know the moment it's back.</h1>
+        <p style="margin:14px 0 0;font-size:15px;line-height:1.6;color:{BRAND_GREY};">
+          Thanks — we've added you to the waiting list for <strong>{title}</strong>{f' by {author}' if author else ''}.
+          As soon as it's restocked, you'll be the first to hear, at this email address.
+        </p>
+      </td></tr>
+      <tr><td style="padding:22px 36px 40px;">
+        <a href="{book_url}" style="display:inline-block;background-color:{BRAND_NAVY};color:#FFFFFF;text-decoration:none;font-size:14px;font-weight:600;padding:14px 28px;">View the title</a>
+      </td></tr>
+    </table>
+    <div style="max-width:560px;margin-top:16px;font-family:monospace;font-size:11px;color:{BRAND_GREY};">
+      You're receiving this because you asked to be notified when this title returns to stock.
+    </div>
+  </td></tr>
+</table>
+</body></html>
+"""
+
+
+async def send_stock_signup(to: str, book: dict) -> bool:
+    """Confirm that a customer has been added to a title's back-in-stock waitlist."""
+    subject = f"You're on the list — {book.get('title','your title')}"
+    html = render_stock_signup_html(book)
+    return await send_email(to=to, subject=subject, html=html)
+
+
 # ====== Signup email verification (OTP) ======
 
 def render_verification_otp_html(name: str, code: str) -> str:

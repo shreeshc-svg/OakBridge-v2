@@ -315,7 +315,7 @@ async def notify_when_in_stock(book_id: str, payload: NotifyRequest):
     if int(book.get("stock", 0) or 0) > 0:
         return {"already_in_stock": True, "message": "Good news — this title is in stock now."}
     email = payload.email.strip().lower()
-    await db.stock_notifications.update_one(
+    res = await db.stock_notifications.update_one(
         {"book_id": book_id, "email": email},
         {"$setOnInsert": {
             "book_id": book_id,
@@ -324,7 +324,18 @@ async def notify_when_in_stock(book_id: str, payload: NotifyRequest):
         }},
         upsert=True,
     )
-    return {"ok": True, "message": "We'll email you the moment it's back in stock."}
+    # Confirm the signup by email — but only the first time (an upsert that didn't
+    # insert means they were already on the list, so don't re-send).
+    if res.upserted_id is not None:
+        try:
+            from emailer import send_stock_signup  # late import avoids cycle
+            full_book = await db.books.find_one(
+                {"id": book_id}, {"_id": 0, "id": 1, "title": 1, "author": 1}
+            )
+            await send_stock_signup(email, full_book or {"id": book_id, "title": book.get("title", "")})
+        except Exception:  # noqa: BLE001
+            log.exception("stock signup confirmation email failed for %s", email)
+    return {"ok": True, "message": "We'll email you the moment it's back in stock. Check your inbox for confirmation."}
 
 
 # ============== AUTHENTICATED ROUTER (customer access) ==============
