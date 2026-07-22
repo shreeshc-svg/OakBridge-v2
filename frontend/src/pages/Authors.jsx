@@ -146,7 +146,7 @@ function initials(name) {
         .toUpperCase();
 }
 
-function AuthorTile({ a, idx }) {
+function AuthorTile({ a, idx, hideSpecialty = false }) {
     const photo = mediaUrl(a.photo) || a.photo;
     return (
         <Link
@@ -176,7 +176,7 @@ function AuthorTile({ a, idx }) {
                 </div>
             </div>
             <div className="mt-4">
-                {a.specialty && <div className="overline !text-[10px]">{a.specialty}</div>}
+                {!hideSpecialty && a.specialty && <div className="overline !text-[10px]">{a.specialty}</div>}
                 <h3 className="font-serif text-lg xl:text-xl mt-1.5 text-[#002B5C] group-hover:text-[#CC0033] transition-colors leading-tight">
                     {a.name}
                 </h3>
@@ -189,11 +189,79 @@ function AuthorTile({ a, idx }) {
     );
 }
 
+// A horizontal author rail with arrows and optional auto-rotation. Advances one
+// tile per tick, loops to the start at the end, and pauses on hover/touch.
+function AuthorRail({ authors, title, startIdx = 0, autoplay, seconds, hideSpecialty = false }) {
+    const railRef = useRef(null);
+
+    const scroll = (dir) => {
+        const el = railRef.current;
+        if (!el) return;
+        const first = el.children[0];
+        const step = first ? first.getBoundingClientRect().width + 24 : el.clientWidth * 0.5;
+        el.scrollBy({ left: dir * step, behavior: "smooth" });
+    };
+
+    useEffect(() => {
+        const el = railRef.current;
+        if (!autoplay || !el || authors.length <= 1) return undefined;
+        let paused = false;
+        const pause = () => { paused = true; };
+        const resume = () => { paused = false; };
+        el.addEventListener("mouseenter", pause);
+        el.addEventListener("mouseleave", resume);
+        el.addEventListener("touchstart", pause, { passive: true });
+        const every = Math.max(2, Number(seconds) || 4) * 1000;
+        const iv = setInterval(() => {
+            if (paused) return;
+            const first = el.children[0];
+            const step = first ? first.getBoundingClientRect().width + 24 : el.clientWidth * 0.5;
+            const atEnd = el.scrollLeft + el.clientWidth >= el.scrollWidth - 8;
+            el.scrollTo({ left: atEnd ? 0 : el.scrollLeft + step, behavior: "smooth" });
+        }, every);
+        return () => {
+            clearInterval(iv);
+            el.removeEventListener("mouseenter", pause);
+            el.removeEventListener("mouseleave", resume);
+            el.removeEventListener("touchstart", pause);
+        };
+    }, [autoplay, seconds, authors.length]);
+
+    if (authors.length === 0) return null;
+
+    return (
+        <section className="pb-16 border-t border-[#E5E7EB] pt-10">
+            <div className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 flex items-end justify-between gap-4">
+                <h2 className="font-serif text-2xl md:text-3xl text-[#002B5C]">{title}</h2>
+                <div className="hidden md:flex items-center gap-2">
+                    <button onClick={() => scroll(-1)} aria-label="Scroll left" className="p-2 border border-[#E5E7EB] hover:border-[#002B5C] transition-colors">
+                        <ChevronLeft size={16} strokeWidth={1.5} />
+                    </button>
+                    <button onClick={() => scroll(1)} aria-label="Scroll right" className="p-2 border border-[#E5E7EB] hover:border-[#002B5C] transition-colors">
+                        <ChevronRight size={16} strokeWidth={1.5} />
+                    </button>
+                </div>
+            </div>
+            <div
+                ref={railRef}
+                className="mt-6 flex gap-6 xl:gap-8 overflow-x-auto snap-x scroll-smooth px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 pb-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            >
+                {authors.map((a, i) => (
+                    <div key={a.id} className="snap-start flex-shrink-0 w-[46%] sm:w-[38%] lg:w-[30%] xl:w-[23%]">
+                        <AuthorTile a={a} idx={startIdx + i} hideSpecialty={hideSpecialty} />
+                    </div>
+                ))}
+            </div>
+        </section>
+    );
+}
+
+const authorGroupKey = (a) => ((a.category || a.specialty || "").trim() || "Other");
+
 function AuthorsIndex() {
     const [authors, setAuthors] = useState([]);
     const [site, setSite] = useState({});
     const [settings, setSettings] = useState({});
-    const railRef = useRef(null);
 
     useEffect(() => {
         fetchAuthors().then(setAuthors);
@@ -202,19 +270,26 @@ function AuthorsIndex() {
     }, []);
 
     const perRow = AUTHOR_GRID_COLS[settings.authors_per_row] ? settings.authors_per_row : 4;
-    const gridRows = Number.isFinite(settings.authors_grid_rows)
-        ? Math.max(0, settings.authors_grid_rows)
-        : 2;
-    // 0 rows means "no carousel" — show the whole list as a grid.
+    const gridRows = Number.isFinite(settings.authors_grid_rows) ? Math.max(0, settings.authors_grid_rows) : 2;
+    const autoplay = settings.authors_carousel_autoplay !== false;
+    const seconds = Number(settings.authors_carousel_seconds) || 4;
+    const grouped = settings.authors_layout === "grouped";
+
+    // Grouped layout: one auto-rotating rail per category, in the admin's order.
+    let groupSections = [];
+    if (grouped) {
+        const groups = {};
+        authors.forEach((a) => { (groups[authorGroupKey(a)] ||= []).push(a); });
+        const order = Array.isArray(settings.authors_category_order) ? settings.authors_category_order : [];
+        const ordered = order.filter((k) => groups[k]);
+        const rest = Object.keys(groups).filter((k) => !order.includes(k)).sort();
+        groupSections = [...ordered, ...rest].map((k) => ({ title: k, items: groups[k] }));
+    }
+
+    // Grid layout: a grid then an overflow rail.
     const gridCount = gridRows === 0 ? authors.length : perRow * gridRows;
     const gridAuthors = authors.slice(0, gridCount);
     const railAuthors = authors.slice(gridCount);
-
-    const scrollRail = (dir) => {
-        const el = railRef.current;
-        if (!el) return;
-        el.scrollBy({ left: dir * el.clientWidth * 0.9, behavior: "smooth" });
-    };
 
     return (
         <div data-testid="authors-index">
@@ -230,60 +305,35 @@ function AuthorsIndex() {
                     {site.authors_title || AUTHORS_DEFAULTS.title}
                 </h1>
             </section>
-            <section
-                data-testid="authors-grid"
-                className={`px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 pt-16 ${railAuthors.length ? "pb-10" : "pb-20"} grid gap-x-6 gap-y-10 xl:gap-x-8 ${AUTHOR_GRID_COLS[perRow]}`}
-            >
-                {gridAuthors.map((a, idx) => (
-                    <AuthorTile key={a.id} a={a} idx={idx} />
-                ))}
-            </section>
 
-            {railAuthors.length > 0 && (
-                <section
-                    data-testid="authors-carousel"
-                    className="pb-20 border-t border-[#E5E7EB] pt-10"
-                >
-                    <div className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 flex items-end justify-between gap-4">
-                        <h2 className="font-serif text-2xl md:text-3xl text-[#002B5C]">
-                            {settings.authors_carousel_title || "More from our list"}
-                        </h2>
-                        {/* Arrows are a desktop affordance; touch devices swipe. */}
-                        <div className="hidden md:flex items-center gap-2">
-                            <button
-                                onClick={() => scrollRail(-1)}
-                                aria-label="Scroll left"
-                                className="p-2 border border-[#E5E7EB] hover:border-[#002B5C] transition-colors"
-                            >
-                                <ChevronLeft size={16} strokeWidth={1.5} />
-                            </button>
-                            <button
-                                onClick={() => scrollRail(1)}
-                                aria-label="Scroll right"
-                                className="p-2 border border-[#E5E7EB] hover:border-[#002B5C] transition-colors"
-                            >
-                                <ChevronRight size={16} strokeWidth={1.5} />
-                            </button>
-                        </div>
-                    </div>
-                    {/*
-                      Scroll padding matches the page gutters so the first and last
-                      tiles line up with the grid above instead of hugging the edge.
-                    */}
-                    <div
-                        ref={railRef}
-                        className="mt-6 flex gap-6 xl:gap-8 overflow-x-auto snap-x snap-mandatory scroll-smooth px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 pb-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            {grouped ? (
+                <div data-testid="authors-grouped" className="pt-4">
+                    {groupSections.map((g) => (
+                        <AuthorRail key={g.title} title={g.title} authors={g.items} autoplay={autoplay} seconds={seconds} hideSpecialty />
+                    ))}
+                </div>
+            ) : (
+                <>
+                    <section
+                        data-testid="authors-grid"
+                        className={`px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 pt-16 ${railAuthors.length ? "pb-10" : "pb-20"} grid gap-x-6 gap-y-10 xl:gap-x-8 ${AUTHOR_GRID_COLS[perRow]}`}
                     >
-                        {railAuthors.map((a, i) => (
-                            <div
-                                key={a.id}
-                                className="snap-start flex-shrink-0 w-[46%] sm:w-[38%] lg:w-[30%] xl:w-[23%]"
-                            >
-                                <AuthorTile a={a} idx={gridCount + i} />
-                            </div>
+                        {gridAuthors.map((a, idx) => (
+                            <AuthorTile key={a.id} a={a} idx={idx} />
                         ))}
-                    </div>
-                </section>
+                    </section>
+                    {railAuthors.length > 0 && (
+                        <div data-testid="authors-carousel">
+                            <AuthorRail
+                                title={settings.authors_carousel_title || "More from our list"}
+                                authors={railAuthors}
+                                startIdx={gridCount}
+                                autoplay={autoplay}
+                                seconds={seconds}
+                            />
+                        </div>
+                    )}
+                </>
             )}
         </div>
     );

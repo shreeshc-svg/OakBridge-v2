@@ -9,8 +9,18 @@ import {
     adminReorderAuthors,
     adminSetAuthorOrderMode,
     adminUploadAuthorPhoto,
+    fetchSettings,
+    adminSetSetting,
     mediaUrl,
 } from "../../lib/api";
+
+// Category options for grouping. The first three match the storefront's default
+// section order; blank = "Uncategorised" (falls into an "Other" section).
+const CATEGORY_OPTIONS = [
+    "Law, Tax & Professional",
+    "Academic & Civil Services",
+    "Business & General",
+];
 
 // A single author row: inline edit of name/specialty/affiliation/bio, photo
 // drag-drop, show/hide, delete, and (in custom mode) reorder.
@@ -78,7 +88,18 @@ function AuthorRow({ a, index, count, mode, onChange, onSave, onDelete, onMove, 
                     placeholder="Author name"
                     className="w-full border border-[#E5E7EB] px-2 py-1.5 text-sm font-medium outline-none focus:border-[#002B5C]"
                 />
-                <div className="grid grid-cols-2 gap-1.5">
+                <div className="grid grid-cols-3 gap-1.5">
+                    <select
+                        value={a.category ?? ""}
+                        onChange={(e) => onChange("category", e.target.value)}
+                        title="Category (used for grouping)"
+                        className="border border-[#E5E7EB] px-2 py-1.5 text-xs outline-none focus:border-[#002B5C] bg-white"
+                    >
+                        <option value="">Uncategorised</option>
+                        {CATEGORY_OPTIONS.map((c) => (
+                            <option key={c} value={c}>{c}</option>
+                        ))}
+                    </select>
                     <input
                         value={a.specialty ?? ""}
                         onChange={(e) => onChange("specialty", e.target.value)}
@@ -140,6 +161,7 @@ export default function AdminAuthors() {
     const [mode, setMode] = useState("alpha");
     const [dirty, setDirty] = useState({});   // id -> true when edited but unsaved
     const [q, setQ] = useState("");
+    const [cfg, setCfg] = useState({});        // layout + carousel settings
 
     const load = () =>
         adminListAuthors()
@@ -149,9 +171,26 @@ export default function AdminAuthors() {
             })
             .catch(() => toast.error("Could not load authors."));
 
-    useEffect(() => { load(); }, []);
+    useEffect(() => {
+        load();
+        fetchSettings().then(setCfg).catch(() => {});
+    }, []);
+
+    const saveCfg = async (key, value) => {
+        setCfg((c) => ({ ...c, [key]: value }));
+        try {
+            await adminSetSetting(key, value);
+            toast.success("Layout updated — live on the Authors page.");
+        } catch {
+            toast.error("Could not save layout.");
+        }
+    };
 
     if (!authors) return <div className="font-mono text-xs text-[#4B5563]">Loading…</div>;
+
+    const grouped = cfg.authors_layout === "grouped";
+    const autoplay = cfg.authors_carousel_autoplay !== false;
+    const seconds = Number(cfg.authors_carousel_seconds) || 4;
 
     const change = (id, k, v) => {
         setAuthors((cur) => cur.map((a) => (a.id === id ? { ...a, [k]: v } : a)));
@@ -162,7 +201,8 @@ export default function AdminAuthors() {
         try {
             await adminUpdateAuthor(a.id, {
                 name: a.name, bio: a.bio, photo: a.photo,
-                affiliation: a.affiliation, specialty: a.specialty, enabled: a.enabled,
+                affiliation: a.affiliation, specialty: a.specialty,
+                category: a.category, enabled: a.enabled,
             });
             setDirty((d) => { const n = { ...d }; delete n[a.id]; return n; });
             toast.success(`Saved ${a.name}.`);
@@ -229,6 +269,59 @@ export default function AdminAuthors() {
                 Authors page is ordered. Each row saves on its own — edit, then click the save
                 icon. {authors.length} authors{hiddenCount ? `, ${hiddenCount} hidden` : ""}.
             </p>
+
+            {/* ---- Layout & carousel ---- */}
+            <div className="mt-6 border border-[#E5E7EB] bg-white p-5 max-w-3xl" data-testid="authors-layout-controls">
+                <h2 className="font-serif text-lg text-[#002B5C]">Page layout</h2>
+                <div className="mt-4 flex flex-wrap items-center gap-x-8 gap-y-4">
+                    <div>
+                        <label className="overline !text-[10px] block mb-1.5">Layout</label>
+                        <div className="inline-flex border border-[#E5E7EB]">
+                            <button
+                                onClick={() => saveCfg("authors_layout", "grid")}
+                                className={`px-3 py-1.5 text-sm ${!grouped ? "bg-[#002B5C] text-white" : "text-[#4B5563] hover:bg-[#F5F7FA]"}`}
+                            >
+                                One grid
+                            </button>
+                            <button
+                                onClick={() => saveCfg("authors_layout", "grouped")}
+                                className={`px-3 py-1.5 text-sm ${grouped ? "bg-[#002B5C] text-white" : "text-[#4B5563] hover:bg-[#F5F7FA]"}`}
+                            >
+                                Grouped by category
+                            </button>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="overline !text-[10px] block mb-1.5">Carousel auto-rotate</label>
+                        <button
+                            onClick={() => saveCfg("authors_carousel_autoplay", !autoplay)}
+                            className={`px-3 py-1.5 text-sm border ${autoplay ? "bg-[#002B5C] text-white border-[#002B5C]" : "text-[#4B5563] border-[#E5E7EB] hover:bg-[#F5F7FA]"}`}
+                        >
+                            {autoplay ? "On" : "Off"}
+                        </button>
+                    </div>
+
+                    <div>
+                        <label className="overline !text-[10px] block mb-1.5">Rotate every (seconds)</label>
+                        <input
+                            type="number"
+                            min="2"
+                            max="30"
+                            value={seconds}
+                            disabled={!autoplay}
+                            onChange={(e) => setCfg((c) => ({ ...c, authors_carousel_seconds: e.target.value }))}
+                            onBlur={(e) => saveCfg("authors_carousel_seconds", Math.max(2, Number(e.target.value) || 4))}
+                            className="w-24 border border-[#E5E7EB] px-3 py-1.5 text-sm outline-none focus:border-[#002B5C] disabled:opacity-50"
+                        />
+                    </div>
+                </div>
+                <p className="text-[11px] text-[#4B5563] mt-3">
+                    {grouped
+                        ? "Grouped: one auto-rotating row per category, using each author’s Category below. Set the category on every author you want to appear in a section."
+                        : "One grid of authors with an auto-rotating carousel for the overflow."}
+                </p>
+            </div>
 
             <div className="mt-6 flex flex-wrap items-center gap-3">
                 <button

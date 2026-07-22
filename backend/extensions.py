@@ -196,6 +196,7 @@ class Author(BaseModel):
     photo: str
     affiliation: str
     specialty: str
+    category: str = ""
     title_count: int = 0
     enabled: bool = True
     order: int = 0
@@ -208,6 +209,7 @@ class AuthorWrite(BaseModel):
     photo: Optional[str] = None
     affiliation: Optional[str] = None
     specialty: Optional[str] = None
+    category: Optional[str] = None
     enabled: Optional[bool] = None
     order: Optional[int] = None
 
@@ -728,6 +730,7 @@ async def admin_create_author(payload: AuthorWrite):
         "photo": (payload.photo or "").strip(),
         "affiliation": (payload.affiliation or "").strip(),
         "specialty": (payload.specialty or "").strip(),
+        "category": (payload.category or "").strip(),
         "title_count": 0,
         "enabled": True if payload.enabled is None else payload.enabled,
         "order": nxt,
@@ -743,7 +746,7 @@ async def admin_update_author(author_id: str, payload: AuthorWrite):
     if not existing:
         raise HTTPException(status_code=404, detail="Author not found")
     updates = {k: v for k, v in payload.model_dump(exclude_none=True).items()}
-    for str_field in ("name", "bio", "photo", "affiliation", "specialty"):
+    for str_field in ("name", "bio", "photo", "affiliation", "specialty", "category"):
         if str_field in updates:
             updates[str_field] = str(updates[str_field]).strip()
     if updates:

@@ -1378,6 +1378,16 @@ SETTINGS_DEFAULTS = {
     "authors_grid_rows": 2,
     "authors_carousel_title": "More from our list",
     "authors_order": "alpha",  # "alpha" (A–Z) or "custom" (admin drag order)
+    # "grid" = one grid + overflow carousel. "grouped" = a section per category.
+    "authors_layout": "grid",
+    "authors_carousel_autoplay": True,
+    "authors_carousel_seconds": 4,
+    # Section order for grouped layout; groups not listed fall to the end.
+    "authors_category_order": [
+        "Law, Tax & Professional",
+        "Academic & Civil Services",
+        "Business & General",
+    ],
     # Trust badges under the price on every book page. Fully admin-managed:
     # reorder, edit label/value, hide (enabled:false), remove, or add new ones.
     "pdp_badges": [
