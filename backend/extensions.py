@@ -538,7 +538,9 @@ extras_router = APIRouter(prefix="/api", tags=["extras"])
 
 @extras_router.get("/authors", response_model=List[Author])
 async def list_authors():
-    authors = await db.authors.find({}, {"_id": 0}).to_list(100)
+    # No cap — the real roster is 143 and grows. A hardcoded 100 silently
+    # dropped 43 authors off the end of the page.
+    authors = await db.authors.find({}, {"_id": 0}).sort("name", 1).to_list(None)
     return authors
 
 

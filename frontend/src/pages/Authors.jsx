@@ -63,12 +63,20 @@ function AuthorDetail({ id }) {
             <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-16 grid grid-cols-1 lg:grid-cols-12 gap-12">
                 <div className="lg:col-span-4">
                     <div className="sticky top-24">
-                        <div className="aspect-[3/4] bg-[#F5F7FA] border border-[#E5E7EB] overflow-hidden">
-                            <img
-                                src={mediaUrl(author.photo) || author.photo}
-                                alt={author.name}
-                                className="w-full h-full object-cover"
-                            />
+                        <div className="aspect-square max-w-[260px] bg-[#F5F7FA] border border-[#E5E7EB] overflow-hidden rounded-sm">
+                            {author.photo ? (
+                                <img
+                                    src={mediaUrl(author.photo) || author.photo}
+                                    alt={author.name}
+                                    width="200"
+                                    height="200"
+                                    className="w-full h-full object-cover"
+                                />
+                            ) : (
+                                <div className="w-full h-full flex items-center justify-center font-serif text-5xl text-[#002B5C]/40">
+                                    {(author.name || "").split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase()}
+                                </div>
+                            )}
                         </div>
                         <dl className="mt-6 space-y-3 text-sm">
                             <div className="flex justify-between border-b border-[#E5E7EB] pb-2">
@@ -123,30 +131,56 @@ const AUTHOR_GRID_COLS = {
     5: "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5",
 };
 
+// Author photos from the old site are all 200x200. Displaying them full-bleed in
+// a tall tile upscaled and cropped them (soft + zoomed). Instead we frame them as
+// a centred square avatar capped near native size, so they stay crisp and the tile
+// has breathing room around the portrait.
+function initials(name) {
+    return (name || "")
+        .replace(/\b(Dr|Prof|Mr|Mrs|Ms|Justice|CA|CS|IAS|IPS|IRS|Adv|Maj|Gen)\b\.?/gi, "")
+        .trim()
+        .split(/\s+/)
+        .slice(0, 2)
+        .map((w) => w[0])
+        .join("")
+        .toUpperCase();
+}
+
 function AuthorTile({ a, idx }) {
+    const photo = mediaUrl(a.photo) || a.photo;
     return (
         <Link
             to={`/authors/${a.id}`}
             data-testid={`author-tile-${a.id}`}
-            className="group block"
+            className="group block text-center"
         >
-            <div className="relative aspect-[3/4] bg-[#F5F7FA] border border-[#E5E7EB] overflow-hidden">
-                <img
-                    src={mediaUrl(a.photo) || a.photo}
-                    alt={a.name}
-                    loading="lazy"
-                    className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                />
-                <div className="absolute top-3 left-3 font-mono text-[10px] text-white/90 uppercase tracking-widest bg-[#002B5C]/70 px-2 py-1">
+            <div className="relative mx-auto w-full max-w-[190px]">
+                <div className="aspect-square bg-[#F5F7FA] border border-[#E5E7EB] overflow-hidden rounded-sm">
+                    {photo ? (
+                        <img
+                            src={photo}
+                            alt={a.name}
+                            loading="lazy"
+                            width="200"
+                            height="200"
+                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                        />
+                    ) : (
+                        <div className="w-full h-full flex items-center justify-center font-serif text-3xl text-[#002B5C]/40">
+                            {initials(a.name)}
+                        </div>
+                    )}
+                </div>
+                <div className="absolute top-2 left-2 font-mono text-[10px] text-white/90 uppercase tracking-widest bg-[#002B5C]/70 px-1.5 py-0.5">
                     {String(idx + 1).padStart(2, "0")}
                 </div>
             </div>
-            <div className="mt-3">
-                <div className="overline !text-[10px]">{a.specialty}</div>
-                <h3 className="font-serif text-xl xl:text-2xl mt-1.5 text-[#002B5C] group-hover:text-[#CC0033] transition-colors">
+            <div className="mt-4">
+                {a.specialty && <div className="overline !text-[10px]">{a.specialty}</div>}
+                <h3 className="font-serif text-lg xl:text-xl mt-1.5 text-[#002B5C] group-hover:text-[#CC0033] transition-colors leading-tight">
                     {a.name}
                 </h3>
-                <p className="text-xs text-[#4B5563] mt-1">{a.affiliation}</p>
+                {a.affiliation && <p className="text-xs text-[#4B5563] mt-1">{a.affiliation}</p>}
                 <span className="mt-3 inline-flex items-center gap-1 text-xs font-medium border-b border-[#002B5C] pb-0.5">
                     Read more <ArrowUpRight size={12} strokeWidth={1.5} />
                 </span>
