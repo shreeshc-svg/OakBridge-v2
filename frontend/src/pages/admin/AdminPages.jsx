@@ -303,8 +303,11 @@ const DS_STATS_DEFAULT = [
 ];
 
 const HOME_TESTIMONIALS_DEFAULT = [
-    { quote: "Oakbridge's commentaries are now the first reference on our shelves.", name: "A Senior Advocate", role: "Supreme Court of India" },
-    { quote: "Rigorous, current and genuinely practitioner-first. A rare combination.", name: "Partner", role: "A leading national law firm" },
+    { quote: "Oakbridge's commentaries are now the first reference on our shelves.", name: "Placeholder Name", role: "Designation, Organisation" },
+    { quote: "Rigorous, current and genuinely practitioner-first — a rare combination in Indian legal publishing.", name: "Placeholder Name", role: "Designation, Organisation" },
+    { quote: "Our faculty adopted three Oakbridge titles this year, and the students noticed the difference at once.", name: "Placeholder Name", role: "Designation, Organisation" },
+    { quote: "The editorial quality stands with the best international houses, and the pricing makes it reachable.", name: "Placeholder Name", role: "Designation, Organisation" },
+    { quote: "Clear, authoritative and beautifully produced — exactly what the profession needed.", name: "Placeholder Name", role: "Designation, Organisation" },
 ];
 
 const AC_FEATURES_DEFAULT = [

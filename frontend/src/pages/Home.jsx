@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Seo from "../components/Seo";
 import { Link } from "react-router-dom";
-import { ArrowUpRight, BookOpen, GraduationCap, Building2, Calendar, Cpu, Briefcase, Users } from "lucide-react";
+import { ArrowUpRight, BookOpen, GraduationCap, Building2, Calendar, Cpu, Briefcase, Users, ChevronLeft, ChevronRight } from "lucide-react";
 import BookCard from "../components/BookCard";
 import BestsellerCarousel from "../components/BestsellerCarousel";
 import {
@@ -71,6 +71,84 @@ const VERTICALS = [
         comingSoon: true,
     },
 ];
+
+// Auto-rotating testimonials carousel. Advances one card per tick, loops at the
+// end, pauses on hover/touch. Arrows for manual control.
+function TestimonialsCarousel({ items }) {
+    const railRef = useRef(null);
+
+    const scroll = (dir) => {
+        const el = railRef.current;
+        if (!el) return;
+        const first = el.children[0];
+        const step = first ? first.getBoundingClientRect().width + 24 : el.clientWidth * 0.8;
+        el.scrollBy({ left: dir * step, behavior: "smooth" });
+    };
+
+    useEffect(() => {
+        const el = railRef.current;
+        if (!el || items.length <= 1) return undefined;
+        let paused = false;
+        const pause = () => { paused = true; };
+        const resume = () => { paused = false; };
+        el.addEventListener("mouseenter", pause);
+        el.addEventListener("mouseleave", resume);
+        el.addEventListener("touchstart", pause, { passive: true });
+        const iv = setInterval(() => {
+            if (paused) return;
+            const first = el.children[0];
+            const step = first ? first.getBoundingClientRect().width + 24 : el.clientWidth * 0.8;
+            const atEnd = el.scrollLeft + el.clientWidth >= el.scrollWidth - 8;
+            el.scrollTo({ left: atEnd ? 0 : el.scrollLeft + step, behavior: "smooth" });
+        }, 5000);
+        return () => {
+            clearInterval(iv);
+            el.removeEventListener("mouseenter", pause);
+            el.removeEventListener("mouseleave", resume);
+            el.removeEventListener("touchstart", pause);
+        };
+    }, [items.length]);
+
+    return (
+        <section data-testid="testimonials" className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 md:py-28 bg-[#F5F7FA] border-y border-[#E5E7EB]">
+            <div className="flex items-end justify-between gap-4 mb-10">
+                <div className="max-w-2xl">
+                    <div className="overline">Testimonials</div>
+                    <h2 className="font-serif text-4xl md:text-5xl mt-3 text-[#002B5C] leading-tight">
+                        Trusted by the people we publish for.
+                    </h2>
+                </div>
+                <div className="hidden md:flex items-center gap-2">
+                    <button onClick={() => scroll(-1)} aria-label="Previous" className="p-2 border border-[#E5E7EB] bg-white hover:border-[#002B5C] transition-colors">
+                        <ChevronLeft size={16} strokeWidth={1.5} />
+                    </button>
+                    <button onClick={() => scroll(1)} aria-label="Next" className="p-2 border border-[#E5E7EB] bg-white hover:border-[#002B5C] transition-colors">
+                        <ChevronRight size={16} strokeWidth={1.5} />
+                    </button>
+                </div>
+            </div>
+            <div
+                ref={railRef}
+                className="flex gap-6 overflow-x-auto snap-x scroll-smooth pb-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            >
+                {items.map((t, i) => (
+                    <figure
+                        key={t.id || i}
+                        data-testid={`testimonial-${i}`}
+                        className="snap-start flex-shrink-0 w-[85%] sm:w-[46%] lg:w-[31%] bg-white border border-[#E5E7EB] p-7 flex flex-col"
+                    >
+                        <div className="font-serif text-5xl text-[#F59E0B] leading-none">“</div>
+                        <blockquote className="mt-2 flex-1 text-[#002B5C] leading-relaxed">{t.quote}</blockquote>
+                        <figcaption className="mt-6 pt-4 border-t border-[#E5E7EB]">
+                            <div className="font-medium text-[#002B5C] text-sm">{t.name}</div>
+                            {t.role && <div className="text-xs font-mono uppercase tracking-widest text-[#4B5563] mt-1">{t.role}</div>}
+                        </figcaption>
+                    </figure>
+                ))}
+            </div>
+        </section>
+    );
+}
 
 export default function Home() {
     const [categories, setCategories] = useState([]);
@@ -541,34 +619,9 @@ export default function Home() {
                 </section>
             )}
 
-            {/* ============== TESTIMONIALS ============== */}
+            {/* ============== TESTIMONIALS (carousel) ============== */}
             {testimonials.length > 0 && (
-                <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 md:py-28 bg-[#F5F7FA] border-y border-[#E5E7EB]">
-                    <div className="max-w-2xl mb-12">
-                        <div className="overline">Testimonials</div>
-                        <h2 className="font-serif text-4xl md:text-5xl mt-3 text-[#002B5C] leading-tight">
-                            Trusted by the people we publish for.
-                        </h2>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {testimonials.map((t, i) => (
-                            <figure
-                                key={t.id || i}
-                                data-testid={`testimonial-${i}`}
-                                className="bg-white border border-[#E5E7EB] p-7 flex flex-col"
-                            >
-                                <div className="font-serif text-5xl text-[#F59E0B] leading-none">“</div>
-                                <blockquote className="mt-2 flex-1 text-[#002B5C] leading-relaxed">
-                                    {t.quote}
-                                </blockquote>
-                                <figcaption className="mt-6 pt-4 border-t border-[#E5E7EB]">
-                                    <div className="font-medium text-[#002B5C] text-sm">{t.name}</div>
-                                    {t.role && <div className="text-xs font-mono uppercase tracking-widest text-[#4B5563] mt-1">{t.role}</div>}
-                                </figcaption>
-                            </figure>
-                        ))}
-                    </div>
-                </section>
+                <TestimonialsCarousel items={testimonials} />
             )}
 
             {/* ============== EDITORIAL CTA ============== */}

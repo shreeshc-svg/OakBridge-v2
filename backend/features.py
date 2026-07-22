@@ -1305,8 +1305,11 @@ COLLECTION_DEFAULTS = {
     ],
     "media_gallery": [],
     "home_testimonials": [
-        {"quote": "Oakbridge's commentaries are now the first reference on our shelves.", "name": "A Senior Advocate", "role": "Supreme Court of India", "enabled": True},
-        {"quote": "Rigorous, current and genuinely practitioner-first. A rare combination.", "name": "Partner", "role": "A leading national law firm", "enabled": True},
+        {"quote": "Oakbridge's commentaries are now the first reference on our shelves.", "name": "Placeholder Name", "role": "Designation, Organisation", "enabled": True},
+        {"quote": "Rigorous, current and genuinely practitioner-first — a rare combination in Indian legal publishing.", "name": "Placeholder Name", "role": "Designation, Organisation", "enabled": True},
+        {"quote": "Our faculty adopted three Oakbridge titles this year, and the students noticed the difference at once.", "name": "Placeholder Name", "role": "Designation, Organisation", "enabled": True},
+        {"quote": "The editorial quality stands with the best international houses, and the pricing makes it reachable.", "name": "Placeholder Name", "role": "Designation, Organisation", "enabled": True},
+        {"quote": "Clear, authoritative and beautifully produced — exactly what the profession needed.", "name": "Placeholder Name", "role": "Designation, Organisation", "enabled": True},
     ],
     "events_vidhi_speakers": [
         {"name": "Arjun Ram Meghwal", "role": "Union Minister for Law & Justice, GoI", "photo": "/api/files/oakbridge/events/vidhi-arjun-meghwal.png"},
