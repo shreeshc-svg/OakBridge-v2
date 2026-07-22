@@ -14,6 +14,7 @@ const DEFAULT_NAV = [
     { to: "/academy", label: "Academy" },
     { to: "/digital-solutions", label: "Digital Solutions" },
     { to: "/authors", label: "Authors" },
+    { to: "/media", label: "Media" },
     { to: "/about", label: "About" },
 ];
 

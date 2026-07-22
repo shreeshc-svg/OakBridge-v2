@@ -35,7 +35,7 @@ const SOLUTIONS = {
     educators: {
         title: "For Educators",
         kicker: "Teacher Resources",
-        lede: "We equip educators with the tools to teach better — review copies, lesson plans, assessment banks and a growing community of practice.",
+        lede: "We equip educators with the tools to teach better — review copies, lesson plans, assessment banks and a growing community of practice. We also provide our educators with customized bundles.",
         image: "https://images.unsplash.com/photo-1434030216411-0b793f4b4173?auto=format&fit=crop&w=1600&q=80",
         features: [
             "Free instructor review copies for adoption consideration",

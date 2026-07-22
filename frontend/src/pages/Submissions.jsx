@@ -95,10 +95,10 @@ export default function Submissions() {
                         <div className="pt-5 border-t border-[#E5E7EB]">
                             <div className="overline">Direct email</div>
                             <a
-                                href="mailto:editorial@oakbridge.in"
+                                href="mailto:info@oakbridge.in"
                                 className="mt-2 inline-block text-sm text-[#002B5C] border-b border-[#002B5C] pb-0.5 hover:text-[#CC0033] hover:border-[#CC0033]"
                             >
-                                editorial@oakbridge.in
+                                info@oakbridge.in
                             </a>
                         </div>
                     </div>

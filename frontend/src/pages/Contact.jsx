@@ -19,7 +19,7 @@ export default function Contact() {
     }, []);
     const DEFAULT_LINES = [
         { label: "Institutional Sales", email: "schools@oakbridge.in" },
-        { label: "Submissions", email: "editorial@oakbridge.in" },
+        { label: "Submissions", email: "info@oakbridge.in" },
         { label: "Press", email: "press@oakbridge.in" },
         { label: "Careers", email: "careers@oakbridge.in" },
     ];
@@ -172,7 +172,7 @@ export default function Contact() {
                                 >
                                     B3 Tower, Spaze iTech Park
                                     <br />
-                                    934, Sohna–Gurgaon Rd, Block S, Sector 49
+                                    934, Sohna–Gurgaon Rd, Sector 49
                                     <br />
                                     Gurugram, Haryana 122018, India
                                 </a>

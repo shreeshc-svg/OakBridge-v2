@@ -151,6 +151,10 @@ export default function Catalog() {
     }, [loadMore]);
 
     const activeCat = cats.find((c) => c.id === category);
+    // The Professional view is the default "Bookstore" landing, so it keeps the
+    // general all-imprint banner rather than a category-specific one. Other
+    // imprints (Academic, Business & General) still get their own hero.
+    const heroCat = category === "professional" ? null : activeCat;
 
     const update = (key, value) => {
         const next = new URLSearchParams(sp);
@@ -209,9 +213,6 @@ export default function Catalog() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [category, search, activeCat, sp, settings]);
 
-    const countLabel = loading
-        ? "—"
-        : `${books.length}${hasMore ? "+" : ""}`;
 
     return (
         <div data-testid="catalog-page">
@@ -245,7 +246,7 @@ export default function Catalog() {
 
                     <div className="relative px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-16 md:py-24 lg:py-28 text-white max-w-5xl">
                         <div className="overline !text-white/70 !text-[11px] fade-up">
-                            {activeCat
+                            {heroCat
                                 ? "Imprint"
                                 : search
                                   ? "Search Results"
@@ -256,11 +257,11 @@ export default function Catalog() {
                             className="font-serif text-5xl md:text-6xl lg:text-7xl mt-5 leading-[0.95] fade-up"
                             style={{ animationDelay: "80ms" }}
                         >
-                            {activeCat ? (
+                            {heroCat ? (
                                 <>
                                     The{" "}
                                     <em className="text-[#F59E0B] not-italic">
-                                        {activeCat.name}
+                                        {heroCat.name}
                                     </em>{" "}
                                     list
                                 </>
@@ -286,7 +287,7 @@ export default function Catalog() {
                             className="mt-6 max-w-xl text-sm md:text-base text-white/80 leading-relaxed fade-up"
                             style={{ animationDelay: "160ms" }}
                         >
-                            {activeCat?.description ||
+                            {heroCat?.description ||
                                 "Browse authoritative reference titles, legal commentaries, curated thematic works and scholarly editions from Oakbridge Publishing — all in one place."}
                         </p>
                         <div
@@ -295,12 +296,11 @@ export default function Catalog() {
                         >
                             <span>
                                 <span className="text-[#F59E0B] text-base font-sans tracking-tight mr-2">
-                                    {countLabel}
+                                    230+
                                 </span>
                                 titles
                             </span>
                             <span>5 imprints</span>
-                            <span>Free delivery over ₹999</span>
                         </div>
                     </div>
                 </div>

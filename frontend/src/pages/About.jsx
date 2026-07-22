@@ -40,7 +40,7 @@ const DEFAULT_MILESTONES = [
 ];
 
 const DEFAULT_COLUMNS = [
-    { id: "careers", overline: "Careers", title: "Join our list.", text: "We hire editors, designers, and field specialists who believe publishing is a craft of public service. Send us your work.", link_label: "careers@oakbridge.in", link_to: "/contact" },
+    { id: "careers", overline: "Careers", title: "Join our list.", text: "We hire editors, designers, and field specialists who believe publishing is a craft of public service. See our open roles and apply.", link_label: "View open roles", link_to: "/careers" },
     { id: "press", overline: "Press", title: "Media inquiries.", text: "For review copies, interviews with our authors or editorial briefings, reach out to our press team.", link_label: "press@oakbridge.in", link_to: "/contact" },
 ];
 

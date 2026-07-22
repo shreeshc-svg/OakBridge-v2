@@ -693,6 +693,40 @@ def render_contact_admin_html(msg: dict) -> str:
 """
 
 
+async def send_job_application_admin(app: dict) -> bool:
+    """Notify the hiring inbox of a new job application, with a link to the CV."""
+    to = ADMIN_NOTIFY_EMAIL or "info@oakbridge.in"
+    cv_link = f"{SITE_URL}{app.get('cv_url','')}" if SITE_URL else app.get("cv_url", "")
+    role = app.get("role", "General application")
+    html = f"""\
+<!DOCTYPE html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:24px;background-color:#FFFFFF;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:{BRAND_NAVY};">
+<table cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:600px;border:1px solid #E5E7EB;">
+  <tr><td style="background-color:{BRAND_NAVY};color:#FFFFFF;padding:18px 24px;">
+    <div style="font-family:monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:{BRAND_AMBER};">New job application</div>
+    <div style="font-family:Georgia,serif;font-size:20px;margin-top:4px;">{role}</div>
+  </td></tr>
+  <tr><td style="padding:24px;">
+    <table cellpadding="0" cellspacing="0" border="0" width="100%" style="font-size:13px;">
+      <tr><td style="color:{BRAND_GREY};padding:6px 0;width:90px;">Name</td><td style="padding:6px 0;">{app.get('name','')}</td></tr>
+      <tr><td style="color:{BRAND_GREY};padding:6px 0;">Email</td><td style="padding:6px 0;"><a href="mailto:{app.get('email','')}" style="color:{BRAND_NAVY};">{app.get('email','')}</a></td></tr>
+      <tr><td style="color:{BRAND_GREY};padding:6px 0;">Phone</td><td style="padding:6px 0;">{app.get('phone','')}</td></tr>
+    </table>
+    <div style="margin-top:20px;">
+      <a href="{cv_link}" style="display:inline-block;background-color:{BRAND_NAVY};color:#FFFFFF;text-decoration:none;font-size:14px;font-weight:600;padding:12px 24px;">Download CV (PDF)</a>
+    </div>
+  </td></tr>
+</table>
+</body></html>
+"""
+    return await send_email(
+        to=to,
+        subject=f"New job application — {role} (from {app.get('name','')})",
+        html=html,
+        reply_to=app.get("email"),
+    )
+
+
 async def send_contact_admin_alert(msg: dict) -> bool:
     """Notify the internal inbox of a new contact-form enquiry; reply-to is the sender."""
     if not ADMIN_NOTIFY_EMAIL:

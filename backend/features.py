@@ -306,6 +306,66 @@ async def create_submission(payload: SubmissionCreate):
     return Submission(**doc)
 
 
+# ============== CAREERS ==============
+# Job listings are stored in the generic content collection `careers_jobs`
+# (admin-editable). Applications come in via the multipart endpoint below.
+
+@public_router.post("/careers/apply")
+async def apply_for_job(
+    name: str = Form(...),
+    phone: str = Form(...),
+    email: str = Form(...),
+    role: str = Form(""),
+    cv: UploadFile = File(...),
+):
+    """Job application: name/phone/email required, CV must be a PDF (max 8 MB)."""
+    name = (name or "").strip()
+    phone = (phone or "").strip()
+    email = (email or "").strip().lower()
+    if not name or not phone or not email:
+        raise HTTPException(status_code=400, detail="Name, phone and email are required")
+    ctype = (cv.content_type or "").lower()
+    fname = (cv.filename or "").lower()
+    if "pdf" not in ctype and not fname.endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="CV must be a PDF file")
+    data = await cv.read()
+    if len(data) > 8 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="CV too large (max 8 MB)")
+    if not data:
+        raise HTTPException(status_code=400, detail="CV file is empty")
+
+    cv_path = f"{APP_NAME}/cv/{uuid.uuid4()}.pdf"
+    put_object(cv_path, data, "application/pdf")
+    cv_url = f"/api/files/{cv_path}"
+
+    doc = {
+        "id": str(uuid.uuid4()),
+        "name": name,
+        "phone": phone,
+        "email": email,
+        "role": (role or "").strip() or "General application",
+        "cv_url": cv_url,
+        "status": "received",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.job_applications.insert_one({**doc})
+
+    # Notify the hiring inbox (fire-and-forget; a mail failure must not lose the application).
+    try:
+        from emailer import send_job_application_admin  # late import avoids cycle
+        await send_job_application_admin(doc)
+    except Exception:  # noqa: BLE001
+        log.exception("job application admin email failed for %s", email)
+
+    return {"ok": True, "message": "Application received — thank you. We'll be in touch."}
+
+
+@admin_router.get("/job-applications")
+async def admin_list_job_applications():
+    cursor = db.job_applications.find({}, {"_id": 0}).sort([("created_at", -1)])
+    return await cursor.to_list(1000)
+
+
 @public_router.post("/books/{book_id}/notify-me")
 async def notify_when_in_stock(book_id: str, payload: NotifyRequest):
     """Register an email to be alerted when an out-of-stock title is restocked."""
@@ -1238,6 +1298,16 @@ SITE_CONTENT_DEFAULTS = {
 }
 
 COLLECTION_DEFAULTS = {
+    # Careers — admin-managed open roles. Empty `location`/`type` are fine.
+    "careers_jobs": [
+        {"id": "editor-law", "title": "Commissioning Editor — Law", "location": "Gurugram", "type": "Full-time", "department": "Editorial", "description": "Own the acquisition and development of law and tax titles, working with leading practitioner-authors from proposal to publication.", "enabled": True},
+        {"id": "sales-institutional", "title": "Institutional Sales Manager", "location": "Delhi NCR", "type": "Full-time", "department": "Sales", "description": "Build and grow relationships with universities, law firms and institutions across India for our academic and professional lists.", "enabled": True},
+    ],
+    "media_gallery": [],
+    "home_testimonials": [
+        {"quote": "Oakbridge's commentaries are now the first reference on our shelves.", "name": "A Senior Advocate", "role": "Supreme Court of India", "enabled": True},
+        {"quote": "Rigorous, current and genuinely practitioner-first. A rare combination.", "name": "Partner", "role": "A leading national law firm", "enabled": True},
+    ],
     "events_vidhi_speakers": [
         {"name": "Arjun Ram Meghwal", "role": "Union Minister for Law & Justice, GoI", "photo": "/api/files/oakbridge/events/vidhi-arjun-meghwal.png"},
         {"name": "Justice A K Sikri", "role": "Former SC Judge \u00b7 Singapore Int'l Commercial Court", "photo": "/api/files/oakbridge/events/vidhi-justice-sikri.png"},
@@ -1360,9 +1430,9 @@ async def set_collection(key: str, payload: CollectionSet):
 
 SETTINGS_DEFAULTS = {
     "tax_percent": 5,
-    "free_ship_threshold": 1500,
-    "ship_flat": 60,
-    "pdp_shipping": "Free shipping on orders over \u20b91,500",
+    "free_ship_threshold": 0,   # 0 = free shipping on all orders
+    "ship_flat": 0,
+    "pdp_shipping": "Free shipping on all orders",
     "pdp_delivery": "3\u20137 business days",
     "pdp_returns": "14-day returns",
     "binding_options": ["Hardcover", "Softcover"],
@@ -1554,8 +1624,8 @@ async def _chat_system_prompt(orders_ctx: str = "", books_ctx: str = "") -> str:
     except Exception:  # noqa: BLE001
         cat_names, cat_map = "", ""
     cat_names = cat_names or "law, tax, business, academic, reference and general titles"
-    free_thr = s.get("free_ship_threshold", 1500)
-    ship_flat = s.get("ship_flat", 60)
+    free_thr = s.get("free_ship_threshold", 0)
+    ship_flat = s.get("ship_flat", 0)
     delivery = s.get("pdp_delivery", "3-7 business days")
     returns = s.get("pdp_returns", "14-day returns")
     if orders_ctx:
@@ -1600,9 +1670,9 @@ async def _chat_system_prompt(orders_ctx: str = "", books_ctx: str = "") -> str:
         "- To order: browse the Bookstore (/books), add to cart, sign in or create an account "
         "(email verified with a one-time code), then pay securely via Razorpay (UPI, cards, "
         "net-banking, wallets).\n"
-        f"- Shipping: free over Rs {free_thr}; otherwise a flat Rs {ship_flat}. Delivery about "
-        f"{delivery} after dispatch.\n"
-        f"- Returns/refunds: {returns}. Details on /refund-policy and /shipping-policy.\n"
+        f"- Shipping: free on all orders. Delivery about {delivery} after dispatch.\n"
+        "- All sales are final — we do not offer cancellations or refunds except for damaged "
+        "or defective items. Details on /shipping-policy.\n"
         "- A GST tax invoice (PDF) is emailed with every order confirmation.\n"
         "- Educators can request a free desk copy from any book page.\n"
         "- Contact: info@oakbridge.in, phone +91 88003 37299, B3 Tower, Spaze iTech Park, Sector 49, "
@@ -1614,7 +1684,7 @@ async def _chat_system_prompt(orders_ctx: str = "", books_ctx: str = "") -> str:
         "- To take the user somewhere, reply with a SHORT confirmation, then on its own final line "
         "append EXACTLY one directive [[go:/path]].\n"
         "- Sections: /, /books, /events, /academy, /digital-solutions, /authors, /about, /contact, "
-        "/submissions, /cart, /terms, /privacy, /refund-policy, /shipping-policy.\n"
+        "/submissions, /cart, /terms, /privacy, /shipping-policy.\n"
         "- FILTER a category: [[go:/books?category=<id>]] using an id from the Category ids list "
         "above. Example — 'show me academic books' -> 'Here are our academic titles. "
         "[[go:/books?category=academic]]'.\n"

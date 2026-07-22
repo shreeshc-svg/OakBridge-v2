@@ -26,7 +26,6 @@ const ROUTES = {
     "/cart": "Cart",
     "/terms": "Terms",
     "/privacy": "Privacy",
-    "/refund-policy": "Refund Policy",
     "/shipping-policy": "Shipping Policy",
     "/what-we-do": "What We Do",
 };

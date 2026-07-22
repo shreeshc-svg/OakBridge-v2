@@ -1,6 +1,6 @@
 import React from "react";
 import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
-import { LayoutDashboard, BookOpen, ShoppingBag, Mail, Users, LogOut, ExternalLink, Tag, PackageCheck, FileText, Inbox, Image, Settings, Scale, LayoutTemplate, Navigation, Menu, X } from "lucide-react";
+import { LayoutDashboard, BookOpen, ShoppingBag, Mail, Users, LogOut, ExternalLink, Tag, PackageCheck, FileText, Inbox, Image, Settings, Scale, LayoutTemplate, Navigation, Menu, X, Briefcase, Clapperboard } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { Toaster } from "../../components/ui/sonner";
 
@@ -10,6 +10,8 @@ const LINKS = [
     { to: "/admin/inventory", label: "Inventory", icon: PackageCheck },
     { to: "/admin/pages", label: "Pages", icon: LayoutTemplate },
     { to: "/admin/authors", label: "Authors", icon: Users },
+    { to: "/admin/careers", label: "Careers", icon: Briefcase },
+    { to: "/admin/media-gallery", label: "Media & Gallery", icon: Clapperboard },
     { to: "/admin/navigation", label: "Navigation", icon: Navigation },
     { to: "/admin/media", label: "Media Library", icon: Image },
     { to: "/admin/orders", label: "Orders", icon: ShoppingBag },

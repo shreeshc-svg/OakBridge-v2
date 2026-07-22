@@ -12,6 +12,7 @@ import {
     fetchBestsellers,
     fetchSiteContent,
     fetchSettings,
+    fetchCollection,
     mediaUrl,
 } from "../lib/api";
 
@@ -79,6 +80,7 @@ export default function Home() {
     const [bestsellers, setBestsellers] = useState([]);
     const [site, setSite] = useState({});
     const [settings, setSettings] = useState(null);
+    const [testimonials, setTestimonials] = useState([]);
 
     useEffect(() => {
         fetchCategories().then(setCategories).catch(() => {});
@@ -87,6 +89,7 @@ export default function Home() {
         fetchNewReleases().then(setNewRel).catch(() => {});
         fetchBestsellers(12).then(setBestsellers).catch(() => {});
         fetchSettings().then(setSettings).catch(() => {});
+        fetchCollection("home_testimonials").then((d) => setTestimonials((d?.items || []).filter((t) => t && t.enabled !== false && t.quote))).catch(() => {});
         // Fallback feed in case bestseller / new-release flags are sparse (also the pool for the curated carousel)
         fetchBooks({ sort: "featured", limit: 100 }).then(setFallback).catch(() => {});
     }, []);
@@ -187,7 +190,7 @@ export default function Home() {
                         <div className="mt-20 grid grid-cols-3 gap-8 max-w-xl pt-8 border-t border-[#002B5C]/15">
                             <div>
                                 <div className="font-serif text-3xl text-[#002B5C]">
-                                    640+
+                                    230+
                                 </div>
                                 <div className="overline mt-1 !text-[10px]">
                                     Titles in print
@@ -195,7 +198,7 @@ export default function Home() {
                             </div>
                             <div>
                                 <div className="font-serif text-3xl text-[#002B5C]">
-                                    210k
+                                    320K
                                 </div>
                                 <div className="overline mt-1 !text-[10px]">
                                     Students served
@@ -203,10 +206,10 @@ export default function Home() {
                             </div>
                             <div>
                                 <div className="font-serif text-3xl text-[#002B5C]">
-                                    18
+                                    Global
                                 </div>
                                 <div className="overline mt-1 !text-[10px]">
-                                    States reached
+                                    Reach
                                 </div>
                             </div>
                         </div>
@@ -390,7 +393,7 @@ export default function Home() {
                             image: "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=800&q=80",
                         },
                         {
-                            name: "Bespoke Books",
+                            name: "Bespoke and Curated Works",
                             tag: "Imprint",
                             slot: "home_imprint_curated",
                             image: "https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&w=800&q=80",
@@ -423,25 +426,29 @@ export default function Home() {
                 </div>
             </section>
 
-            {/* ============== FEATURED BOOKS ============== */}
-            {bestsellersEnabled && carouselBooks.length > 0 && (
+            {/* ============== HOT OFF PRESS (new releases) ============== */}
+            {newReleasesRow.length > 0 && (
             <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 md:py-28 bg-[#F5F7FA] border-y border-[#E5E7EB]">
                 <div className="flex items-end justify-between mb-12">
                     <div>
-                        <div className="overline">Bestsellers</div>
+                        <div className="overline">Hot Off Press</div>
                         <h2 className="font-serif text-4xl md:text-5xl mt-3 text-[#002B5C] leading-tight">
-                            What leaders are reading.
+                            New this season.
                         </h2>
                     </div>
                     <Link
-                        to="/books?bestseller=true"
-                        data-testid="bestsellers-view-all-link"
+                        to="/books?new_release=true"
+                        data-testid="new-releases-view-all-link"
                         className="hidden md:inline-flex items-center gap-1 text-sm font-medium border-b border-[#002B5C] pb-0.5 hover:text-[#CC0033] hover:border-[#CC0033] transition-colors"
                     >
-                        View all bestsellers <ArrowUpRight size={14} strokeWidth={1.5} />
+                        View all new titles <ArrowUpRight size={14} strokeWidth={1.5} />
                     </Link>
                 </div>
-                <BestsellerCarousel books={carouselBooks} speed={bestsellersSpeed} />
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-7 gap-4 md:gap-5">
+                    {newReleasesRow.map((b, i) => (
+                        <BookCard key={b.id} book={b} index={i} compact />
+                    ))}
+                </div>
             </section>
             )}
 
@@ -512,27 +519,53 @@ export default function Home() {
                 </div>
             </section>
 
-            {/* ============== NEW RELEASES ============== */}
-            {newReleasesRow.length > 0 && (
+            {/* ============== BESTSELLERS ============== */}
+            {bestsellersEnabled && carouselBooks.length > 0 && (
                 <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 md:py-28 border-t border-[#E5E7EB]">
                     <div className="flex items-end justify-between mb-12">
                         <div>
-                            <div className="overline">Freshly Pressed</div>
+                            <div className="overline">Bestsellers</div>
                             <h2 className="font-serif text-4xl md:text-5xl mt-3 text-[#002B5C] leading-tight">
-                                New this season.
+                                What leaders are reading.
                             </h2>
                         </div>
                         <Link
-                            to="/books?new_release=true"
-                            data-testid="new-releases-view-all-link"
+                            to="/books?bestseller=true"
+                            data-testid="bestsellers-view-all-link"
                             className="hidden md:inline-flex items-center gap-1 text-sm font-medium border-b border-[#002B5C] pb-0.5 hover:text-[#CC0033] hover:border-[#CC0033] transition-colors"
                         >
-                            View all new titles <ArrowUpRight size={14} strokeWidth={1.5} />
+                            View all bestsellers <ArrowUpRight size={14} strokeWidth={1.5} />
                         </Link>
                     </div>
-                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-7 gap-4 md:gap-5">
-                        {newReleasesRow.map((b, i) => (
-                            <BookCard key={b.id} book={b} index={i} compact />
+                    <BestsellerCarousel books={carouselBooks} speed={bestsellersSpeed} />
+                </section>
+            )}
+
+            {/* ============== TESTIMONIALS ============== */}
+            {testimonials.length > 0 && (
+                <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 md:py-28 bg-[#F5F7FA] border-y border-[#E5E7EB]">
+                    <div className="max-w-2xl mb-12">
+                        <div className="overline">Testimonials</div>
+                        <h2 className="font-serif text-4xl md:text-5xl mt-3 text-[#002B5C] leading-tight">
+                            Trusted by the people we publish for.
+                        </h2>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {testimonials.map((t, i) => (
+                            <figure
+                                key={t.id || i}
+                                data-testid={`testimonial-${i}`}
+                                className="bg-white border border-[#E5E7EB] p-7 flex flex-col"
+                            >
+                                <div className="font-serif text-5xl text-[#F59E0B] leading-none">“</div>
+                                <blockquote className="mt-2 flex-1 text-[#002B5C] leading-relaxed">
+                                    {t.quote}
+                                </blockquote>
+                                <figcaption className="mt-6 pt-4 border-t border-[#E5E7EB]">
+                                    <div className="font-medium text-[#002B5C] text-sm">{t.name}</div>
+                                    {t.role && <div className="text-xs font-mono uppercase tracking-widest text-[#4B5563] mt-1">{t.role}</div>}
+                                </figcaption>
+                            </figure>
                         ))}
                     </div>
                 </section>

@@ -65,7 +65,6 @@ const DEFAULT_FOOTER_COLUMNS = [
 const DEFAULT_LEGAL = [
     { to: "/privacy", label: "Privacy" },
     { to: "/terms", label: "Terms" },
-    { to: "/refund-policy", label: "Refunds" },
     { to: "/shipping-policy", label: "Shipping" },
     { to: "/cookie-policy", label: "Cookies" },
     { to: "/contact", label: "Contact" },

@@ -8,22 +8,6 @@ const ASSET = (p) => `${process.env.REACT_APP_BACKEND_URL}${p}`;
 
 const FLAGSHIP_EVENTS = [
     {
-        id: "vidhi-utsav",
-        eyebrow: "An Oakbridge Initiative · 4th Edition",
-        title: "Vidhi Utsav 2027",
-        subtitle: "The Legal Literature Festival",
-        tagline: "Kanoon aur Kala ka Utsav, ek Naye Rang Mein.",
-        description:
-            "A unique festival that celebrates Law, Legal Literature and Legal Luminaries — a confluence of eminent judges, jurists, writers, lawyers, corporate counsels, leaders and artists.",
-        date: "Coming soon · Feb – Mar 2027",
-        venue: "New Delhi",
-        time: "Two-day premium festival",
-        href: "https://www.vidhiutsav.com",
-        cta: "Visit vidhiutsav.com",
-        image: ASSET("/api/files/oakbridge/events/vidhi-banner.webp"),
-        chips: ["Law", "Literature", "Luminaries", "Awards", "Music", "Comedy"],
-    },
-    {
         id: "law-ai-tech-summit",
         eyebrow: "An Oakbridge Initiative",
         title: "India Law, AI & Tech Summit",
@@ -38,6 +22,22 @@ const FLAGSHIP_EVENTS = [
         cta: "Visit oakbridge.events",
         image: ASSET("/api/files/oakbridge/events/summit-banner.webp"),
         chips: ["Legal Tech", "AI", "Innovation", "Networking"],
+    },
+    {
+        id: "vidhi-utsav",
+        eyebrow: "An Oakbridge Initiative · 4th Edition",
+        title: "Vidhi Utsav 2027",
+        subtitle: "The Legal Literature Festival",
+        tagline: "Kanoon aur Kala ka Utsav, ek Naye Rang Mein.",
+        description:
+            "A unique festival that celebrates Law, Legal Literature and Legal Luminaries — a confluence of eminent judges, jurists, writers, lawyers, corporate counsels, leaders and artists.",
+        date: "Coming soon · Feb – Mar 2027",
+        venue: "New Delhi",
+        time: "Two-day premium festival",
+        href: "https://www.vidhiutsav.com",
+        cta: "Visit vidhiutsav.com",
+        image: ASSET("/api/files/oakbridge/events/vidhi-banner.webp"),
+        chips: ["Law", "Literature", "Luminaries", "Awards", "Music", "Comedy"],
     },
 ];
 
@@ -381,32 +381,6 @@ export default function Events() {
                 </div>
             </section>
 
-            {/* SPEAKERS — VIDHI UTSAV */}
-            <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 md:py-28">
-                <div className="flex items-end justify-between mb-12 flex-wrap gap-4">
-                    <div>
-                        <div className="overline">Vidhi Utsav Speakers</div>
-                        <h2 className="font-serif text-4xl md:text-5xl mt-4 text-[#002B5C] leading-[1.05]">
-                            Eminent voices on stage.
-                        </h2>
-                    </div>
-                    <a
-                        href="https://www.vidhiutsav.com/speakers"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        data-testid="vidhi-speakers-all-link"
-                        className="inline-flex items-center gap-1 text-sm font-medium border-b border-[#002B5C] pb-0.5 hover:text-[#CC0033] hover:border-[#CC0033] transition-colors"
-                    >
-                        View full speaker list <ArrowUpRight size={14} strokeWidth={1.5} />
-                    </a>
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-6 md:gap-8">
-                    {vidhiSpeakers.map((s) => (
-                        <SpeakerCard key={s.name} s={s} />
-                    ))}
-                </div>
-            </section>
-
             {/* SPEAKERS — SUMMIT */}
             <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 md:py-28 bg-[#002B5C] text-white">
                 <div className="flex items-end justify-between mb-12 flex-wrap gap-4">
@@ -478,6 +452,32 @@ export default function Events() {
                             ))}
                         </ul>
                     </div>
+                </div>
+            </section>
+
+            {/* SPEAKERS — VIDHI UTSAV */}
+            <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 md:py-28 border-b border-[#E5E7EB]">
+                <div className="flex items-end justify-between mb-12 flex-wrap gap-4">
+                    <div>
+                        <div className="overline">Vidhi Utsav Speakers</div>
+                        <h2 className="font-serif text-4xl md:text-5xl mt-4 text-[#002B5C] leading-[1.05]">
+                            Eminent voices on stage.
+                        </h2>
+                    </div>
+                    <a
+                        href="https://www.vidhiutsav.com/speakers"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        data-testid="vidhi-speakers-all-link"
+                        className="inline-flex items-center gap-1 text-sm font-medium border-b border-[#002B5C] pb-0.5 hover:text-[#CC0033] hover:border-[#CC0033] transition-colors"
+                    >
+                        View full speaker list <ArrowUpRight size={14} strokeWidth={1.5} />
+                    </a>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-6 md:gap-8">
+                    {vidhiSpeakers.map((s) => (
+                        <SpeakerCard key={s.name} s={s} />
+                    ))}
                 </div>
             </section>
 

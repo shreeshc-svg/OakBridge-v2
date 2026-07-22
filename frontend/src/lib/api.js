@@ -226,6 +226,22 @@ export const adminUploadCover = (file) => {
         .then((r) => r.data);
 };
 
+// ---- Careers ----
+export const fetchJobs = () => api.get("/collections/careers_jobs").then((r) => r.data);
+export const applyForJob = ({ name, phone, email, role, cv }) => {
+    const form = new FormData();
+    form.append("name", name);
+    form.append("phone", phone);
+    form.append("email", email);
+    form.append("role", role || "");
+    form.append("cv", cv);
+    return api
+        .post("/careers/apply", form, { headers: { "Content-Type": "multipart/form-data" } })
+        .then((r) => r.data);
+};
+export const adminListJobApplications = () =>
+    api.get("/admin/job-applications").then((r) => r.data);
+
 // ---- Authors admin ----
 export const adminListAuthors = () => api.get("/admin/authors").then((r) => r.data);
 export const adminCreateAuthor = (payload) => api.post("/admin/authors", payload).then((r) => r.data);

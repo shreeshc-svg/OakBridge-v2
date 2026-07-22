@@ -15,7 +15,7 @@ const DEFAULT_HERO = {
     overline: "What We Do",
     title: "Four businesses.\nOne scholarly",
     highlight: "centre of gravity.",
-    body: "Oakbridge started as a publisher. Today we span four complementary businesses — all anchored by the same authoritative content, authors and editorial standards.",
+    body: "Oakbridge started as a publisher. Today we span two complementary businesses — all anchored by the same authoritative content, authors and editorial standards.",
 };
 
 const DEFAULT_VERTICALS = [

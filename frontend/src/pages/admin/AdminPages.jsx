@@ -61,8 +61,19 @@ export default function AdminPages() {
                     <div className="overline !text-[10px] mt-6 mb-2">Imprint tiles (Five Imprints section)</div>
                     <div className="space-y-3">
                         <SlotRow label="Coffee Table Books" value={site.home_imprint_coffee_table} onSave={(v) => saveSite("home_imprint_coffee_table", v)} />
-                        <SlotRow label="Bespoke Books" value={site.home_imprint_curated} onSave={(v) => saveSite("home_imprint_curated", v)} />
+                        <SlotRow label="Bespoke and Curated Works" value={site.home_imprint_curated} onSave={(v) => saveSite("home_imprint_curated", v)} />
                     </div>
+                    <div className="overline !text-[10px] mb-2 mt-8 pt-8 border-t border-[#E5E7EB]">Testimonials (add / edit / reorder)</div>
+                    <ListEditor
+                        collectionKey="home_testimonials"
+                        defaults={HOME_TESTIMONIALS_DEFAULT}
+                        fields={[
+                            { key: "quote", label: "Quote", type: "textarea" },
+                            { key: "name", label: "Name" },
+                            { key: "role", label: "Role / organisation" },
+                        ]}
+                        blank={{ quote: "", name: "", role: "" }}
+                    />
                 </PageGroup>
 
                 <PageGroup title="Bookstore — Product Listing (PLP)" path="/books">
@@ -289,6 +300,11 @@ const DS_STATS_DEFAULT = [
     { value: "200+", label: "Titles indexed" },
     { value: "Q3", label: "Beta launch target" },
     { value: "Q4", label: "General availability" },
+];
+
+const HOME_TESTIMONIALS_DEFAULT = [
+    { quote: "Oakbridge's commentaries are now the first reference on our shelves.", name: "A Senior Advocate", role: "Supreme Court of India" },
+    { quote: "Rigorous, current and genuinely practitioner-first. A rare combination.", name: "Partner", role: "A leading national law firm" },
 ];
 
 const AC_FEATURES_DEFAULT = [

@@ -26,7 +26,7 @@ _Last updated: {_UPDATED}_
 These Terms & Conditions ("Terms") govern your use of {_SITE} (the "Site") and any
 purchase you make from **{_ENTITY}** ("Oakbridge", "we", "us"). By using the Site
 or placing an order, you agree to these Terms. Please also read our
-[Privacy Policy](/privacy), [Refund & Cancellation Policy](/refund-policy),
+[Privacy Policy](/privacy),
 [Shipping & Delivery Policy](/shipping-policy) and [Cookie Policy](/cookie-policy),
 which form part of these Terms.
 
@@ -61,10 +61,10 @@ email at sign-up to verify your account and process orders.
   unavailability, or pricing/description errors, in line with the Consumer
   Protection (E-Commerce) Rules, 2020.
 
-## 5. Shipping, cancellations & refunds
-Delivery, cancellation and refund terms are set out in our
-[Shipping & Delivery Policy](/shipping-policy) and
-[Refund & Cancellation Policy](/refund-policy).
+## 5. Shipping & delivery
+Delivery terms are set out in our [Shipping & Delivery Policy](/shipping-policy).
+All sales are final — we do not offer cancellations or refunds once an order is
+placed, except where an item arrives damaged or defective.
 
 ## 6. Reviews & user content
 If you post a review or other content, you confirm it is your own, lawful and not
@@ -299,8 +299,8 @@ due to weather, courier or other factors beyond our control.
 ## 5. Delays, damage & non-delivery
 - If your order has not arrived within the estimated window, email {_EMAIL} with
   your order number and we will follow up with the courier.
-- If a package arrives damaged, see our
-  [Refund & Cancellation Policy](/refund-policy).
+- If a package arrives damaged or defective, email {_EMAIL} within 48 hours of
+  delivery with photos and your order number, and we will arrange a replacement.
 
 ## 6. Contact
 For any delivery question, contact us at {_EMAIL} or {_PHONE}.

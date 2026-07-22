@@ -27,7 +27,6 @@ const DEFAULT_COLUMNS = [
     {
         title: "Solutions",
         links: [
-            { to: "/solutions/schools", label: "For Schools" },
             { to: "/solutions/higher-ed", label: "For Colleges" },
             { to: "/solutions/educators", label: "For Educators" },
             { to: "/submissions", label: "Author Submissions" },
@@ -40,7 +39,7 @@ const DEFAULT_COLUMNS = [
             { to: "/about", label: "Our Story" },
             { to: "/authors", label: "Authors" },
             { to: "/contact", label: "Contact" },
-            { to: "/about#careers", label: "Careers" },
+            { to: "/careers", label: "Careers" },
             { to: "/about#press", label: "Press" },
         ],
     },
@@ -49,7 +48,6 @@ const DEFAULT_COLUMNS = [
 const DEFAULT_LEGAL = [
     { to: "/privacy", label: "Privacy" },
     { to: "/terms", label: "Terms" },
-    { to: "/refund-policy", label: "Refunds" },
     { to: "/shipping-policy", label: "Shipping" },
     { to: "/cookie-policy", label: "Cookies" },
     { to: "/contact", label: "Contact" },

@@ -453,8 +453,8 @@ export default function Checkout() {
                                     Privacy Policy
                                 </Link>{" "}
                                 and{" "}
-                                <Link to="/refund-policy" target="_blank" className="text-[#002B5C] underline">
-                                    Refund Policy
+                                <Link to="/shipping-policy" target="_blank" className="text-[#002B5C] underline">
+                                    Shipping Policy
                                 </Link>
                                 .
                             </span>
