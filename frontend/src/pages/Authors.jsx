@@ -4,7 +4,7 @@ import Seo from "../components/Seo";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, ArrowUpRight, ChevronLeft, ChevronRight } from "lucide-react";
 import BookCard from "../components/BookCard";
-import { fetchAuthor, fetchAuthorBooks, fetchAuthors, fetchSiteContent, fetchSettings } from "../lib/api";
+import { fetchAuthor, fetchAuthorBooks, fetchAuthors, fetchSiteContent, fetchSettings, mediaUrl } from "../lib/api";
 
 const AUTHORS_DEFAULTS = {
     overline: "Our Authors",
@@ -65,7 +65,7 @@ function AuthorDetail({ id }) {
                     <div className="sticky top-24">
                         <div className="aspect-[3/4] bg-[#F5F7FA] border border-[#E5E7EB] overflow-hidden">
                             <img
-                                src={author.photo}
+                                src={mediaUrl(author.photo) || author.photo}
                                 alt={author.name}
                                 className="w-full h-full object-cover"
                             />
@@ -132,7 +132,7 @@ function AuthorTile({ a, idx }) {
         >
             <div className="relative aspect-[3/4] bg-[#F5F7FA] border border-[#E5E7EB] overflow-hidden">
                 <img
-                    src={a.photo}
+                    src={mediaUrl(a.photo) || a.photo}
                     alt={a.name}
                     loading="lazy"
                     className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
