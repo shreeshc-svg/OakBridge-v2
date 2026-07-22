@@ -105,3 +105,8 @@ import/
 /vikesh-dhyani.png
 /*.png
 /*.jpg
+
+# scraped author migration — raw inputs (images bundle is 12MB); keep out of git
+oakbridge-authors-images.json
+oakbridge-authors-scrape.json
+backend/mongo.txt

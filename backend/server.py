@@ -350,6 +350,22 @@ async def list_categories():
     return cats
 
 
+# How many of the most recently published titles count as "new releases" when no
+# book carries an explicit new_release flag. release_rank 1 = most recent.
+NEW_RELEASE_TOP_N = 24
+
+
+async def _curated_bestseller_ids() -> List[str]:
+    """Book IDs the admin curated for the home bestseller carousel.
+
+    Reused as the bestseller filter's source so the storefront filter and the home
+    carousel can never disagree about what a bestseller is.
+    """
+    doc = await db.settings.find_one({"key": "home_bestsellers"}, {"_id": 0, "value": 1})
+    value = (doc or {}).get("value") or []
+    return [str(x) for x in value if x]
+
+
 @api_router.get("/books", response_model=List[Book])
 async def list_books(
     category: Optional[str] = None,
@@ -363,15 +379,45 @@ async def list_books(
     limit: int = 60,
     skip: int = 0,
 ):
-    query = {}
+    # Clauses are collected and combined with $and, because several of them below
+    # are themselves $or expressions (search, bestseller, new_release). Assigning
+    # query["$or"] more than once would silently drop all but the last.
+    query: dict = {}
+    clauses: List[dict] = []
     if category:
         query["category"] = category
     if subject:
         query["subject"] = subject
+
     if bestseller is not None:
-        query["bestseller"] = bestseller
+        if bestseller:
+            # No title in the catalogue carries an explicit `bestseller` flag, so a
+            # literal match returns an empty shelf. Fall back to the list the admin
+            # already curates for the home carousel — real editorial intent rather
+            # than an invented flag. An explicit flag, once set, still counts.
+            ids = await _curated_bestseller_ids()
+            clauses.append(
+                {"$or": [{"bestseller": True}, {"id": {"$in": ids}}]}
+                if ids
+                else {"bestseller": True}
+            )
+        else:
+            query["bestseller"] = False
+
     if new_release is not None:
-        query["new_release"] = new_release
+        if new_release:
+            # Same problem, better answer: we know the real publication order, so
+            # "new releases" means the most recently published titles rather than a
+            # flag nobody maintains.
+            clauses.append(
+                {"$or": [
+                    {"new_release": True},
+                    {"release_rank": {"$lte": NEW_RELEASE_TOP_N}},
+                ]}
+            )
+        else:
+            query["new_release"] = False
+
     price_q = {}
     if min_price is not None:
         price_q["$gte"] = min_price
@@ -379,13 +425,19 @@ async def list_books(
         price_q["$lte"] = max_price
     if price_q:
         query["price"] = price_q
+
     if search:
-        query["$or"] = [
-            {"title": {"$regex": search, "$options": "i"}},
-            {"author": {"$regex": search, "$options": "i"}},
-            {"subject": {"$regex": search, "$options": "i"}},
-            {"isbn": {"$regex": search, "$options": "i"}},
-        ]
+        clauses.append(
+            {"$or": [
+                {"title": {"$regex": search, "$options": "i"}},
+                {"author": {"$regex": search, "$options": "i"}},
+                {"subject": {"$regex": search, "$options": "i"}},
+                {"isbn": {"$regex": search, "$options": "i"}},
+            ]}
+        )
+
+    if clauses:
+        query["$and"] = clauses
 
     # `_rank` is the publisher's release order (1 = most recent). Books without a
     # rank fall to the end rather than jumping to the front on an ascending sort.

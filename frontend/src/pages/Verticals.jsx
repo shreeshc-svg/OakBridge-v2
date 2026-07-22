@@ -26,7 +26,7 @@ const DEFAULT_VERTICALS = [
         title: "Scholarly & Professional Books",
         lede: "Our flagship business — authoritative books across Academic, Law, Tax, Business, General, Coffee Table and Curated Works.",
         bullets: [
-            "500+ titles across 5 publishing programs",
+            "200+ titles across 5 publishing programs",
             "Distribution across India and 18 international markets",
             "Print, eBook and institutional licensing",
         ],
@@ -56,7 +56,7 @@ const DEFAULT_VERTICALS = [
         title: "AI-Powered Knowledge Products",
         lede: "Next-generation digital platforms built on our scholarly content — semantic search, research assistants, subscription databases and institutional APIs.",
         bullets: [
-            "Semantic search across 500+ legal and tax titles",
+            "Semantic search across our full legal and tax list",
             "AI research copilots for practitioners",
             "Licensed APIs for law firms, universities and fintechs",
         ],

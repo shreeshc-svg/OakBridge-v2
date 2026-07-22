@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import csv
 import io
+import json
 import os
 import uuid
 import logging
@@ -532,6 +533,39 @@ async def admin_search_logs(days: int = 30, limit: int = 20):
         "top_queries": await top(base),
         "zero_result_queries": await top({**base, "results": 0}),
     }
+
+
+@admin_router.post("/reseed-authors")
+async def admin_reseed_authors(confirm: bool = False):
+    """One-time migration: replace db.authors with the real roster scraped from the
+    old site (backend/authors_seed_real.json, shipped in the deploy).
+
+    Runs inside the deployed backend, so it uses Render's own (working) Atlas
+    connection — no local Mongo URL needed. Guarded by admin auth + an explicit
+    ?confirm=true so it can't fire by accident. Safe to re-run: it fully replaces
+    the collection each time.
+    """
+    path = os.path.join(os.path.dirname(__file__), "authors_seed_real.json")
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="authors_seed_real.json not found in deploy")
+    records = json.load(open(path, encoding="utf-8"))
+    docs = [{k: v for k, v in r.items() if not k.startswith("_")} for r in records]
+    before = await db.authors.count_documents({})
+    if not confirm:
+        # dry run — report what would happen, change nothing
+        matched = sum(1 for d in docs if d.get("title_count", 0) > 0)
+        return {
+            "dry_run": True,
+            "current_authors": before,
+            "incoming": len(docs),
+            "linked_to_books": matched,
+            "note": "re-call with ?confirm=true to replace",
+        }
+    await db.authors.delete_many({})
+    if docs:
+        await db.authors.insert_many(docs)
+    after = await db.authors.count_documents({})
+    return {"dry_run": False, "replaced_from": before, "authors_now": after}
 
 
 # ---------------------------------------------------------------- book preview

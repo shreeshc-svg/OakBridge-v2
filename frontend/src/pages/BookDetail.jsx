@@ -8,7 +8,7 @@ import BookCard from "../components/BookCard";
 import DeskCopyDialog from "../components/DeskCopyDialog";
 import ReviewsSection from "../components/ReviewsSection";
 import { fetchBook, fetchBooks, formatINR, notifyBackInStock, fetchSettings, mediaUrl,
-    fetchBookPreview,
+    fetchBookPreview, shippingPromise,
 } from "../lib/api";
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
@@ -460,7 +460,9 @@ export default function BookDetail() {
                     <div className="mt-10 grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs font-mono text-[#4B5563]">
                         <div>
                             <div className="overline !text-[10px]">Free Shipping</div>
-                            <div className="mt-1 text-[#002B5C]">On ₹{settings?.free_ship_threshold ?? 1500}+</div>
+                            <div className="mt-1 text-[#002B5C]">
+                                {shippingPromise(settings, { short: true })}
+                            </div>
                         </div>
                         <div>
                             <div className="overline !text-[10px]">Delivery</div>

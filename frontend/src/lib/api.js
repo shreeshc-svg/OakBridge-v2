@@ -276,6 +276,24 @@ export const formatINR = (n) =>
         maximumFractionDigits: 0,
     }).format(n);
 
+/**
+ * The shipping promise, derived from live settings rather than written out by
+ * hand. A threshold of 0 means everything ships free — previously the PDP and
+ * cart still advertised a ₹1,500 minimum that no longer existed, and the PDP
+ * tile rendered the nonsense "On ₹0+".
+ *
+ * `short` is for the compact PDP tile; the long form is a full sentence.
+ */
+export const shippingPromise = (settings, { short = false } = {}) => {
+    const thr = Number(settings?.free_ship_threshold ?? 0);
+    if (!Number.isFinite(thr) || thr <= 0) {
+        return short ? "On all orders" : "Free shipping on all orders.";
+    }
+    return short
+        ? `On ${formatINR(thr)}+`
+        : `Free shipping on orders over ${formatINR(thr)}.`;
+};
+
 export const formatApiError = (err) => {
     const d = err?.response?.data?.detail;
     if (!d) return err?.message || "Something went wrong.";

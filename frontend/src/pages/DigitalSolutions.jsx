@@ -20,7 +20,7 @@ const DEFAULTS = {
 const DEFAULT_FEATURES = [];
 
 const DEFAULT_STATS = [
-    { value: "500+", label: "Titles indexed" },
+    { value: "200+", label: "Titles indexed" },
     { value: "Q3", label: "Beta launch target" },
     { value: "Q4", label: "General availability" },
 ];

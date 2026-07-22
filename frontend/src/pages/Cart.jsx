@@ -5,7 +5,7 @@ import { Minus, Plus, Trash2, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
-import { formatINR, mediaUrl } from "../lib/api";
+import { formatINR, mediaUrl, shippingPromise } from "../lib/api";
 import VerifyNotice from "../components/VerifyNotice";
 
 export default function Cart() {
@@ -28,6 +28,7 @@ export default function Cart() {
         shipping,
         tax,
         total,
+        settings,
     } = useCart();
 
     return (
@@ -181,7 +182,7 @@ export default function Cart() {
                                 <ArrowRight size={14} strokeWidth={1.5} />
                             </button>
                             <p className="text-xs text-[#4B5563] text-center mt-3 font-mono">
-                                Free shipping on orders over ₹1500.
+                                {shippingPromise(settings)}
                             </p>
                         </div>
                     </aside>
