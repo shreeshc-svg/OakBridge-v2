@@ -360,12 +360,6 @@ async def apply_for_job(
     return {"ok": True, "message": "Application received — thank you. We'll be in touch."}
 
 
-@admin_router.get("/job-applications")
-async def admin_list_job_applications():
-    cursor = db.job_applications.find({}, {"_id": 0}).sort([("created_at", -1)])
-    return await cursor.to_list(1000)
-
-
 @public_router.post("/books/{book_id}/notify-me")
 async def notify_when_in_stock(book_id: str, payload: NotifyRequest):
     """Register an email to be alerted when an out-of-stock title is restocked."""
@@ -437,6 +431,12 @@ admin_router = APIRouter(
     tags=["admin-features"],
     dependencies=[Depends(require_admin)],
 )
+
+
+@admin_router.get("/job-applications")
+async def admin_list_job_applications():
+    cursor = db.job_applications.find({}, {"_id": 0}).sort([("created_at", -1)])
+    return await cursor.to_list(1000)
 
 
 @admin_router.post("/coupons", response_model=Coupon)
