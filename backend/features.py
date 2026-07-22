@@ -1472,6 +1472,10 @@ SETTINGS_DEFAULTS = {
         "Academic & Civil Services",
         "Business & General",
     ],
+    # Order of the reorderable sections on the public Events page.
+    "events_section_order": [
+        "flagship", "experiences", "summit_speakers", "who_attends", "vidhi_speakers", "cta",
+    ],
     # Trust badges under the price on every book page. Fully admin-managed:
     # reorder, edit label/value, hide (enabled:false), remove, or add new ones.
     "pdp_badges": [

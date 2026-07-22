@@ -1,7 +1,18 @@
 import React, { useEffect, useState } from "react";
 import Breadcrumbs from "../components/Breadcrumbs";
 import Seo from "../components/Seo";
-import { fetchSiteContent, fetchCollection, mediaUrl } from "../lib/api";
+import { fetchSiteContent, fetchCollection, fetchSettings, mediaUrl } from "../lib/api";
+
+// Reorderable sections of the Events page, in their default order.
+const EVENT_SECTION_DEFS = [
+    { key: "flagship", label: "Flagship Events" },
+    { key: "experiences", label: "The Experience" },
+    { key: "summit_speakers", label: "Summit Speakers" },
+    { key: "who_attends", label: "Who Attends" },
+    { key: "vidhi_speakers", label: "Vidhi Utsav Speakers" },
+    { key: "cta", label: "Get Involved (CTA)" },
+];
+const DEFAULT_EVENT_ORDER = EVENT_SECTION_DEFS.map((s) => s.key);
 import { ArrowUpRight, Calendar, MapPin, Users, Sparkles, Mic, BookOpen, Award, Music, Smile, ShoppingBag, Brain, Building2 } from "lucide-react";
 
 const ASSET = (p) => `${process.env.REACT_APP_BACKEND_URL}${p}`;
@@ -189,8 +200,10 @@ export default function Events() {
     const [vidhiSpeakers, setVidhiSpeakers] = useState(VIDHI_SPEAKERS);
     const [summitSpeakers, setSummitSpeakers] = useState(SUMMIT_SPEAKERS);
     const [flagship, setFlagship] = useState([]);
+    const [settings, setSettings] = useState({});
     useEffect(() => {
         fetchSiteContent().then(setSite).catch(() => {});
+        fetchSettings().then(setSettings).catch(() => {});
         fetchCollection("events_vidhi_speakers")
             .then((d) => {
                 if (d?.items?.length)
@@ -244,6 +257,214 @@ export default function Events() {
         }, 6000);
         return () => clearInterval(timer);
     }, [HERO_BANNERS.length]);
+
+    // Each reorderable section as a keyed element; the hero stays fixed at top.
+    const sectionMap = {
+        flagship: (
+            <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 md:py-28">
+                <div className="max-w-3xl mb-16">
+                    <div className="overline">Flagship Events</div>
+                    <h2 className="font-serif text-4xl md:text-5xl mt-4 text-[#002B5C] leading-[1.05]">
+                        A festival and a summit.
+                        <br />
+                        One mission.
+                    </h2>
+                    <p className="mt-6 text-[#4B5563] leading-relaxed">
+                        From the country's only legal-literature festival to the
+                        flagship summit at the intersection of law, AI and technology —
+                        Oakbridge builds platforms that bring the profession together.
+                    </p>
+                </div>
+                <div className="space-y-10">
+                    {flagshipEvents.map((ev, i) => (
+                        <FlagshipCard key={ev.id} ev={ev} i={i} />
+                    ))}
+                </div>
+            </section>
+        ),
+        experiences: (
+            <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 md:py-28 bg-[#F5F7FA] border-t border-b border-[#E5E7EB]">
+                <div className="max-w-3xl mb-16">
+                    <div className="overline">The Experience</div>
+                    <h2 className="font-serif text-4xl md:text-5xl mt-4 text-[#002B5C] leading-[1.05]">
+                        Experience law &amp; ideas
+                        <br />
+                        like never before.
+                    </h2>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                    {EXPERIENCE.map((e, i) => (
+                        <div
+                            key={e.title}
+                            data-testid={`event-experience-${i}`}
+                            className="group relative bg-white border border-[#E5E7EB] p-7 pt-8 overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:border-[#002B5C] hover:shadow-[0_24px_48px_-20px_rgba(0,43,92,0.25)] fade-up"
+                            style={{ animationDelay: `${i * 60}ms` }}
+                        >
+                            <span
+                                aria-hidden="true"
+                                className="absolute top-0 left-0 h-[3px] w-10 bg-[#CC0033] transition-all duration-500 ease-out group-hover:w-full"
+                            />
+                            <div className="w-10 h-10 bg-[#002B5C] text-white flex items-center justify-center transition-colors duration-300 group-hover:bg-[#CC0033]">
+                                <e.icon size={18} strokeWidth={1.75} />
+                            </div>
+                            <h3 className="font-sans font-bold text-lg mt-5 text-[#002B5C] tracking-tight">
+                                {e.title}
+                            </h3>
+                            <p className="text-sm text-[#4B5563] mt-2 leading-relaxed">
+                                {e.text}
+                            </p>
+                        </div>
+                    ))}
+                </div>
+            </section>
+        ),
+        summit_speakers: (
+            <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 md:py-28 bg-[#002B5C] text-white">
+                <div className="flex items-end justify-between mb-12 flex-wrap gap-4">
+                    <div>
+                        <div className="overline !text-white/60">Summit Speakers</div>
+                        <h2 className="font-serif text-4xl md:text-5xl mt-4 leading-[1.05]">
+                            The future of law,
+                            <br />
+                            on one stage.
+                        </h2>
+                    </div>
+                    <a
+                        href="https://www.oakbridge.events/speakers"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        data-testid="summit-speakers-all-link"
+                        className="inline-flex items-center gap-1 text-sm font-medium border-b border-white/40 pb-0.5 hover:text-[#F59E0B] hover:border-[#F59E0B] transition-colors"
+                    >
+                        See all summit speakers <ArrowUpRight size={14} strokeWidth={1.5} />
+                    </a>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-6 md:gap-8">
+                    {summitSpeakers.map((s) => (
+                        <div key={s.name}>
+                            <div className="aspect-square overflow-hidden bg-white/10 border border-white/15">
+                                <img
+                                    src={s.photo}
+                                    alt={s.name}
+                                    loading="lazy"
+                                    className="w-full h-full object-cover"
+                                />
+                            </div>
+                            <div className="mt-3 font-serif text-base leading-tight">{s.name}</div>
+                            <div className="text-xs text-white/60 mt-1 leading-snug">{s.role}</div>
+                        </div>
+                    ))}
+                </div>
+            </section>
+        ),
+        who_attends: (
+            <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 md:py-28 border-b border-[#E5E7EB]">
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+                    <div className="lg:col-span-5">
+                        <div className="overline">Who attends</div>
+                        <h2 className="font-serif text-4xl md:text-5xl mt-4 text-[#002B5C] leading-[1.05]">
+                            A curated gathering
+                            <br />
+                            of luminaries.
+                        </h2>
+                        <p className="mt-6 text-[#4B5563] leading-relaxed">
+                            Oakbridge events are invitation-rich, deliberately small and
+                            built for the people shaping legal practice and policy in
+                            India and beyond.
+                        </p>
+                    </div>
+                    <div className="lg:col-span-7">
+                        <ul className="grid grid-cols-1 sm:grid-cols-2 gap-y-4 gap-x-8">
+                            {WHO_ATTENDS.map((w, i) => (
+                                <li
+                                    key={w}
+                                    className="flex items-start gap-3 text-[#002B5C]"
+                                    data-testid={`who-attends-${i}`}
+                                >
+                                    <span className="font-mono text-xs text-[#CC0033] mt-1.5">
+                                        {String(i + 1).padStart(2, "0")}
+                                    </span>
+                                    <span className="text-base leading-snug">{w}</span>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                </div>
+            </section>
+        ),
+        vidhi_speakers: (
+            <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 md:py-28 border-b border-[#E5E7EB]">
+                <div className="flex items-end justify-between mb-12 flex-wrap gap-4">
+                    <div>
+                        <div className="overline">Vidhi Utsav Speakers</div>
+                        <h2 className="font-serif text-4xl md:text-5xl mt-4 text-[#002B5C] leading-[1.05]">
+                            Eminent voices on stage.
+                        </h2>
+                    </div>
+                    <a
+                        href="https://www.vidhiutsav.com/speakers"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        data-testid="vidhi-speakers-all-link"
+                        className="inline-flex items-center gap-1 text-sm font-medium border-b border-[#002B5C] pb-0.5 hover:text-[#CC0033] hover:border-[#CC0033] transition-colors"
+                    >
+                        View full speaker list <ArrowUpRight size={14} strokeWidth={1.5} />
+                    </a>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-6 md:gap-8">
+                    {vidhiSpeakers.map((s) => (
+                        <SpeakerCard key={s.name} s={s} />
+                    ))}
+                </div>
+            </section>
+        ),
+        cta: (
+            <section className="relative px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-24 md:py-32 bg-[#F5F7FA] text-[#002B5C]">
+                <div className="relative z-10 max-w-3xl">
+                    <div className="overline">Get involved</div>
+                    <h2 className="font-serif text-4xl md:text-6xl mt-4 leading-[1.05]">
+                        Register, partner
+                        <br />
+                        or speak.
+                    </h2>
+                    <p className="mt-6 text-[#4B5563] leading-relaxed text-base md:text-lg">
+                        Whether you're a delegate, a sponsor seeking a high-impact
+                        platform, or a thought leader with something to say — there's a
+                        place for you at Oakbridge events.
+                    </p>
+                    <div className="mt-10 flex flex-wrap gap-4">
+                        <a
+                            href="https://www.vidhiutsav.com"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            data-testid="events-cta-vidhi"
+                            className="inline-flex items-center gap-2 bg-[#002B5C] text-white px-7 py-4 text-sm font-medium hover:bg-[#001F42] transition-colors"
+                        >
+                            Stay updated · Vidhi Utsav 2027
+                            <ArrowUpRight size={16} strokeWidth={1.5} />
+                        </a>
+                        <a
+                            href="https://www.oakbridge.events"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            data-testid="events-cta-summit"
+                            className="inline-flex items-center gap-2 border border-[#002B5C] px-7 py-4 text-sm font-medium hover:bg-white transition-colors"
+                        >
+                            <Building2 size={14} strokeWidth={1.5} />
+                            Explore the Law, AI & Tech Summit
+                        </a>
+                    </div>
+                </div>
+            </section>
+        ),
+    };
+
+    // Admin-chosen order, with any missing/new sections appended in default order.
+    const saved = Array.isArray(settings.events_section_order) ? settings.events_section_order : [];
+    const eventOrder = [
+        ...saved.filter((k) => sectionMap[k]),
+        ...DEFAULT_EVENT_ORDER.filter((k) => !saved.includes(k)),
+    ];
 
     return (
         <div data-testid="events-page">
@@ -322,203 +543,9 @@ export default function Events() {
                 </div>
             </section>
 
-            {/* FLAGSHIP EVENTS */}
-            <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 md:py-28">
-                <div className="max-w-3xl mb-16">
-                    <div className="overline">Flagship Events</div>
-                    <h2 className="font-serif text-4xl md:text-5xl mt-4 text-[#002B5C] leading-[1.05]">
-                        A festival and a summit.
-                        <br />
-                        One mission.
-                    </h2>
-                    <p className="mt-6 text-[#4B5563] leading-relaxed">
-                        From the country's only legal-literature festival to the
-                        flagship summit at the intersection of law, AI and technology —
-                        Oakbridge builds platforms that bring the profession together.
-                    </p>
-                </div>
-
-                <div className="space-y-10">
-                    {flagshipEvents.map((ev, i) => (
-                        <FlagshipCard key={ev.id} ev={ev} i={i} />
-                    ))}
-                </div>
-            </section>
-
-            {/* WHAT TO EXPECT */}
-            <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 md:py-28 bg-[#F5F7FA] border-t border-b border-[#E5E7EB]">
-                <div className="max-w-3xl mb-16">
-                    <div className="overline">The Experience</div>
-                    <h2 className="font-serif text-4xl md:text-5xl mt-4 text-[#002B5C] leading-[1.05]">
-                        Experience law &amp; ideas
-                        <br />
-                        like never before.
-                    </h2>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-                    {EXPERIENCE.map((e, i) => (
-                        <div
-                            key={e.title}
-                            data-testid={`event-experience-${i}`}
-                            className="group relative bg-white border border-[#E5E7EB] p-7 pt-8 overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:border-[#002B5C] hover:shadow-[0_24px_48px_-20px_rgba(0,43,92,0.25)] fade-up"
-                            style={{ animationDelay: `${i * 60}ms` }}
-                        >
-                            <span
-                                aria-hidden="true"
-                                className="absolute top-0 left-0 h-[3px] w-10 bg-[#CC0033] transition-all duration-500 ease-out group-hover:w-full"
-                            />
-                            <div className="w-10 h-10 bg-[#002B5C] text-white flex items-center justify-center transition-colors duration-300 group-hover:bg-[#CC0033]">
-                                <e.icon size={18} strokeWidth={1.75} />
-                            </div>
-                            <h3 className="font-sans font-bold text-lg mt-5 text-[#002B5C] tracking-tight">
-                                {e.title}
-                            </h3>
-                            <p className="text-sm text-[#4B5563] mt-2 leading-relaxed">
-                                {e.text}
-                            </p>
-                        </div>
-                    ))}
-                </div>
-            </section>
-
-            {/* SPEAKERS — SUMMIT */}
-            <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 md:py-28 bg-[#002B5C] text-white">
-                <div className="flex items-end justify-between mb-12 flex-wrap gap-4">
-                    <div>
-                        <div className="overline !text-white/60">Summit Speakers</div>
-                        <h2 className="font-serif text-4xl md:text-5xl mt-4 leading-[1.05]">
-                            The future of law,
-                            <br />
-                            on one stage.
-                        </h2>
-                    </div>
-                    <a
-                        href="https://www.oakbridge.events/speakers"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        data-testid="summit-speakers-all-link"
-                        className="inline-flex items-center gap-1 text-sm font-medium border-b border-white/40 pb-0.5 hover:text-[#F59E0B] hover:border-[#F59E0B] transition-colors"
-                    >
-                        See all summit speakers <ArrowUpRight size={14} strokeWidth={1.5} />
-                    </a>
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-6 md:gap-8">
-                    {summitSpeakers.map((s) => (
-                        <div key={s.name}>
-                            <div className="aspect-square overflow-hidden bg-white/10 border border-white/15">
-                                <img
-                                    src={s.photo}
-                                    alt={s.name}
-                                    loading="lazy"
-                                    className="w-full h-full object-cover"
-                                />
-                            </div>
-                            <div className="mt-3 font-serif text-base leading-tight">{s.name}</div>
-                            <div className="text-xs text-white/60 mt-1 leading-snug">{s.role}</div>
-                        </div>
-                    ))}
-                </div>
-            </section>
-
-            {/* WHO ATTENDS */}
-            <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 md:py-28 border-b border-[#E5E7EB]">
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
-                    <div className="lg:col-span-5">
-                        <div className="overline">Who attends</div>
-                        <h2 className="font-serif text-4xl md:text-5xl mt-4 text-[#002B5C] leading-[1.05]">
-                            A curated gathering
-                            <br />
-                            of luminaries.
-                        </h2>
-                        <p className="mt-6 text-[#4B5563] leading-relaxed">
-                            Oakbridge events are invitation-rich, deliberately small and
-                            built for the people shaping legal practice and policy in
-                            India and beyond.
-                        </p>
-                    </div>
-                    <div className="lg:col-span-7">
-                        <ul className="grid grid-cols-1 sm:grid-cols-2 gap-y-4 gap-x-8">
-                            {WHO_ATTENDS.map((w, i) => (
-                                <li
-                                    key={w}
-                                    className="flex items-start gap-3 text-[#002B5C]"
-                                    data-testid={`who-attends-${i}`}
-                                >
-                                    <span className="font-mono text-xs text-[#CC0033] mt-1.5">
-                                        {String(i + 1).padStart(2, "0")}
-                                    </span>
-                                    <span className="text-base leading-snug">{w}</span>
-                                </li>
-                            ))}
-                        </ul>
-                    </div>
-                </div>
-            </section>
-
-            {/* SPEAKERS — VIDHI UTSAV */}
-            <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 md:py-28 border-b border-[#E5E7EB]">
-                <div className="flex items-end justify-between mb-12 flex-wrap gap-4">
-                    <div>
-                        <div className="overline">Vidhi Utsav Speakers</div>
-                        <h2 className="font-serif text-4xl md:text-5xl mt-4 text-[#002B5C] leading-[1.05]">
-                            Eminent voices on stage.
-                        </h2>
-                    </div>
-                    <a
-                        href="https://www.vidhiutsav.com/speakers"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        data-testid="vidhi-speakers-all-link"
-                        className="inline-flex items-center gap-1 text-sm font-medium border-b border-[#002B5C] pb-0.5 hover:text-[#CC0033] hover:border-[#CC0033] transition-colors"
-                    >
-                        View full speaker list <ArrowUpRight size={14} strokeWidth={1.5} />
-                    </a>
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-6 md:gap-8">
-                    {vidhiSpeakers.map((s) => (
-                        <SpeakerCard key={s.name} s={s} />
-                    ))}
-                </div>
-            </section>
-
-            {/* CTA */}
-            <section className="relative px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-24 md:py-32 bg-[#F5F7FA] text-[#002B5C]">
-                <div className="relative z-10 max-w-3xl">
-                    <div className="overline">Get involved</div>
-                    <h2 className="font-serif text-4xl md:text-6xl mt-4 leading-[1.05]">
-                        Register, partner
-                        <br />
-                        or speak.
-                    </h2>
-                    <p className="mt-6 text-[#4B5563] leading-relaxed text-base md:text-lg">
-                        Whether you're a delegate, a sponsor seeking a high-impact
-                        platform, or a thought leader with something to say — there's a
-                        place for you at Oakbridge events.
-                    </p>
-                    <div className="mt-10 flex flex-wrap gap-4">
-                        <a
-                            href="https://www.vidhiutsav.com"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            data-testid="events-cta-vidhi"
-                            className="inline-flex items-center gap-2 bg-[#002B5C] text-white px-7 py-4 text-sm font-medium hover:bg-[#001F42] transition-colors"
-                        >
-                            Stay updated · Vidhi Utsav 2027
-                            <ArrowUpRight size={16} strokeWidth={1.5} />
-                        </a>
-                        <a
-                            href="https://www.oakbridge.events"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            data-testid="events-cta-summit"
-                            className="inline-flex items-center gap-2 border border-[#002B5C] px-7 py-4 text-sm font-medium hover:bg-white transition-colors"
-                        >
-                            <Building2 size={14} strokeWidth={1.5} />
-                            Explore the Law, AI & Tech Summit
-                        </a>
-                    </div>
-                </div>
-            </section>
+            {eventOrder.map((key) => (
+                <React.Fragment key={key}>{sectionMap[key]}</React.Fragment>
+            ))}
         </div>
     );
 }

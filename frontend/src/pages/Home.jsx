@@ -43,7 +43,7 @@ const VERTICALS = [
         num: "02",
         icon: Calendar,
         title: "Events",
-        tagline: "Forums, launches & conferences",
+        tagline: "Seminars and conferences",
         lede: "India Law Forum, the annual Tax Conclave, book launches and roundtables with scholars and policymakers.",
         to: "/what-we-do#events",
         cta: "Upcoming events",
@@ -230,7 +230,7 @@ export default function Home() {
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-0">
                     <div className="lg:col-span-7 px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 pt-20 pb-20 lg:pt-32 lg:pb-36 relative">
                         <div className="overline fade-up">
-                            Est. 2017 · Independent Scholarly Press
+                            Est. 2017 · A Scholarly Press
                         </div>
                         <h1 className="font-serif text-5xl sm:text-6xl lg:text-7xl leading-[0.95] mt-6 text-[#002B5C] fade-up" style={{ animationDelay: "100ms" }}>
                             A library for
@@ -509,7 +509,7 @@ export default function Home() {
             <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 md:py-28 bg-[#F5F7FA] border-y border-[#E5E7EB]">
                 <div className="flex items-end justify-between mb-12">
                     <div>
-                        <div className="overline">Hot Off Press</div>
+                        <div className="overline">Hot Off the Press</div>
                         <h2 className="font-serif text-4xl md:text-5xl mt-3 text-[#002B5C] leading-tight">
                             New this season.
                         </h2>
@@ -556,8 +556,8 @@ export default function Home() {
                         {[
                             { num: "01", icon: Briefcase, title: "For Firms", tagline: "Bespoke & branded", text: "Bespoke handbooks, corporate histories and practitioner references — co-created with your in-house teams for training, compliance and brand." },
                             { num: "02", icon: Building2, title: "For Institutions", tagline: "Adoption & licensing", text: "Whole-campus adoption programmes, library-grade editions and custom imprints for schools, universities and research bodies." },
-                            { num: "03", icon: Users, title: "For Professionals", tagline: "Practice references", text: "Authoritative Law, Tax, Business and Technology titles — plus ready-reckoners and updates written by leading practitioners." },
-                            { num: "04", icon: GraduationCap, title: "For Educators", tagline: "Classroom-ready", text: "Instructor review copies, lesson plans and classroom-ready ancillaries mapped to current curricula." },
+                            { num: "03", icon: Users, title: "For Professionals", tagline: "Practice references", text: "Authoritative Law, Tax, Business and Technology titles — ready-reckoners and updates written by leading practitioners." },
+                            { num: "04", icon: GraduationCap, title: "For Educators", tagline: "Classroom-ready", text: "Instructor review copies, lesson plans and classroom-ready ancillaries mapped to current curricula, plus customized bundle offerings." },
                         ].map((s, i) => (
                             <div
                                 key={s.title}

@@ -10,8 +10,81 @@ import {
     fetchCollection,
     adminSaveCollection,
     adminUploadMedia,
+    fetchSettings,
+    adminSetSetting,
     mediaUrl,
 } from "../../lib/api";
+
+// Reorder the whole sections of the public Events page.
+const EVENTS_SECTIONS = [
+    { key: "flagship", label: "Flagship Events" },
+    { key: "experiences", label: "The Experience" },
+    { key: "summit_speakers", label: "Summit Speakers" },
+    { key: "who_attends", label: "Who Attends" },
+    { key: "vidhi_speakers", label: "Vidhi Utsav Speakers" },
+    { key: "cta", label: "Get Involved (CTA)" },
+];
+
+function EventsSectionOrder() {
+    const [order, setOrder] = useState(EVENTS_SECTIONS.map((s) => s.key));
+    const [saving, setSaving] = useState(false);
+
+    useEffect(() => {
+        fetchSettings()
+            .then((s) => {
+                const saved = Array.isArray(s.events_section_order) ? s.events_section_order : [];
+                const merged = [
+                    ...saved.filter((k) => EVENTS_SECTIONS.some((x) => x.key === k)),
+                    ...EVENTS_SECTIONS.map((x) => x.key).filter((k) => !saved.includes(k)),
+                ];
+                setOrder(merged);
+            })
+            .catch(() => {});
+    }, []);
+
+    const move = (i, dir) => {
+        const j = i + dir;
+        if (j < 0 || j >= order.length) return;
+        const n = [...order];
+        [n[i], n[j]] = [n[j], n[i]];
+        setOrder(n);
+    };
+
+    const save = async () => {
+        setSaving(true);
+        try {
+            await adminSetSetting("events_section_order", order);
+            toast.success("Section order saved — live on /events.");
+        } catch {
+            toast.error("Could not save order.");
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const labelFor = (k) => EVENTS_SECTIONS.find((x) => x.key === k)?.label || k;
+
+    return (
+        <div className="border border-[#E5E7EB] bg-[#F5F7FA] p-4">
+            <div className="flex items-center justify-between mb-3">
+                <div className="overline !text-[10px]">Section order (drag with arrows)</div>
+                <button onClick={save} disabled={saving} className="text-sm border border-[#002B5C] text-[#002B5C] px-3 py-1 hover:bg-white disabled:opacity-60">
+                    {saving ? "Saving…" : "Save order"}
+                </button>
+            </div>
+            <div className="space-y-2">
+                {order.map((k, i) => (
+                    <div key={k} className="flex items-center gap-2 bg-white border border-[#E5E7EB] px-3 py-2">
+                        <span className="font-mono text-xs text-[#4B5563] w-5">{String(i + 1).padStart(2, "0")}</span>
+                        <span className="flex-1 text-sm text-[#002B5C]">{labelFor(k)}</span>
+                        <button onClick={() => move(i, -1)} disabled={i === 0} aria-label="Up" className="text-[#4B5563] hover:text-[#002B5C] disabled:opacity-25"><ArrowUp size={14} strokeWidth={1.5} /></button>
+                        <button onClick={() => move(i, 1)} disabled={i === order.length - 1} aria-label="Down" className="text-[#4B5563] hover:text-[#002B5C] disabled:opacity-25"><ArrowDown size={14} strokeWidth={1.5} /></button>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
 import {
     PageGroup,
     SlotRow,
@@ -220,6 +293,9 @@ export default function AdminPages() {
                 </PageGroup>
 
                 <PageGroup title="Events" path="/events">
+                    <div className="overline !text-[10px] mb-2">Page section order</div>
+                    <EventsSectionOrder />
+                    <div className="overline !text-[10px] mb-2 mt-8 pt-8 border-t border-[#E5E7EB]">Flagship events (add / edit / reorder)</div>
                     <FlagshipEventsEditor />
                     <div className="overline !text-[10px] mb-2 mt-8 pt-8 border-t border-[#E5E7EB]">Flagship banners (also power the rotating hero)</div>
                     <div className="space-y-3">
