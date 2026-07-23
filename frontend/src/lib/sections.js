@@ -3,18 +3,20 @@
 export const SECTION_REGISTRY = [
     {
         page: "Homepage",
+        slug: "home",
         items: [
             { key: "home.businesses", label: "Our Businesses" },
             { key: "home.imprints", label: "Imprints (Five Imprints)" },
             { key: "home.hot_off_press", label: "Hot Off the Press" },
-            { key: "home.bestsellers", label: "Bestsellers" },
             { key: "home.solutions", label: "Solutions" },
+            { key: "home.bestsellers", label: "Bestsellers" },
             { key: "home.testimonials", label: "Testimonials" },
             { key: "home.manifesto", label: "Manifesto quote" },
         ],
     },
     {
         page: "Events",
+        slug: "events",
         items: [
             { key: "events.flagship", label: "Flagship Events" },
             { key: "events.experiences", label: "The Experience" },
@@ -26,6 +28,7 @@ export const SECTION_REGISTRY = [
     },
     {
         page: "Careers",
+        slug: "careers",
         items: [
             { key: "careers.roles", label: "Open roles list" },
             { key: "careers.form", label: "Application form" },
@@ -33,10 +36,12 @@ export const SECTION_REGISTRY = [
     },
     {
         page: "Author Submissions",
+        slug: "submissions",
         items: [{ key: "submissions.guidelines", label: "‘What we look for’ sidebar" }],
     },
     {
         page: "Contact",
+        slug: "contact",
         items: [
             { key: "contact.form", label: "Contact form" },
             { key: "contact.details", label: "Address & direct lines" },
@@ -44,9 +49,24 @@ export const SECTION_REGISTRY = [
     },
     {
         page: "Media & Gallery",
+        slug: "media",
         items: [{ key: "media.gallery", label: "Gallery grid" }],
     },
 ];
+
+// Resolve a page's section order for the storefront. `saved` is the page's
+// <slug>_section_order setting (bare keys, e.g. "imprints"). Returns the ordered
+// list of bare keys, appending any new/missing sections in their default order.
+// The legacy single "flagship" key expands to the provided flagshipKeys.
+export function resolveSectionOrder(defaultBareKeys, saved, flagshipKeys = []) {
+    const expand = (k) => (k === "flagship" && flagshipKeys.length ? flagshipKeys : [k]);
+    const savedExp = (Array.isArray(saved) ? saved : []).flatMap(expand);
+    const known = new Set(defaultBareKeys);
+    return [
+        ...savedExp.filter((k) => known.has(k)),
+        ...defaultBareKeys.filter((k) => !savedExp.includes(k)),
+    ];
+}
 
 // A Set of hidden section keys from the settings object.
 export function hiddenSet(settings) {

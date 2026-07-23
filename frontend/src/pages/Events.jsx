@@ -285,27 +285,20 @@ export default function Events() {
         ? vidhiSpeakers.filter((s) => String(s.year) === String(activeVidhiYear))
         : vidhiSpeakers;
 
+    // Each flagship event is its own reorderable/hideable section (key
+    // "flagship:<id>"), so they list individually instead of under one parent.
+    const flagshipSectionMap = {};
+    flagshipEvents.forEach((ev) => {
+        flagshipSectionMap[`flagship:${ev.id}`] = (
+            <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-16 md:py-24">
+                <FlagshipCard ev={ev} i={0} />
+            </section>
+        );
+    });
+
     // Each reorderable section as a keyed element; the hero stays fixed at top.
     const sectionMap = {
-        flagship: (
-            <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 md:py-28">
-                <div className="max-w-3xl mb-16">
-                    <div className="overline">{site.events_flagship_overline || "Flagship Events"}</div>
-                    <h2 className="font-serif text-4xl md:text-5xl mt-4 text-[#002B5C] leading-[1.05] whitespace-pre-line">
-                        {renderRich(site.events_flagship_title || "A festival and a summit.\nOne mission.", "#CC0033")}
-                    </h2>
-                    <p className="mt-6 text-[#4B5563] leading-relaxed whitespace-pre-line">
-                        {site.events_flagship_body ||
-                            "From the country's only legal-literature festival to the flagship summit at the intersection of law, AI and technology — Oakbridge builds platforms that bring the profession together."}
-                    </p>
-                </div>
-                <div className="space-y-10">
-                    {flagshipEvents.map((ev, i) => (
-                        <FlagshipCard key={ev.id} ev={ev} i={i} />
-                    ))}
-                </div>
-            </section>
-        ),
+        ...flagshipSectionMap,
         experiences: (
             <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 md:py-28 bg-[#F5F7FA] border-t border-b border-[#E5E7EB]">
                 <div className="max-w-3xl mb-16">
@@ -497,13 +490,21 @@ export default function Events() {
     };
 
     // Admin-chosen order, with any missing/new sections appended in default order,
-    // then dropping any the admin has hidden.
-    const saved = Array.isArray(settings.events_section_order) ? settings.events_section_order : [];
+    // then dropping any the admin has hidden. The legacy single "flagship" key
+    // (and "events.flagship" hide) expands to the individual flagship events.
+    const flagshipKeys = flagshipEvents.map((ev) => `flagship:${ev.id}`);
+    const defaultOrder = [...flagshipKeys, ...DEFAULT_EVENT_ORDER.filter((k) => k !== "flagship")];
+    const savedRaw = Array.isArray(settings.events_section_order) ? settings.events_section_order : [];
+    const saved = savedRaw.flatMap((k) => (k === "flagship" ? flagshipKeys : [k]));
     const hidden = hiddenSet(settings);
     const eventOrder = [
         ...saved.filter((k) => sectionMap[k]),
-        ...DEFAULT_EVENT_ORDER.filter((k) => !saved.includes(k)),
-    ].filter((k) => !hidden.has(`events.${k}`));
+        ...defaultOrder.filter((k) => !saved.includes(k) && sectionMap[k]),
+    ].filter(
+        (k) =>
+            !hidden.has(`events.${k}`) &&
+            !(k.startsWith("flagship:") && hidden.has("events.flagship")),
+    );
 
     return (
         <div data-testid="events-page">

@@ -3,7 +3,9 @@ import Breadcrumbs from "../components/Breadcrumbs";
 import Seo from "../components/Seo";
 import { CheckCircle2, Briefcase, MapPin, Upload, FileText } from "lucide-react";
 import { fetchJobs, applyForJob, fetchSiteContent, fetchSettings, formatApiError } from "../lib/api";
-import { hiddenSet } from "../lib/sections";
+import { hiddenSet, resolveSectionOrder } from "../lib/sections";
+
+const CAREERS_DEFAULT_ORDER = ["roles", "form"];
 import { toast } from "sonner";
 
 export default function Careers() {
@@ -25,6 +27,8 @@ export default function Careers() {
     }, []);
 
     const hidden = hiddenSet(settings);
+    const careersOrder = resolveSectionOrder(CAREERS_DEFAULT_ORDER, settings?.careers_section_order);
+    const careersOrd = (k) => { const i = careersOrder.indexOf(k); return i === -1 ? 99 : i; };
 
     const onChange = (e) => setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
 
@@ -86,7 +90,7 @@ export default function Careers() {
             <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-16 grid grid-cols-1 lg:grid-cols-12 gap-12">
                 {/* Open roles */}
                 {!hidden.has("careers.roles") && (
-                <div className="lg:col-span-6">
+                <div className="lg:col-span-6" style={{ order: careersOrd("roles") }}>
                     <div className="overline">Open roles</div>
                     <h2 className="font-serif text-3xl mt-2 text-[#002B5C]">
                         {jobs.length ? `${jobs.length} position${jobs.length === 1 ? "" : "s"} open` : "No open roles right now"}
@@ -131,7 +135,7 @@ export default function Careers() {
 
                 {/* Application form */}
                 {!hidden.has("careers.form") && (
-                <div className="lg:col-span-6" ref={formRef}>
+                <div className="lg:col-span-6" ref={formRef} style={{ order: careersOrd("form") }}>
                     {done ? (
                         <div data-testid="careers-done" className="border border-[#002B5C] p-8 text-center">
                             <CheckCircle2 size={40} strokeWidth={1.5} className="mx-auto text-[#002B5C]" />

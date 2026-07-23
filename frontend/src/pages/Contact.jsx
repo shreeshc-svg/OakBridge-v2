@@ -3,7 +3,9 @@ import Breadcrumbs from "../components/Breadcrumbs";
 import Seo from "../components/Seo";
 import { Mail, MapPin, Phone } from "lucide-react";
 import { submitContact, fetchSettings, fetchSiteContent } from "../lib/api";
-import { hiddenSet } from "../lib/sections";
+import { hiddenSet, resolveSectionOrder } from "../lib/sections";
+
+const CONTACT_DEFAULT_ORDER = ["form", "details"];
 import { toast } from "sonner";
 
 export default function Contact() {
@@ -27,6 +29,8 @@ export default function Contact() {
         { label: "Careers", email: "careers@oakbridge.in" },
     ];
     const hidden = hiddenSet(settings);
+    const contactOrder = resolveSectionOrder(CONTACT_DEFAULT_ORDER, settings?.contact_section_order);
+    const contactOrd = (k) => { const i = contactOrder.indexOf(k); return i === -1 ? 99 : i; };
     const directLines =
         Array.isArray(settings?.contact_direct_lines) && settings.contact_direct_lines.length
             ? settings.contact_direct_lines
@@ -77,7 +81,7 @@ export default function Contact() {
 
             <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 grid grid-cols-1 lg:grid-cols-12 gap-12">
                 {!hidden.has("contact.form") && (
-                <div className="lg:col-span-7">
+                <div className="lg:col-span-7" style={{ order: contactOrd("form") }}>
                     <form
                         onSubmit={onSubmit}
                         className="space-y-6"
@@ -158,7 +162,7 @@ export default function Contact() {
                 )}
 
                 {!hidden.has("contact.details") && (
-                <aside className="lg:col-span-5 space-y-8">
+                <aside className="lg:col-span-5 space-y-8" style={{ order: contactOrd("details") }}>
                     <div className="border border-[#E5E7EB] p-8 bg-white">
                         <div className="overline">Head Office</div>
                         <div className="mt-4 flex gap-4">

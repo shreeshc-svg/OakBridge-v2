@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { Link } from "react-router-dom";
-import { UploadCloud, ArrowUp, ArrowDown, X, Plus, Eye, EyeOff } from "lucide-react";
+import { UploadCloud, ArrowUp, ArrowDown, X, Plus, Eye, EyeOff, GripVertical } from "lucide-react";
 import { toast } from "sonner";
 import { SECTION_REGISTRY } from "../../lib/sections";
 import {
@@ -16,76 +16,6 @@ import {
     mediaUrl,
 } from "../../lib/api";
 
-// Reorder the whole sections of the public Events page.
-const EVENTS_SECTIONS = [
-    { key: "flagship", label: "Flagship Events" },
-    { key: "experiences", label: "The Experience" },
-    { key: "summit_speakers", label: "Summit Speakers" },
-    { key: "who_attends", label: "Who Attends" },
-    { key: "vidhi_speakers", label: "Vidhi Utsav Speakers" },
-    { key: "cta", label: "Get Involved (CTA)" },
-];
-
-function EventsSectionOrder() {
-    const [order, setOrder] = useState(EVENTS_SECTIONS.map((s) => s.key));
-    const [saving, setSaving] = useState(false);
-
-    useEffect(() => {
-        fetchSettings()
-            .then((s) => {
-                const saved = Array.isArray(s.events_section_order) ? s.events_section_order : [];
-                const merged = [
-                    ...saved.filter((k) => EVENTS_SECTIONS.some((x) => x.key === k)),
-                    ...EVENTS_SECTIONS.map((x) => x.key).filter((k) => !saved.includes(k)),
-                ];
-                setOrder(merged);
-            })
-            .catch(() => {});
-    }, []);
-
-    const move = (i, dir) => {
-        const j = i + dir;
-        if (j < 0 || j >= order.length) return;
-        const n = [...order];
-        [n[i], n[j]] = [n[j], n[i]];
-        setOrder(n);
-    };
-
-    const save = async () => {
-        setSaving(true);
-        try {
-            await adminSetSetting("events_section_order", order);
-            toast.success("Section order saved — live on /events.");
-        } catch {
-            toast.error("Could not save order.");
-        } finally {
-            setSaving(false);
-        }
-    };
-
-    const labelFor = (k) => EVENTS_SECTIONS.find((x) => x.key === k)?.label || k;
-
-    return (
-        <div className="border border-[#E5E7EB] bg-[#F5F7FA] p-4">
-            <div className="flex items-center justify-between mb-3">
-                <div className="overline !text-[10px]">Section order (drag with arrows)</div>
-                <button onClick={save} disabled={saving} className="text-sm border border-[#002B5C] text-[#002B5C] px-3 py-1 hover:bg-white disabled:opacity-60">
-                    {saving ? "Saving…" : "Save order"}
-                </button>
-            </div>
-            <div className="space-y-2">
-                {order.map((k, i) => (
-                    <div key={k} className="flex items-center gap-2 bg-white border border-[#E5E7EB] px-3 py-2">
-                        <span className="font-mono text-xs text-[#4B5563] w-5">{String(i + 1).padStart(2, "0")}</span>
-                        <span className="flex-1 text-sm text-[#002B5C]">{labelFor(k)}</span>
-                        <button onClick={() => move(i, -1)} disabled={i === 0} aria-label="Up" className="text-[#4B5563] hover:text-[#002B5C] disabled:opacity-25"><ArrowUp size={14} strokeWidth={1.5} /></button>
-                        <button onClick={() => move(i, 1)} disabled={i === order.length - 1} aria-label="Down" className="text-[#4B5563] hover:text-[#002B5C] disabled:opacity-25"><ArrowDown size={14} strokeWidth={1.5} /></button>
-                    </div>
-                ))}
-            </div>
-        </div>
-    );
-}
 import {
     PageGroup,
     pageGroupId,
@@ -412,8 +342,11 @@ export default function AdminPages() {
                 </PageGroup>
 
                 <PageGroup title="Events" path="/events">
-                    <div className="overline !text-[10px] mb-2">Page section order</div>
-                    <EventsSectionOrder />
+                    <div className="overline !text-[10px] mb-2">Page section order &amp; visibility</div>
+                    <p className="text-xs text-[#4B5563] mb-2">
+                        Reorder (drag) or hide sections — including each flagship event individually — in the{" "}
+                        <strong>Section order &amp; visibility</strong> panel at the top of this page.
+                    </p>
                     <div className="overline !text-[10px] mb-2 mt-8 pt-8 border-t border-[#E5E7EB]">Flagship events (add / edit / reorder)</div>
                     <FlagshipEventsEditor />
                     <div className="overline !text-[10px] mb-2 mt-8 pt-8 border-t border-[#E5E7EB]">Page text (headings &amp; intros — *word* = accent)</div>
@@ -421,9 +354,6 @@ export default function AdminPages() {
                         <TextSlotRow label="Hero — overline" value={site.events_hero_overline} onSave={(v) => saveSite("events_hero_overline", v)} />
                         <TextSlotRow label="Hero — heading" value={site.events_hero_title} onSave={(v) => saveSite("events_hero_title", v)} multiline />
                         <TextSlotRow label="Hero — intro" value={site.events_hero_body} onSave={(v) => saveSite("events_hero_body", v)} multiline />
-                        <TextSlotRow label="Flagship — overline" value={site.events_flagship_overline} onSave={(v) => saveSite("events_flagship_overline", v)} />
-                        <TextSlotRow label="Flagship — heading" value={site.events_flagship_title} onSave={(v) => saveSite("events_flagship_title", v)} multiline />
-                        <TextSlotRow label="Flagship — intro" value={site.events_flagship_body} onSave={(v) => saveSite("events_flagship_body", v)} multiline />
                         <TextSlotRow label="Experience — overline" value={site.events_exp_overline} onSave={(v) => saveSite("events_exp_overline", v)} />
                         <TextSlotRow label="Experience — heading" value={site.events_exp_title} onSave={(v) => saveSite("events_exp_title", v)} multiline />
                         <TextSlotRow label="Summit Speakers — overline" value={site.events_summit_overline} onSave={(v) => saveSite("events_summit_overline", v)} />
@@ -489,27 +419,73 @@ export default function AdminPages() {
 }
 
 function SectionVisibility() {
-    const [hidden, setHidden] = useState(null);
+    const [pages, setPages] = useState(null);
     const [saving, setSaving] = useState(false);
+    const drag = useRef(null); // { p: pageIndex, i: rowIndex }
 
     useEffect(() => {
-        fetchSettings()
-            .then((s) => setHidden(new Set(Array.isArray(s.hidden_sections) ? s.hidden_sections : [])))
-            .catch(() => setHidden(new Set()));
+        Promise.all([
+            fetchSettings().catch(() => ({})),
+            fetchCollection("events_flagship").catch(() => ({ items: [] })),
+        ]).then(([s, fc]) => {
+            const flag = fc && fc.items && fc.items.length ? fc.items : DEFAULT_FLAGSHIP;
+            const flagKeys = flag.map((ev) => `flagship:${ev.id}`);
+            const hidden = new Set(Array.isArray(s.hidden_sections) ? s.hidden_sections : []);
+            const built = SECTION_REGISTRY.map((g) => {
+                const rows = [];
+                g.items.forEach((it) => {
+                    if (it.key === "events.flagship") {
+                        flag.forEach((ev) =>
+                            rows.push({ key: `events.flagship:${ev.id}`, bare: `flagship:${ev.id}`, label: `Flagship — ${ev.title}` }),
+                        );
+                    } else {
+                        rows.push({ key: it.key, bare: it.key.split(".").slice(1).join("."), label: it.label });
+                    }
+                });
+                const savedRaw = Array.isArray(s[`${g.slug}_section_order`]) ? s[`${g.slug}_section_order`] : [];
+                const saved = savedRaw.flatMap((k) => (k === "flagship" ? flagKeys : [k]));
+                rows.sort((a, b) => {
+                    const ia = saved.indexOf(a.bare);
+                    const ib = saved.indexOf(b.bare);
+                    if (ia === -1 && ib === -1) return 0;
+                    if (ia === -1) return 1;
+                    if (ib === -1) return -1;
+                    return ia - ib;
+                });
+                return { slug: g.slug, label: g.page, rows: rows.map((r) => ({ ...r, hidden: hidden.has(r.key) })) };
+            });
+            setPages(built);
+        });
     }, []);
 
-    if (!hidden) return <div className="font-mono text-xs text-[#4B5563]">Loading…</div>;
+    if (!pages) return <div className="font-mono text-xs text-[#4B5563]">Loading…</div>;
 
-    const toggle = (key) => {
-        const next = new Set(hidden);
-        if (next.has(key)) next.delete(key); else next.add(key);
-        setHidden(next);
+    const toggle = (p, i) =>
+        setPages((ps) => ps.map((pg, pi) => (pi !== p ? pg : { ...pg, rows: pg.rows.map((r, ri) => (ri !== i ? r : { ...r, hidden: !r.hidden })) })));
+    const onDrop = (p, i) => {
+        const src = drag.current;
+        drag.current = null;
+        if (!src || src.p !== p || src.i === i) return;
+        setPages((ps) =>
+            ps.map((pg, pi) => {
+                if (pi !== p) return pg;
+                const rows = [...pg.rows];
+                const [moved] = rows.splice(src.i, 1);
+                rows.splice(i, 0, moved);
+                return { ...pg, rows };
+            }),
+        );
     };
     const save = async () => {
         setSaving(true);
         try {
-            await adminSetSetting("hidden_sections", [...hidden]);
-            toast.success("Visibility saved — live on the site.");
+            const hidden = [];
+            pages.forEach((pg) => pg.rows.forEach((r) => { if (r.hidden) hidden.push(r.key); }));
+            await adminSetSetting("hidden_sections", hidden);
+            for (const pg of pages) {
+                await adminSetSetting(`${pg.slug}_section_order`, pg.rows.map((r) => r.bare));
+            }
+            toast.success("Order & visibility saved — live on the site.");
         } catch {
             toast.error("Could not save.");
         } finally {
@@ -520,35 +496,38 @@ function SectionVisibility() {
     return (
         <div className="border border-[#E5E7EB] bg-white p-6 mb-8" data-testid="section-visibility">
             <div className="flex items-center justify-between">
-                <h2 className="font-serif text-xl text-[#002B5C]">Section visibility</h2>
+                <h2 className="font-serif text-xl text-[#002B5C]">Section order &amp; visibility</h2>
                 <button onClick={save} disabled={saving} className="text-sm bg-[#002B5C] text-white px-4 py-1.5 hover:bg-[#001F42] disabled:opacity-60">
-                    {saving ? "Saving…" : "Save visibility"}
+                    {saving ? "Saving…" : "Save changes"}
                 </button>
             </div>
             <p className="text-[11px] text-[#4B5563] mt-1">
-                Hide any section from the live site without deleting it. Click the eye to toggle, then Save.
-                Hidden sections keep their content and can be shown again anytime.
+                Drag the handle to reorder sections — the order shows on the live page. Click the eye to hide a
+                section without deleting it. Then Save.
             </p>
             <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
-                {SECTION_REGISTRY.map((group) => (
-                    <div key={group.page}>
-                        <div className="overline !text-[10px] mb-2">{group.page}</div>
+                {pages.map((pg, p) => (
+                    <div key={pg.slug}>
+                        <div className="overline !text-[10px] mb-2">{pg.label}</div>
                         <div className="space-y-1.5">
-                            {group.items.map((it) => {
-                                const isHidden = hidden.has(it.key);
-                                return (
-                                    <button
-                                        key={it.key}
-                                        onClick={() => toggle(it.key)}
-                                        data-testid={`vis-${it.key}`}
-                                        className={`w-full flex items-center gap-2 border px-3 py-1.5 text-sm text-left ${isHidden ? "border-[#E5E7EB] bg-[#F5F7FA] text-[#4B5563]" : "border-[#E5E7EB] bg-white text-[#002B5C]"}`}
-                                    >
-                                        {isHidden ? <EyeOff size={14} strokeWidth={1.5} /> : <Eye size={14} strokeWidth={1.5} className="text-[#002B5C]" />}
-                                        <span className="flex-1">{it.label}</span>
-                                        <span className="font-mono text-[10px] uppercase tracking-widest">{isHidden ? "Hidden" : "Shown"}</span>
+                            {pg.rows.map((r, i) => (
+                                <div
+                                    key={r.key}
+                                    draggable
+                                    onDragStart={() => { drag.current = { p, i }; }}
+                                    onDragOver={(e) => e.preventDefault()}
+                                    onDrop={(e) => { e.preventDefault(); onDrop(p, i); }}
+                                    data-testid={`vis-${r.key}`}
+                                    className={`flex items-center gap-2 border px-3 py-1.5 text-sm ${r.hidden ? "border-[#E5E7EB] bg-[#F5F7FA] text-[#4B5563]" : "border-[#E5E7EB] bg-white text-[#002B5C]"}`}
+                                >
+                                    <GripVertical size={14} strokeWidth={1.5} className="cursor-grab text-[#9CA3AF] flex-shrink-0" />
+                                    <span className="flex-1">{r.label}</span>
+                                    <button onClick={() => toggle(p, i)} aria-label="Toggle visibility" className="flex items-center gap-1 flex-shrink-0">
+                                        {r.hidden ? <EyeOff size={14} strokeWidth={1.5} /> : <Eye size={14} strokeWidth={1.5} className="text-[#002B5C]" />}
+                                        <span className="font-mono text-[10px] uppercase tracking-widest">{r.hidden ? "Hidden" : "Shown"}</span>
                                     </button>
-                                );
-                            })}
+                                </div>
+                            ))}
                         </div>
                     </div>
                 ))}

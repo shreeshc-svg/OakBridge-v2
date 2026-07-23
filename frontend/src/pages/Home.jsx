@@ -14,7 +14,11 @@ import {
     fetchCollection,
     mediaUrl,
 } from "../lib/api";
-import { hiddenSet } from "../lib/sections";
+import { hiddenSet, resolveSectionOrder } from "../lib/sections";
+
+// Default top-to-bottom order of the reorderable homepage sections. Admin can
+// override via Admin → Pages → Section order & visibility (home_section_order).
+const HOME_DEFAULT_ORDER = ["businesses", "imprints", "hot_off_press", "solutions", "bestsellers", "testimonials", "manifesto"];
 
 // The five homepage "Imprint" tiles. Each is fully editable in Admin → Pages
 // (name + image + link). Defaults below mirror what was live so nothing changes
@@ -214,6 +218,8 @@ export default function Home() {
     const bestsellersEnabled = settings?.home_bestsellers_enabled !== false; // default on
     const bestsellersSpeed = Number(settings?.home_bestsellers_speed) || 40; // px/sec
     const hidden = hiddenSet(settings); // admin section show/hide
+    const homeOrder = resolveSectionOrder(HOME_DEFAULT_ORDER, settings?.home_section_order);
+    const homeOrd = (k) => { const i = homeOrder.indexOf(k); return i === -1 ? 99 : i; };
 
     // Compose the new-releases row: new releases first, then featured, then fallback — dedup by id and exclude any book already shown in the bestsellers row. Max 7.
     const newReleasesRow = (() => {
@@ -232,14 +238,14 @@ export default function Home() {
     })();
 
     return (
-        <div data-testid="home-page">
+        <div data-testid="home-page" className="flex flex-col">
             <Seo
                 title="Law Books & Academic Publishing House"
                 description="Oakbridge Publishing is a leading law and academic publishing house — authoritative law books, tax, business and reference titles, plus events, training and AI-powered digital solutions for students, professionals and institutions."
                 path="/"
             />
             {/* ============== HERO ============== */}
-            <section className="relative overflow-hidden border-b border-[#002B5C]/10">
+            <section style={{ order: -1 }} className="relative overflow-hidden border-b border-[#002B5C]/10">
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-0">
                     <div className="lg:col-span-7 px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 pt-20 pb-20 lg:pt-32 lg:pb-36 relative">
                         <div className="overline fade-up">
@@ -328,6 +334,7 @@ export default function Home() {
             {!hidden.has("home.businesses") && (
             <section
                 data-testid="home-verticals"
+                style={{ order: homeOrd("businesses") }}
                 className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 md:py-24 border-b border-[#E5E7EB]"
             >
                 <div className="flex flex-wrap items-end justify-between gap-4 mb-12">
@@ -412,7 +419,7 @@ export default function Home() {
 
             {/* ============== CATEGORIES BENTO (Imprints) ============== */}
             {!hidden.has("home.imprints") && (
-            <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-24 md:py-32">
+            <section style={{ order: homeOrd("imprints") }} className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-24 md:py-32">
                 <div className="flex items-end justify-between mb-12">
                     <div>
                         <div className="overline">{site.home_imprints_overline || "The Catalogue"}</div>
@@ -466,7 +473,7 @@ export default function Home() {
 
             {/* ============== HOT OFF PRESS (new releases) ============== */}
             {!hidden.has("home.hot_off_press") && newReleasesRow.length > 0 && (
-            <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 md:py-28 bg-[#F5F7FA] border-y border-[#E5E7EB]">
+            <section style={{ order: homeOrd("hot_off_press") }} className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 md:py-28 bg-[#F5F7FA] border-y border-[#E5E7EB]">
                 <div className="flex items-end justify-between mb-12">
                     <div>
                         <div className="overline">{site.home_hot_overline || "Hot Off the Press"}</div>
@@ -492,7 +499,7 @@ export default function Home() {
 
             {/* ============== SOLUTIONS ============== */}
             {!hidden.has("home.solutions") && (
-            <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-24 md:py-32">
+            <section style={{ order: homeOrd("solutions") }} className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-24 md:py-32">
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
                     <div className="lg:col-span-4">
                         <div className="overline">{site.home_solutions_overline || "Solutions"}</div>
@@ -561,7 +568,7 @@ export default function Home() {
 
             {/* ============== BESTSELLERS ============== */}
             {!hidden.has("home.bestsellers") && bestsellersEnabled && carouselBooks.length > 0 && (
-                <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 md:py-28 border-t border-[#E5E7EB]">
+                <section style={{ order: homeOrd("bestsellers") }} className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 md:py-28 border-t border-[#E5E7EB]">
                     <div className="flex items-end justify-between mb-12">
                         <div>
                             <div className="overline">{site.home_bestsellers_overline || "Bestsellers"}</div>
@@ -583,16 +590,18 @@ export default function Home() {
 
             {/* ============== TESTIMONIALS (carousel) ============== */}
             {!hidden.has("home.testimonials") && testimonials.length > 0 && (
-                <TestimonialsCarousel
-                    items={testimonials}
-                    overline={site.home_testimonials_overline}
-                    title={site.home_testimonials_title}
-                />
+                <div style={{ order: homeOrd("testimonials") }}>
+                    <TestimonialsCarousel
+                        items={testimonials}
+                        overline={site.home_testimonials_overline}
+                        title={site.home_testimonials_title}
+                    />
+                </div>
             )}
 
             {/* ============== EDITORIAL CTA (Manifesto) ============== */}
             {!hidden.has("home.manifesto") && (
-            <section className="relative px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-24 md:py-32 bg-[#002B5C] text-[#FFFFFF] overflow-hidden">
+            <section style={{ order: homeOrd("manifesto") }} className="relative px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-24 md:py-32 bg-[#002B5C] text-[#FFFFFF] overflow-hidden">
                 <div className="relative z-10 max-w-3xl">
                     <div className="overline !text-white/50">Manifesto</div>
                     <p className="font-serif text-3xl md:text-5xl mt-6 leading-tight">
