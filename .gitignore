@@ -110,3 +110,8 @@ import/
 oakbridge-authors-images.json
 oakbridge-authors-scrape.json
 backend/mongo.txt
+
+# scraped Vidhi Utsav inputs (local one-time use)
+vidhi_utsav_speakers.csv
+vidhi_utsav_speakers.json
+vidhi_utsav_s3_manifest.csv
