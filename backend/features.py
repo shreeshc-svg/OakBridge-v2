@@ -1476,6 +1476,8 @@ SETTINGS_DEFAULTS = {
     "events_section_order": [
         "flagship", "experiences", "summit_speakers", "who_attends", "vidhi_speakers", "cta",
     ],
+    # Admin sidebar order (list of admin route paths). Empty = built-in order.
+    "admin_nav_order": [],
     # Trust badges under the price on every book page. Fully admin-managed:
     # reorder, edit label/value, hide (enabled:false), remove, or add new ones.
     "pdp_badges": [

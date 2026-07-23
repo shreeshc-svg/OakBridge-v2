@@ -13,6 +13,18 @@ const EVENT_SECTION_DEFS = [
     { key: "cta", label: "Get Involved (CTA)" },
 ];
 const DEFAULT_EVENT_ORDER = EVENT_SECTION_DEFS.map((s) => s.key);
+
+function renderRich(text, color = "#F59E0B") {
+    return String(text || "")
+        .split(/(\*[^*]+\*)/g)
+        .map((p, i) =>
+            p.length > 2 && p.startsWith("*") && p.endsWith("*") ? (
+                <em key={i} className="not-italic" style={{ color }}>{p.slice(1, -1)}</em>
+            ) : (
+                <React.Fragment key={i}>{p}</React.Fragment>
+            ),
+        );
+}
 import { ArrowUpRight, Calendar, MapPin, Users, Sparkles, Mic, BookOpen, Award, Music, Smile, ShoppingBag, Brain, Building2 } from "lucide-react";
 
 const ASSET = (p) => `${process.env.REACT_APP_BACKEND_URL}${p}`;
@@ -263,16 +275,13 @@ export default function Events() {
         flagship: (
             <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 md:py-28">
                 <div className="max-w-3xl mb-16">
-                    <div className="overline">Flagship Events</div>
-                    <h2 className="font-serif text-4xl md:text-5xl mt-4 text-[#002B5C] leading-[1.05]">
-                        A festival and a summit.
-                        <br />
-                        One mission.
+                    <div className="overline">{site.events_flagship_overline || "Flagship Events"}</div>
+                    <h2 className="font-serif text-4xl md:text-5xl mt-4 text-[#002B5C] leading-[1.05] whitespace-pre-line">
+                        {renderRich(site.events_flagship_title || "A festival and a summit.\nOne mission.", "#CC0033")}
                     </h2>
-                    <p className="mt-6 text-[#4B5563] leading-relaxed">
-                        From the country's only legal-literature festival to the
-                        flagship summit at the intersection of law, AI and technology —
-                        Oakbridge builds platforms that bring the profession together.
+                    <p className="mt-6 text-[#4B5563] leading-relaxed whitespace-pre-line">
+                        {site.events_flagship_body ||
+                            "From the country's only legal-literature festival to the flagship summit at the intersection of law, AI and technology — Oakbridge builds platforms that bring the profession together."}
                     </p>
                 </div>
                 <div className="space-y-10">
@@ -285,11 +294,9 @@ export default function Events() {
         experiences: (
             <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 md:py-28 bg-[#F5F7FA] border-t border-b border-[#E5E7EB]">
                 <div className="max-w-3xl mb-16">
-                    <div className="overline">The Experience</div>
-                    <h2 className="font-serif text-4xl md:text-5xl mt-4 text-[#002B5C] leading-[1.05]">
-                        Experience law &amp; ideas
-                        <br />
-                        like never before.
+                    <div className="overline">{site.events_exp_overline || "The Experience"}</div>
+                    <h2 className="font-serif text-4xl md:text-5xl mt-4 text-[#002B5C] leading-[1.05] whitespace-pre-line">
+                        {renderRich(site.events_exp_title || "Experience law & ideas\nlike never before.", "#CC0033")}
                     </h2>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
@@ -322,11 +329,9 @@ export default function Events() {
             <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 md:py-28 bg-[#002B5C] text-white">
                 <div className="flex items-end justify-between mb-12 flex-wrap gap-4">
                     <div>
-                        <div className="overline !text-white/60">Summit Speakers</div>
-                        <h2 className="font-serif text-4xl md:text-5xl mt-4 leading-[1.05]">
-                            The future of law,
-                            <br />
-                            on one stage.
+                        <div className="overline !text-white/60">{site.events_summit_overline || "Summit Speakers"}</div>
+                        <h2 className="font-serif text-4xl md:text-5xl mt-4 leading-[1.05] whitespace-pre-line">
+                            {renderRich(site.events_summit_title || "The future of law,\non one stage.")}
                         </h2>
                     </div>
                     <a
@@ -361,16 +366,13 @@ export default function Events() {
             <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 md:py-28 border-b border-[#E5E7EB]">
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
                     <div className="lg:col-span-5">
-                        <div className="overline">Who attends</div>
-                        <h2 className="font-serif text-4xl md:text-5xl mt-4 text-[#002B5C] leading-[1.05]">
-                            A curated gathering
-                            <br />
-                            of luminaries.
+                        <div className="overline">{site.events_who_overline || "Who attends"}</div>
+                        <h2 className="font-serif text-4xl md:text-5xl mt-4 text-[#002B5C] leading-[1.05] whitespace-pre-line">
+                            {renderRich(site.events_who_title || "A curated gathering\nof luminaries.", "#CC0033")}
                         </h2>
-                        <p className="mt-6 text-[#4B5563] leading-relaxed">
-                            Oakbridge events are invitation-rich, deliberately small and
-                            built for the people shaping legal practice and policy in
-                            India and beyond.
+                        <p className="mt-6 text-[#4B5563] leading-relaxed whitespace-pre-line">
+                            {site.events_who_body ||
+                                "Oakbridge events are invitation-rich, deliberately small and built for the people shaping legal practice and policy in India and beyond."}
                         </p>
                     </div>
                     <div className="lg:col-span-7">
@@ -396,9 +398,9 @@ export default function Events() {
             <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 md:py-28 border-b border-[#E5E7EB]">
                 <div className="flex items-end justify-between mb-12 flex-wrap gap-4">
                     <div>
-                        <div className="overline">Vidhi Utsav Speakers</div>
-                        <h2 className="font-serif text-4xl md:text-5xl mt-4 text-[#002B5C] leading-[1.05]">
-                            Eminent voices on stage.
+                        <div className="overline">{site.events_vidhi_overline || "Vidhi Utsav Speakers"}</div>
+                        <h2 className="font-serif text-4xl md:text-5xl mt-4 text-[#002B5C] leading-[1.05] whitespace-pre-line">
+                            {renderRich(site.events_vidhi_title || "Eminent voices on stage.", "#CC0033")}
                         </h2>
                     </div>
                     <a
@@ -421,16 +423,13 @@ export default function Events() {
         cta: (
             <section className="relative px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-24 md:py-32 bg-[#F5F7FA] text-[#002B5C]">
                 <div className="relative z-10 max-w-3xl">
-                    <div className="overline">Get involved</div>
-                    <h2 className="font-serif text-4xl md:text-6xl mt-4 leading-[1.05]">
-                        Register, partner
-                        <br />
-                        or speak.
+                    <div className="overline">{site.events_cta_overline || "Get involved"}</div>
+                    <h2 className="font-serif text-4xl md:text-6xl mt-4 leading-[1.05] whitespace-pre-line">
+                        {renderRich(site.events_cta_title || "Register, partner\nor speak.", "#CC0033")}
                     </h2>
-                    <p className="mt-6 text-[#4B5563] leading-relaxed text-base md:text-lg">
-                        Whether you're a delegate, a sponsor seeking a high-impact
-                        platform, or a thought leader with something to say — there's a
-                        place for you at Oakbridge events.
+                    <p className="mt-6 text-[#4B5563] leading-relaxed text-base md:text-lg whitespace-pre-line">
+                        {site.events_cta_body ||
+                            "Whether you're a delegate, a sponsor seeking a high-impact platform, or a thought leader with something to say — there's a place for you at Oakbridge events."}
                     </p>
                     <div className="mt-10 flex flex-wrap gap-4">
                         <a
@@ -510,26 +509,32 @@ export default function Events() {
 
                     <div className="relative px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 md:py-28 text-white max-w-5xl">
                         <div className="overline !text-white/70 !text-[11px] fade-up">
-                            Oakbridge Events
+                            {site.events_hero_overline || "Oakbridge Events"}
                         </div>
                         <h1
-                            className="font-serif text-5xl md:text-6xl lg:text-7xl mt-5 leading-[0.95] fade-up"
+                            className="font-serif text-5xl md:text-6xl lg:text-7xl mt-5 leading-[0.95] whitespace-pre-line fade-up"
                             style={{ animationDelay: "80ms" }}
                         >
-                            Two curated
-                            <br />
-                            <em className="text-[#F59E0B] not-italic">flagship events.</em>
+                            {site.events_hero_title
+                                ? renderRich(site.events_hero_title)
+                                : (<>Two curated<br /><em className="text-[#F59E0B] not-italic">flagship events.</em></>)}
                         </h1>
                         <p
                             className="mt-6 max-w-2xl text-base md:text-lg text-white/85 leading-relaxed fade-up"
                             style={{ animationDelay: "160ms" }}
                         >
-                            <strong className="text-white">Vidhi Utsav</strong> — a celebration of Law &amp;
-                            Literature — and the{" "}
-                            <strong className="text-white">India Law, AI &amp; Tech Summit</strong>{" "}
-                            on the future of legal innovation. Oakbridge curates the
-                            country's most influential gatherings convening judges,
-                            jurists, general counsels, scholars and technologists.
+                            {site.events_hero_body ? (
+                                <span className="whitespace-pre-line">{site.events_hero_body}</span>
+                            ) : (
+                                <>
+                                    <strong className="text-white">Vidhi Utsav</strong> — a celebration of Law &amp;
+                                    Literature — and the{" "}
+                                    <strong className="text-white">India Law, AI &amp; Tech Summit</strong>{" "}
+                                    on the future of legal innovation. Oakbridge curates the
+                                    country's most influential gatherings convening judges,
+                                    jurists, general counsels, scholars and technologists.
+                                </>
+                            )}
                         </p>
                         <div
                             className="mt-10 flex flex-wrap items-center gap-x-10 gap-y-4 text-xs font-mono uppercase tracking-widest text-white/60 fade-up"

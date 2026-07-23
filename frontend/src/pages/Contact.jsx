@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import Breadcrumbs from "../components/Breadcrumbs";
 import Seo from "../components/Seo";
 import { Mail, MapPin, Phone } from "lucide-react";
-import { submitContact, fetchSettings } from "../lib/api";
+import { submitContact, fetchSettings, fetchSiteContent } from "../lib/api";
 import { toast } from "sonner";
 
 export default function Contact() {
@@ -14,8 +14,10 @@ export default function Contact() {
     });
     const [submitting, setSubmitting] = useState(false);
     const [settings, setSettings] = useState(null);
+    const [site, setSite] = useState({});
     useEffect(() => {
         fetchSettings().then(setSettings).catch(() => {});
+        fetchSiteContent().then(setSite).catch(() => {});
     }, []);
     const DEFAULT_LINES = [
         { label: "Institutional Sales", email: "schools@oakbridge.in" },
@@ -61,14 +63,13 @@ export default function Contact() {
                 path="/contact"
             />
             <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 pt-20 pb-16 border-b border-[#E5E7EB]">
-                <div className="overline">Get in Touch</div>
-                <h1 className="font-serif text-5xl md:text-7xl mt-6 text-[#002B5C] leading-[0.95] max-w-3xl">
-                    We read every letter.
+                <div className="overline">{site.contact_overline || "Get in Touch"}</div>
+                <h1 className="font-serif text-5xl md:text-7xl mt-6 text-[#002B5C] leading-[0.95] max-w-3xl whitespace-pre-line">
+                    {site.contact_title || "We read every letter."}
                 </h1>
-                <p className="mt-6 max-w-xl text-[#4B5563] leading-relaxed">
-                    Questions about our books, bulk orders for your school,
-                    press inquiries, or manuscripts — reach us through the
-                    form below or at the addresses to the right.
+                <p className="mt-6 max-w-xl text-[#4B5563] leading-relaxed whitespace-pre-line">
+                    {site.contact_body ||
+                        "Questions about our books, bulk orders for your school, press inquiries, or manuscripts — reach us through the form below or at the addresses to the right."}
                 </p>
             </section>
 

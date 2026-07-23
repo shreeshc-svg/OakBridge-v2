@@ -6,6 +6,19 @@ import { Search, SlidersHorizontal, X } from "lucide-react";
 import BookCard from "../components/BookCard";
 import { fetchBooks, fetchCategories, fetchSiteContent, fetchSettings, mediaUrl, logSearch, fetchSuggestIndex } from "../lib/api";
 
+// Renders admin copy where *text* becomes the accent colour and \n a line break.
+function renderRich(text, color = "#CC0033") {
+    return String(text || "")
+        .split(/(\*[^*]+\*)/g)
+        .map((p, i) =>
+            p.length > 2 && p.startsWith("*") && p.endsWith("*") ? (
+                <em key={i} className="not-italic" style={{ color }}>{p.slice(1, -1)}</em>
+            ) : (
+                <React.Fragment key={i}>{p}</React.Fragment>
+            ),
+        );
+}
+
 // How many books to pull per infinite-scroll page.
 const PAGE_SIZE = 24;
 
@@ -250,7 +263,7 @@ export default function Catalog() {
                                 ? "Imprint"
                                 : search
                                   ? "Search Results"
-                                  : "The Bookstore"}
+                                  : (site.plp_hero_overline || "The Bookstore")}
                         </div>
                         <h1
                             data-testid="catalog-hero-title"
@@ -272,6 +285,8 @@ export default function Catalog() {
                                         "{search}"
                                     </em>
                                 </>
+                            ) : site.plp_hero_title ? (
+                                <span className="whitespace-pre-line">{renderRich(site.plp_hero_title, "#F59E0B")}</span>
                             ) : (
                                 <>
                                     A library for the
@@ -287,7 +302,7 @@ export default function Catalog() {
                             className="mt-6 max-w-xl text-sm md:text-base text-white/80 leading-relaxed fade-up"
                             style={{ animationDelay: "160ms" }}
                         >
-                            {heroCat?.description ||
+                            {heroCat?.description || site.plp_hero_body ||
                                 "Browse authoritative reference titles, legal commentaries, curated thematic works and scholarly editions from Oakbridge Publishing — all in one place."}
                         </p>
                         <div

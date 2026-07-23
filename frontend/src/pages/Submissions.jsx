@@ -1,10 +1,15 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Breadcrumbs from "../components/Breadcrumbs";
 import Seo from "../components/Seo";
 import { Link } from "react-router-dom";
 import { CheckCircle2, FileText } from "lucide-react";
-import { submitManuscript, formatApiError } from "../lib/api";
+import { submitManuscript, fetchSiteContent, formatApiError } from "../lib/api";
 import { toast } from "sonner";
+
+const asLines = (v, fallback) => {
+    const s = (v || "").trim();
+    return (s ? s.split("\n") : fallback).map((x) => x.trim()).filter(Boolean);
+};
 
 const CATEGORIES = [
     { v: "academic", l: "Academic" },
@@ -32,6 +37,11 @@ export default function Submissions() {
     });
     const [done, setDone] = useState(false);
     const [submitting, setSubmitting] = useState(false);
+    const [site, setSite] = useState({});
+
+    useEffect(() => {
+        fetchSiteContent().then(setSite).catch(() => {});
+    }, []);
 
     const onChange = (e) =>
         setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
@@ -63,17 +73,13 @@ export default function Submissions() {
                 path="/submissions"
             />
             <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 pt-20 pb-16 border-b border-[#E5E7EB]">
-                <div className="overline">Author Submissions</div>
-                <h1 className="font-serif text-5xl md:text-7xl mt-4 text-[#002B5C] leading-[0.95] max-w-3xl">
-                    We read every
-                    <br />
-                    manuscript.
+                <div className="overline">{site.sub_overline || "Author Submissions"}</div>
+                <h1 className="font-serif text-5xl md:text-7xl mt-4 text-[#002B5C] leading-[0.95] max-w-3xl whitespace-pre-line">
+                    {site.sub_title || "We read every\nmanuscript."}
                 </h1>
-                <p className="mt-8 max-w-xl text-[#4B5563] leading-relaxed">
-                    Oakbridge is actively commissioning across Academic, Law,
-                    Tax, Business and Reference lists. Share your book idea
-                    below and our editorial team will respond within four
-                    weeks.
+                <p className="mt-8 max-w-xl text-[#4B5563] leading-relaxed whitespace-pre-line">
+                    {site.sub_body ||
+                        "Oakbridge is actively commissioning across Academic, Law, Tax, Business and Reference lists. Share your book idea below and our editorial team will respond within four weeks."}
                 </p>
             </section>
 
@@ -83,13 +89,17 @@ export default function Submissions() {
                         <div>
                             <FileText size={20} strokeWidth={1.5} className="text-[#CC0033]" />
                             <h3 className="font-serif text-xl mt-3 text-[#002B5C]">
-                                What we look for
+                                {site.sub_lookfor_title || "What we look for"}
                             </h3>
                             <ul className="mt-3 text-sm text-[#4B5563] space-y-2 list-disc pl-5">
-                                <li>Original, well-structured scholarship</li>
-                                <li>Clear pedagogical intent and audience</li>
-                                <li>A sample chapter or complete manuscript</li>
-                                <li>Author credentials & teaching experience</li>
+                                {asLines(site.sub_lookfor_items, [
+                                    "Original, well-structured scholarship",
+                                    "Clear pedagogical intent and audience",
+                                    "A sample chapter or complete manuscript",
+                                    "Author credentials & teaching experience",
+                                ]).map((item, i) => (
+                                    <li key={i}>{item}</li>
+                                ))}
                             </ul>
                         </div>
                         <div className="pt-5 border-t border-[#E5E7EB]">

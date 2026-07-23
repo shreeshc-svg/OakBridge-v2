@@ -3,7 +3,19 @@ import { createPortal } from "react-dom";
 import Breadcrumbs from "../components/Breadcrumbs";
 import Seo from "../components/Seo";
 import { X, Play, Image as ImageIcon } from "lucide-react";
-import { fetchCollection, mediaUrl } from "../lib/api";
+import { fetchCollection, fetchSiteContent, mediaUrl } from "../lib/api";
+
+function renderRich(text) {
+    return String(text || "")
+        .split(/(\*[^*]+\*)/g)
+        .map((p, i) =>
+            p.length > 2 && p.startsWith("*") && p.endsWith("*") ? (
+                <em key={i} className="text-[#CC0033] not-italic">{p.slice(1, -1)}</em>
+            ) : (
+                <React.Fragment key={i}>{p}</React.Fragment>
+            ),
+        );
+}
 
 // Turn a YouTube/Vimeo URL into an embeddable src + a thumbnail (YouTube only).
 function parseVideo(url) {
@@ -17,12 +29,14 @@ function parseVideo(url) {
 
 export default function MediaGallery() {
     const [items, setItems] = useState([]);
+    const [site, setSite] = useState({});
     const [active, setActive] = useState(null); // item open in lightbox
 
     useEffect(() => {
         fetchCollection("media_gallery")
             .then((d) => setItems((d?.items || []).filter((x) => x && x.enabled !== false && x.url)))
             .catch(() => {});
+        fetchSiteContent().then(setSite).catch(() => {});
     }, []);
 
     useEffect(() => {
@@ -79,13 +93,13 @@ export default function MediaGallery() {
             <Seo title="Media & Gallery" description="Photos and video from Oakbridge Publishing's events, launches and forums." path="/media" />
 
             <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 pt-20 pb-12 border-b border-[#E5E7EB]">
-                <div className="overline">Media &amp; Gallery</div>
-                <h1 className="font-serif text-5xl md:text-7xl mt-4 text-[#002B5C] leading-[0.95] max-w-3xl">
-                    Moments from the <em className="text-[#CC0033] not-italic">Oakbridge</em> stage.
+                <div className="overline">{site.media_overline || "Media & Gallery"}</div>
+                <h1 className="font-serif text-5xl md:text-7xl mt-4 text-[#002B5C] leading-[0.95] max-w-3xl whitespace-pre-line">
+                    {renderRich(site.media_title || "Moments from the *Oakbridge* stage.")}
                 </h1>
-                <p className="mt-6 max-w-2xl text-[#4B5563] leading-relaxed">
-                    Photographs and film from our launches, forums and summits — the people and ideas
-                    shaping law, policy and scholarship in India.
+                <p className="mt-6 max-w-2xl text-[#4B5563] leading-relaxed whitespace-pre-line">
+                    {site.media_body ||
+                        "Photographs and film from our launches, forums and summits — the people and ideas shaping law, policy and scholarship in India."}
                 </p>
             </section>
 

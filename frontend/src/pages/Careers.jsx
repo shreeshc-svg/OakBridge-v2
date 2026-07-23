@@ -2,11 +2,12 @@ import React, { useEffect, useRef, useState } from "react";
 import Breadcrumbs from "../components/Breadcrumbs";
 import Seo from "../components/Seo";
 import { CheckCircle2, Briefcase, MapPin, Upload, FileText } from "lucide-react";
-import { fetchJobs, applyForJob, formatApiError } from "../lib/api";
+import { fetchJobs, applyForJob, fetchSiteContent, formatApiError } from "../lib/api";
 import { toast } from "sonner";
 
 export default function Careers() {
     const [jobs, setJobs] = useState([]);
+    const [site, setSite] = useState({});
     const [form, setForm] = useState({ name: "", phone: "", email: "", role: "" });
     const [cv, setCv] = useState(null);
     const [done, setDone] = useState(false);
@@ -17,6 +18,7 @@ export default function Careers() {
 
     useEffect(() => {
         fetchJobs().then((d) => setJobs((d?.items || []).filter((j) => j && j.enabled !== false))).catch(() => {});
+        fetchSiteContent().then(setSite).catch(() => {});
     }, []);
 
     const onChange = (e) => setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
@@ -66,14 +68,13 @@ export default function Careers() {
             />
 
             <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 pt-20 pb-14 border-b border-[#E5E7EB]">
-                <div className="overline">Careers</div>
-                <h1 className="font-serif text-5xl md:text-7xl mt-4 text-[#002B5C] leading-[0.95] max-w-3xl">
-                    Build the house that publishes India.
+                <div className="overline">{site.careers_overline || "Careers"}</div>
+                <h1 className="font-serif text-5xl md:text-7xl mt-4 text-[#002B5C] leading-[0.95] max-w-3xl whitespace-pre-line">
+                    {site.careers_title || "Build the house that publishes India."}
                 </h1>
-                <p className="mt-6 max-w-2xl text-[#4B5563] leading-relaxed">
-                    We hire editors, salespeople, designers and technologists who believe publishing
-                    is a craft of public service. See our open roles, or send us a general
-                    application — we're always glad to meet good people.
+                <p className="mt-6 max-w-2xl text-[#4B5563] leading-relaxed whitespace-pre-line">
+                    {site.careers_body ||
+                        "We hire editors, salespeople, designers and technologists who believe publishing is a craft of public service. See our open roles, or send us a general application — we're always glad to meet good people."}
                 </p>
             </section>
 

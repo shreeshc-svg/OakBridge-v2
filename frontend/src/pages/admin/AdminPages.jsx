@@ -131,6 +131,36 @@ export default function AdminPages() {
 
                 <PageGroup title="Homepage" path="/">
                     <SlotRow label="Hero image" value={site.home_hero} onSave={(v) => saveSite("home_hero", v)} />
+                    <div className="overline !text-[10px] mt-6 mb-2">Hero text</div>
+                    <div className="space-y-3">
+                        <TextSlotRow label="Overline (Est. 2017 · …)" value={site.home_hero_overline} onSave={(v) => saveSite("home_hero_overline", v)} />
+                        <TextSlotRow label="Headline (wrap a word in *stars* for red; use line breaks)" value={site.home_hero_title} onSave={(v) => saveSite("home_hero_title", v)} multiline />
+                        <TextSlotRow label="Intro paragraph" value={site.home_hero_body} onSave={(v) => saveSite("home_hero_body", v)} multiline />
+                    </div>
+                    <div className="overline !text-[10px] mt-6 mb-2">Section headings (tip: *word* = red accent)</div>
+                    <div className="space-y-3">
+                        <TextSlotRow label="Our Businesses — overline" value={site.home_biz_overline} onSave={(v) => saveSite("home_biz_overline", v)} />
+                        <TextSlotRow label="Our Businesses — heading" value={site.home_biz_title} onSave={(v) => saveSite("home_biz_title", v)} multiline />
+                        <TextSlotRow label="Imprints — overline" value={site.home_imprints_overline} onSave={(v) => saveSite("home_imprints_overline", v)} />
+                        <TextSlotRow label="Imprints — heading" value={site.home_imprints_title} onSave={(v) => saveSite("home_imprints_title", v)} multiline />
+                        <TextSlotRow label="Hot Off the Press — overline" value={site.home_hot_overline} onSave={(v) => saveSite("home_hot_overline", v)} />
+                        <TextSlotRow label="Hot Off the Press — heading" value={site.home_hot_title} onSave={(v) => saveSite("home_hot_title", v)} multiline />
+                        <TextSlotRow label="Solutions — overline" value={site.home_solutions_overline} onSave={(v) => saveSite("home_solutions_overline", v)} />
+                        <TextSlotRow label="Solutions — heading" value={site.home_solutions_title} onSave={(v) => saveSite("home_solutions_title", v)} multiline />
+                        <TextSlotRow label="Bestsellers — overline" value={site.home_bestsellers_overline} onSave={(v) => saveSite("home_bestsellers_overline", v)} />
+                        <TextSlotRow label="Bestsellers — heading" value={site.home_bestsellers_title} onSave={(v) => saveSite("home_bestsellers_title", v)} multiline />
+                        <TextSlotRow label="Testimonials — overline" value={site.home_testimonials_overline} onSave={(v) => saveSite("home_testimonials_overline", v)} />
+                        <TextSlotRow label="Testimonials — heading" value={site.home_testimonials_title} onSave={(v) => saveSite("home_testimonials_title", v)} multiline />
+                    </div>
+                    <div className="overline !text-[10px] mt-6 mb-2">Hero stats (three)</div>
+                    <div className="space-y-3">
+                        <TextSlotRow label="Stat 1 — value (e.g. 230+)" value={site.home_stat1_value} onSave={(v) => saveSite("home_stat1_value", v)} />
+                        <TextSlotRow label="Stat 1 — label" value={site.home_stat1_label} onSave={(v) => saveSite("home_stat1_label", v)} />
+                        <TextSlotRow label="Stat 2 — value (e.g. 320K)" value={site.home_stat2_value} onSave={(v) => saveSite("home_stat2_value", v)} />
+                        <TextSlotRow label="Stat 2 — label" value={site.home_stat2_label} onSave={(v) => saveSite("home_stat2_label", v)} />
+                        <TextSlotRow label="Stat 3 — value (e.g. Global)" value={site.home_stat3_value} onSave={(v) => saveSite("home_stat3_value", v)} />
+                        <TextSlotRow label="Stat 3 — label" value={site.home_stat3_label} onSave={(v) => saveSite("home_stat3_label", v)} />
+                    </div>
                     <div className="overline !text-[10px] mt-6 mb-2">Imprint tiles (Five Imprints section)</div>
                     <div className="space-y-3">
                         <SlotRow label="Coffee Table Books" value={site.home_imprint_coffee_table} onSave={(v) => saveSite("home_imprint_coffee_table", v)} />
@@ -155,6 +185,12 @@ export default function AdminPages() {
                         <Link to="/admin/page-bookstore" className="text-[#002B5C] border-b border-[#002B5C] hover:text-[#CC0033]">Bookstore page settings</Link>.
                     </p>
                     <SlotRow label="Banner image" value={site.plp_banner} onSave={(v) => saveSite("plp_banner", v)} />
+                    <div className="overline !text-[10px] mt-6 mb-2">Hero text (shown on the main bookstore landing)</div>
+                    <div className="space-y-3">
+                        <TextSlotRow label="Overline" value={site.plp_hero_overline} onSave={(v) => saveSite("plp_hero_overline", v)} />
+                        <TextSlotRow label="Headline (*word* = amber accent; line breaks allowed)" value={site.plp_hero_title} onSave={(v) => saveSite("plp_hero_title", v)} multiline />
+                        <TextSlotRow label="Description" value={site.plp_hero_body} onSave={(v) => saveSite("plp_hero_body", v)} multiline />
+                    </div>
                     <div className="overline !text-[10px] mt-6 mb-2">Category images</div>
                     <div className="space-y-3">
                         {cats.map((c) => (
@@ -297,6 +333,27 @@ export default function AdminPages() {
                     <EventsSectionOrder />
                     <div className="overline !text-[10px] mb-2 mt-8 pt-8 border-t border-[#E5E7EB]">Flagship events (add / edit / reorder)</div>
                     <FlagshipEventsEditor />
+                    <div className="overline !text-[10px] mb-2 mt-8 pt-8 border-t border-[#E5E7EB]">Page text (headings &amp; intros — *word* = accent)</div>
+                    <div className="space-y-3">
+                        <TextSlotRow label="Hero — overline" value={site.events_hero_overline} onSave={(v) => saveSite("events_hero_overline", v)} />
+                        <TextSlotRow label="Hero — heading" value={site.events_hero_title} onSave={(v) => saveSite("events_hero_title", v)} multiline />
+                        <TextSlotRow label="Hero — intro" value={site.events_hero_body} onSave={(v) => saveSite("events_hero_body", v)} multiline />
+                        <TextSlotRow label="Flagship — overline" value={site.events_flagship_overline} onSave={(v) => saveSite("events_flagship_overline", v)} />
+                        <TextSlotRow label="Flagship — heading" value={site.events_flagship_title} onSave={(v) => saveSite("events_flagship_title", v)} multiline />
+                        <TextSlotRow label="Flagship — intro" value={site.events_flagship_body} onSave={(v) => saveSite("events_flagship_body", v)} multiline />
+                        <TextSlotRow label="Experience — overline" value={site.events_exp_overline} onSave={(v) => saveSite("events_exp_overline", v)} />
+                        <TextSlotRow label="Experience — heading" value={site.events_exp_title} onSave={(v) => saveSite("events_exp_title", v)} multiline />
+                        <TextSlotRow label="Summit Speakers — overline" value={site.events_summit_overline} onSave={(v) => saveSite("events_summit_overline", v)} />
+                        <TextSlotRow label="Summit Speakers — heading" value={site.events_summit_title} onSave={(v) => saveSite("events_summit_title", v)} multiline />
+                        <TextSlotRow label="Who Attends — overline" value={site.events_who_overline} onSave={(v) => saveSite("events_who_overline", v)} />
+                        <TextSlotRow label="Who Attends — heading" value={site.events_who_title} onSave={(v) => saveSite("events_who_title", v)} multiline />
+                        <TextSlotRow label="Who Attends — intro" value={site.events_who_body} onSave={(v) => saveSite("events_who_body", v)} multiline />
+                        <TextSlotRow label="Vidhi Speakers — overline" value={site.events_vidhi_overline} onSave={(v) => saveSite("events_vidhi_overline", v)} />
+                        <TextSlotRow label="Vidhi Speakers — heading" value={site.events_vidhi_title} onSave={(v) => saveSite("events_vidhi_title", v)} multiline />
+                        <TextSlotRow label="Get Involved — overline" value={site.events_cta_overline} onSave={(v) => saveSite("events_cta_overline", v)} />
+                        <TextSlotRow label="Get Involved — heading" value={site.events_cta_title} onSave={(v) => saveSite("events_cta_title", v)} multiline />
+                        <TextSlotRow label="Get Involved — intro" value={site.events_cta_body} onSave={(v) => saveSite("events_cta_body", v)} multiline />
+                    </div>
                     <div className="overline !text-[10px] mb-2 mt-8 pt-8 border-t border-[#E5E7EB]">Flagship banners (also power the rotating hero)</div>
                     <div className="space-y-3">
                         <SlotRow label="Vidhi Utsav banner" value={site["events_vidhi_banner"]} onSave={(v) => saveSite("events_vidhi_banner", v)} />
@@ -304,6 +361,44 @@ export default function AdminPages() {
                     </div>
                     <CollectionEditor label="Vidhi Utsav speakers" collectionKey="events_vidhi_speakers" />
                     <CollectionEditor label="Summit speakers" collectionKey="events_summit_speakers" />
+                </PageGroup>
+
+                <PageGroup title="Contact" path="/contact">
+                    <div className="overline !text-[10px] mb-2">Page text</div>
+                    <div className="space-y-3">
+                        <TextSlotRow label="Overline" value={site.contact_overline} onSave={(v) => saveSite("contact_overline", v)} />
+                        <TextSlotRow label="Heading" value={site.contact_title} onSave={(v) => saveSite("contact_title", v)} multiline />
+                        <TextSlotRow label="Intro" value={site.contact_body} onSave={(v) => saveSite("contact_body", v)} multiline />
+                    </div>
+                    <p className="text-[11px] text-[#4B5563] mt-3">Direct-line emails are in <Link to="/admin/settings" className="text-[#002B5C] border-b border-[#002B5C]">Settings</Link>.</p>
+                </PageGroup>
+
+                <PageGroup title="Author Submissions" path="/submissions">
+                    <div className="space-y-3">
+                        <TextSlotRow label="Overline" value={site.sub_overline} onSave={(v) => saveSite("sub_overline", v)} />
+                        <TextSlotRow label="Heading" value={site.sub_title} onSave={(v) => saveSite("sub_title", v)} multiline />
+                        <TextSlotRow label="Intro" value={site.sub_body} onSave={(v) => saveSite("sub_body", v)} multiline />
+                        <TextSlotRow label="'What we look for' — heading" value={site.sub_lookfor_title} onSave={(v) => saveSite("sub_lookfor_title", v)} />
+                        <TextSlotRow label="'What we look for' — list (one item per line)" value={site.sub_lookfor_items} onSave={(v) => saveSite("sub_lookfor_items", v)} multiline />
+                    </div>
+                </PageGroup>
+
+                <PageGroup title="Careers" path="/careers">
+                    <p className="text-sm text-[#4B5563] mb-3">Open roles and applications are managed in <Link to="/admin/careers" className="text-[#002B5C] border-b border-[#002B5C]">Careers</Link>.</p>
+                    <div className="space-y-3">
+                        <TextSlotRow label="Overline" value={site.careers_overline} onSave={(v) => saveSite("careers_overline", v)} />
+                        <TextSlotRow label="Heading" value={site.careers_title} onSave={(v) => saveSite("careers_title", v)} multiline />
+                        <TextSlotRow label="Intro" value={site.careers_body} onSave={(v) => saveSite("careers_body", v)} multiline />
+                    </div>
+                </PageGroup>
+
+                <PageGroup title="Media & Gallery" path="/media">
+                    <p className="text-sm text-[#4B5563] mb-3">Photos and videos are managed in <Link to="/admin/media-gallery" className="text-[#002B5C] border-b border-[#002B5C]">Media &amp; Gallery</Link>.</p>
+                    <div className="space-y-3">
+                        <TextSlotRow label="Overline" value={site.media_overline} onSave={(v) => saveSite("media_overline", v)} />
+                        <TextSlotRow label="Heading (*word* = accent)" value={site.media_title} onSave={(v) => saveSite("media_title", v)} multiline />
+                        <TextSlotRow label="Intro" value={site.media_body} onSave={(v) => saveSite("media_body", v)} multiline />
+                    </div>
                 </PageGroup>
             </section>
         </div>

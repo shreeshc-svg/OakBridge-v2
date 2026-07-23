@@ -72,9 +72,22 @@ const VERTICALS = [
     },
 ];
 
+// Renders admin copy where *text* becomes the red accent, and \n a line break.
+function renderRich(text) {
+    return String(text || "")
+        .split(/(\*[^*]+\*)/g)
+        .map((p, i) =>
+            p.length > 2 && p.startsWith("*") && p.endsWith("*") ? (
+                <em key={i} className="text-[#CC0033] not-italic">{p.slice(1, -1)}</em>
+            ) : (
+                <React.Fragment key={i}>{p}</React.Fragment>
+            ),
+        );
+}
+
 // Auto-rotating testimonials carousel. Advances one card per tick, loops at the
 // end, pauses on hover/touch. Arrows for manual control.
-function TestimonialsCarousel({ items }) {
+function TestimonialsCarousel({ items, overline, title }) {
     const railRef = useRef(null);
 
     const scroll = (dir) => {
@@ -113,9 +126,9 @@ function TestimonialsCarousel({ items }) {
         <section data-testid="testimonials" className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 md:py-28 bg-[#F5F7FA] border-y border-[#E5E7EB]">
             <div className="flex items-end justify-between gap-4 mb-10">
                 <div className="max-w-2xl">
-                    <div className="overline">Testimonials</div>
-                    <h2 className="font-serif text-4xl md:text-5xl mt-3 text-[#002B5C] leading-tight">
-                        Trusted by the people we publish for.
+                    <div className="overline">{overline || "Testimonials"}</div>
+                    <h2 className="font-serif text-4xl md:text-5xl mt-3 text-[#002B5C] leading-tight whitespace-pre-line">
+                        {renderRich(title || "Trusted by the people we publish for.")}
                     </h2>
                 </div>
                 <div className="hidden md:flex items-center gap-2">
@@ -230,22 +243,14 @@ export default function Home() {
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-0">
                     <div className="lg:col-span-7 px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 pt-20 pb-20 lg:pt-32 lg:pb-36 relative">
                         <div className="overline fade-up">
-                            Est. 2017 · A Scholarly Press
+                            {site.home_hero_overline || "Est. 2017 · A Scholarly Press"}
                         </div>
-                        <h1 className="font-serif text-5xl sm:text-6xl lg:text-7xl leading-[0.95] mt-6 text-[#002B5C] fade-up" style={{ animationDelay: "100ms" }}>
-                            A library for
-                            <br />
-                            the <em className="text-[#CC0033]">intellectually</em>
-                            <br />
-                            restless.
+                        <h1 className="font-serif text-5xl sm:text-6xl lg:text-7xl leading-[0.95] mt-6 text-[#002B5C] whitespace-pre-line fade-up" style={{ animationDelay: "100ms" }}>
+                            {renderRich(site.home_hero_title || "A library for\nthe *intellectually*\nrestless.")}
                         </h1>
-                        <p className="mt-8 max-w-lg text-base text-[#4B5563] leading-relaxed fade-up" style={{ animationDelay: "200ms" }}>
-                            Oakbridge produces authoritative, reliable and
-                            opinion-influencing reference titles, legal
-                            commentaries, thematic books across various
-                            genres, and thought-leadership curated works for
-                            students, professionals and curious minds across
-                            the globe.
+                        <p className="mt-8 max-w-lg text-base text-[#4B5563] leading-relaxed whitespace-pre-line fade-up" style={{ animationDelay: "200ms" }}>
+                            {site.home_hero_body ||
+                                "Oakbridge produces authoritative, reliable and opinion-influencing reference titles, legal commentaries, thematic books across various genres, and thought-leadership curated works for students, professionals and curious minds across the globe."}
                         </p>
                         <div className="mt-10 flex flex-wrap gap-4 fade-up" style={{ animationDelay: "300ms" }}>
                             <Link
@@ -268,26 +273,26 @@ export default function Home() {
                         <div className="mt-20 grid grid-cols-3 gap-8 max-w-xl pt-8 border-t border-[#002B5C]/15">
                             <div>
                                 <div className="font-serif text-3xl text-[#002B5C]">
-                                    230+
+                                    {site.home_stat1_value || "230+"}
                                 </div>
                                 <div className="overline mt-1 !text-[10px]">
-                                    Titles in print
+                                    {site.home_stat1_label || "Titles in print"}
                                 </div>
                             </div>
                             <div>
                                 <div className="font-serif text-3xl text-[#002B5C]">
-                                    320K
+                                    {site.home_stat2_value || "320K"}
                                 </div>
                                 <div className="overline mt-1 !text-[10px]">
-                                    Students served
+                                    {site.home_stat2_label || "Students served"}
                                 </div>
                             </div>
                             <div>
                                 <div className="font-serif text-3xl text-[#002B5C]">
-                                    Global
+                                    {site.home_stat3_value || "Global"}
                                 </div>
                                 <div className="overline mt-1 !text-[10px]">
-                                    Reach
+                                    {site.home_stat3_label || "Reach"}
                                 </div>
                             </div>
                         </div>
@@ -326,9 +331,9 @@ export default function Home() {
             >
                 <div className="flex flex-wrap items-end justify-between gap-4 mb-12">
                     <div>
-                        <div className="overline">Our Businesses</div>
-                        <h2 className="font-serif text-4xl md:text-5xl mt-3 text-[#002B5C] max-w-2xl leading-tight">
-                            Four complementary lines of business.
+                        <div className="overline">{site.home_biz_overline || "Our Businesses"}</div>
+                        <h2 className="font-serif text-4xl md:text-5xl mt-3 text-[#002B5C] max-w-2xl leading-tight whitespace-pre-line">
+                            {renderRich(site.home_biz_title || "Four complementary lines of business.")}
                         </h2>
                     </div>
                     <Link
@@ -407,11 +412,9 @@ export default function Home() {
             <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-24 md:py-32">
                 <div className="flex items-end justify-between mb-12">
                     <div>
-                        <div className="overline">The Catalogue</div>
-                        <h2 className="font-serif text-4xl md:text-5xl mt-3 text-[#002B5C] max-w-2xl leading-tight">
-                            Five imprints.
-                            <br />
-                            One scholarly standard.
+                        <div className="overline">{site.home_imprints_overline || "The Catalogue"}</div>
+                        <h2 className="font-serif text-4xl md:text-5xl mt-3 text-[#002B5C] max-w-2xl leading-tight whitespace-pre-line">
+                            {renderRich(site.home_imprints_title || "Five imprints.\nOne scholarly standard.")}
                         </h2>
                     </div>
                     <Link
@@ -509,9 +512,9 @@ export default function Home() {
             <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 md:py-28 bg-[#F5F7FA] border-y border-[#E5E7EB]">
                 <div className="flex items-end justify-between mb-12">
                     <div>
-                        <div className="overline">Hot Off the Press</div>
-                        <h2 className="font-serif text-4xl md:text-5xl mt-3 text-[#002B5C] leading-tight">
-                            New this season.
+                        <div className="overline">{site.home_hot_overline || "Hot Off the Press"}</div>
+                        <h2 className="font-serif text-4xl md:text-5xl mt-3 text-[#002B5C] leading-tight whitespace-pre-line">
+                            {renderRich(site.home_hot_title || "New this season.")}
                         </h2>
                     </div>
                     <Link
@@ -534,9 +537,9 @@ export default function Home() {
             <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-24 md:py-32">
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
                     <div className="lg:col-span-4">
-                        <div className="overline">Solutions</div>
-                        <h2 className="font-serif text-4xl md:text-5xl mt-3 text-[#002B5C] leading-tight">
-                            We work with the institutions shaping tomorrow.
+                        <div className="overline">{site.home_solutions_overline || "Solutions"}</div>
+                        <h2 className="font-serif text-4xl md:text-5xl mt-3 text-[#002B5C] leading-tight whitespace-pre-line">
+                            {renderRich(site.home_solutions_title || "We work with the institutions shaping tomorrow.")}
                         </h2>
                         <p className="mt-6 text-[#4B5563] text-sm leading-relaxed">
                             We collaborate with professionals and scholars to
@@ -602,9 +605,9 @@ export default function Home() {
                 <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 md:py-28 border-t border-[#E5E7EB]">
                     <div className="flex items-end justify-between mb-12">
                         <div>
-                            <div className="overline">Bestsellers</div>
-                            <h2 className="font-serif text-4xl md:text-5xl mt-3 text-[#002B5C] leading-tight">
-                                What leaders are reading.
+                            <div className="overline">{site.home_bestsellers_overline || "Bestsellers"}</div>
+                            <h2 className="font-serif text-4xl md:text-5xl mt-3 text-[#002B5C] leading-tight whitespace-pre-line">
+                                {renderRich(site.home_bestsellers_title || "What leaders are reading.")}
                             </h2>
                         </div>
                         <Link
@@ -621,7 +624,11 @@ export default function Home() {
 
             {/* ============== TESTIMONIALS (carousel) ============== */}
             {testimonials.length > 0 && (
-                <TestimonialsCarousel items={testimonials} />
+                <TestimonialsCarousel
+                    items={testimonials}
+                    overline={site.home_testimonials_overline}
+                    title={site.home_testimonials_title}
+                />
             )}
 
             {/* ============== EDITORIAL CTA ============== */}

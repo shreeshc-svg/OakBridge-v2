@@ -1,7 +1,30 @@
 import React, { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
+import { ArrowUp, ArrowDown } from "lucide-react";
 import { fetchSettings, adminSetSetting } from "../../lib/api";
+
+// Must mirror the sidebar in AdminLayout (path + label).
+const ADMIN_NAV = [
+    { to: "/admin", label: "Dashboard" },
+    { to: "/admin/books", label: "Books" },
+    { to: "/admin/inventory", label: "Inventory" },
+    { to: "/admin/pages", label: "Pages" },
+    { to: "/admin/authors", label: "Authors" },
+    { to: "/admin/careers", label: "Careers" },
+    { to: "/admin/media-gallery", label: "Media & Gallery" },
+    { to: "/admin/navigation", label: "Navigation" },
+    { to: "/admin/media", label: "Media Library" },
+    { to: "/admin/orders", label: "Orders" },
+    { to: "/admin/coupons", label: "Coupons" },
+    { to: "/admin/messages", label: "Messages" },
+    { to: "/admin/desk-copies", label: "Desk Copies" },
+    { to: "/admin/submissions", label: "Submissions" },
+    { to: "/admin/waitlists", label: "Waitlists" },
+    { to: "/admin/users", label: "Users" },
+    { to: "/admin/legal", label: "Legal" },
+    { to: "/admin/settings", label: "Settings" },
+];
 
 export default function AdminSettings() {
     const [s, setS] = useState(null);
@@ -16,6 +39,29 @@ export default function AdminSettings() {
     }
 
     const set = (k, v) => setS((cur) => ({ ...cur, [k]: v }));
+
+    // Admin sidebar order: merge saved order with any new/missing items.
+    const savedNav = Array.isArray(s.admin_nav_order) ? s.admin_nav_order : [];
+    const navOrder = [
+        ...savedNav.filter((to) => ADMIN_NAV.some((x) => x.to === to)),
+        ...ADMIN_NAV.map((x) => x.to).filter((to) => !savedNav.includes(to)),
+    ];
+    const navLabel = (to) => ADMIN_NAV.find((x) => x.to === to)?.label || to;
+    const moveNav = (i, dir) => {
+        const j = i + dir;
+        if (j < 0 || j >= navOrder.length) return;
+        const n = [...navOrder];
+        [n[i], n[j]] = [n[j], n[i]];
+        set("admin_nav_order", n);
+    };
+    const saveNavOrder = async () => {
+        try {
+            await adminSetSetting("admin_nav_order", navOrder);
+            toast.success("Sidebar order saved — reload to see it.");
+        } catch {
+            toast.error("Could not save sidebar order.");
+        }
+    };
 
     const lines = Array.isArray(s.contact_direct_lines) ? s.contact_direct_lines : [];
     const setLines = (arr) => set("contact_direct_lines", arr);
@@ -83,6 +129,28 @@ export default function AdminSettings() {
                     <p className="text-[11px] text-[#4B5563] mt-3">
                         Tax and shipping are recomputed on the server at checkout using these values.
                     </p>
+                </div>
+
+                <div className="border border-[#E5E7EB] bg-white p-6" data-testid="admin-nav-order">
+                    <div className="flex items-center justify-between">
+                        <h2 className="font-serif text-xl text-[#002B5C]">Admin sidebar order</h2>
+                        <button onClick={saveNavOrder} className="text-sm border border-[#002B5C] text-[#002B5C] px-3 py-1 hover:bg-[#F5F7FA]">
+                            Save order
+                        </button>
+                    </div>
+                    <p className="text-[11px] text-[#4B5563] mt-1">
+                        Rearrange the links in this admin sidebar. Reload the page after saving to see the new order.
+                    </p>
+                    <div className="mt-4 space-y-1.5 max-w-md">
+                        {navOrder.map((to, i) => (
+                            <div key={to} className="flex items-center gap-2 border border-[#E5E7EB] px-3 py-1.5">
+                                <span className="font-mono text-xs text-[#4B5563] w-5">{String(i + 1).padStart(2, "0")}</span>
+                                <span className="flex-1 text-sm text-[#002B5C]">{navLabel(to)}</span>
+                                <button onClick={() => moveNav(i, -1)} disabled={i === 0} aria-label="Up" className="text-[#4B5563] hover:text-[#002B5C] disabled:opacity-25"><ArrowUp size={14} strokeWidth={1.5} /></button>
+                                <button onClick={() => moveNav(i, 1)} disabled={i === navOrder.length - 1} aria-label="Down" className="text-[#4B5563] hover:text-[#002B5C] disabled:opacity-25"><ArrowDown size={14} strokeWidth={1.5} /></button>
+                            </div>
+                        ))}
+                    </div>
                 </div>
 
                 <div className="border border-[#E5E7EB] bg-white p-6" data-testid="authors-layout-settings">

@@ -3,6 +3,7 @@ import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { LayoutDashboard, BookOpen, ShoppingBag, Mail, Users, LogOut, ExternalLink, Tag, PackageCheck, FileText, Inbox, Image, Settings, Scale, LayoutTemplate, Navigation, Menu, X, Briefcase, Clapperboard } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { Toaster } from "../../components/ui/sonner";
+import { fetchSettings } from "../../lib/api";
 
 const LINKS = [
     { to: "/admin", end: true, label: "Dashboard", icon: LayoutDashboard },
@@ -30,6 +31,25 @@ export default function AdminLayout() {
     const nav = useNavigate();
     const loc = useLocation();
     const [navOpen, setNavOpen] = React.useState(false);
+    const [navOrder, setNavOrder] = React.useState([]);
+
+    React.useEffect(() => {
+        fetchSettings()
+            .then((s) => setNavOrder(Array.isArray(s.admin_nav_order) ? s.admin_nav_order : []))
+            .catch(() => {});
+    }, []);
+
+    // Reorder the sidebar per the admin's saved order; unlisted items keep their
+    // default position at the end.
+    const orderedLinks = React.useMemo(() => {
+        if (!navOrder.length) return LINKS;
+        const byTo = Object.fromEntries(LINKS.map((l) => [l.to, l]));
+        const seen = new Set();
+        const out = [];
+        navOrder.forEach((to) => { if (byTo[to] && !seen.has(to)) { out.push(byTo[to]); seen.add(to); } });
+        LINKS.forEach((l) => { if (!seen.has(l.to)) out.push(l); });
+        return out;
+    }, [navOrder]);
 
     React.useEffect(() => {
         window.scrollTo(0, 0);
@@ -46,13 +66,13 @@ export default function AdminLayout() {
         };
     }, [navOpen]);
 
-    const current = LINKS.find((l) =>
+    const current = orderedLinks.find((l) =>
         l.end ? loc.pathname === l.to : loc.pathname.startsWith(l.to),
     );
 
     const navList = (
         <nav className="space-y-1">
-            {LINKS.map((l) => (
+            {orderedLinks.map((l) => (
                 <NavLink
                     key={l.to}
                     to={l.to}
