@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import Breadcrumbs from "../components/Breadcrumbs";
 import Seo from "../components/Seo";
-import { fetchSiteContent, fetchCollection, fetchSettings, mediaUrl } from "../lib/api";
+import { fetchSiteContent, fetchCollection, fetchSettings, resolveCollection, mediaUrl } from "../lib/api";
 import { hiddenSet } from "../lib/sections";
 
 // Reorderable sections of the Events page, in their default order.
@@ -213,7 +213,7 @@ export default function Events() {
     const [vidhiSpeakers, setVidhiSpeakers] = useState(VIDHI_SPEAKERS);
     const [vidhiYear, setVidhiYear] = useState(null);
     const [summitSpeakers, setSummitSpeakers] = useState(SUMMIT_SPEAKERS);
-    const [flagship, setFlagship] = useState([]);
+    const [flagshipData, setFlagshipData] = useState(null);
     const [settings, setSettings] = useState({});
     useEffect(() => {
         fetchSiteContent().then(setSite).catch(() => {});
@@ -231,7 +231,7 @@ export default function Events() {
             })
             .catch(() => {});
         fetchCollection("events_flagship")
-            .then((d) => setFlagship(d?.items || []))
+            .then(setFlagshipData)
             .catch(() => {});
     }, []);
     const resolveImg = (e) =>
@@ -240,7 +240,7 @@ export default function Events() {
                 (e.id === "law-ai-tech-summit" && site.events_summit_banner) ||
                 e.image,
         ) || e.image;
-    const flagshipEvents = (flagship.length ? flagship : FLAGSHIP_EVENTS).map((e) => ({
+    const flagshipEvents = resolveCollection(flagshipData, FLAGSHIP_EVENTS).map((e) => ({
         ...e,
         chips: Array.isArray(e.chips)
             ? e.chips

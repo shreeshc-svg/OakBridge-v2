@@ -1417,10 +1417,13 @@ class CollectionSet(BaseModel):
 
 @public_router.get("/collections/{key}")
 async def get_collection(key: str):
+    # "configured" = an admin has saved this collection at least once (even to an
+    # empty list). The storefront uses saved items verbatim when configured, so an
+    # intentionally-cleared section stays cleared instead of reverting to defaults.
     doc = await db.content_collections.find_one({"key": key}, {"_id": 0})
     if doc and doc.get("items") is not None:
-        return {"key": key, "items": doc["items"]}
-    return {"key": key, "items": COLLECTION_DEFAULTS.get(key, [])}
+        return {"key": key, "items": doc["items"], "configured": True}
+    return {"key": key, "items": COLLECTION_DEFAULTS.get(key, []), "configured": False}
 
 
 @admin_router.put("/collections/{key}")

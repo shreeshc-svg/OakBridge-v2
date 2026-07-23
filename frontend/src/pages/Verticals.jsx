@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { fetchSiteContent, fetchCollection, mediaUrl } from "../lib/api";
+import { fetchSiteContent, fetchCollection, resolveCollection, mediaUrl } from "../lib/api";
 import Breadcrumbs from "../components/Breadcrumbs";
 import Seo from "../components/Seo";
 import { Link } from "react-router-dom";
@@ -150,11 +150,11 @@ function VerticalCard({ v, reverse, site }) {
 
 export default function Verticals() {
     const [site, setSite] = useState({});
-    const [cards, setCards] = useState([]);
+    const [cardsData, setCardsData] = useState(null);
     useEffect(() => {
         fetchSiteContent().then(setSite).catch(() => {});
         fetchCollection("page_verticals")
-            .then((d) => setCards(d?.items || []))
+            .then(setCardsData)
             .catch(() => {});
     }, []);
 
@@ -164,7 +164,7 @@ export default function Verticals() {
         highlight: site.wwd_highlight ?? DEFAULT_HERO.highlight,
         body: site.wwd_body || DEFAULT_HERO.body,
     };
-    const verticals = cards.length ? cards : DEFAULT_VERTICALS;
+    const verticals = resolveCollection(cardsData, DEFAULT_VERTICALS);
     // Four tiles for the hero. Falls back to the old single hero image if a
     // vertical has no picture of its own, so the grid is never patchy.
     const heroFallback = mediaUrl(site.wwd_hero) || site.wwd_hero || DEFAULT_HERO_IMAGE;

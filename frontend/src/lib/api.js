@@ -141,6 +141,13 @@ export const adminUploadBookPreview = (id, file) => {
 };
 export const adminRemoveBookPreview = (id) => api.delete(`/admin/books/${id}/preview`).then((r) => r.data);
 export const fetchCollection = (key) => api.get(`/collections/${key}`).then((r) => r.data);
+// Resolve a collection fetch to the list to render. Once an admin has saved the
+// collection ("configured"), its items win even when empty — so a section the
+// admin intentionally cleared stays cleared. Only an untouched collection falls
+// back to the code defaults. Pass the raw fetchCollection result (or null while
+// loading) as `d`.
+export const resolveCollection = (d, defaults = []) =>
+    d && d.configured ? (Array.isArray(d.items) ? d.items : []) : (d && Array.isArray(d.items) && d.items.length ? d.items : defaults);
 export const adminSaveCollection = (key, items) =>
     api.put(`/admin/collections/${key}`, { items }).then((r) => r.data);
 export const fetchSettings = () => api.get("/settings").then((r) => r.data);

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { GraduationCap, BookOpen, Award, MonitorPlay } from "lucide-react";
 import ComingSoon from "./ComingSoon";
-import { fetchSiteContent, fetchCollection } from "../lib/api";
+import { fetchSiteContent, fetchCollection, resolveCollection } from "../lib/api";
 
 // Icons referenced by name so admin-editable features can pick one.
 const ICONS = { MonitorPlay, GraduationCap, BookOpen, Award };
@@ -29,16 +29,16 @@ const DEFAULT_STATS = [
 
 export default function Academy() {
     const [site, setSite] = useState({});
-    const [features, setFeatures] = useState([]);
-    const [stats, setStats] = useState([]);
+    const [featData, setFeatData] = useState(null);
+    const [statsData, setStatsData] = useState(null);
 
     useEffect(() => {
         fetchSiteContent().then(setSite).catch(() => {});
-        fetchCollection("page_ac_features").then((d) => setFeatures(d?.items || [])).catch(() => {});
-        fetchCollection("page_ac_stats").then((d) => setStats(d?.items || [])).catch(() => {});
+        fetchCollection("page_ac_features").then(setFeatData).catch(() => {});
+        fetchCollection("page_ac_stats").then(setStatsData).catch(() => {});
     }, []);
 
-    const resolvedFeatures = (features.length ? features : DEFAULT_FEATURES).map((f) => ({
+    const resolvedFeatures = resolveCollection(featData, DEFAULT_FEATURES).map((f) => ({
         ...f,
         icon: ICONS[f.icon] || MonitorPlay,
     }));
@@ -52,7 +52,7 @@ export default function Academy() {
             body={site.ac_body || DEFAULTS.body}
             waitlistSource="academy-waitlist"
             emailPlaceholder="you@firm.com"
-            stats={stats.length ? stats : DEFAULT_STATS}
+            stats={resolveCollection(statsData, DEFAULT_STATS)}
             featuresKicker={site.ac_features_kicker || DEFAULTS.features_kicker}
             featuresHeadline={site.ac_features_headline || DEFAULTS.features_headline}
             features={resolvedFeatures}

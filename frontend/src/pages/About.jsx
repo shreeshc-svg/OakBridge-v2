@@ -3,7 +3,7 @@ import Breadcrumbs from "../components/Breadcrumbs";
 import Seo from "../components/Seo";
 import { Link } from "react-router-dom";
 import { ArrowUpRight } from "lucide-react";
-import { fetchSiteContent, fetchCollection, mediaUrl } from "../lib/api";
+import { fetchSiteContent, fetchCollection, resolveCollection, mediaUrl } from "../lib/api";
 
 /**
  * Renders admin-editable copy. Text wrapped in *asterisks* is shown in the
@@ -63,15 +63,15 @@ const DEFAULT_TEAM = [
 
 export default function About() {
     const [site, setSite] = useState({});
-    const [milestones, setMilestones] = useState([]);
-    const [columns, setColumns] = useState([]);
-    const [team, setTeam] = useState([]);
+    const [milestonesData, setMilestonesData] = useState(null);
+    const [columnsData, setColumnsData] = useState(null);
+    const [teamData, setTeamData] = useState(null);
 
     useEffect(() => {
         fetchSiteContent().then(setSite).catch(() => {});
-        fetchCollection("page_about_milestones").then((d) => setMilestones(d?.items || [])).catch(() => {});
-        fetchCollection("page_about_columns").then((d) => setColumns(d?.items || [])).catch(() => {});
-        fetchCollection("page_about_team").then((d) => setTeam(d?.items || [])).catch(() => {});
+        fetchCollection("page_about_milestones").then(setMilestonesData).catch(() => {});
+        fetchCollection("page_about_columns").then(setColumnsData).catch(() => {});
+        fetchCollection("page_about_team").then(setTeamData).catch(() => {});
     }, []);
 
     const c = {
@@ -82,9 +82,9 @@ export default function About() {
         timeline_overline: site.about_timeline_overline || DEFAULTS.timeline_overline,
         timeline_title: site.about_timeline_title || DEFAULTS.timeline_title,
     };
-    const items = milestones.length ? milestones : DEFAULT_MILESTONES;
-    const cols = columns.length ? columns : DEFAULT_COLUMNS;
-    const people = team.length ? team : DEFAULT_TEAM;
+    const items = resolveCollection(milestonesData, DEFAULT_MILESTONES);
+    const cols = resolveCollection(columnsData, DEFAULT_COLUMNS);
+    const people = resolveCollection(teamData, DEFAULT_TEAM);
 
     return (
         <div data-testid="about-page">
