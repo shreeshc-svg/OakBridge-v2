@@ -10,7 +10,7 @@ editable from Admin -> Legal, which overrides these defaults.
 """
 
 _ENTITY = "Oakbridge Publishing Pvt. Ltd."
-_ADDR = "934, 9th Floor, Tower B3, Spaze iTech Park, Sector 49, Gurugram 122018, Haryana, India"
+_ADDR = "934, Tower B3, Sohna–Gurgaon Rd, Sector 49, Spaze iTech Park, Gurugram, Haryana 122018, India"
 _GSTIN = "06AACCO5406D1ZW"
 _EMAIL = "info@oakbridge.in"
 _PHONE = "+91 88003 37299"

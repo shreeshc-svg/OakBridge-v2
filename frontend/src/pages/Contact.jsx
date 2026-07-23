@@ -176,9 +176,9 @@ export default function Contact() {
                                     rel="noreferrer"
                                     className="hover:text-[#CC0033]"
                                 >
-                                    B3 Tower, Spaze iTech Park
+                                    934, Tower B3,
                                     <br />
-                                    934, Sohna–Gurgaon Rd, Sector 49
+                                    Sohna–Gurgaon Rd, Sector 49, Spaze iTech Park
                                     <br />
                                     Gurugram, Haryana 122018, India
                                 </a>

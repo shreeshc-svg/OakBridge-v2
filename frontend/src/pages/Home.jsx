@@ -6,7 +6,6 @@ import BookCard from "../components/BookCard";
 import BestsellerCarousel from "../components/BestsellerCarousel";
 import {
     fetchBooks,
-    fetchCategories,
     fetchFeatured,
     fetchNewReleases,
     fetchBestsellers,
@@ -17,16 +16,17 @@ import {
 } from "../lib/api";
 import { hiddenSet } from "../lib/sections";
 
-const CATEGORY_EMOJI = {
-    law: "01",
-    tax: "02",
-    business: "03",
-    academic: "04",
-    professional: "05",
-    "test-prep": "06",
-    children: "07",
-    "general-reference": "08",
-};
+// The five homepage "Imprint" tiles. Each is fully editable in Admin → Pages
+// (name + image + link). Defaults below mirror what was live so nothing changes
+// visually until an admin overrides a field. Image slots read site content;
+// coffee_table/curated keep their original slot keys for backward-compat.
+const IMPRINT_TILES = [
+    { key: "academic", name: "Academic", link: "/books?category=academic", imgSlot: "home_imprint_academic_img", image: "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=800&q=80" },
+    { key: "professional", name: "Professional", link: "/books?category=professional", imgSlot: "home_imprint_professional_img", image: "https://images.unsplash.com/photo-1589994965851-a8f479c573a9?auto=format&fit=crop&w=800&q=80" },
+    { key: "bgr", name: "Business & General", link: "/books?category=bgr", imgSlot: "home_imprint_bgr_img", image: "https://images.unsplash.com/photo-1507842217343-583bb7270b66?auto=format&fit=crop&w=800&q=80" },
+    { key: "coffee_table", name: "Coffee Table Books", link: "/books", imgSlot: "home_imprint_coffee_table", image: "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=800&q=80" },
+    { key: "curated", name: "Bespoke and Curated Works", link: "/books", imgSlot: "home_imprint_curated", image: "https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&w=800&q=80" },
+];
 
 const VERTICALS = [
     {
@@ -165,7 +165,6 @@ function TestimonialsCarousel({ items, overline, title }) {
 }
 
 export default function Home() {
-    const [categories, setCategories] = useState([]);
     const [featured, setFeatured] = useState([]);
     const [newRel, setNewRel] = useState([]);
     const [fallback, setFallback] = useState([]);
@@ -175,7 +174,6 @@ export default function Home() {
     const [testimonials, setTestimonials] = useState([]);
 
     useEffect(() => {
-        fetchCategories().then(setCategories).catch(() => {});
         fetchSiteContent().then(setSite).catch(() => {});
         fetchFeatured().then(setFeatured).catch(() => {});
         fetchNewReleases().then(setNewRel).catch(() => {});
@@ -432,36 +430,27 @@ export default function Home() {
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 md:gap-5">
-                    {categories.map((cat) => {
+                    {IMPRINT_TILES.map((imp) => {
+                        const name = site[`home_imprint_${imp.key}_name`] || imp.name;
+                        const link = site[`home_imprint_${imp.key}_link`] || imp.link;
+                        const image = mediaUrl(site[imp.imgSlot]) || imp.image;
                         return (
                             <Link
-                                key={cat.id}
-                                to={`/books?category=${cat.id}`}
-                                data-testid={`category-tile-${cat.id}`}
-                                className="group relative block overflow-hidden bg-[#F5F7FA] border border-[#E5E7EB] aspect-[3/4] hover:border-[#002B5C] transition-colors"
+                                key={imp.key}
+                                to={link}
+                                data-testid={`imprint-tile-${imp.key}`}
+                                className="group relative block overflow-hidden bg-[#002B5C] border border-[#E5E7EB] aspect-[3/4] hover:border-[#002B5C] transition-colors"
                             >
                                 <img
-                                    src={cat.image}
-                                    alt={cat.name}
+                                    src={image}
+                                    alt={name}
                                     className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                                 />
                                 <div className="absolute inset-0 bg-gradient-to-t from-[#002B5C]/90 via-[#002B5C]/30 to-transparent" />
                                 <div className="absolute inset-0 p-5 flex flex-col justify-between text-[#FFFFFF]">
-                                    <div className="flex justify-between items-start">
-                                        <span className="font-mono text-[10px] text-white/70">
-                                            {CATEGORY_EMOJI[cat.id] || "—"} /{" "}
-                                            {String(
-                                                categories.length,
-                                            ).padStart(2, "0")}
-                                        </span>
-                                        <span className="overline !text-[9px] !text-white/70">
-                                            {cat.book_count} titles
-                                        </span>
-                                    </div>
+                                    <span className="overline !text-[9px] !text-[#F59E0B]">Imprint</span>
                                     <div>
-                                        <h3 className="font-serif text-xl leading-tight">
-                                            {cat.name}
-                                        </h3>
+                                        <h3 className="font-serif text-xl leading-tight">{name}</h3>
                                         <div className="mt-3 inline-flex items-center gap-1 text-[11px] font-mono uppercase tracking-widest border-b border-[#F59E0B] pb-0.5 text-[#F59E0B]">
                                             Explore
                                             <ArrowUpRight size={11} strokeWidth={1.5} />
@@ -471,44 +460,6 @@ export default function Home() {
                             </Link>
                         );
                     })}
-                    {[
-                        {
-                            name: "Coffee Table Books",
-                            tag: "Imprint",
-                            slot: "home_imprint_coffee_table",
-                            image: "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=800&q=80",
-                        },
-                        {
-                            name: "Bespoke and Curated Works",
-                            tag: "Imprint",
-                            slot: "home_imprint_curated",
-                            image: "https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&w=800&q=80",
-                        },
-                    ].map((imp) => (
-                        <Link
-                            key={imp.name}
-                            to="/books"
-                            data-testid={`imprint-tile-${imp.name.toLowerCase().replace(/\s+/g, "-")}`}
-                            className="group relative block overflow-hidden bg-[#002B5C] border border-[#E5E7EB] aspect-[3/4] hover:border-[#002B5C] transition-colors"
-                        >
-                            <img
-                                src={mediaUrl(site[imp.slot]) || imp.image}
-                                alt={imp.name}
-                                className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                            />
-                            <div className="absolute inset-0 bg-gradient-to-t from-[#002B5C]/90 via-[#002B5C]/30 to-transparent" />
-                            <div className="absolute inset-0 p-5 flex flex-col justify-between text-[#FFFFFF]">
-                                <span className="overline !text-[9px] !text-[#F59E0B]">{imp.tag}</span>
-                                <div>
-                                    <h3 className="font-serif text-xl leading-tight">{imp.name}</h3>
-                                    <div className="mt-3 inline-flex items-center gap-1 text-[11px] font-mono uppercase tracking-widest border-b border-[#F59E0B] pb-0.5 text-[#F59E0B]">
-                                        Explore
-                                        <ArrowUpRight size={11} strokeWidth={1.5} />
-                                    </div>
-                                </div>
-                            </div>
-                        </Link>
-                    ))}
                 </div>
             </section>
             )}
@@ -564,7 +515,7 @@ export default function Home() {
                     </div>
                     <div className="lg:col-span-8 grid grid-cols-1 md:grid-cols-2 gap-5">
                         {[
-                            { num: "01", icon: Briefcase, title: "For Firms", tagline: "Bespoke & branded", text: "Bespoke handbooks, corporate histories and practitioner references — co-created with your in-house teams for training, compliance and brand." },
+                            { num: "01", icon: Briefcase, title: "For Firms", tagline: "Bespoke & branded", text: "Bespoke handbooks, corporate histories and practitioner references — co-created with your in-house teams for training, compliance and brand building." },
                             { num: "02", icon: Building2, title: "For Institutions", tagline: "Adoption & licensing", text: "Whole-campus adoption programmes, library-grade editions and custom imprints for schools, universities and research bodies." },
                             { num: "03", icon: Users, title: "For Professionals", tagline: "Practice references", text: "Authoritative Law, Tax, Business and Technology titles — ready-reckoners and updates written by leading practitioners." },
                             { num: "04", icon: GraduationCap, title: "For Educators", tagline: "Classroom-ready", text: "Instructor review copies, lesson plans and classroom-ready ancillaries mapped to current curricula, plus customized bundle offerings." },

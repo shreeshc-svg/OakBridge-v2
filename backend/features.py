@@ -1686,8 +1686,8 @@ async def _chat_system_prompt(orders_ctx: str = "", books_ctx: str = "") -> str:
         "or defective items. Details on /shipping-policy.\n"
         "- A GST tax invoice (PDF) is emailed with every order confirmation.\n"
         "- Educators can request a free desk copy from any book page.\n"
-        "- Contact: info@oakbridge.in, phone +91 88003 37299, B3 Tower, Spaze iTech Park, Sector 49, "
-        "Gurugram, Haryana 122018.\n"
+        "- Contact: info@oakbridge.in, phone +91 88003 37299, 934, Tower B3, Sohna–Gurgaon Rd, "
+        "Sector 49, Spaze iTech Park, Gurugram, Haryana 122018.\n"
         f"- Category ids (for filter links): {cat_map}\n"
         + books_block
         + order_block +

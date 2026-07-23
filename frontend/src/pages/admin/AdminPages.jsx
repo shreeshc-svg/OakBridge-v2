@@ -206,10 +206,22 @@ export default function AdminPages() {
                         <TextSlotRow label="Stat 3 — value (e.g. Global)" value={site.home_stat3_value} onSave={(v) => saveSite("home_stat3_value", v)} />
                         <TextSlotRow label="Stat 3 — label" value={site.home_stat3_label} onSave={(v) => saveSite("home_stat3_label", v)} />
                     </div>
-                    <div className="overline !text-[10px] mt-6 mb-2">Imprint tiles (Five Imprints section)</div>
-                    <div className="space-y-3">
-                        <SlotRow label="Coffee Table Books" value={site.home_imprint_coffee_table} onSave={(v) => saveSite("home_imprint_coffee_table", v)} />
-                        <SlotRow label="Bespoke and Curated Works" value={site.home_imprint_curated} onSave={(v) => saveSite("home_imprint_curated", v)} />
+                    <div className="overline !text-[10px] mt-6 mb-2">Five Imprint tiles — name, image &amp; link</div>
+                    <div className="space-y-6">
+                        {[
+                            { key: "academic", label: "Academic", imgSlot: "home_imprint_academic_img" },
+                            { key: "professional", label: "Professional", imgSlot: "home_imprint_professional_img" },
+                            { key: "bgr", label: "Business & General", imgSlot: "home_imprint_bgr_img" },
+                            { key: "coffee_table", label: "Coffee Table Books", imgSlot: "home_imprint_coffee_table" },
+                            { key: "curated", label: "Bespoke and Curated Works", imgSlot: "home_imprint_curated" },
+                        ].map((t, i) => (
+                            <div key={t.key} className="space-y-3 border-b border-[#E5E7EB] pb-5 last:border-0">
+                                <div className="overline !text-[10px] !text-[#002B5C]">Tile {i + 1} — {t.label}</div>
+                                <TextSlotRow label="Name" value={site[`home_imprint_${t.key}_name`]} onSave={(v) => saveSite(`home_imprint_${t.key}_name`, v)} />
+                                <TextSlotRow label="Link (e.g. /books?category=academic)" value={site[`home_imprint_${t.key}_link`]} onSave={(v) => saveSite(`home_imprint_${t.key}_link`, v)} />
+                                <SlotRow label="Tile image" value={site[t.imgSlot]} onSave={(v) => saveSite(t.imgSlot, v)} />
+                            </div>
+                        ))}
                     </div>
                     <div className="overline !text-[10px] mb-2 mt-8 pt-8 border-t border-[#E5E7EB]">Testimonials (add / edit / reorder)</div>
                     <ListEditor
@@ -315,6 +327,32 @@ export default function AdminPages() {
                 </PageGroup>
 
                 <PageGroup title="Solutions" path="/solutions/:slug">
+                    <div className="overline !text-[10px] mb-2">Index page heading (/solutions)</div>
+                    <div className="space-y-3">
+                        <TextSlotRow label="Overline" value={site.solutions_index_overline} onSave={(v) => saveSite("solutions_index_overline", v)} />
+                        <TextSlotRow label="Headline (line breaks allowed)" value={site.solutions_index_title} onSave={(v) => saveSite("solutions_index_title", v)} multiline />
+                    </div>
+                    <div className="overline !text-[10px] mb-2 mt-8 pt-8 border-t border-[#E5E7EB]">Shared labels (detail pages)</div>
+                    <div className="space-y-3">
+                        <TextSlotRow label="&quot;What's included&quot; label" value={site.solutions_included_label} onSave={(v) => saveSite("solutions_included_label", v)} />
+                        <TextSlotRow label="Contact button label" value={site.solutions_cta_label} onSave={(v) => saveSite("solutions_cta_label", v)} />
+                    </div>
+                    <div className="overline !text-[10px] mb-2 mt-8 pt-8 border-t border-[#E5E7EB]">Solution pages — text (one bullet per line in Features)</div>
+                    <div className="mt-2">
+                        <ListEditor
+                            collectionKey="page_solutions"
+                            defaults={SOLUTIONS_DEFAULT}
+                            fields={[
+                                { key: "slug", label: "Slug (schools / higher-ed / educators)" },
+                                { key: "kicker", label: "Kicker (small overline)" },
+                                { key: "title", label: "Title" },
+                                { key: "lede", label: "Intro paragraph", type: "textarea" },
+                                { key: "features", label: "Features — one per line", type: "textarea" },
+                            ]}
+                            blank={{ slug: "", kicker: "", title: "", lede: "", features: "" }}
+                        />
+                    </div>
+                    <div className="overline !text-[10px] mb-2 mt-8 pt-8 border-t border-[#E5E7EB]">Solution images</div>
                     <div className="space-y-3">
                         <SlotRow label="For Schools" value={site["solutions_schools"]} onSave={(v) => saveSite("solutions_schools", v)} />
                         <SlotRow label="For Colleges" value={site["solutions_higher-ed"]} onSave={(v) => saveSite("solutions_higher-ed", v)} />
@@ -624,6 +662,14 @@ const ABOUT_MILESTONES_DEFAULT = [
 const ABOUT_COLUMNS_DEFAULT = [
     { id: "careers", overline: "Careers", title: "Join our list.", text: "We hire editors, designers, and field specialists who believe publishing is a craft of public service. Send us your work.", link_label: "careers@oakbridge.in", link_to: "/contact" },
     { id: "press", overline: "Press", title: "Media inquiries.", text: "For review copies, interviews with our authors or editorial briefings, reach out to our press team.", link_label: "press@oakbridge.in", link_to: "/contact" },
+];
+
+// One item per solution page. "slug" must match the URL (/solutions/<slug>) and
+// the image slot (solutions_<slug>). Features: one bullet per line.
+const SOLUTIONS_DEFAULT = [
+    { slug: "schools", kicker: "K-12 Programmes", title: "For Schools", lede: "Whole-school textbook adoption programmes aligned with CBSE, ICSE and State Boards — with teacher training, digital supplements and periodic curriculum updates.", features: "CBSE, ICSE & NEP 2020 aligned editions\nTeacher's manuals and lesson plans included\nQuarterly in-service training workshops\nDigital companion: practice bank + video lessons\nVolume discounts for district-wide adoption" },
+    { slug: "higher-ed", kicker: "Higher Education", title: "For Colleges", lede: "Rigorous course texts for undergraduate and postgraduate programmes — including custom courseware developed in partnership with your faculty.", features: "Custom courseware bundled for your syllabus\nIndian case studies across business, law & tech\nDigital lab manuals with live datasets\nInstructor review copies within 5 working days\nDedicated campus account manager" },
+    { slug: "educators", kicker: "Teacher Resources", title: "For Educators", lede: "We equip educators with the tools to teach better — review copies, lesson plans, assessment banks and a growing community of practice. We also provide our educators with customized bundles.", features: "Free instructor review copies for adoption consideration\nDownloadable lesson plans and rubrics\nPrivate educator community and quarterly meet-ups\nEarly access to new editions\nCo-authoring invitations for subject experts" },
 ];
 
 

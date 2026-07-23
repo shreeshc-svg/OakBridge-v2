@@ -211,6 +211,7 @@ function SpeakerCard({ s }) {
 export default function Events() {
     const [site, setSite] = useState({});
     const [vidhiSpeakers, setVidhiSpeakers] = useState(VIDHI_SPEAKERS);
+    const [vidhiYear, setVidhiYear] = useState(null);
     const [summitSpeakers, setSummitSpeakers] = useState(SUMMIT_SPEAKERS);
     const [flagship, setFlagship] = useState([]);
     const [settings, setSettings] = useState({});
@@ -270,6 +271,19 @@ export default function Events() {
         }, 6000);
         return () => clearInterval(timer);
     }, [HERO_BANNERS.length]);
+
+    // Vidhi speakers grouped by year (newest first). Falls back to a flat list
+    // when the data carries no year (e.g. the built-in placeholders).
+    const vidhiYears = Array.from(
+        new Set(vidhiSpeakers.map((s) => String(s.year || "")).filter(Boolean)),
+    ).sort((a, b) => Number(b) - Number(a));
+    const activeVidhiYear =
+        vidhiYears.length && (vidhiYear == null || !vidhiYears.includes(vidhiYear))
+            ? vidhiYears[0]
+            : vidhiYear;
+    const vidhiShown = vidhiYears.length
+        ? vidhiSpeakers.filter((s) => String(s.year) === String(activeVidhiYear))
+        : vidhiSpeakers;
 
     // Each reorderable section as a keyed element; the hero stays fixed at top.
     const sectionMap = {
@@ -414,9 +428,32 @@ export default function Events() {
                         View full speaker list <ArrowUpRight size={14} strokeWidth={1.5} />
                     </a>
                 </div>
+                {vidhiYears.length > 1 && (
+                    <div className="flex flex-wrap gap-2 mb-10" data-testid="vidhi-year-tabs">
+                        {vidhiYears.map((y) => {
+                            const active = String(y) === String(activeVidhiYear);
+                            return (
+                                <button
+                                    key={y}
+                                    type="button"
+                                    onClick={() => setVidhiYear(y)}
+                                    aria-pressed={active}
+                                    data-testid={`vidhi-year-${y}`}
+                                    className={`px-5 py-2 text-sm font-medium border transition-colors ${
+                                        active
+                                            ? "bg-[#002B5C] text-white border-[#002B5C]"
+                                            : "bg-white text-[#002B5C] border-[#E5E7EB] hover:border-[#002B5C]"
+                                    }`}
+                                >
+                                    {y}
+                                </button>
+                            );
+                        })}
+                    </div>
+                )}
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-6 md:gap-8">
-                    {vidhiSpeakers.map((s) => (
-                        <SpeakerCard key={s.name} s={s} />
+                    {vidhiShown.map((s, i) => (
+                        <SpeakerCard key={`${s.name}-${i}`} s={s} />
                     ))}
                 </div>
             </section>

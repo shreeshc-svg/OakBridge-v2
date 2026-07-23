@@ -54,8 +54,16 @@ def main() -> int:
         dbname = input(f"Database name [{guess}]: ").strip() or guess
 
     items = json.load(open(args.file, encoding="utf-8"))
-    # store only the fields the storefront uses
-    docs = [{"name": r["name"], "role": r["role"], "photo": r["photo"]} for r in items]
+    # store only the fields the storefront uses (name, role, photo, year)
+    docs = [
+        {
+            "name": r["name"],
+            "role": r["role"],
+            "photo": r["photo"],
+            "year": str(r.get("year") or ""),
+        }
+        for r in items
+    ]
 
     client = MongoClient(mongo, serverSelectionTimeoutMS=15000)
     client.admin.command("ping")
