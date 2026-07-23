@@ -338,6 +338,7 @@ export default function Events() {
             src: mediaUrl(site.events_summit_banner) || ASSET("/api/files/oakbridge/events/summit-banner.webp"),
             alt: "India Law, AI & Tech Summit",
             caption: "India Law, AI & Tech Summit · Where Law Meets Innovation",
+            fit: "contain",
         },
     ];
     const [heroIdx, setHeroIdx] = useState(0);
@@ -616,7 +617,7 @@ export default function Events() {
                             src={b.src}
                             alt={b.alt}
                             data-testid={`events-hero-banner-${b.id}`}
-                            className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-[1200ms] ease-in-out ${i === heroIdx ? "opacity-100" : "opacity-0"}`}
+                            className={`absolute inset-0 w-full h-full transition-opacity duration-[1200ms] ease-in-out ${b.fit === "contain" ? "object-contain object-right" : "object-cover"} ${i === heroIdx ? "opacity-100" : "opacity-0"}`}
                         />
                     ))}
                     <div className="absolute inset-0 bg-gradient-to-r from-[#002B5C]/95 via-[#002B5C]/70 to-[#002B5C]/30" />
