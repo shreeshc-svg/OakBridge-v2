@@ -3,7 +3,8 @@ import { createPortal } from "react-dom";
 import Breadcrumbs from "../components/Breadcrumbs";
 import Seo from "../components/Seo";
 import { X, Play, Image as ImageIcon } from "lucide-react";
-import { fetchCollection, fetchSiteContent, mediaUrl } from "../lib/api";
+import { fetchCollection, fetchSiteContent, fetchSettings, mediaUrl } from "../lib/api";
+import { hiddenSet } from "../lib/sections";
 
 function renderRich(text) {
     return String(text || "")
@@ -30,6 +31,7 @@ function parseVideo(url) {
 export default function MediaGallery() {
     const [items, setItems] = useState([]);
     const [site, setSite] = useState({});
+    const [settings, setSettings] = useState({});
     const [active, setActive] = useState(null); // item open in lightbox
 
     useEffect(() => {
@@ -37,7 +39,10 @@ export default function MediaGallery() {
             .then((d) => setItems((d?.items || []).filter((x) => x && x.enabled !== false && x.url)))
             .catch(() => {});
         fetchSiteContent().then(setSite).catch(() => {});
+        fetchSettings().then(setSettings).catch(() => {});
     }, []);
+
+    const hidden = hiddenSet(settings);
 
     useEffect(() => {
         if (!active) return undefined;
@@ -103,6 +108,7 @@ export default function MediaGallery() {
                 </p>
             </section>
 
+            {!hidden.has("media.gallery") && (
             <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-14">
                 {items.length === 0 ? (
                     <div className="border border-dashed border-[#E5E7EB] p-16 text-center text-[#4B5563]">
@@ -115,6 +121,7 @@ export default function MediaGallery() {
                     </div>
                 )}
             </section>
+            )}
 
             {active && createPortal(
                 <div className="fixed inset-0 z-[100] h-[100dvh] bg-[#002B5C]/95 backdrop-blur-sm flex flex-col" role="dialog" aria-modal="true" onClick={() => setActive(null)}>

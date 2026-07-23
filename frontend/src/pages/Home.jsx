@@ -15,6 +15,7 @@ import {
     fetchCollection,
     mediaUrl,
 } from "../lib/api";
+import { hiddenSet } from "../lib/sections";
 
 const CATEGORY_EMOJI = {
     law: "01",
@@ -214,6 +215,7 @@ export default function Home() {
     })();
     const bestsellersEnabled = settings?.home_bestsellers_enabled !== false; // default on
     const bestsellersSpeed = Number(settings?.home_bestsellers_speed) || 40; // px/sec
+    const hidden = hiddenSet(settings); // admin section show/hide
 
     // Compose the new-releases row: new releases first, then featured, then fallback — dedup by id and exclude any book already shown in the bestsellers row. Max 7.
     const newReleasesRow = (() => {
@@ -325,6 +327,7 @@ export default function Home() {
             </section>
 
             {/* ============== BUSINESS VERTICALS (prominent, directly after hero) ============== */}
+            {!hidden.has("home.businesses") && (
             <section
                 data-testid="home-verticals"
                 className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 md:py-24 border-b border-[#E5E7EB]"
@@ -407,8 +410,10 @@ export default function Home() {
                     ))}
                 </div>
             </section>
+            )}
 
-            {/* ============== CATEGORIES BENTO ============== */}
+            {/* ============== CATEGORIES BENTO (Imprints) ============== */}
+            {!hidden.has("home.imprints") && (
             <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-24 md:py-32">
                 <div className="flex items-end justify-between mb-12">
                     <div>
@@ -506,9 +511,10 @@ export default function Home() {
                     ))}
                 </div>
             </section>
+            )}
 
             {/* ============== HOT OFF PRESS (new releases) ============== */}
-            {newReleasesRow.length > 0 && (
+            {!hidden.has("home.hot_off_press") && newReleasesRow.length > 0 && (
             <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 md:py-28 bg-[#F5F7FA] border-y border-[#E5E7EB]">
                 <div className="flex items-end justify-between mb-12">
                     <div>
@@ -534,6 +540,7 @@ export default function Home() {
             )}
 
             {/* ============== SOLUTIONS ============== */}
+            {!hidden.has("home.solutions") && (
             <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-24 md:py-32">
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
                     <div className="lg:col-span-4">
@@ -599,9 +606,10 @@ export default function Home() {
                     </div>
                 </div>
             </section>
+            )}
 
             {/* ============== BESTSELLERS ============== */}
-            {bestsellersEnabled && carouselBooks.length > 0 && (
+            {!hidden.has("home.bestsellers") && bestsellersEnabled && carouselBooks.length > 0 && (
                 <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 md:py-28 border-t border-[#E5E7EB]">
                     <div className="flex items-end justify-between mb-12">
                         <div>
@@ -623,7 +631,7 @@ export default function Home() {
             )}
 
             {/* ============== TESTIMONIALS (carousel) ============== */}
-            {testimonials.length > 0 && (
+            {!hidden.has("home.testimonials") && testimonials.length > 0 && (
                 <TestimonialsCarousel
                     items={testimonials}
                     overline={site.home_testimonials_overline}
@@ -631,7 +639,8 @@ export default function Home() {
                 />
             )}
 
-            {/* ============== EDITORIAL CTA ============== */}
+            {/* ============== EDITORIAL CTA (Manifesto) ============== */}
+            {!hidden.has("home.manifesto") && (
             <section className="relative px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-24 md:py-32 bg-[#002B5C] text-[#FFFFFF] overflow-hidden">
                 <div className="relative z-10 max-w-3xl">
                     <div className="overline !text-white/50">Manifesto</div>
@@ -653,6 +662,7 @@ export default function Home() {
                     </div>
                 </div>
             </section>
+            )}
         </div>
     );
 }

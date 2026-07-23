@@ -2,12 +2,14 @@ import React, { useEffect, useRef, useState } from "react";
 import Breadcrumbs from "../components/Breadcrumbs";
 import Seo from "../components/Seo";
 import { CheckCircle2, Briefcase, MapPin, Upload, FileText } from "lucide-react";
-import { fetchJobs, applyForJob, fetchSiteContent, formatApiError } from "../lib/api";
+import { fetchJobs, applyForJob, fetchSiteContent, fetchSettings, formatApiError } from "../lib/api";
+import { hiddenSet } from "../lib/sections";
 import { toast } from "sonner";
 
 export default function Careers() {
     const [jobs, setJobs] = useState([]);
     const [site, setSite] = useState({});
+    const [settings, setSettings] = useState({});
     const [form, setForm] = useState({ name: "", phone: "", email: "", role: "" });
     const [cv, setCv] = useState(null);
     const [done, setDone] = useState(false);
@@ -19,7 +21,10 @@ export default function Careers() {
     useEffect(() => {
         fetchJobs().then((d) => setJobs((d?.items || []).filter((j) => j && j.enabled !== false))).catch(() => {});
         fetchSiteContent().then(setSite).catch(() => {});
+        fetchSettings().then(setSettings).catch(() => {});
     }, []);
+
+    const hidden = hiddenSet(settings);
 
     const onChange = (e) => setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
 
@@ -80,6 +85,7 @@ export default function Careers() {
 
             <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-16 grid grid-cols-1 lg:grid-cols-12 gap-12">
                 {/* Open roles */}
+                {!hidden.has("careers.roles") && (
                 <div className="lg:col-span-6">
                     <div className="overline">Open roles</div>
                     <h2 className="font-serif text-3xl mt-2 text-[#002B5C]">
@@ -121,8 +127,10 @@ export default function Careers() {
                         )}
                     </div>
                 </div>
+                )}
 
                 {/* Application form */}
+                {!hidden.has("careers.form") && (
                 <div className="lg:col-span-6" ref={formRef}>
                     {done ? (
                         <div data-testid="careers-done" className="border border-[#002B5C] p-8 text-center">
@@ -197,6 +205,7 @@ export default function Careers() {
                         </form>
                     )}
                 </div>
+                )}
             </section>
         </div>
     );

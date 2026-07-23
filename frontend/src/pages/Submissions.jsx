@@ -3,7 +3,8 @@ import Breadcrumbs from "../components/Breadcrumbs";
 import Seo from "../components/Seo";
 import { Link } from "react-router-dom";
 import { CheckCircle2, FileText } from "lucide-react";
-import { submitManuscript, fetchSiteContent, formatApiError } from "../lib/api";
+import { submitManuscript, fetchSiteContent, fetchSettings, formatApiError } from "../lib/api";
+import { hiddenSet } from "../lib/sections";
 import { toast } from "sonner";
 
 const asLines = (v, fallback) => {
@@ -38,10 +39,14 @@ export default function Submissions() {
     const [done, setDone] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [site, setSite] = useState({});
+    const [settings, setSettings] = useState({});
 
     useEffect(() => {
         fetchSiteContent().then(setSite).catch(() => {});
+        fetchSettings().then(setSettings).catch(() => {});
     }, []);
+
+    const hidden = hiddenSet(settings);
 
     const onChange = (e) =>
         setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
@@ -84,6 +89,7 @@ export default function Submissions() {
             </section>
 
             <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-16 grid grid-cols-1 lg:grid-cols-12 gap-12">
+                {!hidden.has("submissions.guidelines") && (
                 <aside className="lg:col-span-4">
                     <div className="sticky top-24 border border-[#E5E7EB] bg-white p-6 space-y-5">
                         <div>
@@ -113,6 +119,7 @@ export default function Submissions() {
                         </div>
                     </div>
                 </aside>
+                )}
 
                 <div className="lg:col-span-8">
                     {done ? (

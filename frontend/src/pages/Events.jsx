@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import Breadcrumbs from "../components/Breadcrumbs";
 import Seo from "../components/Seo";
 import { fetchSiteContent, fetchCollection, fetchSettings, mediaUrl } from "../lib/api";
+import { hiddenSet } from "../lib/sections";
 
 // Reorderable sections of the Events page, in their default order.
 const EVENT_SECTION_DEFS = [
@@ -458,12 +459,14 @@ export default function Events() {
         ),
     };
 
-    // Admin-chosen order, with any missing/new sections appended in default order.
+    // Admin-chosen order, with any missing/new sections appended in default order,
+    // then dropping any the admin has hidden.
     const saved = Array.isArray(settings.events_section_order) ? settings.events_section_order : [];
+    const hidden = hiddenSet(settings);
     const eventOrder = [
         ...saved.filter((k) => sectionMap[k]),
         ...DEFAULT_EVENT_ORDER.filter((k) => !saved.includes(k)),
-    ];
+    ].filter((k) => !hidden.has(`events.${k}`));
 
     return (
         <div data-testid="events-page">

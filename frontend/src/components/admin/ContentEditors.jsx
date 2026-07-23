@@ -3,9 +3,13 @@ import { UploadCloud, ArrowUp, ArrowDown, X, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { adminUploadMedia, fetchCollection, adminSaveCollection, mediaUrl } from "../../lib/api";
 
+// Slug used as the anchor id so the tab bar can jump to each group.
+export const pageGroupId = (title) =>
+    "pg-" + String(title || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
 export function PageGroup({ title, path, children }) {
     return (
-        <div className="mt-8 border border-[#E5E7EB] bg-white p-6">
+        <div id={pageGroupId(title)} className="mt-8 border border-[#E5E7EB] bg-white p-6 scroll-mt-24">
             <div className="flex items-baseline gap-3">
                 <h3 className="font-serif text-xl text-[#002B5C]">{title}</h3>
                 <span className="font-mono text-[11px] text-[#4B5563]">{path}</span>

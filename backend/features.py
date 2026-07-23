@@ -1478,6 +1478,8 @@ SETTINGS_DEFAULTS = {
     ],
     # Admin sidebar order (list of admin route paths). Empty = built-in order.
     "admin_nav_order": [],
+    # Sections hidden from the public site, as "page.section" keys. Empty = all shown.
+    "hidden_sections": [],
     # Trust badges under the price on every book page. Fully admin-managed:
     # reorder, edit label/value, hide (enabled:false), remove, or add new ones.
     "pdp_badges": [

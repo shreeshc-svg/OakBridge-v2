@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { UploadCloud, ArrowUp, ArrowDown, X, Plus } from "lucide-react";
+import { UploadCloud, ArrowUp, ArrowDown, X, Plus, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
+import { SECTION_REGISTRY } from "../../lib/sections";
 import {
     fetchSiteContent,
     adminSetSiteContent,
@@ -87,12 +88,36 @@ function EventsSectionOrder() {
 }
 import {
     PageGroup,
+    pageGroupId,
     SlotRow,
     TextSlotRow,
     PageCardsEditor,
     ListEditor,
     CollectionEditor,
 } from "../../components/admin/ContentEditors";
+
+// Tab bar targets — label shown, title must match the PageGroup title exactly.
+const PAGE_TABS = [
+    { label: "Homepage", title: "Homepage" },
+    { label: "Bookstore", title: "Bookstore — Product Listing (PLP)" },
+    { label: "Book page", title: "Book pages — Product Detail (PDP)" },
+    { label: "What We Do", title: "What We Do" },
+    { label: "Digital Solutions", title: "Digital Solutions" },
+    { label: "Academy", title: "Academy" },
+    { label: "Solutions", title: "Solutions" },
+    { label: "About", title: "About" },
+    { label: "Authors", title: "Authors" },
+    { label: "Events", title: "Events" },
+    { label: "Contact", title: "Contact" },
+    { label: "Submissions", title: "Author Submissions" },
+    { label: "Careers", title: "Careers" },
+    { label: "Media", title: "Media & Gallery" },
+];
+
+function scrollToGroup(title) {
+    const el = document.getElementById(pageGroupId(title));
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+}
 
 export default function AdminPages() {
     const [cats, setCats] = useState([]);
@@ -122,6 +147,26 @@ export default function AdminPages() {
                 Everything that appears on your storefront pages — headlines, body copy, cards and
                 images. Header and footer links live under Navigation.
             </p>
+
+            {/* Jump-to tabs — click a page to scroll straight to its editor. */}
+            <div className="mt-6 sticky top-0 z-20 -mx-2 px-2 py-3 bg-[#F5F7FA]/95 backdrop-blur border-b border-[#E5E7EB]">
+                <div className="flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    {PAGE_TABS.map((t) => (
+                        <button
+                            key={t.title}
+                            onClick={() => scrollToGroup(t.title)}
+                            data-testid={`page-tab-${t.label.toLowerCase().replace(/\s+/g, "-")}`}
+                            className="flex-shrink-0 border border-[#E5E7EB] bg-white px-3 py-1.5 text-xs font-medium text-[#002B5C] hover:border-[#002B5C] hover:bg-[#002B5C] hover:text-white transition-colors"
+                        >
+                            {t.label}
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            <section className="mt-8">
+                <SectionVisibility />
+            </section>
 
             <section className="mt-10">
                 <h2 className="font-serif text-2xl text-[#002B5C]">Storefront pages</h2>
@@ -401,6 +446,75 @@ export default function AdminPages() {
                     </div>
                 </PageGroup>
             </section>
+        </div>
+    );
+}
+
+function SectionVisibility() {
+    const [hidden, setHidden] = useState(null);
+    const [saving, setSaving] = useState(false);
+
+    useEffect(() => {
+        fetchSettings()
+            .then((s) => setHidden(new Set(Array.isArray(s.hidden_sections) ? s.hidden_sections : [])))
+            .catch(() => setHidden(new Set()));
+    }, []);
+
+    if (!hidden) return <div className="font-mono text-xs text-[#4B5563]">Loading…</div>;
+
+    const toggle = (key) => {
+        const next = new Set(hidden);
+        if (next.has(key)) next.delete(key); else next.add(key);
+        setHidden(next);
+    };
+    const save = async () => {
+        setSaving(true);
+        try {
+            await adminSetSetting("hidden_sections", [...hidden]);
+            toast.success("Visibility saved — live on the site.");
+        } catch {
+            toast.error("Could not save.");
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    return (
+        <div className="border border-[#E5E7EB] bg-white p-6 mb-8" data-testid="section-visibility">
+            <div className="flex items-center justify-between">
+                <h2 className="font-serif text-xl text-[#002B5C]">Section visibility</h2>
+                <button onClick={save} disabled={saving} className="text-sm bg-[#002B5C] text-white px-4 py-1.5 hover:bg-[#001F42] disabled:opacity-60">
+                    {saving ? "Saving…" : "Save visibility"}
+                </button>
+            </div>
+            <p className="text-[11px] text-[#4B5563] mt-1">
+                Hide any section from the live site without deleting it. Click the eye to toggle, then Save.
+                Hidden sections keep their content and can be shown again anytime.
+            </p>
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
+                {SECTION_REGISTRY.map((group) => (
+                    <div key={group.page}>
+                        <div className="overline !text-[10px] mb-2">{group.page}</div>
+                        <div className="space-y-1.5">
+                            {group.items.map((it) => {
+                                const isHidden = hidden.has(it.key);
+                                return (
+                                    <button
+                                        key={it.key}
+                                        onClick={() => toggle(it.key)}
+                                        data-testid={`vis-${it.key}`}
+                                        className={`w-full flex items-center gap-2 border px-3 py-1.5 text-sm text-left ${isHidden ? "border-[#E5E7EB] bg-[#F5F7FA] text-[#4B5563]" : "border-[#E5E7EB] bg-white text-[#002B5C]"}`}
+                                    >
+                                        {isHidden ? <EyeOff size={14} strokeWidth={1.5} /> : <Eye size={14} strokeWidth={1.5} className="text-[#002B5C]" />}
+                                        <span className="flex-1">{it.label}</span>
+                                        <span className="font-mono text-[10px] uppercase tracking-widest">{isHidden ? "Hidden" : "Shown"}</span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                ))}
+            </div>
         </div>
     );
 }

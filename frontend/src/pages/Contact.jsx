@@ -3,6 +3,7 @@ import Breadcrumbs from "../components/Breadcrumbs";
 import Seo from "../components/Seo";
 import { Mail, MapPin, Phone } from "lucide-react";
 import { submitContact, fetchSettings, fetchSiteContent } from "../lib/api";
+import { hiddenSet } from "../lib/sections";
 import { toast } from "sonner";
 
 export default function Contact() {
@@ -25,6 +26,7 @@ export default function Contact() {
         { label: "Press", email: "press@oakbridge.in" },
         { label: "Careers", email: "careers@oakbridge.in" },
     ];
+    const hidden = hiddenSet(settings);
     const directLines =
         Array.isArray(settings?.contact_direct_lines) && settings.contact_direct_lines.length
             ? settings.contact_direct_lines
@@ -74,6 +76,7 @@ export default function Contact() {
             </section>
 
             <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 grid grid-cols-1 lg:grid-cols-12 gap-12">
+                {!hidden.has("contact.form") && (
                 <div className="lg:col-span-7">
                     <form
                         onSubmit={onSubmit}
@@ -152,7 +155,9 @@ export default function Contact() {
                         </button>
                     </form>
                 </div>
+                )}
 
+                {!hidden.has("contact.details") && (
                 <aside className="lg:col-span-5 space-y-8">
                     <div className="border border-[#E5E7EB] p-8 bg-white">
                         <div className="overline">Head Office</div>
@@ -226,6 +231,7 @@ export default function Contact() {
                         </dl>
                     </div>
                 </aside>
+                )}
             </section>
         </div>
     );
