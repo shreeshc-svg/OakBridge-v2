@@ -212,7 +212,7 @@ export default function AdminSettings() {
                                         data-testid={`setting-${sec.key}_marquee_seconds`}
                                         className="w-full border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none focus:border-[#002B5C]"
                                     />
-                                    <div className="text-[11px] text-[#4B5563] mt-1">e.g. 40 = leisurely, 20 = brisk. Minimum 8.</div>
+                                    <div className="text-[11px] text-[#4B5563] mt-1">On-screen speed (lower = faster) — the same value gives the same visual speed on both rows, whatever the speaker count. e.g. 40 = leisurely, 20 = brisk. Minimum 8.</div>
                                 </div>
                                 <label className="flex items-center gap-2 text-sm text-[#002B5C] cursor-pointer pb-2">
                                     <input

@@ -217,7 +217,11 @@ function SpeakerMarquee({ speakers, autoplay = true, seconds = 40, dark = false 
     if (!speakers || speakers.length === 0) return null;
     const many = speakers.length > 1;
     const loop = many ? [...speakers, ...speakers] : speakers;
-    const dur = Math.max(8, Number(seconds) || 40);
+    // Duration scales with the number of tiles so the on-screen speed (pixels/sec)
+    // is the SAME for every row regardless of how many speakers it has. `seconds`
+    // is the loop time for a ~30-speaker reference row; a 200-speaker row simply
+    // takes proportionally longer per loop (so it doesn't fly past unreadably).
+    const dur = Math.max(8, ((Number(seconds) || 40) * speakers.length) / 30);
     return (
         <div className="relative overflow-hidden group" data-testid="speaker-marquee">
             <div
