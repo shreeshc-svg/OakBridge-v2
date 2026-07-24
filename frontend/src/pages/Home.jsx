@@ -322,9 +322,6 @@ export default function Home() {
                                 "A publisher's job is to ask the question the
                                 classroom has not yet thought of."
                             </div>
-                            <div className="mt-3 font-mono text-xs text-white/60">
-                                — Ananya Ghosh, Editor-in-Chief
-                            </div>
                         </div>
                     </div>
                 </div>
