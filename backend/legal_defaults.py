@@ -16,7 +16,7 @@ _GSTIN = "06AACCO5406D1ZW"
 _EMAIL = "info@oakbridge.in"
 _PHONE = "+91 88003 37299"
 _SITE = "https://oakbridge.in"
-_GRIEVANCE = "[Grievance Officer name]"
+_GRIEVANCE = "Bhupendra Yadav"
 # Effective date shown at the top of every policy. Update when a policy materially
 # changes — the Consumer Protection (E-Commerce) Rules expect a dated version.
 _UPDATED = "24 July 2026"
@@ -95,6 +95,12 @@ Oakbridge reserves the right to suspend, cancel or discontinue any or all produc
 or services at any time without notice, and to make modifications and alterations
 in any or all of the content, products and services contained on the Site without
 prior notice.
+
+## Purchases, Cancellations & Refunds
+Once an order has been placed and dispatched, it cannot be returned and **no
+refunds will be made**, except where an item arrives damaged, defective or
+incorrect. Full details are set out in our
+[Refund & Cancellation Policy](/refund-policy).
 
 ## Limitation of Liability
 Oakbridge specifically disclaims any liability (whether based in contract, tort,
@@ -250,52 +256,40 @@ This Refund & Cancellation Policy applies to purchases from {_SITE}, operated by
 **{_ENTITY}**, and should be read with our
 [Shipping & Delivery Policy](/shipping-policy).
 
-At Oakbridge, customer satisfaction is our top priority. We aim to provide a
-seamless and enjoyable shopping experience. If you are not entirely satisfied with
-your purchase, we're here to help.
+## 1. All sales are final
+Once an order has been placed and dispatched, it cannot be returned and **no
+refunds will be made**, except in the limited circumstances set out below, which we
+honour in line with the Consumer Protection (E-Commerce) Rules, 2020.
 
-## Cancellation
-- Orders once placed may be cancelled only before they are shipped.
-- No cancellations are possible once the order is dispatched.
+## 2. Cancellation
+- You may cancel an order **only before it is dispatched** by emailing {_EMAIL}
+  with your order number. If it has not yet shipped, we will cancel it and refund
+  you in full.
+- No cancellations are possible once the order has been dispatched.
 
-## Eligibility for Returns
-**1. Damaged or Defective Books:** If your book arrives damaged or defective, you
-are eligible for a return or replacement. Please notify us within **7 days** of
-receiving the product.
+## 3. Damaged, defective or incorrect items
+If your order arrives **damaged, defective, or is the wrong item**, you are eligible
+for a replacement or refund. Please notify us within **7 days** of delivery at
+{_EMAIL} or {_PHONE}, quoting your order number and including a photograph of the
+issue. Items must be returned unused and in their original packaging; for such
+orders we provide a prepaid return label.
 
-**2. Incorrect Orders:** If you receive the wrong book or an incorrect order,
-contact us within **7 days** for a return or exchange.
+We do **not** accept returns or offer refunds for change of mind, nor for digital
+products / eBooks once access has been delivered.
 
-**3. Change of Mind:** We accept returns for items in unread and resalable
-condition within **14 days** of delivery. Books must be in their original
-packaging, with no marks or signs of use.
+## 4. How refunds are issued
+Where a refund is due under this policy, it is credited to your original payment
+method via **Razorpay**, typically within **5–7 business days** after we receive and
+inspect the returned item. Your bank may take additional time to reflect the credit.
 
-## Return Process
-- Contact our customer service team at {_EMAIL} or {_PHONE} with your order details
-  and the reason for return.
-- Pack the book securely in its original packaging.
-- We will provide a prepaid shipping label for damaged, defective or incorrect
-  orders.
-- For returns due to change of mind, customers will be responsible for return
-  shipping costs.
+## 5. Failed or duplicate payments
+If a payment failed but an amount was debited, it is normally auto-reversed by your
+bank within **5–7 working days**. For duplicate charges, email {_EMAIL} and we will
+investigate and refund any extra amount.
 
-## Exchanges
-If you need to exchange an item, contact us and we'll arrange the exchange once we
-receive the returned product.
-
-## Refund Process
-- **Damaged / Incorrect Orders:** Once the returned item is received and inspected,
-  we will issue a full refund or provide a replacement.
-- **Change of Mind:** For eligible returns, a refund will be processed once the
-  item is received and verified as unused and resalable.
-- Refunds will be credited to the original payment method within **5–7 business
-  days** after the return is processed.
-
-## Refund Related Queries
-If you haven't received a refund within the stipulated time mentioned above, please
-check your bank account again and then contact your bank or credit card company. If
-you have still not received your refund after these steps, please contact us at
-{_EMAIL} or {_PHONE}.
+## 6. Contact
+For any cancellation or eligible refund request, email {_EMAIL} with your order
+number, or call {_PHONE}.
 """
 
 SHIPPING = f"""\
