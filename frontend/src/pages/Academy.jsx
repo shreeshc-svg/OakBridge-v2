@@ -12,7 +12,7 @@ const DEFAULTS = {
     accent: "authors you read.",
     body: "The Oakbridge Academy is a new home for self-paced e-learning, certification programmes and in-house workshops — drawing from the same practitioner-authors who write our reference titles. Cohorts open soon.",
     features_kicker: "What's coming",
-    features_headline: "Three formats.\nOne faculty.",
+    features_headline: "Three formats.\nOne goal — Learn.",
 };
 
 const DEFAULT_FEATURES = [

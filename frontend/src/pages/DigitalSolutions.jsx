@@ -10,7 +10,7 @@ const DEFAULTS = {
     eyebrow: "Oakbridge · Digital Solutions",
     headline: "AI-powered research,\nbuilt on the",
     accent: "books you trust.",
-    body: "We're building a new line of digital products on top of Oakbridge's scholarly catalogue — semantic search, research copilots and licensed APIs for law firms, universities and fintechs. Launching soon.",
+    body: "We're building a new line of digital products on top of Oakbridge's scholarly catalogue — semantic search, research copilots and licensed APIs for law firms, universities and Corporate & Judiciary. Launching soon.",
     features_kicker: "What's coming",
     features_headline: "Three products.\nOne trusted source.",
 };
