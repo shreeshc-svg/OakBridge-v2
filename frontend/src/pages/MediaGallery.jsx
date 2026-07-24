@@ -28,6 +28,14 @@ function parseVideo(url) {
     return { embed: u, thumb: null };
 }
 
+// The gallery is split into two titled sections. Each media item carries a
+// `section` key ("launches" default, or "presentations"); titles are editable
+// via site content (media_launches_title / media_presentations_title).
+const MEDIA_SECTIONS = [
+    { key: "launches", title: "Book Launches", slot: "media_launches_title" },
+    { key: "presentations", title: "Book Presentations", slot: "media_presentations_title" },
+];
+
 export default function MediaGallery() {
     const [items, setItems] = useState([]);
     const [site, setSite] = useState({});
@@ -57,15 +65,14 @@ export default function MediaGallery() {
         const isVideo = it.type === "video";
         const vid = isVideo ? parseVideo(it.url) : null;
         const img = isVideo ? (vid.thumb || mediaUrl(it.poster) || it.poster) : (mediaUrl(it.url) || it.url);
-        // A varied, editorial rhythm: every 5th tile spans two columns/rows.
-        const feature = i % 5 === 0;
+        // Consistent tile size across the whole grid (uniform 4:3 tiles).
         return (
             <button
                 key={it.id || i}
                 onClick={() => setActive(it)}
                 data-testid={`media-tile-${it.id || i}`}
-                className={`group relative overflow-hidden bg-[#002B5C] ${feature ? "sm:col-span-2 sm:row-span-2" : ""}`}
-                style={{ aspectRatio: feature ? "1 / 1" : "4 / 3" }}
+                className="group relative overflow-hidden bg-[#002B5C]"
+                style={{ aspectRatio: "4 / 3" }}
             >
                 {img ? (
                     <img src={img} alt={it.title || ""} loading="lazy" className="absolute inset-0 w-full h-full object-cover opacity-90 group-hover:opacity-100 group-hover:scale-105 transition-all duration-500" />
@@ -109,16 +116,27 @@ export default function MediaGallery() {
             </section>
 
             {!hidden.has("media.gallery") && (
-            <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-14">
+            <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-14 space-y-16">
                 {items.length === 0 ? (
                     <div className="border border-dashed border-[#E5E7EB] p-16 text-center text-[#4B5563]">
                         <ImageIcon size={28} strokeWidth={1.5} className="mx-auto text-[#E5E7EB]" />
                         <p className="mt-3 text-sm">Our gallery is being curated. Check back soon.</p>
                     </div>
                 ) : (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 auto-rows-auto gap-3 md:gap-4 [grid-auto-flow:dense]">
-                        {items.map(tile)}
-                    </div>
+                    MEDIA_SECTIONS.map((sec) => {
+                        const list = items.filter((it) => (it.section || "launches") === sec.key);
+                        if (list.length === 0) return null;
+                        return (
+                            <div key={sec.key} data-testid={`media-section-${sec.key}`}>
+                                <h2 className="font-serif text-3xl md:text-4xl text-[#002B5C] mb-6">
+                                    {site[sec.slot] || sec.title}
+                                </h2>
+                                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
+                                    {list.map(tile)}
+                                </div>
+                            </div>
+                        );
+                    })
                 )}
             </section>
             )}

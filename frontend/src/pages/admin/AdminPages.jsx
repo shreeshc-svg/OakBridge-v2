@@ -412,6 +412,11 @@ export default function AdminPages() {
                         <TextSlotRow label="Heading (*word* = accent)" value={site.media_title} onSave={(v) => saveSite("media_title", v)} multiline />
                         <TextSlotRow label="Intro" value={site.media_body} onSave={(v) => saveSite("media_body", v)} multiline />
                     </div>
+                    <div className="overline !text-[10px] mb-2 mt-8 pt-8 border-t border-[#E5E7EB]">Gallery section titles</div>
+                    <div className="space-y-3">
+                        <TextSlotRow label="Section 1 title" value={site.media_launches_title} onSave={(v) => saveSite("media_launches_title", v)} />
+                        <TextSlotRow label="Section 2 title" value={site.media_presentations_title} onSave={(v) => saveSite("media_presentations_title", v)} />
+                    </div>
                 </PageGroup>
             </section>
         </div>

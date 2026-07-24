@@ -54,6 +54,13 @@ function Row({ it, i, count, onChange, onMove, onRemove }) {
                     <input value={it.title ?? ""} onChange={(e) => onChange("title", e.target.value)} placeholder="Title (optional)" className="border border-[#E5E7EB] px-2 py-1.5 text-xs outline-none focus:border-[#002B5C]" />
                     <input value={it.caption ?? ""} onChange={(e) => onChange("caption", e.target.value)} placeholder="Caption (optional)" className="border border-[#E5E7EB] px-2 py-1.5 text-xs outline-none focus:border-[#002B5C]" />
                 </div>
+                <div className="flex items-center gap-2">
+                    <label className="overline !text-[9px] text-[#4B5563]">Section</label>
+                    <select value={it.section || "launches"} onChange={(e) => onChange("section", e.target.value)} className="border border-[#E5E7EB] px-2 py-1.5 text-xs outline-none focus:border-[#002B5C]">
+                        <option value="launches">Book Launches</option>
+                        <option value="presentations">Book Presentations</option>
+                    </select>
+                </div>
             </div>
 
             <div className="flex flex-col items-center gap-1.5">
@@ -77,7 +84,7 @@ export default function AdminMediaGallery() {
     if (!items) return <div className="font-mono text-xs text-[#4B5563]">Loading…</div>;
 
     const upd = (i, k, v) => setItems((cur) => cur.map((x, idx) => (idx === i ? { ...x, [k]: v } : x)));
-    const add = () => setItems((cur) => [...cur, { id: `m-${Date.now()}`, type: "image", url: "", title: "", caption: "", enabled: true }]);
+    const add = () => setItems((cur) => [...cur, { id: `m-${Date.now()}`, type: "image", url: "", title: "", caption: "", section: "launches", enabled: true }]);
     const remove = (i) => setItems((cur) => cur.filter((_, idx) => idx !== i));
     const move = (i, dir) => {
         const j = i + dir; if (j < 0 || j >= items.length) return;
