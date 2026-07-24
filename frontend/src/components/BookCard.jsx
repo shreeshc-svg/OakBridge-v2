@@ -14,6 +14,8 @@ export default function BookCard({ book, index = 0, compact = false }) {
     const [notifyEmail, setNotifyEmail] = useState("");
     const [notifyBusy, setNotifyBusy] = useState(false);
     const [notified, setNotified] = useState(false);
+    const [imgErr, setImgErr] = useState(false);
+    const hasCover = book.cover_image && !imgErr;
 
     const stock = Number.isFinite(book.stock) ? book.stock : (book.stock ?? 0);
     const oos = stock <= 0;
@@ -47,13 +49,22 @@ export default function BookCard({ book, index = 0, compact = false }) {
         >
             <Link to={`/books/${book.id}`} className="block">
                 <div className="relative aspect-[2/3] overflow-hidden bg-white border border-[#E5E7EB]">
-                    <img
-                        src={mediaUrl(book.cover_image)}
-                        alt={book.title}
-                        className={`absolute inset-0 w-full h-full object-contain book-tilt ${oos ? "opacity-40 grayscale" : ""}`}
-                        loading="lazy"
-                        decoding="async"
-                    />
+                    {hasCover ? (
+                        <img
+                            src={mediaUrl(book.cover_image)}
+                            alt={book.title}
+                            onError={() => setImgErr(true)}
+                            className={`absolute inset-0 w-full h-full object-contain book-tilt ${oos ? "opacity-40 grayscale" : ""}`}
+                            loading="lazy"
+                            decoding="async"
+                        />
+                    ) : (
+                        <div className={`absolute inset-0 flex flex-col items-center justify-center text-center px-4 bg-[#F5F7FA] ${oos ? "opacity-40 grayscale" : ""}`}>
+                            <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-[#CC0033] mb-2">Oakbridge</span>
+                            <span className="font-serif text-sm md:text-base text-[#002B5C] leading-snug">{book.title}</span>
+                            {book.author && <span className="mt-2 text-[10px] text-[#4B5563]">{book.author}</span>}
+                        </div>
+                    )}
                     {oos && (
                         <span
                             data-testid={`oos-badge-${book.id}`}
