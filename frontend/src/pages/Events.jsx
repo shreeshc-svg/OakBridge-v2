@@ -426,12 +426,12 @@ export default function Events() {
             </section>
         ),
         summit_speakers: (
-            <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 md:py-28 bg-[#002B5C] text-white">
+            <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 md:py-28 border-b border-[#E5E7EB]">
                 <div className="flex items-end justify-between mb-12 flex-wrap gap-4">
                     <div>
-                        <div className="overline !text-white/60">{site.events_summit_overline || "Summit Speakers"}</div>
-                        <h2 className="font-serif text-4xl md:text-5xl mt-4 leading-[1.05] whitespace-pre-line">
-                            {renderRich(site.events_summit_title || "The future of law,\non one stage.")}
+                        <div className="overline">{site.events_summit_overline || "Summit Speakers"}</div>
+                        <h2 className="font-serif text-4xl md:text-5xl mt-4 text-[#002B5C] leading-[1.05] whitespace-pre-line">
+                            {renderRich(site.events_summit_title || "The future of law,\non one stage.", "#CC0033")}
                         </h2>
                     </div>
                     <a
@@ -439,14 +439,14 @@ export default function Events() {
                         target="_blank"
                         rel="noopener noreferrer"
                         data-testid="summit-speakers-all-link"
-                        className="inline-flex items-center gap-1 text-sm font-medium border-b border-white/40 pb-0.5 hover:text-[#F59E0B] hover:border-[#F59E0B] transition-colors"
+                        className="inline-flex items-center gap-1 text-sm font-medium border-b border-[#002B5C] pb-0.5 hover:text-[#CC0033] hover:border-[#CC0033] transition-colors"
                     >
                         See all summit speakers <ArrowUpRight size={14} strokeWidth={1.5} />
                     </a>
                 </div>
                 <div className={`grid ${SPEAKER_GRID_COLS[summitPerRow]} gap-6 md:gap-8`}>
                     {summitSplit.grid.map((s, i) => (
-                        <SpeakerCard key={`${s.name}-${i}`} s={s} dark />
+                        <SpeakerCard key={`${s.name}-${i}`} s={s} />
                     ))}
                 </div>
                 <SpeakerRail
@@ -454,7 +454,6 @@ export default function Events() {
                     title={settings.summit_carousel_title || "More summit speakers"}
                     autoplay={summitAutoplay}
                     seconds={summitSeconds}
-                    dark
                 />
             </section>
         ),
