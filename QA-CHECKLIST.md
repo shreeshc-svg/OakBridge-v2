@@ -7,7 +7,9 @@ Legend: 🛒 storefront · 🔐 auth · 💳 payments · 📧 email · 🛠️ a
 ---
 
 ## 0. Environment sanity
-- [ ] Backend healthy: `GET /api` responds; `GET /api/books` returns titles (Atlas connected + real 200-book catalogue imported).
+- [ ] Backend healthy: `GET /api` responds; `GET /api/books` returns titles (Atlas connected + real catalogue imported).
+- [ ] `GET /api/health` returns **200** `{"status":"ok","db":"up"}` (503 if Mongo is down). Point **UptimeRobot** at `https://api.oakbridge.in/api/health`.
+- [ ] **`REACT_APP_BACKEND_URL`** in Vercel = `https://api.oakbridge.in` (NOT localhost) and site was redeployed after setting it — otherwise all API calls silently fail on the live site.
 - [ ] Frontend loads, talks to backend (no CORS errors in browser console).
 - [ ] `reportlab` + `boto3` installed in the backend environment (invoices + S3 depend on them).
 - [ ] **S3** vars set on Render: `S3_BUCKET`, `S3_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`; covers load from S3.
@@ -103,7 +105,10 @@ Legend: 🛒 storefront · 🔐 auth · 💳 payments · 📧 email · 🛠️ a
 
 ## 9. SEO / meta
 - [ ] Page titles + meta descriptions per page; canonical URLs correct.
-- [ ] `/robots.txt` and `/sitemap.xml` reachable; favicon + OG image load.
+- [ ] `/robots.txt` reachable.
+- [ ] `https://oakbridge.in/sitemap.xml` loads (served via Vercel rewrite from the dynamic `/api/sitemap.xml`) and **lists book pages** (`/books/<id>`), not just top-level pages. Deleted titles must NOT appear.
+- [ ] Submit `https://oakbridge.in/sitemap.xml` to Google **Search Console** once DNS is live.
+- [ ] favicon + OG image load.
 - [ ] Book pages emit Book + Breadcrumb JSON-LD (view source / Rich Results test).
 - [ ] Images have alt text.
 
