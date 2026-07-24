@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState } from "react";
 import Breadcrumbs from "../components/Breadcrumbs";
 import Seo from "../components/Seo";
 import { fetchSiteContent, fetchCollection, fetchSettings, resolveCollection, mediaUrl } from "../lib/api";
@@ -26,7 +26,7 @@ function renderRich(text, color = "#F59E0B") {
             ),
         );
 }
-import { ArrowUpRight, Calendar, MapPin, Users, Sparkles, Mic, BookOpen, Award, Music, Smile, ShoppingBag, Brain, Building2, ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowUpRight, Calendar, MapPin, Users, Sparkles, Mic, BookOpen, Award, Music, Smile, ShoppingBag, Brain, Building2 } from "lucide-react";
 
 const ASSET = (p) => `${process.env.REACT_APP_BACKEND_URL}${p}`;
 
@@ -208,81 +208,33 @@ function SpeakerCard({ s, dark = false }) {
     );
 }
 
-// Per-row column counts spelled out so Tailwind's JIT keeps the classes.
-const SPEAKER_GRID_COLS = {
-    4: "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4",
-    5: "grid-cols-2 sm:grid-cols-3 lg:grid-cols-5",
-    6: "grid-cols-2 sm:grid-cols-3 lg:grid-cols-6",
-};
-
-// Horizontal speaker rail with arrows + optional auto-scroll (one tile per tick,
-// loops at the end, pauses on hover/touch). Mirrors the Authors page carousel.
-function SpeakerRail({ speakers, title, autoplay, seconds, dark = false }) {
-    const railRef = useRef(null);
-    const scroll = (dir) => {
-        const el = railRef.current;
-        if (!el) return;
-        const first = el.children[0];
-        const step = first ? first.getBoundingClientRect().width + 24 : el.clientWidth * 0.5;
-        el.scrollBy({ left: dir * step, behavior: "smooth" });
-    };
-    useEffect(() => {
-        const el = railRef.current;
-        if (!autoplay || !el || speakers.length <= 1) return undefined;
-        let paused = false;
-        const pause = () => { paused = true; };
-        const resume = () => { paused = false; };
-        el.addEventListener("mouseenter", pause);
-        el.addEventListener("mouseleave", resume);
-        el.addEventListener("touchstart", pause, { passive: true });
-        const every = Math.max(2, Number(seconds) || 4) * 1000;
-        const iv = setInterval(() => {
-            if (paused) return;
-            const first = el.children[0];
-            const step = first ? first.getBoundingClientRect().width + 24 : el.clientWidth * 0.5;
-            const atEnd = el.scrollLeft + el.clientWidth >= el.scrollWidth - 8;
-            el.scrollTo({ left: atEnd ? 0 : el.scrollLeft + step, behavior: "smooth" });
-        }, every);
-        return () => {
-            clearInterval(iv);
-            el.removeEventListener("mouseenter", pause);
-            el.removeEventListener("mouseleave", resume);
-            el.removeEventListener("touchstart", pause);
-        };
-    }, [autoplay, seconds, speakers.length]);
-
-    if (speakers.length === 0) return null;
+// A single continuous marquee row of speakers. The list is duplicated once and
+// the track translates -50% on a linear loop, so it scrolls seamlessly with no
+// snap or jump. Pauses on hover. `seconds` = time for one full loop (lower =
+// faster); `autoplay` off freezes it. Each tile carries its spacing as margin
+// (not flex gap) so the -50% wrap lines up exactly.
+function SpeakerMarquee({ speakers, autoplay = true, seconds = 40, dark = false }) {
+    if (!speakers || speakers.length === 0) return null;
+    const many = speakers.length > 1;
+    const loop = many ? [...speakers, ...speakers] : speakers;
+    const dur = Math.max(8, Number(seconds) || 40);
     return (
-        <div className="mt-10">
-            <div className="flex items-end justify-between gap-4 mb-5">
-                <h3 className={`font-serif text-xl md:text-2xl ${dark ? "text-white" : "text-[#002B5C]"}`}>{title}</h3>
-                <div className="hidden md:flex items-center gap-2">
-                    <button onClick={() => scroll(-1)} aria-label="Scroll left" className={`p-2 border transition-colors ${dark ? "border-white/25 hover:border-white text-white" : "border-[#E5E7EB] hover:border-[#002B5C]"}`}>
-                        <ChevronLeft size={16} strokeWidth={1.5} />
-                    </button>
-                    <button onClick={() => scroll(1)} aria-label="Scroll right" className={`p-2 border transition-colors ${dark ? "border-white/25 hover:border-white text-white" : "border-[#E5E7EB] hover:border-[#002B5C]"}`}>
-                        <ChevronRight size={16} strokeWidth={1.5} />
-                    </button>
-                </div>
-            </div>
+        <div className="relative overflow-hidden group" data-testid="speaker-marquee">
             <div
-                ref={railRef}
-                className="flex gap-6 xl:gap-8 overflow-x-auto snap-x scroll-smooth pb-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                className="flex w-max will-change-transform group-hover:[animation-play-state:paused] motion-reduce:animate-none"
+                style={{
+                    animation: many ? `marquee ${dur}s linear infinite` : "none",
+                    animationPlayState: autoplay ? undefined : "paused",
+                }}
             >
-                {speakers.map((s, i) => (
-                    <div key={`${s.name}-${i}`} className="snap-start flex-shrink-0 w-[44%] sm:w-[30%] lg:w-[15%]">
+                {loop.map((s, i) => (
+                    <div key={i} className="flex-shrink-0 w-[46%] sm:w-[31%] lg:w-[15.5%] mr-4 sm:mr-6 xl:mr-8">
                         <SpeakerCard s={s} dark={dark} />
                     </div>
                 ))}
             </div>
         </div>
     );
-}
-
-// Split a speaker list into a grid (perRow × rows) and the overflow rail.
-function splitSpeakers(list, perRow, rows) {
-    const n = rows === 0 ? list.length : perRow * rows;
-    return { grid: list.slice(0, n), rail: list.slice(n) };
 }
 
 export default function Events() {
@@ -363,19 +315,12 @@ export default function Events() {
         ? vidhiSpeakers.filter((s) => String(s.year) === String(activeVidhiYear))
         : vidhiSpeakers;
 
-    // Speaker layout: N grid rows then an auto-scrolling overflow rail (admin-set,
-    // same controls as the Authors page). Defaults: 6 across, 2 rows, autoplay on.
-    const vidhiPerRow = SPEAKER_GRID_COLS[settings.vidhi_per_row] ? settings.vidhi_per_row : 6;
-    const vidhiRows = Number.isFinite(settings.vidhi_grid_rows) ? Math.max(0, settings.vidhi_grid_rows) : 2;
+    // Speaker layout: one continuous marquee row per section. Admin controls the
+    // scroll speed (seconds per full loop; lower = faster) and autoplay on/off.
     const vidhiAutoplay = settings.vidhi_carousel_autoplay !== false;
-    const vidhiSeconds = Number(settings.vidhi_carousel_seconds) || 4;
-    const vidhiSplit = splitSpeakers(vidhiShown, vidhiPerRow, vidhiRows);
-
-    const summitPerRow = SPEAKER_GRID_COLS[settings.summit_per_row] ? settings.summit_per_row : 6;
-    const summitRows = Number.isFinite(settings.summit_grid_rows) ? Math.max(0, settings.summit_grid_rows) : 2;
+    const vidhiSeconds = Number(settings.vidhi_marquee_seconds) || 40;
     const summitAutoplay = settings.summit_carousel_autoplay !== false;
-    const summitSeconds = Number(settings.summit_carousel_seconds) || 4;
-    const summitSplit = splitSpeakers(summitSpeakers, summitPerRow, summitRows);
+    const summitSeconds = Number(settings.summit_marquee_seconds) || 40;
 
     // Each flagship event is its own reorderable/hideable section (key
     // "flagship:<id>"), so they list individually instead of under one parent.
@@ -444,14 +389,8 @@ export default function Events() {
                         See all summit speakers <ArrowUpRight size={14} strokeWidth={1.5} />
                     </a>
                 </div>
-                <div className={`grid ${SPEAKER_GRID_COLS[summitPerRow]} gap-6 md:gap-8`}>
-                    {summitSplit.grid.map((s, i) => (
-                        <SpeakerCard key={`${s.name}-${i}`} s={s} />
-                    ))}
-                </div>
-                <SpeakerRail
-                    speakers={summitSplit.rail}
-                    title={settings.summit_carousel_title || "More summit speakers"}
+                <SpeakerMarquee
+                    speakers={summitSpeakers}
                     autoplay={summitAutoplay}
                     seconds={summitSeconds}
                 />
@@ -531,14 +470,8 @@ export default function Events() {
                         })}
                     </div>
                 )}
-                <div className={`grid ${SPEAKER_GRID_COLS[vidhiPerRow]} gap-6 md:gap-8`}>
-                    {vidhiSplit.grid.map((s, i) => (
-                        <SpeakerCard key={`${s.name}-${i}`} s={s} />
-                    ))}
-                </div>
-                <SpeakerRail
-                    speakers={vidhiSplit.rail}
-                    title={settings.vidhi_carousel_title || "More speakers"}
+                <SpeakerMarquee
+                    speakers={vidhiShown}
                     autoplay={vidhiAutoplay}
                     seconds={vidhiSeconds}
                 />

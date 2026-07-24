@@ -86,11 +86,8 @@ export default function AdminSettings() {
                 (s.authors_carousel_title || "").trim() || "More from our list",
             );
             for (const p of ["vidhi", "summit"]) {
-                await adminSetSetting(`${p}_per_row`, [4, 5, 6].includes(Number(s[`${p}_per_row`])) ? Number(s[`${p}_per_row`]) : 6);
-                await adminSetSetting(`${p}_grid_rows`, s[`${p}_grid_rows`] === undefined || s[`${p}_grid_rows`] === "" ? 2 : Math.max(0, Number(s[`${p}_grid_rows`]) || 0));
                 await adminSetSetting(`${p}_carousel_autoplay`, s[`${p}_carousel_autoplay`] !== false);
-                await adminSetSetting(`${p}_carousel_seconds`, Math.max(2, Number(s[`${p}_carousel_seconds`]) || 4));
-                await adminSetSetting(`${p}_carousel_title`, (s[`${p}_carousel_title`] || "").trim());
+                await adminSetSetting(`${p}_marquee_seconds`, Math.max(8, Number(s[`${p}_marquee_seconds`]) || 40));
             }
             await adminSetSetting(
                 "contact_direct_lines",
@@ -198,66 +195,35 @@ export default function AdminSettings() {
                 <div className="border border-[#E5E7EB] bg-white p-6" data-testid="speaker-layout-settings">
                     <h2 className="font-serif text-xl text-[#002B5C]">Events — speaker sections layout</h2>
                     <p className="text-[11px] text-[#4B5563] mt-1">
-                        Each speaker section shows a grid of the first rows, then the rest auto-scroll in a
-                        carousel below — same behaviour as the Authors page.
+                        Each speaker section is a single row that scrolls continuously. Set the scroll speed
+                        (seconds for one full loop — lower is faster) and turn the movement on or off.
                     </p>
                     {[{ key: "vidhi", label: "Vidhi Utsav speakers" }, { key: "summit", label: "Summit speakers" }].map((sec) => (
                         <div key={sec.key} className="mt-5 border-t border-[#E5E7EB] pt-5 first:border-t-0 first:pt-0 first:mt-4">
                             <div className="overline !text-[10px] mb-3 !text-[#002B5C]">{sec.label}</div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
                                 <div>
-                                    <label className="overline !text-[10px] block mb-1">Speakers per row</label>
-                                    <select
-                                        value={s[`${sec.key}_per_row`] ?? 6}
-                                        onChange={(e) => set(`${sec.key}_per_row`, Number(e.target.value))}
-                                        data-testid={`setting-${sec.key}_per_row`}
-                                        className="w-full border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none focus:border-[#002B5C]"
-                                    >
-                                        <option value={4}>4 across</option>
-                                        <option value={5}>5 across</option>
-                                        <option value={6}>6 across</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="overline !text-[10px] block mb-1">Rows before carousel</label>
+                                    <label className="overline !text-[10px] block mb-1">Scroll speed (seconds per loop)</label>
                                     <input
                                         type="number"
-                                        value={s[`${sec.key}_grid_rows`] ?? 2}
-                                        onChange={(e) => set(`${sec.key}_grid_rows`, e.target.value)}
-                                        data-testid={`setting-${sec.key}_grid_rows`}
+                                        min="8"
+                                        value={s[`${sec.key}_marquee_seconds`] ?? 40}
+                                        onChange={(e) => set(`${sec.key}_marquee_seconds`, e.target.value)}
+                                        data-testid={`setting-${sec.key}_marquee_seconds`}
                                         className="w-full border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none focus:border-[#002B5C]"
                                     />
-                                    <div className="text-[11px] text-[#4B5563] mt-1">0 = show everyone in the grid (no carousel).</div>
+                                    <div className="text-[11px] text-[#4B5563] mt-1">e.g. 40 = leisurely, 20 = brisk. Minimum 8.</div>
                                 </div>
-                                <div>
-                                    <label className="overline !text-[10px] block mb-1">Carousel heading</label>
+                                <label className="flex items-center gap-2 text-sm text-[#002B5C] cursor-pointer pb-2">
                                     <input
-                                        type="text"
-                                        value={s[`${sec.key}_carousel_title`] ?? ""}
-                                        onChange={(e) => set(`${sec.key}_carousel_title`, e.target.value)}
-                                        placeholder={sec.key === "summit" ? "More summit speakers" : "More speakers"}
-                                        className="w-full border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none focus:border-[#002B5C]"
+                                        type="checkbox"
+                                        checked={s[`${sec.key}_carousel_autoplay`] !== false}
+                                        onChange={(e) => set(`${sec.key}_carousel_autoplay`, e.target.checked)}
+                                        data-testid={`setting-${sec.key}_carousel_autoplay`}
                                     />
-                                </div>
-                                <div>
-                                    <label className="overline !text-[10px] block mb-1">Auto-scroll seconds</label>
-                                    <input
-                                        type="number"
-                                        value={s[`${sec.key}_carousel_seconds`] ?? 4}
-                                        onChange={(e) => set(`${sec.key}_carousel_seconds`, e.target.value)}
-                                        className="w-full border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none focus:border-[#002B5C]"
-                                    />
-                                </div>
+                                    Auto-scroll (movement on)
+                                </label>
                             </div>
-                            <label className="mt-3 flex items-center gap-2 text-sm text-[#002B5C] cursor-pointer">
-                                <input
-                                    type="checkbox"
-                                    checked={s[`${sec.key}_carousel_autoplay`] !== false}
-                                    onChange={(e) => set(`${sec.key}_carousel_autoplay`, e.target.checked)}
-                                    data-testid={`setting-${sec.key}_carousel_autoplay`}
-                                />
-                                Auto-scroll the carousel
-                            </label>
                         </div>
                     ))}
                 </div>
