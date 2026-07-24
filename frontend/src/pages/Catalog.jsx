@@ -51,8 +51,13 @@ export default function Catalog() {
     const sentinelRef = useRef(null);
 
     const category = sp.get("category") || "";
+    const subject = sp.get("subject") || "";
     const search = sp.get("search") || "";
     const sort = sp.get("sort") || "featured";
+
+    // Sub-categories shown under a parent category (filter by the book `subject`).
+    // Professional splits into Law and Tax, per management.
+    const SUBCATEGORIES = { professional: ["Law", "Tax"] };
 
     // Admin-editable sort menu + filter toggles (fall back to defaults until loaded).
     const sortOptions =
@@ -88,6 +93,7 @@ export default function Catalog() {
     const buildParams = useCallback(() => {
         const params = { sort };
         if (category) params.category = category;
+        if (subject) params.subject = subject;
         if (search) params.search = search;
         enabledFilters.forEach((f) => {
             if (sp.get(f.key) === "true") params[f.key] = true;
@@ -173,6 +179,8 @@ export default function Catalog() {
         const next = new URLSearchParams(sp);
         if (!value) next.delete(key);
         else next.set(key, value);
+        // Switching category clears any active sub-category (subject) filter.
+        if (key === "category") next.delete("subject");
         setSp(next, { replace: true });
     };
 
@@ -218,6 +226,7 @@ export default function Catalog() {
     const activeFilters = useMemo(() => {
         const arr = [];
         if (category) arr.push({ k: "category", v: category, label: activeCat?.name || category });
+        if (subject) arr.push({ k: "subject", v: "", label: subject });
         enabledFilters.forEach((f) => {
             if (sp.get(f.key) === "true") arr.push({ k: f.key, v: "", label: f.label });
         });
@@ -379,6 +388,30 @@ export default function Catalog() {
                                                 {c.book_count}
                                             </span>
                                         </button>
+                                        {category === c.id && SUBCATEGORIES[c.id] && (
+                                            <ul className="mt-1 mb-1 ml-1 space-y-1 border-l border-[#E5E7EB] pl-3">
+                                                <li>
+                                                    <button
+                                                        onClick={() => update("subject", "")}
+                                                        data-testid="filter-subject-all"
+                                                        className={`text-sm w-full text-left py-0.5 ${!subject ? "text-[#CC0033] font-semibold" : "text-[#4B5563] hover:text-[#002B5C]"}`}
+                                                    >
+                                                        All {c.name}
+                                                    </button>
+                                                </li>
+                                                {SUBCATEGORIES[c.id].map((sub) => (
+                                                    <li key={sub}>
+                                                        <button
+                                                            onClick={() => update("subject", sub)}
+                                                            data-testid={`filter-subject-${sub}`}
+                                                            className={`text-sm w-full text-left py-0.5 ${subject === sub ? "text-[#CC0033] font-semibold" : "text-[#4B5563] hover:text-[#002B5C]"}`}
+                                                        >
+                                                            {sub}
+                                                        </button>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        )}
                                     </li>
                                 ))}
                             </ul>
