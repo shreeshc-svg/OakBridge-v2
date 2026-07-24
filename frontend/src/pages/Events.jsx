@@ -284,6 +284,7 @@ export default function Events() {
             src: mediaUrl(site.events_vidhi_banner) || ASSET("/api/files/oakbridge/events/vidhi-banner.webp"),
             alt: "Vidhi Utsav — Legal Literature Festival",
             caption: "Vidhi Utsav · The Legal Literature Festival",
+            fit: "contain",
         },
         {
             id: "law-ai-tech",
