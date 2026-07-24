@@ -49,7 +49,7 @@ const VERTICALS = [
         icon: Calendar,
         title: "Events",
         tagline: "Seminars and conferences",
-        lede: "India Law Forum, the annual Tax Conclave, book launches and roundtables with scholars and policymakers.",
+        lede: "India Legal Tech & AI Summit, Vidhi Utsav, book launches and roundtables with scholars and policymakers.",
         to: "/what-we-do#events",
         cta: "Upcoming events",
     },
@@ -59,7 +59,7 @@ const VERTICALS = [
         icon: Cpu,
         title: "Digital Solutions",
         tagline: "AI-powered knowledge products",
-        lede: "Semantic search, research copilots and licensed APIs built on our scholarly content for law firms, universities and fintechs.",
+        lede: "Semantic search, research copilots and licensed APIs built on our scholarly content for law firms, universities and Corporate & Judiciary.",
         to: "/digital-solutions",
         cta: "Get early access",
         comingSoon: true,
@@ -70,7 +70,7 @@ const VERTICALS = [
         icon: GraduationCap,
         title: "Training & Certification",
         tagline: "Training programmes for practitioners",
-        lede: "Certification tracks and in-house workshops in Law, Tax and Corporate Governance — delivered by our authors.",
+        lede: "Certification tracks and in-house workshops in Law, Tax and Corporate Governance — delivered by our authors and Subject Matter experts.",
         to: "/academy",
         cta: "Get early access",
         comingSoon: true,
@@ -458,10 +458,12 @@ export default function Home() {
                                     <span className="overline !text-[9px] !text-[#F59E0B]">Imprint</span>
                                     <div>
                                         <h3 className="font-serif text-xl leading-tight">{name}</h3>
-                                        <div className="mt-3 inline-flex items-center gap-1 text-[11px] font-mono uppercase tracking-widest border-b border-[#F59E0B] pb-0.5 text-[#F59E0B]">
-                                            Explore
-                                            <ArrowUpRight size={11} strokeWidth={1.5} />
-                                        </div>
+                                        {!["coffee_table", "curated"].includes(imp.key) && (
+                                            <div className="mt-3 inline-flex items-center gap-1 text-[11px] font-mono uppercase tracking-widest border-b border-[#F59E0B] pb-0.5 text-[#F59E0B]">
+                                                Explore
+                                                <ArrowUpRight size={11} strokeWidth={1.5} />
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             </Link>
