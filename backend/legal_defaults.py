@@ -1,12 +1,13 @@
 """
 Default legal / policy content for Oakbridge Publishing (Markdown).
 
-These templates are drafted to reflect Oakbridge's ACTUAL data flows and to align
-with India's Digital Personal Data Protection Act, 2023 (DPDP Act) and the
-Consumer Protection (E-Commerce) Rules, 2020. They are NOT legal advice — have
-them reviewed by counsel before go-live and confirm the [bracketed] items
-(especially the Grievance Officer's name and the effective date). All pages are
-editable from Admin -> Legal, which overrides these defaults.
+Terms, Refund & Cancellation and Shipping reflect Oakbridge's existing
+(counsel-reviewed) policy language carried over from oakbridge.in. Privacy and
+Cookie are drafted to align with India's Digital Personal Data Protection Act,
+2023 (DPDP Act) and the Consumer Protection (E-Commerce) Rules, 2020. They are
+NOT legal advice — have them reviewed by counsel before go-live and confirm the
+[bracketed] items (especially the Grievance Officer's name and the effective
+date). All pages are editable from Admin -> Legal, which overrides these defaults.
 """
 
 _ENTITY = "Oakbridge Publishing Pvt. Ltd."
@@ -23,91 +24,111 @@ _UPDATED = "24 July 2026"
 TERMS = f"""\
 _Last updated: {_UPDATED}_
 
-These Terms & Conditions ("Terms") govern your use of {_SITE} (the "Site") and any
-purchase you make from **{_ENTITY}** ("Oakbridge", "we", "us"). By using the Site
-or placing an order, you agree to these Terms. Please also read our
-[Privacy Policy](/privacy),
-[Shipping & Delivery Policy](/shipping-policy) and [Cookie Policy](/cookie-policy),
-which form part of these Terms.
+**{_ENTITY}** (hereinafter referred to as "Oakbridge") is the sole and absolute
+owner of the website {_SITE} (the "Site") and offers the visitor(s)/user(s)
+("You") the use of the Site, which includes the content and community services
+offered through the Site via any mobile or internet-connected device or otherwise
+(the "Service"). This Service is provided on an 'As Is' basis and is continually
+under development.
 
-## 1. Who we are
-{_ENTITY}, a company incorporated in India.
-Registered office: {_ADDR}. GSTIN: {_GSTIN}. Customer care & grievance contact:
-{_EMAIL}, {_PHONE}.
+These Terms of Use ("Terms") constitute a legally binding agreement between You
+and Oakbridge regarding your use of the Site and any Services offered by Oakbridge,
+including but not limited to delivery of content via the Site or any Service.
 
-## 2. Eligibility & accounts
-You must be capable of forming a legally binding contract under the Indian
-Contract Act, 1872 to purchase from us. You are responsible for keeping your
-account credentials secure and for all activity under your account. Information
-you provide must be accurate and current. We collect a valid mobile number and
-email at sign-up to verify your account and process orders.
+By accessing this Site, you automatically confirm your acknowledgment and
+acceptance of these Terms, which shall apply to You while hosting, publishing,
+sharing, transacting, displaying or uploading information or views related directly
+or indirectly to the Site or Services provided by Oakbridge.
 
-## 3. Products & pricing
-- We publish and sell books and related products. Descriptions, covers,
-  specifications and availability are provided in good faith but may change
-  without notice.
-- All prices are in Indian Rupees (INR). Applicable GST is shown at checkout and
-  itemised on your tax invoice.
-- We may correct pricing, description or availability errors and cancel affected
-  orders even after they are placed; if payment was taken, we refund it in full.
+You hereby represent and warrant to Oakbridge that you are at least eighteen (18)
+years of age or above and are capable of entering, performing and adhering to these
+Terms and that you agree to be bound by the following terms and conditions. While
+individuals under the age of 18 may utilize the Service of the Site, they shall do
+so only with the involvement and guidance of their parents and/or legal guardians.
 
-## 4. Orders & payment
-- An order is an offer to buy. A contract forms only when we confirm acceptance
-  by email after payment is successfully received.
-- Payments are processed by our payment partner, **Razorpay**. We do not receive
-  or store your full card, UPI or bank details. Your use of the payment gateway is
-  subject to Razorpay's own terms and privacy policy.
-- We may refuse or cancel any order for reasons including suspected fraud, stock
-  unavailability, or pricing/description errors, in line with the Consumer
-  Protection (E-Commerce) Rules, 2020.
+Oakbridge may add, change or update these Terms from time to time, entirely at its
+own discretion. You are responsible for checking these Terms periodically to remain
+in compliance with them. Your use of the Site after any amendment to the Terms
+shall constitute your acceptance of the amended Terms and you thereby agree to be
+bound by such change(s)/revision(s).
 
-## 5. Shipping & delivery
-Delivery terms are set out in our [Shipping & Delivery Policy](/shipping-policy).
-All sales are final — we do not offer cancellations or refunds once an order is
-placed, except where an item arrives damaged or defective.
+Please also read our [Refund & Cancellation Policy](/refund-policy),
+[Shipping & Delivery Policy](/shipping-policy), [Privacy Policy](/privacy) and
+[Cookie Policy](/cookie-policy), which form part of these Terms.
 
-## 6. Reviews & user content
-If you post a review or other content, you confirm it is your own, lawful and not
-misleading, and you grant us a non-exclusive licence to display it on the Site. We
-may remove content that is unlawful, defamatory or abusive.
+## Copyright and Trademarks
+Unless otherwise stated, copyright and all intellectual property rights in all
+content/material presented on the Site (including but not limited to text, audio,
+video or graphical images), trademarks and logos appearing on this Site are the
+property of Oakbridge or such third party which may own the mark, and are protected
+under applicable laws of the land. You agree not to use any framing techniques to
+enclose any trademark or logo or other proprietary information of Oakbridge or any
+third party; or remove, conceal or obliterate any copyright or other proprietary
+notice or any credit-line or date-line or other mark or source identifier included
+on the Site/Service, including without limitation, the size, colour, location or
+style of all proprietary marks. Any infringement shall be subjected to legal
+prosecution.
 
-## 7. AI assistant
-The Site offers an automated assistant ("Oaky") to help with website and order
-questions. It is provided for convenience, may be imperfect, and its responses are
-not professional, legal or financial advice. For anything important, contact us at
+## Limited Permission to Copy
+Oakbridge grants you permission to only access and make personal use of the Site,
+and You agree not to, directly or indirectly, download or modify / alter / change /
+amend / vary / transform / revise / translate / copy / publish / distribute or
+otherwise disseminate any content on the Site/Service, except with the express
+consent of Oakbridge. However, you may print or download extracts from these pages
+for your personal / individual, non-commercial use only. You must not retain any
+copies of these pages saved to disk or to any other storage medium except for the
+purposes of personal / individual, non-commercial use.
+
+No part of the Site may be reproduced or transmitted to or stored in any other
+website, nor may any of its pages or part thereof be disseminated in any electronic
+or non-electronic form, nor included in any public or private electronic retrieval
+system or service without prior written permission. Requests for distribution or to
+republish the content/materials provided in this Site should be addressed to
 {_EMAIL}.
 
-## 8. Intellectual property
-All content on the Site — text, book content, logos, images and design — is owned
-by or licensed to Oakbridge and protected by law. You may not reproduce,
-distribute or create derivative works without our written permission. Digital
-products (eBooks) are licensed to you for personal, non-commercial use only and
-may not be shared, resold or redistributed.
+## No Unlawful or Prohibited Use
+As a condition of your use of the Services, you will not use the Services for any
+purpose that is unlawful under the present laws of the land.
 
-## 9. Acceptable use
-You agree not to misuse the Site, attempt to gain unauthorised access, disrupt its
-operation, scrape or harvest data, or use it for any unlawful purpose.
+## Changes
+Oakbridge reserves the right to suspend, cancel or discontinue any or all products
+or services at any time without notice, and to make modifications and alterations
+in any or all of the content, products and services contained on the Site without
+prior notice.
 
-## 10. Limitation of liability
-To the maximum extent permitted by law, Oakbridge is not liable for indirect or
-consequential losses. Our total liability for any order will not exceed the amount
-you paid for that order. Nothing in these Terms limits liability that cannot be
-limited under applicable law, including the Consumer Protection Act, 2019.
+## Limitation of Liability
+Oakbridge specifically disclaims any liability (whether based in contract, tort,
+strict liability or otherwise) for any direct, indirect, incidental, consequential
+or special damages arising out of or in any way connected with access to or use of
+the Site, including liability associated with any viruses which may infect your
+computer equipment.
 
-## 11. Grievance redressal
-In accordance with the Consumer Protection (E-Commerce) Rules, 2020, our Grievance
-Officer is:
-{_GRIEVANCE}, {_ENTITY}, {_ADDR}. Email: {_EMAIL}. Phone: {_PHONE}. We acknowledge
-complaints within 48 hours and endeavour to resolve them within one month.
+## Due Care
+Due care has been taken while providing the information available on this Site.
+Oakbridge holds no responsibility for any mistake that may have inadvertently crept
+in.
 
-## 12. Governing law & jurisdiction
-These Terms are governed by the laws of India. Subject to applicable consumer-
-protection law, disputes are subject to the exclusive jurisdiction of the courts
-of Gurugram, Haryana.
+## Grievance Redressal
+Any complaints or concerns with regard to content and/or comment or breach of these
+Terms shall be submitted through an email addressed to the Grievance Officer,
+{_GRIEVANCE}, at {_EMAIL}, duly signed by the Complainant with his/her electronic
+signature.
 
-## 13. Changes & contact
-We may update these Terms from time to time; the current version is always on this
-page. Questions? Email {_EMAIL}.
+## Arbitration
+Any dispute arising out of or in connection with this agreement, including any
+question regarding its existence, amendment, validity or termination, shall be
+referred to and resolved by arbitration in accordance with the Indian Arbitration &
+Conciliation Act, 1996. The arbitration shall be a "documents only", evidence
+through affidavits "fast track" arbitration. The Tribunal shall consist of one (1)
+arbitrator to be appointed by Oakbridge. The exclusive seat of arbitration shall be
+New Delhi, India, and the language of the arbitration shall be English. This
+agreement shall be governed by and construed in accordance with the laws of India.
+User access to and use of the Site is subject to all applicable Indian laws.
+
+## Jurisdiction
+In respect of all matters/disputes arising out of, in connection with or in
+relation to this agreement, only the Courts at New Delhi, India shall have
+jurisdiction.
 """
 
 PRIVACY = f"""\
@@ -229,45 +250,52 @@ This Refund & Cancellation Policy applies to purchases from {_SITE}, operated by
 **{_ENTITY}**, and should be read with our
 [Shipping & Delivery Policy](/shipping-policy).
 
-## 1. Order cancellation
-- You may request cancellation **before your order is dispatched** by emailing
-  {_EMAIL} with your order number. If it has not shipped, we cancel it and refund
-  you in full.
-- Once dispatched, an order cannot be cancelled but may be eligible for return
-  (below).
+At Oakbridge, customer satisfaction is our top priority. We aim to provide a
+seamless and enjoyable shopping experience. If you are not entirely satisfied with
+your purchase, we're here to help.
 
-## 2. Returns & replacements
-You may request a return within **7 days** of delivery if:
-- the item arrived **damaged or defective**,
-- you received the **wrong item**, or
-- the item is **not as described** on the Site.
+## Cancellation
+- Orders once placed may be cancelled only before they are shipped.
+- No cancellations are possible once the order is dispatched.
 
-To be eligible, physical items must be unused and in their original condition and
-packaging. Email {_EMAIL} with your order number and a photo of the issue. In line
-with the Consumer Protection (E-Commerce) Rules, 2020, we will not refuse to take
-back goods or refund payment where the product is defective, not as described, or
-delivered late (except in cases of force majeure).
+## Eligibility for Returns
+**1. Damaged or Defective Books:** If your book arrives damaged or defective, you
+are eligible for a return or replacement. Please notify us within **7 days** of
+receiving the product.
 
-Because of their nature, we generally **cannot accept returns** of:
-- digital products / eBooks once access has been delivered, and
-- items damaged by misuse after delivery.
+**2. Incorrect Orders:** If you receive the wrong book or an incorrect order,
+contact us within **7 days** for a return or exchange.
 
-## 3. Refunds
-- After we receive and inspect a returned item (or approve a pre-dispatch
-  cancellation), we notify you of approval.
-- Approved refunds are issued to your **original payment method** via Razorpay,
-  typically within **5–7 business days**, though your bank may take additional
-  time to reflect the credit.
-- Shipping charges are non-refundable unless the return is due to our error.
+**3. Change of Mind:** We accept returns for items in unread and resalable
+condition within **14 days** of delivery. Books must be in their original
+packaging, with no marks or signs of use.
 
-## 4. Failed or duplicate payments
-If your payment failed but an amount was debited, it is normally auto-reversed by
-your bank within **5–7 working days**. For duplicate charges, email {_EMAIL} and
-we will investigate and refund any extra amount.
+## Return Process
+- Contact our customer service team at {_EMAIL} or {_PHONE} with your order details
+  and the reason for return.
+- Pack the book securely in its original packaging.
+- We will provide a prepaid shipping label for damaged, defective or incorrect
+  orders.
+- For returns due to change of mind, customers will be responsible for return
+  shipping costs.
 
-## 5. Contact
-For any cancellation or refund request, email {_EMAIL} with your order number, or
-call {_PHONE}.
+## Exchanges
+If you need to exchange an item, contact us and we'll arrange the exchange once we
+receive the returned product.
+
+## Refund Process
+- **Damaged / Incorrect Orders:** Once the returned item is received and inspected,
+  we will issue a full refund or provide a replacement.
+- **Change of Mind:** For eligible returns, a refund will be processed once the
+  item is received and verified as unused and resalable.
+- Refunds will be credited to the original payment method within **5–7 business
+  days** after the return is processed.
+
+## Refund Related Queries
+If you haven't received a refund within the stipulated time mentioned above, please
+check your bank account again and then contact your bank or credit card company. If
+you have still not received your refund after these steps, please contact us at
+{_EMAIL} or {_PHONE}.
 """
 
 SHIPPING = f"""\
@@ -276,34 +304,35 @@ _Last updated: {_UPDATED}_
 This Shipping & Delivery Policy applies to orders placed on {_SITE}, operated by
 **{_ENTITY}**.
 
-## 1. Where we ship
-We deliver across India. For international orders, please contact {_EMAIL} before
-ordering.
+## 1. General
+- We provide **free delivery** on all items.
+- The estimated time of delivery is approximately **3–5 working days**.
+- We process all deliveries through DTDC, a reputed courier service
+  (https://www.dtdc.in).
+- If there is no courier service available in your area, we will get in touch with
+  you and try to work out a convenient alternate delivery location that is serviced
+  by our courier partners.
+- All orders are processed within **1–2 business days** (excluding weekends and
+  holidays).
+- Orders placed after 4:00 pm on weekdays or on weekends will be processed the next
+  business day.
 
-## 2. Processing & dispatch
-Orders are typically processed and dispatched within **1–2 business days** of
-successful payment. You will receive an email confirmation when your order is
-placed, and tracking details where available once it ships.
+## 2. Tracking Orders
+- Once your order has been shipped, you will receive an email with the tracking
+  information.
+- You can track your shipment via the DTDC Courier (https://www.dtdc.in) website
+  using the tracking number provided over email.
 
-## 3. Delivery timelines
-Estimated delivery is **3–7 business days** after dispatch, depending on your
-location and the courier. These are estimates, not guarantees; delays can occur
-due to weather, courier or other factors beyond our control.
+## 3. Delivery Issues
+- **Lost or Stolen Packages:** If your package is marked as delivered but you have
+  not received it, please contact our support team at {_EMAIL} or {_PHONE}. We will
+  help you track it down.
+- **Damaged or Incorrect Orders:** If you receive a damaged or incorrect order,
+  please notify us within **7 days** of delivery, and we will arrange for a
+  replacement or refund.
 
-## 4. Shipping charges
-- Shipping is calculated at checkout based on your order. The exact charge and any
-  free-shipping threshold are shown at checkout before you pay.
-- Orders above the current free-shipping threshold qualify for **free shipping**;
-  below it, a flat shipping fee applies.
-
-## 5. Delays, damage & non-delivery
-- If your order has not arrived within the estimated window, email {_EMAIL} with
-  your order number and we will follow up with the courier.
-- If a package arrives damaged or defective, email {_EMAIL} within 48 hours of
-  delivery with photos and your order number, and we will arrange a replacement.
-
-## 6. Contact
-For any delivery question, contact us at {_EMAIL} or {_PHONE}.
+## 4. Shipping Locations
+We ship to all regions across India.
 """
 
 COOKIE = f"""\
