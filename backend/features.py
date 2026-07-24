@@ -1480,6 +1480,72 @@ async def merge_titles(dry_run: bool = True, remove_obsolete: bool = False):
     return result
 
 
+@admin_router.post("/delete-coverless")
+async def delete_coverless(dry_run: bool = True):
+    """Delete every book whose cover image is missing from storage (all categories).
+
+    A book counts as "coverless" if its cover_image is empty, or points at a
+    /api/files/... path with no matching object in storage. External (http) cover
+    URLs count as HAVING a cover. dry_run=true (default) only reports counts.
+    """
+    from collections import Counter as _Counter
+
+    books = await db.books.find(
+        {}, {"_id": 0, "id": 1, "isbn": 1, "title": 1, "cover_image": 1, "category": 1}
+    ).to_list(None)
+
+    # List the covers prefix once, then check each book against it (fast).
+    existing_keys = set()
+    if _s3_enabled():
+        prefix = _safe_key("oakbridge/covers/")
+        token = None
+        while True:
+            kwargs = {"Bucket": S3_BUCKET, "Prefix": prefix}
+            if token:
+                kwargs["ContinuationToken"] = token
+            resp = _s3().list_objects_v2(**kwargs)
+            for obj in resp.get("Contents", []) or []:
+                existing_keys.add(obj["Key"])
+            if resp.get("IsTruncated"):
+                token = resp.get("NextContinuationToken")
+            else:
+                break
+
+    def _has_cover(cov: str) -> bool:
+        cov = str(cov or "").strip()
+        if not cov:
+            return False
+        if cov.startswith("http://") or cov.startswith("https://"):
+            return True
+        path = cov.split("/api/files/", 1)[-1] if "/api/files/" in cov else cov.lstrip("/")
+        try:
+            if _s3_enabled():
+                return _safe_key(path) in existing_keys
+            return os.path.exists(_resolve(path))
+        except Exception:  # noqa: BLE001
+            return False
+
+    coverless = [b for b in books if not _has_cover(b.get("cover_image"))]
+    result = {
+        "total": len(books),
+        "coverless": len(coverless),
+        "by_category": dict(_Counter(b.get("category", "?") for b in coverless)),
+        "titles": [
+            {"isbn": b.get("isbn"), "title": b.get("title"), "category": b.get("category")}
+            for b in coverless
+        ],
+        "dry_run": bool(dry_run),
+    }
+    if dry_run:
+        return result
+
+    ids = [b["id"] for b in coverless if b.get("id")]
+    if ids:
+        res = await db.books.delete_many({"id": {"$in": ids}})
+        result["deleted"] = res.deleted_count
+    return result
+
+
 SETTINGS_DEFAULTS = {
     "tax_percent": 5,
     "free_ship_threshold": 0,   # 0 = free shipping on all orders
