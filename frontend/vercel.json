@@ -3,6 +3,7 @@
   "buildCommand": "yarn build",
   "outputDirectory": "build",
   "rewrites": [
+    { "source": "/sitemap.xml", "destination": "https://api.oakbridge.in/api/sitemap.xml" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

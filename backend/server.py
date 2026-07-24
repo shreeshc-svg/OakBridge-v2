@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Query, Depends
+from fastapi import FastAPI, APIRouter, HTTPException, Query, Depends, Response
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -339,6 +339,67 @@ async def startup_event():
 @api_router.get("/")
 async def root():
     return {"message": "Oakbridge Publishing API", "status": "ok"}
+
+
+@api_router.get("/health")
+async def health():
+    """Lightweight liveness + DB check for uptime monitors (e.g. UptimeRobot).
+
+    Returns 200 only when MongoDB responds to a ping; 503 otherwise so the
+    monitor alerts on a DB outage, not just a dead process.
+    """
+    try:
+        await client.admin.command("ping")
+        return {"status": "ok", "db": "up"}
+    except Exception as e:  # noqa: BLE001
+        logger.error("health check DB ping failed: %s", e)
+        return Response(
+            content='{"status":"degraded","db":"down"}',
+            media_type="application/json",
+            status_code=503,
+        )
+
+
+# Public site origin used to build absolute URLs in the sitemap. Override with
+# SITE_URL env if the canonical host ever changes.
+SITE_URL = (os.environ.get("SITE_URL") or "https://oakbridge.in").rstrip("/")
+
+# Top-level pages that should always be in the sitemap (mirrors the storefront
+# routes; excludes the noindex ones already blocked in robots.txt).
+_SITEMAP_STATIC_PATHS = [
+    "/", "/books", "/authors", "/events", "/about", "/contact",
+    "/submissions", "/academy", "/digital-solutions", "/what-we-do",
+    "/terms", "/privacy", "/refund-policy", "/shipping-policy",
+]
+
+
+@api_router.get("/sitemap.xml")
+async def sitemap():
+    """Dynamic sitemap — always reflects the LIVE catalogue (deleted titles drop
+    out automatically, new ones appear), unlike a hand-maintained static file.
+    Served at https://oakbridge.in/sitemap.xml via a Vercel rewrite."""
+    from xml.sax.saxutils import escape
+
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    urls = [
+        f"  <url><loc>{SITE_URL}{p}</loc><changefreq>weekly</changefreq></url>"
+        for p in _SITEMAP_STATIC_PATHS
+    ]
+    books = await db.books.find({}, {"_id": 0, "id": 1}).to_list(None)
+    for b in books:
+        bid = escape(str(b.get("id", "")))
+        if bid:
+            urls.append(
+                f"  <url><loc>{SITE_URL}/books/{bid}</loc>"
+                f"<lastmod>{today}</lastmod><changefreq>weekly</changefreq></url>"
+            )
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        + "\n".join(urls)
+        + "\n</urlset>\n"
+    )
+    return Response(content=xml, media_type="application/xml")
 
 
 @api_router.get("/categories", response_model=List[Category])
