@@ -228,7 +228,7 @@ function SpeakerMarquee({ speakers, autoplay = true, seconds = 40, dark = false 
                 }}
             >
                 {loop.map((s, i) => (
-                    <div key={i} className="flex-shrink-0 w-[46%] sm:w-[31%] lg:w-[15.5%] mr-4 sm:mr-6 xl:mr-8">
+                    <div key={i} className="flex-shrink-0 w-[150px] sm:w-[180px] lg:w-[200px] mr-4 sm:mr-6 xl:mr-8">
                         <SpeakerCard s={s} dark={dark} />
                     </div>
                 ))}
