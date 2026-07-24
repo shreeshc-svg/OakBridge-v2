@@ -181,8 +181,10 @@ export default function Footer() {
                     </div>
                 </div>
 
-                {/* Bottom bar */}
-                <div className="pt-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 text-xs text-white/50 font-mono">
+                {/* Bottom bar — extra right padding on desktop reserves the corner
+                    where the floating chat + back-to-top widgets sit, so the legal
+                    links (esp. "Contact") never render underneath them. */}
+                <div className="pt-10 md:pr-20 2xl:pr-0 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 text-xs text-white/50 font-mono">
                     <div>
                         © {new Date().getFullYear()} {c.copyright}
                     </div>
