@@ -1616,6 +1616,72 @@ async def find_generated_covers(dry_run: bool = True, threshold: float = 0.5):
     return result
 
 
+@admin_router.post("/reset-test-data")
+async def reset_test_data(
+    dry_run: bool = True,
+    confirm: str = "",
+    clear_coupons: bool = False,
+    reset_invoice_counter: bool = True,
+):
+    """Wipe accumulated TEST / transactional data for a clean production start.
+
+    Clears customer-generated + transactional collections and all NON-admin users.
+    NEVER touches catalogue/content/config: books, authors, categories, settings,
+    site_content, content_collections, media, legal (and coupons unless
+    clear_coupons=true). The admin account (role="admin") is always preserved.
+
+    Safe by default: dry_run=true just reports counts. To actually delete, call with
+    dry_run=false AND confirm="RESET".
+    """
+    TEST_COLLECTIONS = [
+        "orders", "carts", "newsletter", "stock_notifications", "search_logs",
+        "reviews", "contact_messages", "submissions", "desk_copies", "job_applications",
+    ]
+
+    counts = {}
+    for c in TEST_COLLECTIONS:
+        counts[c] = await db[c].count_documents({})
+    counts["users_non_admin"] = await db.users.count_documents({"role": {"$ne": "admin"}})
+    if clear_coupons:
+        counts["coupons"] = await db.coupons.count_documents({})
+    if reset_invoice_counter:
+        counts["counters"] = await db.counters.count_documents({})
+
+    preserved = [
+        "books", "authors", "categories", "settings", "site_content",
+        "content_collections", "media", "legal",
+    ]
+    if not clear_coupons:
+        preserved.append("coupons")
+
+    admin_kept = await db.users.count_documents({"role": "admin"})
+    result = {
+        "would_delete": counts,
+        "total_docs": sum(counts.values()),
+        "admin_users_preserved": admin_kept,
+        "preserved_collections": preserved,
+        "dry_run": bool(dry_run),
+    }
+    if dry_run:
+        return result
+
+    if confirm != "RESET":
+        raise HTTPException(status_code=400, detail='To apply, send confirm="RESET"')
+
+    deleted = {}
+    for c in TEST_COLLECTIONS:
+        deleted[c] = (await db[c].delete_many({})).deleted_count
+    deleted["users_non_admin"] = (
+        await db.users.delete_many({"role": {"$ne": "admin"}})
+    ).deleted_count
+    if clear_coupons:
+        deleted["coupons"] = (await db.coupons.delete_many({})).deleted_count
+    if reset_invoice_counter:
+        deleted["counters"] = (await db.counters.delete_many({})).deleted_count
+    result["deleted"] = deleted
+    return result
+
+
 SETTINGS_DEFAULTS = {
     "tax_percent": 5,
     "free_ship_threshold": 0,   # 0 = free shipping on all orders
