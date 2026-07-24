@@ -450,6 +450,7 @@ export default function AdminPages() {
                     <div className="space-y-3">
                         <TextSlotRow label="Section 1 title" value={site.media_launches_title} onSave={(v) => saveSite("media_launches_title", v)} />
                         <TextSlotRow label="Section 2 title" value={site.media_presentations_title} onSave={(v) => saveSite("media_presentations_title", v)} />
+                        <TextSlotRow label="Section 3 title" value={site.media_events_title} onSave={(v) => saveSite("media_events_title", v)} />
                     </div>
                 </PageGroup>
             </section>

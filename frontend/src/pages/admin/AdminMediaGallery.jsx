@@ -59,6 +59,7 @@ function Row({ it, i, count, onChange, onMove, onRemove }) {
                     <select value={it.section || "launches"} onChange={(e) => onChange("section", e.target.value)} className="border border-[#E5E7EB] px-2 py-1.5 text-xs outline-none focus:border-[#002B5C]">
                         <option value="launches">Book Launches</option>
                         <option value="presentations">Book Presentations</option>
+                        <option value="events">Events</option>
                     </select>
                 </div>
             </div>

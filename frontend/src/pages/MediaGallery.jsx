@@ -34,6 +34,7 @@ function parseVideo(url) {
 const MEDIA_SECTIONS = [
     { key: "launches", title: "Book Launches", slot: "media_launches_title" },
     { key: "presentations", title: "Book Presentations", slot: "media_presentations_title" },
+    { key: "events", title: "Events", slot: "media_events_title" },
 ];
 
 export default function MediaGallery() {
