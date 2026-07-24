@@ -1550,6 +1550,72 @@ async def delete_coverless(dry_run: bool = True):
     return result
 
 
+@admin_router.post("/find-generated-covers")
+async def find_generated_covers(dry_run: bool = True, threshold: float = 0.5):
+    """Detect (and optionally delete) books whose cover is a GENERATED navy
+    placeholder — the "title on a solid navy card with OAKBRIDGE PUBLISHING" style
+    that was auto-created for titles lacking a real cover.
+
+    Each cover is sampled and the fraction of near-navy (#002B5C) pixels measured;
+    covers above `threshold` (default 0.5) are treated as generated placeholders.
+    Real photographic/designed covers sit well below that. dry_run=true only reports.
+    """
+    from io import BytesIO
+
+    from PIL import Image
+
+    NAVY = (0, 43, 92)
+    TOL = 45
+
+    def navy_fraction(data: bytes) -> float:
+        im = Image.open(BytesIO(data)).convert("RGB").resize((48, 72))
+        px = list(im.getdata())
+        hits = sum(
+            1 for r, g, b in px
+            if abs(r - NAVY[0]) <= TOL and abs(g - NAVY[1]) <= TOL and abs(b - NAVY[2]) <= TOL
+        )
+        return hits / max(1, len(px))
+
+    books = await db.books.find(
+        {}, {"_id": 0, "id": 1, "isbn": 1, "title": 1, "cover_image": 1, "category": 1}
+    ).to_list(None)
+
+    flagged, errors = [], 0
+    for b in books:
+        cov = str(b.get("cover_image") or "").strip()
+        if not cov or cov.startswith("http://") or cov.startswith("https://") or "placeholder" in cov.lower():
+            continue
+        path = cov.split("/api/files/", 1)[-1] if "/api/files/" in cov else cov.lstrip("/")
+        try:
+            data, _ = get_object(path)
+            frac = navy_fraction(data)
+            if frac >= threshold:
+                flagged.append({
+                    "isbn": b.get("isbn"), "title": b.get("title"),
+                    "category": b.get("category"), "navy": round(frac, 2),
+                })
+        except Exception:  # noqa: BLE001
+            errors += 1
+
+    flagged.sort(key=lambda x: -x["navy"])
+    result = {
+        "total": len(books),
+        "flagged": len(flagged),
+        "threshold": threshold,
+        "load_errors": errors,
+        "titles": flagged,
+        "dry_run": bool(dry_run),
+    }
+    if dry_run:
+        return result
+
+    isbns = [f["isbn"] for f in flagged if f.get("isbn")]
+    if isbns:
+        res = await db.books.delete_many({"isbn": {"$in": isbns}})
+        result["deleted"] = res.deleted_count
+    return result
+
+
 SETTINGS_DEFAULTS = {
     "tax_percent": 5,
     "free_ship_threshold": 0,   # 0 = free shipping on all orders
