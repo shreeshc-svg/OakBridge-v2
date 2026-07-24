@@ -508,10 +508,9 @@ export default function Home() {
                         <h2 className="font-serif text-4xl md:text-5xl mt-3 text-[#002B5C] leading-tight whitespace-pre-line">
                             {renderRich(site.home_solutions_title || "We work with the institutions shaping tomorrow.")}
                         </h2>
-                        <p className="mt-6 text-[#4B5563] text-sm leading-relaxed">
-                            We collaborate with professionals and scholars to
-                            curate opinion-building books that empower readers
-                            and users to gain a competitive edge.
+                        <p className="mt-6 text-[#4B5563] text-sm leading-relaxed whitespace-pre-line">
+                            {site.home_solutions_body ||
+                                "We collaborate with professionals and scholars to curate opinion-building books that empower readers and users to gain a competitive edge."}
                         </p>
                         <Link
                             to="/contact"
@@ -524,11 +523,16 @@ export default function Home() {
                     </div>
                     <div className="lg:col-span-8 grid grid-cols-1 md:grid-cols-2 gap-5">
                         {[
-                            { num: "01", icon: Briefcase, title: "For Firms", tagline: "Bespoke & branded", text: "Bespoke handbooks, corporate histories and practitioner references — co-created with your in-house teams for training, compliance and brand building." },
-                            { num: "02", icon: Building2, title: "For Institutions", tagline: "Adoption & licensing", text: "Whole-campus adoption programmes, library-grade editions and custom imprints for schools, universities and research bodies." },
-                            { num: "03", icon: Users, title: "For Professionals", tagline: "Practice references", text: "Authoritative Law, Tax, Business and Technology titles — ready-reckoners and updates written by leading practitioners." },
-                            { num: "04", icon: GraduationCap, title: "For Educators", tagline: "Classroom-ready", text: "Instructor review copies, lesson plans and classroom-ready ancillaries mapped to current curricula, plus customized bundle offerings." },
-                        ].map((s, i) => (
+                            { icon: Briefcase, title: "For Firms", tagline: "Bespoke & branded", text: "Bespoke handbooks, corporate histories and practitioner references — co-created with your in-house teams for training, compliance and brand building." },
+                            { icon: Building2, title: "For Institutions", tagline: "Adoption & licensing", text: "Whole-campus adoption programmes, library-grade editions and custom imprints for schools, universities and research bodies." },
+                            { icon: Users, title: "For Professionals", tagline: "Practice references", text: "Authoritative Law, Tax, Business and Technology titles — ready-reckoners and updates written by leading practitioners." },
+                            { icon: GraduationCap, title: "For Educators", tagline: "Classroom-ready", text: "Instructor review copies, lesson plans and classroom-ready ancillaries mapped to current curricula, plus customized bundle offerings." },
+                        ].map((s, i) => {
+                            const n = i + 1;
+                            const tagline = site[`home_sol${n}_tagline`] || s.tagline;
+                            const title = site[`home_sol${n}_title`] || s.title;
+                            const text = site[`home_sol${n}_text`] || s.text;
+                            return (
                             <div
                                 key={s.title}
                                 data-testid={`solution-card-${s.title.toLowerCase().replace(/\s+/g, "-")}`}
@@ -543,7 +547,7 @@ export default function Home() {
                                     aria-hidden="true"
                                     className="absolute top-3 right-5 font-mono text-[64px] leading-none font-semibold text-[#002B5C]/[0.04] group-hover:text-[#002B5C]/[0.07] transition-colors select-none"
                                 >
-                                    {s.num}
+                                    {String(n).padStart(2, "0")}
                                 </span>
 
                                 <div className="relative flex items-start gap-4">
@@ -551,18 +555,19 @@ export default function Home() {
                                         <s.icon size={20} strokeWidth={1.75} />
                                     </div>
                                     <div className="overline !text-[10px] !text-[#CC0033] mt-1">
-                                        {s.tagline}
+                                        {tagline}
                                     </div>
                                 </div>
 
                                 <h3 className="relative font-sans font-bold text-2xl text-[#002B5C] mt-7 tracking-tight leading-tight">
-                                    {s.title}
+                                    {title}
                                 </h3>
                                 <p className="relative text-sm text-[#4B5563] mt-3 leading-relaxed flex-1">
-                                    {s.text}
+                                    {text}
                                 </p>
                             </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 </div>
             </section>

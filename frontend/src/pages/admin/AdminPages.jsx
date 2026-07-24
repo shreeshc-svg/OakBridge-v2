@@ -122,6 +122,7 @@ export default function AdminPages() {
                         <TextSlotRow label="Hot Off the Press — heading" value={site.home_hot_title} onSave={(v) => saveSite("home_hot_title", v)} multiline />
                         <TextSlotRow label="Solutions — overline" value={site.home_solutions_overline} onSave={(v) => saveSite("home_solutions_overline", v)} />
                         <TextSlotRow label="Solutions — heading" value={site.home_solutions_title} onSave={(v) => saveSite("home_solutions_title", v)} multiline />
+                        <TextSlotRow label="Solutions — intro paragraph" value={site.home_solutions_body} onSave={(v) => saveSite("home_solutions_body", v)} multiline />
                         <TextSlotRow label="Bestsellers — overline" value={site.home_bestsellers_overline} onSave={(v) => saveSite("home_bestsellers_overline", v)} />
                         <TextSlotRow label="Bestsellers — heading" value={site.home_bestsellers_title} onSave={(v) => saveSite("home_bestsellers_title", v)} multiline />
                         <TextSlotRow label="Testimonials — overline" value={site.home_testimonials_overline} onSave={(v) => saveSite("home_testimonials_overline", v)} />
@@ -135,6 +136,22 @@ export default function AdminPages() {
                         <TextSlotRow label="Stat 2 — label" value={site.home_stat2_label} onSave={(v) => saveSite("home_stat2_label", v)} />
                         <TextSlotRow label="Stat 3 — value (e.g. Global)" value={site.home_stat3_value} onSave={(v) => saveSite("home_stat3_value", v)} />
                         <TextSlotRow label="Stat 3 — label" value={site.home_stat3_label} onSave={(v) => saveSite("home_stat3_label", v)} />
+                    </div>
+                    <div className="overline !text-[10px] mt-6 mb-2">Solutions cards (For Firms / Institutions / Professionals / Educators)</div>
+                    <div className="space-y-6">
+                        {[
+                            { n: 1, label: "For Firms" },
+                            { n: 2, label: "For Institutions" },
+                            { n: 3, label: "For Professionals" },
+                            { n: 4, label: "For Educators" },
+                        ].map((c) => (
+                            <div key={c.n} className="space-y-3 border-b border-[#E5E7EB] pb-5 last:border-0">
+                                <div className="overline !text-[10px] !text-[#002B5C]">Card {c.n} — {c.label}</div>
+                                <TextSlotRow label="Tagline (small red label)" value={site[`home_sol${c.n}_tagline`]} onSave={(v) => saveSite(`home_sol${c.n}_tagline`, v)} />
+                                <TextSlotRow label="Title" value={site[`home_sol${c.n}_title`]} onSave={(v) => saveSite(`home_sol${c.n}_title`, v)} />
+                                <TextSlotRow label="Description" value={site[`home_sol${c.n}_text`]} onSave={(v) => saveSite(`home_sol${c.n}_text`, v)} multiline />
+                            </div>
+                        ))}
                     </div>
                     <div className="overline !text-[10px] mt-6 mb-2">Five Imprint tiles — name, image &amp; link</div>
                     <div className="space-y-6">
