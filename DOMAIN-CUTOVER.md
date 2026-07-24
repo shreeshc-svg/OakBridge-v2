@@ -74,7 +74,7 @@ REACT_APP_BACKEND_URL=https://api.oakbridge.in
 
 ### 4. Razorpay
 
-Repoint the webhook to `https://api.oakbridge.in/api/payments/webhook` in **Live** mode, and keep `RAZORPAY_WEBHOOK_SECRET` in sync. Miss this and orders never confirm and stock never decrements.
+Repoint the webhook to `https://api.oakbridge.in/api/webhooks/razorpay` in **Live** mode, and keep `RAZORPAY_WEBHOOK_SECRET` in sync. Miss this and orders never confirm and stock never decrements.
 
 ### 5. Expected side-effect
 
