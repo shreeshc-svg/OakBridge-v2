@@ -354,7 +354,13 @@ export default function Home() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-                    {VERTICALS.map((v, i) => (
+                    {VERTICALS.map((v, i) => {
+                        const n = i + 1;
+                        const tagline = site[`home_biz${n}_tagline`] || v.tagline;
+                        const title = site[`home_biz${n}_title`] || v.title;
+                        const lede = site[`home_biz${n}_lede`] || v.lede;
+                        const cta = site[`home_biz${n}_cta`] || v.cta;
+                        return (
                         <Link
                             key={v.id}
                             to={v.to}
@@ -381,12 +387,12 @@ export default function Home() {
                                     <v.icon size={20} strokeWidth={1.75} />
                                 </div>
                                 <div className="overline !text-[10px] !text-[#CC0033] mt-1">
-                                    {v.tagline}
+                                    {tagline}
                                 </div>
                             </div>
 
                             <h3 className="relative font-sans font-bold text-2xl text-[#002B5C] mt-7 tracking-tight leading-tight">
-                                {v.title}
+                                {title}
                             </h3>
 
                             {v.comingSoon && (
@@ -400,11 +406,11 @@ export default function Home() {
                             )}
 
                             <p className="relative text-sm text-[#4B5563] mt-3 leading-relaxed flex-1">
-                                {v.lede}
+                                {lede}
                             </p>
 
                             <span className="relative mt-7 inline-flex items-center gap-1 text-xs font-mono uppercase tracking-[0.18em] text-[#002B5C] group-hover:text-[#CC0033] transition-colors self-start">
-                                {v.cta}
+                                {cta}
                                 <ArrowUpRight
                                     size={14}
                                     strokeWidth={2}
@@ -412,7 +418,8 @@ export default function Home() {
                                 />
                             </span>
                         </Link>
-                    ))}
+                        );
+                    })}
                 </div>
             </section>
             )}

@@ -137,6 +137,23 @@ export default function AdminPages() {
                         <TextSlotRow label="Stat 3 — value (e.g. Global)" value={site.home_stat3_value} onSave={(v) => saveSite("home_stat3_value", v)} />
                         <TextSlotRow label="Stat 3 — label" value={site.home_stat3_label} onSave={(v) => saveSite("home_stat3_label", v)} />
                     </div>
+                    <div className="overline !text-[10px] mt-6 mb-2">Our Businesses cards (Publishing / Events / Digital Solutions / Training)</div>
+                    <div className="space-y-6">
+                        {[
+                            { n: 1, label: "Publishing" },
+                            { n: 2, label: "Events" },
+                            { n: 3, label: "Digital Solutions" },
+                            { n: 4, label: "Training & Certification" },
+                        ].map((c) => (
+                            <div key={c.n} className="space-y-3 border-b border-[#E5E7EB] pb-5 last:border-0">
+                                <div className="overline !text-[10px] !text-[#002B5C]">Card {c.n} — {c.label}</div>
+                                <TextSlotRow label="Tagline (small red label)" value={site[`home_biz${c.n}_tagline`]} onSave={(v) => saveSite(`home_biz${c.n}_tagline`, v)} />
+                                <TextSlotRow label="Title" value={site[`home_biz${c.n}_title`]} onSave={(v) => saveSite(`home_biz${c.n}_title`, v)} />
+                                <TextSlotRow label="Description" value={site[`home_biz${c.n}_lede`]} onSave={(v) => saveSite(`home_biz${c.n}_lede`, v)} multiline />
+                                <TextSlotRow label="Button label" value={site[`home_biz${c.n}_cta`]} onSave={(v) => saveSite(`home_biz${c.n}_cta`, v)} />
+                            </div>
+                        ))}
+                    </div>
                     <div className="overline !text-[10px] mt-6 mb-2">Solutions cards (For Firms / Institutions / Professionals / Educators)</div>
                     <div className="space-y-6">
                         {[
