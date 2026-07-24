@@ -7,8 +7,8 @@ const DEFAULT_COLUMNS = [
     {
         title: "Shop",
         links: [
-            { to: "/books?category=law", label: "Law" },
-            { to: "/books?category=tax", label: "Taxation" },
+            { to: "/books?category=professional&subject=Law", label: "Law" },
+            { to: "/books?category=professional&subject=Tax", label: "Taxation" },
             { to: "/books?category=business", label: "Business & Management" },
             { to: "/books?category=academic", label: "Academic" },
             { to: "/books?category=general-reference", label: "General & Reference" },
