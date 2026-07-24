@@ -1434,6 +1434,52 @@ async def set_collection(key: str, payload: CollectionSet):
     return {"ok": True, "count": len(payload.items)}
 
 
+@admin_router.post("/merge-titles")
+async def merge_titles(dry_run: bool = True, remove_obsolete: bool = False):
+    """One-time go-live catalogue merge from books_go_live_seed.json.
+
+    Adds titles whose ISBN isn't already live; leaves existing titles untouched
+    (price, cover, stock, curation preserved). Only removes live-but-not-in-sheet
+    titles when remove_obsolete=true. dry_run=true (default) previews counts only.
+    """
+    import json as _json
+    import os as _os
+
+    seed_path = _os.path.join(_os.path.dirname(__file__), "books_go_live_seed.json")
+    if not _os.path.exists(seed_path):
+        raise HTTPException(status_code=404, detail="books_go_live_seed.json not found on server")
+    with open(seed_path, encoding="utf-8") as fh:
+        recs = _json.load(fh)
+
+    sheet_isbns = {str(r.get("isbn", "")).strip() for r in recs}
+    live = await db.books.find({}, {"_id": 0, "isbn": 1, "title": 1}).to_list(None)
+    live_isbns = {str(b.get("isbn", "")).strip() for b in live}
+    to_add = [r for r in recs if str(r.get("isbn", "")).strip() not in live_isbns]
+    obsolete = [b for b in live if str(b.get("isbn", "")).strip() not in sheet_isbns]
+
+    result = {
+        "sheet": len(recs),
+        "live": len(live),
+        "to_add": len(to_add),
+        "existing": len(recs) - len(to_add),
+        "obsolete": len(obsolete),
+        "sample_new": [r.get("title") for r in to_add[:10]],
+        "obsolete_titles": [b.get("title") for b in obsolete][:60],
+        "dry_run": bool(dry_run),
+    }
+    if dry_run:
+        return result
+
+    if to_add:
+        await db.books.insert_many([dict(r) for r in to_add])
+        result["added"] = len(to_add)
+    if remove_obsolete and obsolete:
+        ids = [str(b.get("isbn", "")).strip() for b in obsolete]
+        res = await db.books.delete_many({"isbn": {"$in": ids}})
+        result["removed"] = res.deleted_count
+    return result
+
+
 SETTINGS_DEFAULTS = {
     "tax_percent": 5,
     "free_ship_threshold": 0,   # 0 = free shipping on all orders
