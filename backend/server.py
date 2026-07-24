@@ -752,10 +752,24 @@ app.include_router(features_tasks_router)
 from inventory_sync import inventory_router  # noqa: E402
 app.include_router(inventory_router)
 
+# The production domains, Vercel preview and local dev are always allowed; any
+# extra origins in the CORS_ORIGINS env var (comma-separated) are merged in. This
+# way the domain cutover to oakbridge.in works even if the env var isn't updated.
+_BASE_CORS_ORIGINS = [
+    "https://oakbridge.in",
+    "https://www.oakbridge.in",
+    "https://oak-bridge-v2.vercel.app",
+    "http://localhost:3000",
+]
+_ALLOWED_ORIGINS = sorted(
+    set(_BASE_CORS_ORIGINS)
+    | {o.strip() for o in os.environ.get("CORS_ORIGINS", "").split(",") if o.strip()}
+)
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=[o.strip() for o in os.environ.get('CORS_ORIGINS', 'http://localhost:3000').split(',') if o.strip()],
+    allow_origins=_ALLOWED_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
