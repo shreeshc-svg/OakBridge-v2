@@ -1515,6 +1515,10 @@ async def delete_coverless(dry_run: bool = True):
         cov = str(cov or "").strip()
         if not cov:
             return False
+        # A placeholder image (even if it exists in storage) does not count as a
+        # real cover.
+        if "placeholder" in cov.lower():
+            return False
         if cov.startswith("http://") or cov.startswith("https://"):
             return True
         path = cov.split("/api/files/", 1)[-1] if "/api/files/" in cov else cov.lstrip("/")
