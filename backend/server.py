@@ -81,7 +81,9 @@ class Book(BaseModel):
     pages: int
     language: str = "English"
     publisher: str = "Oakbridge Publishing"
-    publication_year: int = 2024
+    # Tolerate a missing/null year in the DB rather than 500-ing the whole
+    # catalogue response: a single bad document used to break /api/books entirely.
+    publication_year: Optional[int] = 2024
     bestseller: bool = False
     new_release: bool = False
     rating: float = 4.5

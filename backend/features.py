@@ -1674,16 +1674,25 @@ async def apply_release_order(dry_run: bool = True):
 
     updated = 0
     for b, e in matched:
-        res = await db.books.update_one(
-            {"id": b["id"]},
-            {"$set": {
-                "release_rank": e["rank"],
-                "publication_date": e["publication_date"],
-                "publication_year": e["year"],
-            }},
-        )
+        # Only write the date fields when the master actually has a date. Writing
+        # publication_year=None breaks the Book response model (it is typed `int`),
+        # which 500s every catalogue endpoint — including Admin → Books.
+        fields = {"release_rank": e["rank"]}
+        if e.get("publication_date"):
+            fields["publication_date"] = e["publication_date"]
+        if e.get("year"):
+            fields["publication_year"] = e["year"]
+        res = await db.books.update_one({"id": b["id"]}, {"$set": fields})
         updated += res.modified_count
+
+    # Repair any doc a previous run left with a null year/date.
+    repaired = await db.books.update_many(
+        {"publication_year": None}, {"$set": {"publication_year": 2024}}
+    )
+    await db.books.update_many({"publication_date": None}, {"$unset": {"publication_date": ""}})
+
     result["updated"] = updated
+    result["repaired_null_year"] = repaired.modified_count
     return result
 
 
