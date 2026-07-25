@@ -10,6 +10,11 @@ const LINKS = [
     { to: "/admin/books", label: "Books", icon: BookOpen },
     { to: "/admin/inventory", label: "Inventory", icon: PackageCheck },
     { to: "/admin/pages", label: "Pages", icon: LayoutTemplate },
+    // These two routes existed in App.js but had no sidebar link, so the pages
+    // (incl. the homepage "What leaders are reading" carousel picker) were
+    // effectively unreachable without typing the URL.
+    { to: "/admin/page-bookstore", label: "Bookstore Page", icon: LayoutTemplate },
+    { to: "/admin/page-book", label: "Book Page", icon: BookOpen },
     { to: "/admin/authors", label: "Authors", icon: Users },
     { to: "/admin/careers", label: "Careers", icon: Briefcase },
     { to: "/admin/media-gallery", label: "Media & Gallery", icon: Clapperboard },
