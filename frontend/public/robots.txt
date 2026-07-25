@@ -5,4 +5,4 @@ Disallow: /account
 Disallow: /checkout
 Disallow: /order-confirmation
 
-Sitemap: https://oakbridge.in/sitemap.xml
+Sitemap: https://www.oakbridge.in/sitemap.xml
