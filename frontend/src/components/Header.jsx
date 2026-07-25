@@ -85,14 +85,18 @@ export default function Header() {
                         />
                     </Link>
 
-                    <nav className="hidden xl:flex items-center gap-5">
+                    {/* Desktop nav shows from lg (1024px). It used to be xl (1280px),
+                        which meant a maximised 1280px window fell ~15px short once the
+                        scrollbar was subtracted from the viewport — so the full nav
+                        silently collapsed to the hamburger on common laptop screens. */}
+                    <nav className="hidden lg:flex items-center gap-3 xl:gap-5">
                         {navItems.map((n) => (
                             <NavLink
                                 key={n.to}
                                 to={n.to}
                                 data-testid={`nav-${n.label.toLowerCase().replace(/\s+/g, "-")}`}
                                 className={({ isActive }) =>
-                                    `text-sm font-medium transition-colors ${isActive ? "text-[#002B5C]" : "text-[#4B5563] hover:text-[#002B5C]"}`
+                                    `text-[13px] xl:text-sm font-medium whitespace-nowrap transition-colors ${isActive ? "text-[#002B5C]" : "text-[#4B5563] hover:text-[#002B5C]"}`
                                 }
                             >
                                 {n.label}
@@ -101,7 +105,7 @@ export default function Header() {
                     </nav>
 
                     <div className="flex items-center gap-2 flex-shrink-0">
-                        <SearchBox className="hidden md:block w-44 xl:w-52" />
+                        <SearchBox className="hidden md:block w-36 lg:w-40 xl:w-52" />
                         <button
                             onClick={() => setIsOpen(true)}
                             data-testid="open-cart-button"
@@ -187,7 +191,7 @@ export default function Header() {
                         <button
                             onClick={() => setMobileOpen(!mobileOpen)}
                             data-testid="mobile-menu-toggle"
-                            className="xl:hidden p-2 hover:bg-[#F5F7FA]"
+                            className="lg:hidden p-2 hover:bg-[#F5F7FA]"
                             aria-label="Menu"
                         >
                             {mobileOpen ? (
@@ -200,7 +204,7 @@ export default function Header() {
                 </div>
 
                 {mobileOpen && (
-                    <div className="xl:hidden border-t border-[#002B5C]/10 bg-[#FFFFFF]">
+                    <div className="lg:hidden border-t border-[#002B5C]/10 bg-[#FFFFFF]">
                         <nav className="flex flex-col px-6 py-4 gap-3">
                             {navItems.map((n) => (
                                 <NavLink
