@@ -36,11 +36,19 @@ Create the service from `render.yaml` (New → Blueprint). Then set these env va
 | `LLM_API_KEY` | your Groq API key (`gsk_…`) |
 | `LLM_MODEL` | `llama-3.1-8b-instant` |
 
-**Suggested production admin password** (rotate anytime):
+**Admin password — never commit it.** Generate a strong one locally and paste it straight
+into Render → Environment → `ADMIN_PASSWORD`. It is not needed anywhere else.
 
+```bash
+# generate a 24-char password (macOS/Linux)
+LC_ALL=C tr -dc 'A-Za-z0-9!@#%^&*_+=' < /dev/urandom | head -c 24; echo
+
+# PowerShell
+-join ((48..57)+(65..90)+(97..122)+(33,35,37,38,42,43,61,64,94,95) | Get-Random -Count 24 | % {[char]$_})
 ```
-_CC$cpYUuNb^YF5K6Qy3
-```
+
+> A password that has ever been committed to git must be treated as public — it stays in
+> the history. Rotate it in Render rather than reusing it.
 
 Build: `pip install -r requirements-local.txt` · Start: `uvicorn server:app --host 0.0.0.0 --port $PORT` · Health check: `/api`.
 Note: the app only seeds the admin if `ADMIN_PASSWORD` is set, and CORS now defaults to localhost only — so `CORS_ORIGINS` **must** be set in production. `reportlab` (PDF invoices) is in `requirements-local.txt`, so it installs automatically.
