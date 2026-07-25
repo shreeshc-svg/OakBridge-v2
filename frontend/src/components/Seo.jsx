@@ -1,14 +1,16 @@
 import React from "react";
 
-const SITE = "https://oakbridge.in";
-const DEFAULT_IMG =
-    "https://oakbridge.in/og-image.jpg";
+// Canonical host is www (the apex 308-redirects to it). Canonical tags and OG
+// URLs must name the host we actually serve, or Google is told to prefer a URL
+// that only redirects.
+const SITE = "https://www.oakbridge.in";
+const DEFAULT_IMG = "https://www.oakbridge.in/og-image.jpg";
 
 /**
  * React 19 hoists <title>/<meta>/<link> to <head> automatically, so this
  * component just renders them. `jsonLd` may be an object or an array of objects.
  */
-export default function Seo({ title, description, path, image, type = "website", jsonLd }) {
+export default function Seo({ title, description, path, image, type = "website", jsonLd, noindex = false }) {
     const fullTitle = title ? `${title} · Oakbridge Publishing` : "Oakbridge Publishing";
     const url = path ? `${SITE}${path}` : SITE + "/";
     const img = image || DEFAULT_IMG;
@@ -18,6 +20,7 @@ export default function Seo({ title, description, path, image, type = "website",
         <>
             <title>{fullTitle}</title>
             {description && <meta name="description" content={description} />}
+            {noindex && <meta name="robots" content="noindex, follow" />}
             <link rel="canonical" href={url} />
             <meta property="og:type" content={type} />
             <meta property="og:site_name" content="Oakbridge Publishing" />

@@ -40,6 +40,7 @@ import AdminCareers from "@/pages/admin/AdminCareers";
 import AdminMediaGallery from "@/pages/admin/AdminMediaGallery";
 import AdminLegal from "@/pages/admin/AdminLegal";
 import AdminMessages from "@/pages/admin/AdminMessages";
+import NotFound from "@/pages/NotFound";
 import Submissions from "@/pages/Submissions";
 import Careers from "@/pages/Careers";
 import MediaGallery from "@/pages/MediaGallery";
@@ -109,6 +110,10 @@ function App() {
                                         </ProtectedRoute>
                                     }
                                 />
+                                {/* Catch-all: without this, any unknown URL (incl. every
+                                    stale link still in Google from the previous site)
+                                    rendered a blank page. */}
+                                <Route path="*" element={<NotFound />} />
                             </Route>
                             <Route
                                 path="/admin"
