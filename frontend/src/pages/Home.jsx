@@ -188,22 +188,6 @@ export default function Home() {
         fetchBooks({ sort: "featured", limit: 100 }).then(setFallback).catch(() => {});
     }, []);
 
-    // Compose the bestseller row: bestsellers first, then new releases, then any other books — dedup by id, max 6.
-    const bestsellerRow = (() => {
-        const seen = new Set();
-        const out = [];
-        for (const list of [featured, newRel, fallback]) {
-            for (const b of list) {
-                if (!seen.has(b.id)) {
-                    seen.add(b.id);
-                    out.push(b);
-                    if (out.length >= 6) return out;
-                }
-            }
-        }
-        return out;
-    })();
-
     // "What leaders are reading" shows ONLY the books the admin has explicitly
     // selected (home_bestsellers), in the admin's order — never the whole catalogue.
     // If nothing is selected (or the carousel is disabled), it doesn't render.
@@ -221,21 +205,15 @@ export default function Home() {
     const homeOrder = resolveSectionOrder(HOME_DEFAULT_ORDER, settings?.home_section_order);
     const homeOrd = (k) => { const i = homeOrder.indexOf(k); return i === -1 ? 99 : i; };
 
-    // Compose the new-releases row: new releases first, then featured, then fallback — dedup by id and exclude any book already shown in the bestsellers row. Max 7.
-    const newReleasesRow = (() => {
-        const used = new Set(bestsellerRow.map((b) => b.id));
-        const out = [];
-        for (const list of [newRel, featured, fallback]) {
-            for (const b of list) {
-                if (!used.has(b.id)) {
-                    used.add(b.id);
-                    out.push(b);
-                    if (out.length >= 7) return out;
-                }
-            }
-        }
-        return out;
-    })();
+    // "Hot Off the Press" = strictly the most recently PUBLISHED titles, in
+    // publication-date order (the API sorts by release_rank, rank 1 = newest).
+    //
+    // This used to compose new releases + featured + any-other-book, minus a
+    // hidden "bestsellerRow" that was itself built from the newest titles. With
+    // almost no book carrying the `bestseller` flag, that row silently swallowed
+    // the 5 newest titles and the carousel began at rank 6. No dedup, no
+    // backfill: the row now shows exactly what the catalogue says is newest.
+    const newReleasesRow = (newRel.length ? newRel : fallback).slice(0, 7);
 
     return (
         <div data-testid="home-page" className="flex flex-col">
