@@ -1616,6 +1616,77 @@ async def find_generated_covers(dry_run: bool = True, threshold: float = 0.5):
     return result
 
 
+@admin_router.post("/apply-release-order")
+async def apply_release_order(dry_run: bool = True):
+    """Write `release_rank` / publication date onto every book from the committed
+    `release_order.json` (rank 1 = most recently published).
+
+    Run this after any catalogue merge: titles added later carry no rank, so they
+    can never surface as New Arrivals or in the homepage "Hot Off the Press" row
+    however recent they are. Matched on ISBN (digits only) — exact, no fuzzy
+    title matching. dry_run=true reports without writing.
+    """
+    import json as _json
+    import re as _re
+
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "release_order.json")
+    if not os.path.exists(path):
+        raise HTTPException(status_code=500, detail="release_order.json not found")
+
+    with open(path, encoding="utf-8") as fh:
+        order = _json.load(fh)
+
+    def _clean(v) -> str:
+        return _re.sub(r"\D", "", str(v or ""))
+
+    by_isbn = {_clean(e.get("isbn")): e for e in order if e.get("isbn")}
+
+    books = await db.books.find(
+        {}, {"_id": 0, "id": 1, "isbn": 1, "title": 1, "release_rank": 1}
+    ).to_list(None)
+
+    matched, unmatched, newly_ranked = [], [], 0
+    for b in books:
+        e = by_isbn.get(_clean(b.get("isbn")))
+        if e:
+            matched.append((b, e))
+            if b.get("release_rank") is None:
+                newly_ranked += 1
+        else:
+            unmatched.append({"isbn": b.get("isbn"), "title": b.get("title")})
+
+    preview = [
+        {"rank": e["rank"], "date": e["publication_date"], "title": b.get("title")}
+        for b, e in sorted(matched, key=lambda x: x[1]["rank"])[:10]
+    ]
+    result = {
+        "catalogue": len(books),
+        "order_entries": len(order),
+        "matched": len(matched),
+        "newly_ranked": newly_ranked,
+        "unmatched": len(unmatched),
+        "unmatched_titles": unmatched[:20],
+        "top_new_arrivals_preview": preview,
+        "dry_run": bool(dry_run),
+    }
+    if dry_run:
+        return result
+
+    updated = 0
+    for b, e in matched:
+        res = await db.books.update_one(
+            {"id": b["id"]},
+            {"$set": {
+                "release_rank": e["rank"],
+                "publication_date": e["publication_date"],
+                "publication_year": e["year"],
+            }},
+        )
+        updated += res.modified_count
+    result["updated"] = updated
+    return result
+
+
 @admin_router.post("/reset-test-data")
 async def reset_test_data(
     dry_run: bool = True,
