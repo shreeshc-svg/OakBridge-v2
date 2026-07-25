@@ -303,6 +303,29 @@ export default function BookDetail() {
                         </span>
                     </div>
 
+                    {/* Format (Hardback / Paperback) from the Title Master. The
+                        `hasOptions` block further down only renders for titles with
+                        selectable variants, so without this a book's binding was
+                        never surfaced outside the Specifications tab. */}
+                    {book.binding && (
+                        <div className="mt-4 flex items-center gap-2">
+                            <span
+                                data-testid="book-binding-badge"
+                                className="inline-flex items-center gap-2 border border-[#002B5C]/20 bg-[#F5F7FA] px-3 py-1.5"
+                            >
+                                <BookOpen size={14} strokeWidth={1.5} className="text-[#002B5C]" />
+                                <span className="font-mono text-[11px] uppercase tracking-widest text-[#002B5C]">
+                                    {book.binding}
+                                </span>
+                            </span>
+                            {book.size && (
+                                <span className="font-mono text-[11px] text-[#4B5563]">
+                                    {book.size}
+                                </span>
+                            )}
+                        </div>
+                    )}
+
                     <div className="mt-8 flex items-baseline gap-4 pb-8 border-b border-[#E5E7EB]">
                         <span
                             data-testid="book-price"
@@ -521,9 +544,11 @@ export default function BookDetail() {
                                         ["ISBN", book.isbn],
                                         ["Category", book.category],
                                         ["Subject", book.subject],
-                                        ["Grade / Level", book.grade || "—"],
+                                        // Size (trim name + dimensions, e.g. "Royal · 24 × 16 cm")
+                                        // replaces the old Grade / Level row, which was empty for
+                                        // every title in this catalogue.
+                                        ["Size", book.size || "—"],
                                         ...(book.binding ? [["Binding", book.binding]] : []),
-                                        ...(book.size ? [["Size", book.size]] : []),
                                     ].map(([k, v]) => (
                                         <div
                                             key={k}

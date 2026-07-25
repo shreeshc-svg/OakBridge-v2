@@ -1616,6 +1616,76 @@ async def find_generated_covers(dry_run: bool = True, threshold: float = 0.5):
     return result
 
 
+@admin_router.post("/apply-book-specs")
+async def apply_book_specs(dry_run: bool = True):
+    """Write `size` (trim name + dimensions) and `binding` (Hardback/Paperback)
+    onto each book from the committed `book_specs.json`, generated from the Title
+    Master's dimension and binding columns.
+
+    size    e.g. "Royal · 24 × 16 cm"  (dimensions only where the trim is unknown)
+    binding "Hardback" (HB, HB(DJ)) or "Paperback" (PB, PB(GF))
+
+    Matched on ISBN (digits only). dry_run=true reports without writing.
+    """
+    import json as _json
+    import re as _re
+
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "book_specs.json")
+    if not os.path.exists(path):
+        raise HTTPException(status_code=500, detail="book_specs.json not found")
+    with open(path, encoding="utf-8") as fh:
+        specs = _json.load(fh)
+
+    books = await db.books.find(
+        {}, {"_id": 0, "id": 1, "isbn": 1, "title": 1, "size": 1, "binding": 1}
+    ).to_list(None)
+
+    plan, no_entry, no_size = [], [], []
+    for b in books:
+        e = specs.get(_re.sub(r"\D", "", str(b.get("isbn") or "")))
+        if not e:
+            no_entry.append({"isbn": b.get("isbn"), "title": b.get("title")})
+            continue
+        fields = {}
+        if e.get("size"):
+            fields["size"] = e["size"]
+        else:
+            no_size.append({"isbn": b.get("isbn"), "title": b.get("title")})
+        if e.get("binding"):
+            fields["binding"] = e["binding"]
+        if fields:
+            plan.append((b["id"], fields))
+
+    from collections import Counter as _C
+
+    trims = _C((f.get("size") or "").split(" · ")[0] or "dimensions only" for _, f in plan)
+    binds = _C(f.get("binding") or "none" for _, f in plan)
+    result = {
+        "catalogue": len(books),
+        "spec_entries": len(specs),
+        "will_update": len(plan),
+        "by_trim": dict(trims),
+        "by_binding": dict(binds),
+        "no_spec_entry": len(no_entry),
+        "no_spec_entry_titles": no_entry[:20],
+        "no_size_titles": no_size[:20],
+        "sample": [
+            {"title": next(b["title"] for b in books if b["id"] == bid), **f}
+            for bid, f in plan[:5]
+        ],
+        "dry_run": bool(dry_run),
+    }
+    if dry_run:
+        return result
+
+    updated = 0
+    for bid, fields in plan:
+        res = await db.books.update_one({"id": bid}, {"$set": fields})
+        updated += res.modified_count
+    result["updated"] = updated
+    return result
+
+
 @admin_router.post("/apply-release-order")
 async def apply_release_order(dry_run: bool = True):
     """Write `release_rank` / publication date onto every book from the committed
