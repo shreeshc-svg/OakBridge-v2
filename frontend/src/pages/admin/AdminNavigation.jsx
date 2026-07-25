@@ -8,6 +8,7 @@ import {
     adminSaveCollection,
 } from "../../lib/api";
 import { TextSlotRow, ListEditor } from "../../components/admin/ContentEditors";
+import CONTENT_DEFAULTS from "../../lib/contentDefaults";
 
 const DEFAULT_NAV = [
     { to: "/what-we-do", label: "What We Do", hidden: false },
@@ -292,12 +293,12 @@ export default function AdminNavigation() {
                         The left-hand block of the footer, including the newsletter sign-up.
                     </p>
                     <div className="mt-4 space-y-3">
-                        <TextSlotRow label="Small label (e.g. Est. 2017 · New Delhi)" value={site.footer_est} onSave={(v) => saveSite("footer_est", v)} />
-                        <TextSlotRow label="Tagline (line breaks allowed)" value={site.footer_tagline} onSave={(v) => saveSite("footer_tagline", v)} multiline />
-                        <TextSlotRow label="Description paragraph" value={site.footer_blurb} onSave={(v) => saveSite("footer_blurb", v)} multiline />
-                        <TextSlotRow label="Newsletter — email placeholder" value={site.footer_news_placeholder} onSave={(v) => saveSite("footer_news_placeholder", v)} />
-                        <TextSlotRow label="Newsletter — button label" value={site.footer_news_button} onSave={(v) => saveSite("footer_news_button", v)} />
-                        <TextSlotRow label="Newsletter — success message" value={site.footer_news_success} onSave={(v) => saveSite("footer_news_success", v)} />
+                        <TextSlotRow label="Small label (e.g. Est. 2017 · New Delhi)" value={site.footer_est} defaultValue={CONTENT_DEFAULTS.footer_est} onSave={(v) => saveSite("footer_est", v)} />
+                        <TextSlotRow label="Tagline (line breaks allowed)" value={site.footer_tagline} defaultValue={CONTENT_DEFAULTS.footer_tagline} onSave={(v) => saveSite("footer_tagline", v)} multiline />
+                        <TextSlotRow label="Description paragraph" value={site.footer_blurb} defaultValue={CONTENT_DEFAULTS.footer_blurb} onSave={(v) => saveSite("footer_blurb", v)} multiline />
+                        <TextSlotRow label="Newsletter — email placeholder" value={site.footer_news_placeholder} defaultValue={CONTENT_DEFAULTS.footer_news_placeholder} onSave={(v) => saveSite("footer_news_placeholder", v)} />
+                        <TextSlotRow label="Newsletter — button label" value={site.footer_news_button} defaultValue={CONTENT_DEFAULTS.footer_news_button} onSave={(v) => saveSite("footer_news_button", v)} />
+                        <TextSlotRow label="Newsletter — success message" value={site.footer_news_success} defaultValue={CONTENT_DEFAULTS.footer_news_success} onSave={(v) => saveSite("footer_news_success", v)} />
                     </div>
                 </div>
 
@@ -307,7 +308,7 @@ export default function AdminNavigation() {
                         The copyright line and the row of legal links. The year is added automatically.
                     </p>
                     <div className="mt-4 space-y-3">
-                        <TextSlotRow label="Copyright line (after the year)" value={site.footer_copyright} onSave={(v) => saveSite("footer_copyright", v)} />
+                        <TextSlotRow label="Copyright line (after the year)" value={site.footer_copyright} defaultValue={CONTENT_DEFAULTS.footer_copyright} onSave={(v) => saveSite("footer_copyright", v)} />
                     </div>
                     <div className="overline !text-[10px] mb-2 mt-6">Legal links</div>
                     <ListEditor

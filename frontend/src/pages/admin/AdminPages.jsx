@@ -16,6 +16,7 @@ import {
     mediaUrl,
 } from "../../lib/api";
 
+import CONTENT_DEFAULTS from "../../lib/contentDefaults";
 import {
     PageGroup,
     pageGroupId,
@@ -108,34 +109,34 @@ export default function AdminPages() {
                     <SlotRow label="Hero image" value={site.home_hero} onSave={(v) => saveSite("home_hero", v)} />
                     <div className="overline !text-[10px] mt-6 mb-2">Hero text</div>
                     <div className="space-y-3">
-                        <TextSlotRow label="Overline (Est. 2017 · …)" value={site.home_hero_overline} onSave={(v) => saveSite("home_hero_overline", v)} />
-                        <TextSlotRow label="Headline (wrap a word in *stars* for red; use line breaks)" value={site.home_hero_title} onSave={(v) => saveSite("home_hero_title", v)} multiline />
-                        <TextSlotRow label="Intro paragraph" value={site.home_hero_body} onSave={(v) => saveSite("home_hero_body", v)} multiline />
+                        <TextSlotRow label="Overline (Est. 2017 · …)" value={site.home_hero_overline} defaultValue={CONTENT_DEFAULTS.home_hero_overline} onSave={(v) => saveSite("home_hero_overline", v)} />
+                        <TextSlotRow label="Headline (wrap a word in *stars* for red; use line breaks)" value={site.home_hero_title} defaultValue={CONTENT_DEFAULTS.home_hero_title} onSave={(v) => saveSite("home_hero_title", v)} multiline />
+                        <TextSlotRow label="Intro paragraph" value={site.home_hero_body} defaultValue={CONTENT_DEFAULTS.home_hero_body} onSave={(v) => saveSite("home_hero_body", v)} multiline />
                     </div>
                     <div className="overline !text-[10px] mt-6 mb-2">Section headings (tip: *word* = red accent)</div>
                     <div className="space-y-3">
-                        <TextSlotRow label="Our Businesses — overline" value={site.home_biz_overline} onSave={(v) => saveSite("home_biz_overline", v)} />
-                        <TextSlotRow label="Our Businesses — heading" value={site.home_biz_title} onSave={(v) => saveSite("home_biz_title", v)} multiline />
-                        <TextSlotRow label="Imprints — overline" value={site.home_imprints_overline} onSave={(v) => saveSite("home_imprints_overline", v)} />
-                        <TextSlotRow label="Imprints — heading" value={site.home_imprints_title} onSave={(v) => saveSite("home_imprints_title", v)} multiline />
-                        <TextSlotRow label="Hot Off the Press — overline" value={site.home_hot_overline} onSave={(v) => saveSite("home_hot_overline", v)} />
-                        <TextSlotRow label="Hot Off the Press — heading" value={site.home_hot_title} onSave={(v) => saveSite("home_hot_title", v)} multiline />
-                        <TextSlotRow label="Solutions — overline" value={site.home_solutions_overline} onSave={(v) => saveSite("home_solutions_overline", v)} />
-                        <TextSlotRow label="Solutions — heading" value={site.home_solutions_title} onSave={(v) => saveSite("home_solutions_title", v)} multiline />
-                        <TextSlotRow label="Solutions — intro paragraph" value={site.home_solutions_body} onSave={(v) => saveSite("home_solutions_body", v)} multiline />
-                        <TextSlotRow label="Bestsellers — overline" value={site.home_bestsellers_overline} onSave={(v) => saveSite("home_bestsellers_overline", v)} />
-                        <TextSlotRow label="Bestsellers — heading" value={site.home_bestsellers_title} onSave={(v) => saveSite("home_bestsellers_title", v)} multiline />
-                        <TextSlotRow label="Testimonials — overline" value={site.home_testimonials_overline} onSave={(v) => saveSite("home_testimonials_overline", v)} />
-                        <TextSlotRow label="Testimonials — heading" value={site.home_testimonials_title} onSave={(v) => saveSite("home_testimonials_title", v)} multiline />
+                        <TextSlotRow label="Our Businesses — overline" value={site.home_biz_overline} defaultValue={CONTENT_DEFAULTS.home_biz_overline} onSave={(v) => saveSite("home_biz_overline", v)} />
+                        <TextSlotRow label="Our Businesses — heading" value={site.home_biz_title} defaultValue={CONTENT_DEFAULTS.home_biz_title} onSave={(v) => saveSite("home_biz_title", v)} multiline />
+                        <TextSlotRow label="Imprints — overline" value={site.home_imprints_overline} defaultValue={CONTENT_DEFAULTS.home_imprints_overline} onSave={(v) => saveSite("home_imprints_overline", v)} />
+                        <TextSlotRow label="Imprints — heading" value={site.home_imprints_title} defaultValue={CONTENT_DEFAULTS.home_imprints_title} onSave={(v) => saveSite("home_imprints_title", v)} multiline />
+                        <TextSlotRow label="Hot Off the Press — overline" value={site.home_hot_overline} defaultValue={CONTENT_DEFAULTS.home_hot_overline} onSave={(v) => saveSite("home_hot_overline", v)} />
+                        <TextSlotRow label="Hot Off the Press — heading" value={site.home_hot_title} defaultValue={CONTENT_DEFAULTS.home_hot_title} onSave={(v) => saveSite("home_hot_title", v)} multiline />
+                        <TextSlotRow label="Solutions — overline" value={site.home_solutions_overline} defaultValue={CONTENT_DEFAULTS.home_solutions_overline} onSave={(v) => saveSite("home_solutions_overline", v)} />
+                        <TextSlotRow label="Solutions — heading" value={site.home_solutions_title} defaultValue={CONTENT_DEFAULTS.home_solutions_title} onSave={(v) => saveSite("home_solutions_title", v)} multiline />
+                        <TextSlotRow label="Solutions — intro paragraph" value={site.home_solutions_body} defaultValue={CONTENT_DEFAULTS.home_solutions_body} onSave={(v) => saveSite("home_solutions_body", v)} multiline />
+                        <TextSlotRow label="Bestsellers — overline" value={site.home_bestsellers_overline} defaultValue={CONTENT_DEFAULTS.home_bestsellers_overline} onSave={(v) => saveSite("home_bestsellers_overline", v)} />
+                        <TextSlotRow label="Bestsellers — heading" value={site.home_bestsellers_title} defaultValue={CONTENT_DEFAULTS.home_bestsellers_title} onSave={(v) => saveSite("home_bestsellers_title", v)} multiline />
+                        <TextSlotRow label="Testimonials — overline" value={site.home_testimonials_overline} defaultValue={CONTENT_DEFAULTS.home_testimonials_overline} onSave={(v) => saveSite("home_testimonials_overline", v)} />
+                        <TextSlotRow label="Testimonials — heading" value={site.home_testimonials_title} defaultValue={CONTENT_DEFAULTS.home_testimonials_title} onSave={(v) => saveSite("home_testimonials_title", v)} multiline />
                     </div>
                     <div className="overline !text-[10px] mt-6 mb-2">Hero stats (three)</div>
                     <div className="space-y-3">
-                        <TextSlotRow label="Stat 1 — value (e.g. 230+)" value={site.home_stat1_value} onSave={(v) => saveSite("home_stat1_value", v)} />
-                        <TextSlotRow label="Stat 1 — label" value={site.home_stat1_label} onSave={(v) => saveSite("home_stat1_label", v)} />
-                        <TextSlotRow label="Stat 2 — value (e.g. 320K)" value={site.home_stat2_value} onSave={(v) => saveSite("home_stat2_value", v)} />
-                        <TextSlotRow label="Stat 2 — label" value={site.home_stat2_label} onSave={(v) => saveSite("home_stat2_label", v)} />
-                        <TextSlotRow label="Stat 3 — value (e.g. Global)" value={site.home_stat3_value} onSave={(v) => saveSite("home_stat3_value", v)} />
-                        <TextSlotRow label="Stat 3 — label" value={site.home_stat3_label} onSave={(v) => saveSite("home_stat3_label", v)} />
+                        <TextSlotRow label="Stat 1 — value (e.g. 230+)" value={site.home_stat1_value} defaultValue={CONTENT_DEFAULTS.home_stat1_value} onSave={(v) => saveSite("home_stat1_value", v)} />
+                        <TextSlotRow label="Stat 1 — label" value={site.home_stat1_label} defaultValue={CONTENT_DEFAULTS.home_stat1_label} onSave={(v) => saveSite("home_stat1_label", v)} />
+                        <TextSlotRow label="Stat 2 — value (e.g. 320K)" value={site.home_stat2_value} defaultValue={CONTENT_DEFAULTS.home_stat2_value} onSave={(v) => saveSite("home_stat2_value", v)} />
+                        <TextSlotRow label="Stat 2 — label" value={site.home_stat2_label} defaultValue={CONTENT_DEFAULTS.home_stat2_label} onSave={(v) => saveSite("home_stat2_label", v)} />
+                        <TextSlotRow label="Stat 3 — value (e.g. Global)" value={site.home_stat3_value} defaultValue={CONTENT_DEFAULTS.home_stat3_value} onSave={(v) => saveSite("home_stat3_value", v)} />
+                        <TextSlotRow label="Stat 3 — label" value={site.home_stat3_label} defaultValue={CONTENT_DEFAULTS.home_stat3_label} onSave={(v) => saveSite("home_stat3_label", v)} />
                     </div>
                     <div className="overline !text-[10px] mt-6 mb-2">Our Businesses cards (Publishing / Events / Digital Solutions / Training)</div>
                     <div className="space-y-6">
@@ -208,9 +209,9 @@ export default function AdminPages() {
                     <SlotRow label="Banner image" value={site.plp_banner} onSave={(v) => saveSite("plp_banner", v)} />
                     <div className="overline !text-[10px] mt-6 mb-2">Hero text (shown on the main bookstore landing)</div>
                     <div className="space-y-3">
-                        <TextSlotRow label="Overline" value={site.plp_hero_overline} onSave={(v) => saveSite("plp_hero_overline", v)} />
-                        <TextSlotRow label="Headline (*word* = amber accent; line breaks allowed)" value={site.plp_hero_title} onSave={(v) => saveSite("plp_hero_title", v)} multiline />
-                        <TextSlotRow label="Description" value={site.plp_hero_body} onSave={(v) => saveSite("plp_hero_body", v)} multiline />
+                        <TextSlotRow label="Overline" value={site.plp_hero_overline} defaultValue={CONTENT_DEFAULTS.plp_hero_overline} onSave={(v) => saveSite("plp_hero_overline", v)} />
+                        <TextSlotRow label="Headline (*word* = amber accent; line breaks allowed)" value={site.plp_hero_title} defaultValue={CONTENT_DEFAULTS.plp_hero_title} onSave={(v) => saveSite("plp_hero_title", v)} multiline />
+                        <TextSlotRow label="Description" value={site.plp_hero_body} defaultValue={CONTENT_DEFAULTS.plp_hero_body} onSave={(v) => saveSite("plp_hero_body", v)} multiline />
                     </div>
                     <div className="overline !text-[10px] mt-6 mb-2">Category images</div>
                     <div className="space-y-3">
@@ -234,10 +235,10 @@ export default function AdminPages() {
                     <div className="overline !text-[10px] mb-2">Hero</div>
                     <div className="space-y-3">
                         <SlotRow label="Hero image (right-hand panel)" value={site.wwd_hero} onSave={(v) => saveSite("wwd_hero", v)} />
-                        <TextSlotRow label="Overline" value={site.wwd_overline} onSave={(v) => saveSite("wwd_overline", v)} />
-                        <TextSlotRow label="Title (line breaks allowed)" value={site.wwd_title} onSave={(v) => saveSite("wwd_title", v)} multiline />
-                        <TextSlotRow label="Title highlight (red)" value={site.wwd_highlight} onSave={(v) => saveSite("wwd_highlight", v)} />
-                        <TextSlotRow label="Intro paragraph" value={site.wwd_body} onSave={(v) => saveSite("wwd_body", v)} multiline />
+                        <TextSlotRow label="Overline" value={site.wwd_overline} defaultValue={CONTENT_DEFAULTS.wwd_overline} onSave={(v) => saveSite("wwd_overline", v)} />
+                        <TextSlotRow label="Title (line breaks allowed)" value={site.wwd_title} defaultValue={CONTENT_DEFAULTS.wwd_title} onSave={(v) => saveSite("wwd_title", v)} multiline />
+                        <TextSlotRow label="Title highlight (red)" value={site.wwd_highlight} defaultValue={CONTENT_DEFAULTS.wwd_highlight} onSave={(v) => saveSite("wwd_highlight", v)} />
+                        <TextSlotRow label="Intro paragraph" value={site.wwd_body} defaultValue={CONTENT_DEFAULTS.wwd_body} onSave={(v) => saveSite("wwd_body", v)} multiline />
                     </div>
                     <div className="overline !text-[10px] mb-2 mt-8 pt-8 border-t border-[#E5E7EB]">Vertical cards (add / edit / reorder)</div>
                     <PageCardsEditor collectionKey="page_verticals" iconOptions={["BookOpen", "Calendar", "Cpu", "GraduationCap"]} defaults={WWD_CARDS_DEFAULT} />
@@ -253,17 +254,17 @@ export default function AdminPages() {
                 <PageGroup title="Digital Solutions" path="/digital-solutions">
                     <div className="overline !text-[10px] mb-2">Hero</div>
                     <div className="space-y-3">
-                        <TextSlotRow label="Eyebrow" value={site.ds_eyebrow} onSave={(v) => saveSite("ds_eyebrow", v)} />
-                        <TextSlotRow label="Headline (line breaks allowed)" value={site.ds_headline} onSave={(v) => saveSite("ds_headline", v)} multiline />
-                        <TextSlotRow label="Headline accent (amber)" value={site.ds_accent} onSave={(v) => saveSite("ds_accent", v)} />
-                        <TextSlotRow label="Body paragraph" value={site.ds_body} onSave={(v) => saveSite("ds_body", v)} multiline />
+                        <TextSlotRow label="Eyebrow" value={site.ds_eyebrow} defaultValue={CONTENT_DEFAULTS.ds_eyebrow} onSave={(v) => saveSite("ds_eyebrow", v)} />
+                        <TextSlotRow label="Headline (line breaks allowed)" value={site.ds_headline} defaultValue={CONTENT_DEFAULTS.ds_headline} onSave={(v) => saveSite("ds_headline", v)} multiline />
+                        <TextSlotRow label="Headline accent (amber)" value={site.ds_accent} defaultValue={CONTENT_DEFAULTS.ds_accent} onSave={(v) => saveSite("ds_accent", v)} />
+                        <TextSlotRow label="Body paragraph" value={site.ds_body} defaultValue={CONTENT_DEFAULTS.ds_body} onSave={(v) => saveSite("ds_body", v)} multiline />
                     </div>
                     <div className="overline !text-[10px] mb-2 mt-8 pt-8 border-t border-[#E5E7EB]">Hero stats</div>
                     <ListEditor collectionKey="page_ds_stats" defaults={DS_STATS_DEFAULT} fields={[{ key: "value", label: "Value (e.g. 500+)" }, { key: "label", label: "Label" }]} blank={{ value: "", label: "" }} />
                     <div className="overline !text-[10px] mb-2 mt-8 pt-8 border-t border-[#E5E7EB]">“What’s coming” section</div>
                     <div className="space-y-3">
-                        <TextSlotRow label="Section kicker" value={site.ds_features_kicker} onSave={(v) => saveSite("ds_features_kicker", v)} />
-                        <TextSlotRow label="Section headline (line breaks allowed)" value={site.ds_features_headline} onSave={(v) => saveSite("ds_features_headline", v)} multiline />
+                        <TextSlotRow label="Section kicker" value={site.ds_features_kicker} defaultValue={CONTENT_DEFAULTS.ds_features_kicker} onSave={(v) => saveSite("ds_features_kicker", v)} />
+                        <TextSlotRow label="Section headline (line breaks allowed)" value={site.ds_features_headline} defaultValue={CONTENT_DEFAULTS.ds_features_headline} onSave={(v) => saveSite("ds_features_headline", v)} multiline />
                     </div>
                     <div className="mt-4">
                         <ListEditor collectionKey="page_ds_features" defaults={DS_FEATURES_DEFAULT} iconOptions={["Sparkles", "Bot", "Database", "Cpu"]} fields={[{ key: "title", label: "Title" }, { key: "text", label: "Text", type: "textarea" }]} blank={{ icon: "Sparkles", title: "", text: "" }} />
@@ -273,17 +274,17 @@ export default function AdminPages() {
                 <PageGroup title="Academy" path="/academy">
                     <div className="overline !text-[10px] mb-2">Hero</div>
                     <div className="space-y-3">
-                        <TextSlotRow label="Eyebrow" value={site.ac_eyebrow} onSave={(v) => saveSite("ac_eyebrow", v)} />
-                        <TextSlotRow label="Headline (line breaks allowed)" value={site.ac_headline} onSave={(v) => saveSite("ac_headline", v)} multiline />
-                        <TextSlotRow label="Headline accent (amber)" value={site.ac_accent} onSave={(v) => saveSite("ac_accent", v)} />
-                        <TextSlotRow label="Body paragraph" value={site.ac_body} onSave={(v) => saveSite("ac_body", v)} multiline />
+                        <TextSlotRow label="Eyebrow" value={site.ac_eyebrow} defaultValue={CONTENT_DEFAULTS.ac_eyebrow} onSave={(v) => saveSite("ac_eyebrow", v)} />
+                        <TextSlotRow label="Headline (line breaks allowed)" value={site.ac_headline} defaultValue={CONTENT_DEFAULTS.ac_headline} onSave={(v) => saveSite("ac_headline", v)} multiline />
+                        <TextSlotRow label="Headline accent (amber)" value={site.ac_accent} defaultValue={CONTENT_DEFAULTS.ac_accent} onSave={(v) => saveSite("ac_accent", v)} />
+                        <TextSlotRow label="Body paragraph" value={site.ac_body} defaultValue={CONTENT_DEFAULTS.ac_body} onSave={(v) => saveSite("ac_body", v)} multiline />
                     </div>
                     <div className="overline !text-[10px] mb-2 mt-8 pt-8 border-t border-[#E5E7EB]">Hero stats</div>
                     <ListEditor collectionKey="page_ac_stats" defaults={AC_STATS_DEFAULT} fields={[{ key: "value", label: "Value (e.g. 12+)" }, { key: "label", label: "Label" }]} blank={{ value: "", label: "" }} />
                     <div className="overline !text-[10px] mb-2 mt-8 pt-8 border-t border-[#E5E7EB]">“What’s coming” section</div>
                     <div className="space-y-3">
-                        <TextSlotRow label="Section kicker" value={site.ac_features_kicker} onSave={(v) => saveSite("ac_features_kicker", v)} />
-                        <TextSlotRow label="Section headline (line breaks allowed)" value={site.ac_features_headline} onSave={(v) => saveSite("ac_features_headline", v)} multiline />
+                        <TextSlotRow label="Section kicker" value={site.ac_features_kicker} defaultValue={CONTENT_DEFAULTS.ac_features_kicker} onSave={(v) => saveSite("ac_features_kicker", v)} />
+                        <TextSlotRow label="Section headline (line breaks allowed)" value={site.ac_features_headline} defaultValue={CONTENT_DEFAULTS.ac_features_headline} onSave={(v) => saveSite("ac_features_headline", v)} multiline />
                     </div>
                     <div className="mt-4">
                         <ListEditor collectionKey="page_ac_features" defaults={AC_FEATURES_DEFAULT} iconOptions={["MonitorPlay", "GraduationCap", "BookOpen", "Award"]} fields={[{ key: "title", label: "Title" }, { key: "text", label: "Text", type: "textarea" }]} blank={{ icon: "GraduationCap", title: "", text: "" }} />
@@ -293,13 +294,13 @@ export default function AdminPages() {
                 <PageGroup title="Solutions" path="/solutions/:slug">
                     <div className="overline !text-[10px] mb-2">Index page heading (/solutions)</div>
                     <div className="space-y-3">
-                        <TextSlotRow label="Overline" value={site.solutions_index_overline} onSave={(v) => saveSite("solutions_index_overline", v)} />
-                        <TextSlotRow label="Headline (line breaks allowed)" value={site.solutions_index_title} onSave={(v) => saveSite("solutions_index_title", v)} multiline />
+                        <TextSlotRow label="Overline" value={site.solutions_index_overline} defaultValue={CONTENT_DEFAULTS.solutions_index_overline} onSave={(v) => saveSite("solutions_index_overline", v)} />
+                        <TextSlotRow label="Headline (line breaks allowed)" value={site.solutions_index_title} defaultValue={CONTENT_DEFAULTS.solutions_index_title} onSave={(v) => saveSite("solutions_index_title", v)} multiline />
                     </div>
                     <div className="overline !text-[10px] mb-2 mt-8 pt-8 border-t border-[#E5E7EB]">Shared labels (detail pages)</div>
                     <div className="space-y-3">
-                        <TextSlotRow label="&quot;What's included&quot; label" value={site.solutions_included_label} onSave={(v) => saveSite("solutions_included_label", v)} />
-                        <TextSlotRow label="Contact button label" value={site.solutions_cta_label} onSave={(v) => saveSite("solutions_cta_label", v)} />
+                        <TextSlotRow label="&quot;What's included&quot; label" value={site.solutions_included_label} defaultValue={CONTENT_DEFAULTS.solutions_included_label} onSave={(v) => saveSite("solutions_included_label", v)} />
+                        <TextSlotRow label="Contact button label" value={site.solutions_cta_label} defaultValue={CONTENT_DEFAULTS.solutions_cta_label} onSave={(v) => saveSite("solutions_cta_label", v)} />
                     </div>
                     <div className="overline !text-[10px] mb-2 mt-8 pt-8 border-t border-[#E5E7EB]">Solution pages — text (one bullet per line in Features)</div>
                     <div className="mt-2">
@@ -327,23 +328,23 @@ export default function AdminPages() {
                 <PageGroup title="About" path="/about">
                     <div className="overline !text-[10px] mb-2">Hero — wrap a word in *asterisks* to show it in red</div>
                     <div className="space-y-3">
-                        <TextSlotRow label="Overline" value={site.about_overline} onSave={(v) => saveSite("about_overline", v)} />
-                        <TextSlotRow label="Headline (line breaks + *highlight*)" value={site.about_title} onSave={(v) => saveSite("about_title", v)} multiline />
-                        <TextSlotRow label="Intro paragraph" value={site.about_body1} onSave={(v) => saveSite("about_body1", v)} multiline />
-                        <TextSlotRow label="Second paragraph" value={site.about_body2} onSave={(v) => saveSite("about_body2", v)} multiline />
+                        <TextSlotRow label="Overline" value={site.about_overline} defaultValue={CONTENT_DEFAULTS.about_overline} onSave={(v) => saveSite("about_overline", v)} />
+                        <TextSlotRow label="Headline (line breaks + *highlight*)" value={site.about_title} defaultValue={CONTENT_DEFAULTS.about_title} onSave={(v) => saveSite("about_title", v)} multiline />
+                        <TextSlotRow label="Intro paragraph" value={site.about_body1} defaultValue={CONTENT_DEFAULTS.about_body1} onSave={(v) => saveSite("about_body1", v)} multiline />
+                        <TextSlotRow label="Second paragraph" value={site.about_body2} defaultValue={CONTENT_DEFAULTS.about_body2} onSave={(v) => saveSite("about_body2", v)} multiline />
                     </div>
                     <div className="overline !text-[10px] mb-2 mt-8 pt-8 border-t border-[#E5E7EB]">Timeline</div>
                     <div className="space-y-3">
-                        <TextSlotRow label="Timeline overline" value={site.about_timeline_overline} onSave={(v) => saveSite("about_timeline_overline", v)} />
-                        <TextSlotRow label="Timeline headline (line breaks allowed)" value={site.about_timeline_title} onSave={(v) => saveSite("about_timeline_title", v)} multiline />
+                        <TextSlotRow label="Timeline overline" value={site.about_timeline_overline} defaultValue={CONTENT_DEFAULTS.about_timeline_overline} onSave={(v) => saveSite("about_timeline_overline", v)} />
+                        <TextSlotRow label="Timeline headline (line breaks allowed)" value={site.about_timeline_title} defaultValue={CONTENT_DEFAULTS.about_timeline_title} onSave={(v) => saveSite("about_timeline_title", v)} multiline />
                     </div>
                     <div className="mt-4">
                         <ListEditor collectionKey="page_about_milestones" defaults={ABOUT_MILESTONES_DEFAULT} fields={[{ key: "year", label: "Year" }, { key: "text", label: "Milestone text", type: "textarea" }]} blank={{ year: "", text: "" }} />
                     </div>
                     <div className="overline !text-[10px] mb-2 mt-8 pt-8 border-t border-[#E5E7EB]">Management team</div>
                     <div className="space-y-3">
-                        <TextSlotRow label="Section overline" value={site.about_team_overline} onSave={(v) => saveSite("about_team_overline", v)} />
-                        <TextSlotRow label="Section headline (line breaks + *highlight*)" value={site.about_team_title} onSave={(v) => saveSite("about_team_title", v)} multiline />
+                        <TextSlotRow label="Section overline" value={site.about_team_overline} defaultValue={CONTENT_DEFAULTS.about_team_overline} onSave={(v) => saveSite("about_team_overline", v)} />
+                        <TextSlotRow label="Section headline (line breaks + *highlight*)" value={site.about_team_title} defaultValue={CONTENT_DEFAULTS.about_team_title} onSave={(v) => saveSite("about_team_title", v)} multiline />
                     </div>
                     <div className="mt-4">
                         <ListEditor
@@ -366,8 +367,8 @@ export default function AdminPages() {
                 <PageGroup title="Authors" path="/authors">
                     <div className="overline !text-[10px] mb-2">Hero</div>
                     <div className="space-y-3">
-                        <TextSlotRow label="Overline" value={site.authors_overline} onSave={(v) => saveSite("authors_overline", v)} />
-                        <TextSlotRow label="Headline (line breaks allowed)" value={site.authors_title} onSave={(v) => saveSite("authors_title", v)} multiline />
+                        <TextSlotRow label="Overline" value={site.authors_overline} defaultValue={CONTENT_DEFAULTS.authors_overline} onSave={(v) => saveSite("authors_overline", v)} />
+                        <TextSlotRow label="Headline (line breaks allowed)" value={site.authors_title} defaultValue={CONTENT_DEFAULTS.authors_title} onSave={(v) => saveSite("authors_title", v)} multiline />
                     </div>
                     <p className="text-xs text-[#4B5563] mt-4">
                         The author tiles themselves come from your author records — edit those in{" "}
@@ -385,21 +386,21 @@ export default function AdminPages() {
                     <FlagshipEventsEditor />
                     <div className="overline !text-[10px] mb-2 mt-8 pt-8 border-t border-[#E5E7EB]">Page text (headings &amp; intros — *word* = accent)</div>
                     <div className="space-y-3">
-                        <TextSlotRow label="Hero — overline" value={site.events_hero_overline} onSave={(v) => saveSite("events_hero_overline", v)} />
-                        <TextSlotRow label="Hero — heading" value={site.events_hero_title} onSave={(v) => saveSite("events_hero_title", v)} multiline />
-                        <TextSlotRow label="Hero — intro" value={site.events_hero_body} onSave={(v) => saveSite("events_hero_body", v)} multiline />
-                        <TextSlotRow label="Experience — overline" value={site.events_exp_overline} onSave={(v) => saveSite("events_exp_overline", v)} />
-                        <TextSlotRow label="Experience — heading" value={site.events_exp_title} onSave={(v) => saveSite("events_exp_title", v)} multiline />
-                        <TextSlotRow label="Summit Speakers — overline" value={site.events_summit_overline} onSave={(v) => saveSite("events_summit_overline", v)} />
-                        <TextSlotRow label="Summit Speakers — heading" value={site.events_summit_title} onSave={(v) => saveSite("events_summit_title", v)} multiline />
-                        <TextSlotRow label="Who Attends — overline" value={site.events_who_overline} onSave={(v) => saveSite("events_who_overline", v)} />
-                        <TextSlotRow label="Who Attends — heading" value={site.events_who_title} onSave={(v) => saveSite("events_who_title", v)} multiline />
-                        <TextSlotRow label="Who Attends — intro" value={site.events_who_body} onSave={(v) => saveSite("events_who_body", v)} multiline />
-                        <TextSlotRow label="Vidhi Speakers — overline" value={site.events_vidhi_overline} onSave={(v) => saveSite("events_vidhi_overline", v)} />
-                        <TextSlotRow label="Vidhi Speakers — heading" value={site.events_vidhi_title} onSave={(v) => saveSite("events_vidhi_title", v)} multiline />
-                        <TextSlotRow label="Get Involved — overline" value={site.events_cta_overline} onSave={(v) => saveSite("events_cta_overline", v)} />
-                        <TextSlotRow label="Get Involved — heading" value={site.events_cta_title} onSave={(v) => saveSite("events_cta_title", v)} multiline />
-                        <TextSlotRow label="Get Involved — intro" value={site.events_cta_body} onSave={(v) => saveSite("events_cta_body", v)} multiline />
+                        <TextSlotRow label="Hero — overline" value={site.events_hero_overline} defaultValue={CONTENT_DEFAULTS.events_hero_overline} onSave={(v) => saveSite("events_hero_overline", v)} />
+                        <TextSlotRow label="Hero — heading" value={site.events_hero_title} defaultValue={CONTENT_DEFAULTS.events_hero_title} onSave={(v) => saveSite("events_hero_title", v)} multiline />
+                        <TextSlotRow label="Hero — intro" value={site.events_hero_body} defaultValue={CONTENT_DEFAULTS.events_hero_body} onSave={(v) => saveSite("events_hero_body", v)} multiline />
+                        <TextSlotRow label="Experience — overline" value={site.events_exp_overline} defaultValue={CONTENT_DEFAULTS.events_exp_overline} onSave={(v) => saveSite("events_exp_overline", v)} />
+                        <TextSlotRow label="Experience — heading" value={site.events_exp_title} defaultValue={CONTENT_DEFAULTS.events_exp_title} onSave={(v) => saveSite("events_exp_title", v)} multiline />
+                        <TextSlotRow label="Summit Speakers — overline" value={site.events_summit_overline} defaultValue={CONTENT_DEFAULTS.events_summit_overline} onSave={(v) => saveSite("events_summit_overline", v)} />
+                        <TextSlotRow label="Summit Speakers — heading" value={site.events_summit_title} defaultValue={CONTENT_DEFAULTS.events_summit_title} onSave={(v) => saveSite("events_summit_title", v)} multiline />
+                        <TextSlotRow label="Who Attends — overline" value={site.events_who_overline} defaultValue={CONTENT_DEFAULTS.events_who_overline} onSave={(v) => saveSite("events_who_overline", v)} />
+                        <TextSlotRow label="Who Attends — heading" value={site.events_who_title} defaultValue={CONTENT_DEFAULTS.events_who_title} onSave={(v) => saveSite("events_who_title", v)} multiline />
+                        <TextSlotRow label="Who Attends — intro" value={site.events_who_body} defaultValue={CONTENT_DEFAULTS.events_who_body} onSave={(v) => saveSite("events_who_body", v)} multiline />
+                        <TextSlotRow label="Vidhi Speakers — overline" value={site.events_vidhi_overline} defaultValue={CONTENT_DEFAULTS.events_vidhi_overline} onSave={(v) => saveSite("events_vidhi_overline", v)} />
+                        <TextSlotRow label="Vidhi Speakers — heading" value={site.events_vidhi_title} defaultValue={CONTENT_DEFAULTS.events_vidhi_title} onSave={(v) => saveSite("events_vidhi_title", v)} multiline />
+                        <TextSlotRow label="Get Involved — overline" value={site.events_cta_overline} defaultValue={CONTENT_DEFAULTS.events_cta_overline} onSave={(v) => saveSite("events_cta_overline", v)} />
+                        <TextSlotRow label="Get Involved — heading" value={site.events_cta_title} defaultValue={CONTENT_DEFAULTS.events_cta_title} onSave={(v) => saveSite("events_cta_title", v)} multiline />
+                        <TextSlotRow label="Get Involved — intro" value={site.events_cta_body} defaultValue={CONTENT_DEFAULTS.events_cta_body} onSave={(v) => saveSite("events_cta_body", v)} multiline />
                     </div>
                     <div className="overline !text-[10px] mb-2 mt-8 pt-8 border-t border-[#E5E7EB]">Flagship banners (also power the rotating hero)</div>
                     <div className="space-y-3">
@@ -413,44 +414,44 @@ export default function AdminPages() {
                 <PageGroup title="Contact" path="/contact">
                     <div className="overline !text-[10px] mb-2">Page text</div>
                     <div className="space-y-3">
-                        <TextSlotRow label="Overline" value={site.contact_overline} onSave={(v) => saveSite("contact_overline", v)} />
-                        <TextSlotRow label="Heading" value={site.contact_title} onSave={(v) => saveSite("contact_title", v)} multiline />
-                        <TextSlotRow label="Intro" value={site.contact_body} onSave={(v) => saveSite("contact_body", v)} multiline />
+                        <TextSlotRow label="Overline" value={site.contact_overline} defaultValue={CONTENT_DEFAULTS.contact_overline} onSave={(v) => saveSite("contact_overline", v)} />
+                        <TextSlotRow label="Heading" value={site.contact_title} defaultValue={CONTENT_DEFAULTS.contact_title} onSave={(v) => saveSite("contact_title", v)} multiline />
+                        <TextSlotRow label="Intro" value={site.contact_body} defaultValue={CONTENT_DEFAULTS.contact_body} onSave={(v) => saveSite("contact_body", v)} multiline />
                     </div>
                     <p className="text-[11px] text-[#4B5563] mt-3">Direct-line emails are in <Link to="/admin/settings" className="text-[#002B5C] border-b border-[#002B5C]">Settings</Link>.</p>
                 </PageGroup>
 
                 <PageGroup title="Author Submissions" path="/submissions">
                     <div className="space-y-3">
-                        <TextSlotRow label="Overline" value={site.sub_overline} onSave={(v) => saveSite("sub_overline", v)} />
-                        <TextSlotRow label="Heading" value={site.sub_title} onSave={(v) => saveSite("sub_title", v)} multiline />
-                        <TextSlotRow label="Intro" value={site.sub_body} onSave={(v) => saveSite("sub_body", v)} multiline />
-                        <TextSlotRow label="'What we look for' — heading" value={site.sub_lookfor_title} onSave={(v) => saveSite("sub_lookfor_title", v)} />
-                        <TextSlotRow label="'What we look for' — list (one item per line)" value={site.sub_lookfor_items} onSave={(v) => saveSite("sub_lookfor_items", v)} multiline />
+                        <TextSlotRow label="Overline" value={site.sub_overline} defaultValue={CONTENT_DEFAULTS.sub_overline} onSave={(v) => saveSite("sub_overline", v)} />
+                        <TextSlotRow label="Heading" value={site.sub_title} defaultValue={CONTENT_DEFAULTS.sub_title} onSave={(v) => saveSite("sub_title", v)} multiline />
+                        <TextSlotRow label="Intro" value={site.sub_body} defaultValue={CONTENT_DEFAULTS.sub_body} onSave={(v) => saveSite("sub_body", v)} multiline />
+                        <TextSlotRow label="'What we look for' — heading" value={site.sub_lookfor_title} defaultValue={CONTENT_DEFAULTS.sub_lookfor_title} onSave={(v) => saveSite("sub_lookfor_title", v)} />
+                        <TextSlotRow label="'What we look for' — list (one item per line)" value={site.sub_lookfor_items} defaultValue={CONTENT_DEFAULTS.sub_lookfor_items} onSave={(v) => saveSite("sub_lookfor_items", v)} multiline />
                     </div>
                 </PageGroup>
 
                 <PageGroup title="Careers" path="/careers">
                     <p className="text-sm text-[#4B5563] mb-3">Open roles and applications are managed in <Link to="/admin/careers" className="text-[#002B5C] border-b border-[#002B5C]">Careers</Link>.</p>
                     <div className="space-y-3">
-                        <TextSlotRow label="Overline" value={site.careers_overline} onSave={(v) => saveSite("careers_overline", v)} />
-                        <TextSlotRow label="Heading" value={site.careers_title} onSave={(v) => saveSite("careers_title", v)} multiline />
-                        <TextSlotRow label="Intro" value={site.careers_body} onSave={(v) => saveSite("careers_body", v)} multiline />
+                        <TextSlotRow label="Overline" value={site.careers_overline} defaultValue={CONTENT_DEFAULTS.careers_overline} onSave={(v) => saveSite("careers_overline", v)} />
+                        <TextSlotRow label="Heading" value={site.careers_title} defaultValue={CONTENT_DEFAULTS.careers_title} onSave={(v) => saveSite("careers_title", v)} multiline />
+                        <TextSlotRow label="Intro" value={site.careers_body} defaultValue={CONTENT_DEFAULTS.careers_body} onSave={(v) => saveSite("careers_body", v)} multiline />
                     </div>
                 </PageGroup>
 
                 <PageGroup title="Media & Gallery" path="/media">
                     <p className="text-sm text-[#4B5563] mb-3">Photos and videos are managed in <Link to="/admin/media-gallery" className="text-[#002B5C] border-b border-[#002B5C]">Media &amp; Gallery</Link>.</p>
                     <div className="space-y-3">
-                        <TextSlotRow label="Overline" value={site.media_overline} onSave={(v) => saveSite("media_overline", v)} />
-                        <TextSlotRow label="Heading (*word* = accent)" value={site.media_title} onSave={(v) => saveSite("media_title", v)} multiline />
-                        <TextSlotRow label="Intro" value={site.media_body} onSave={(v) => saveSite("media_body", v)} multiline />
+                        <TextSlotRow label="Overline" value={site.media_overline} defaultValue={CONTENT_DEFAULTS.media_overline} onSave={(v) => saveSite("media_overline", v)} />
+                        <TextSlotRow label="Heading (*word* = accent)" value={site.media_title} defaultValue={CONTENT_DEFAULTS.media_title} onSave={(v) => saveSite("media_title", v)} multiline />
+                        <TextSlotRow label="Intro" value={site.media_body} defaultValue={CONTENT_DEFAULTS.media_body} onSave={(v) => saveSite("media_body", v)} multiline />
                     </div>
                     <div className="overline !text-[10px] mb-2 mt-8 pt-8 border-t border-[#E5E7EB]">Gallery section titles</div>
                     <div className="space-y-3">
-                        <TextSlotRow label="Section 1 title" value={site.media_launches_title} onSave={(v) => saveSite("media_launches_title", v)} />
-                        <TextSlotRow label="Section 2 title" value={site.media_presentations_title} onSave={(v) => saveSite("media_presentations_title", v)} />
-                        <TextSlotRow label="Section 3 title" value={site.media_events_title} onSave={(v) => saveSite("media_events_title", v)} />
+                        <TextSlotRow label="Section 1 title" value={site.media_launches_title} defaultValue={CONTENT_DEFAULTS.media_launches_title} onSave={(v) => saveSite("media_launches_title", v)} />
+                        <TextSlotRow label="Section 2 title" value={site.media_presentations_title} defaultValue={CONTENT_DEFAULTS.media_presentations_title} onSave={(v) => saveSite("media_presentations_title", v)} />
+                        <TextSlotRow label="Section 3 title" value={site.media_events_title} defaultValue={CONTENT_DEFAULTS.media_events_title} onSave={(v) => saveSite("media_events_title", v)} />
                     </div>
                 </PageGroup>
             </section>

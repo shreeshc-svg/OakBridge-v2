@@ -105,11 +105,21 @@ export function SlotRow({ label, value, onSave }) {
     );
 }
 
-export function TextSlotRow({ label, value, onSave, multiline }) {
+/**
+ * One editable site_content text slot.
+ *
+ * `defaultValue` is the copy the storefront falls back to when no override is
+ * saved. Passing it makes an empty field self-explanatory: the built-in text
+ * shows as a greyed placeholder with a "Using default" note, instead of the box
+ * looking blank as though the section had no content at all. "Use default" loads
+ * that text in so it can be edited, and clearing the field reverts to it.
+ */
+export function TextSlotRow({ label, value, onSave, multiline, defaultValue = "" }) {
     const [val, setVal] = useState(value || "");
     const [saving, setSaving] = useState(false);
     useEffect(() => setVal(value || ""), [value]);
     const changed = (val || "") !== (value || "");
+    const usingDefault = !(value || "").trim() && !!defaultValue;
     const save = async () => {
         setSaving(true);
         try {
@@ -120,14 +130,50 @@ export function TextSlotRow({ label, value, onSave, multiline }) {
             setSaving(false);
         }
     };
+    const box =
+        "mt-1 w-full border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none focus:border-[#002B5C] placeholder:text-[#9CA3AF] placeholder:italic";
     return (
         <div className="flex items-start gap-3 border border-[#E5E7EB] bg-white p-3">
             <div className="flex-1 min-w-0">
-                <div className="overline !text-[10px]">{label}</div>
+                <div className="flex items-center gap-2 flex-wrap">
+                    <div className="overline !text-[10px]">{label}</div>
+                    {usingDefault && (
+                        <span className="font-mono text-[9px] uppercase tracking-widest text-[#4B5563] bg-[#F5F7FA] border border-[#E5E7EB] px-1.5 py-0.5">
+                            Using default
+                        </span>
+                    )}
+                </div>
                 {multiline ? (
-                    <textarea value={val} onChange={(e) => setVal(e.target.value)} rows={3} className="mt-1 w-full border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none focus:border-[#002B5C]" />
+                    <textarea
+                        value={val}
+                        onChange={(e) => setVal(e.target.value)}
+                        rows={3}
+                        placeholder={defaultValue}
+                        className={box}
+                    />
                 ) : (
-                    <input value={val} onChange={(e) => setVal(e.target.value)} className="mt-1 w-full border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none focus:border-[#002B5C]" />
+                    <input
+                        value={val}
+                        onChange={(e) => setVal(e.target.value)}
+                        placeholder={defaultValue}
+                        className={box}
+                    />
+                )}
+                {defaultValue && (
+                    <div className="mt-1.5 flex items-start gap-3">
+                        <button
+                            type="button"
+                            onClick={() => setVal(defaultValue)}
+                            className="flex-shrink-0 text-[10px] font-mono uppercase tracking-widest text-[#002B5C] border-b border-[#002B5C]/40 hover:border-[#CC0033] hover:text-[#CC0033]"
+                        >
+                            Use default
+                        </button>
+                        {(val || "").trim() !== defaultValue && (
+                            <span className="text-[10px] text-[#4B5563] whitespace-pre-line line-clamp-2">
+                                Default: {defaultValue}
+                            </span>
+                        )}
+                    </div>
                 )}
             </div>
             <button onClick={save} disabled={!changed || saving} className="mt-5 text-xs font-medium border border-[#002B5C] px-4 py-2 hover:bg-[#F5F7FA] disabled:opacity-40 flex-shrink-0">
