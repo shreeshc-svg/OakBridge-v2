@@ -544,7 +544,26 @@ async def featured_books(limit: int = 8):
 
 @api_router.get("/books/new-releases", response_model=List[Book])
 async def new_release_books(limit: int = 8):
-    cursor = db.books.find({"new_release": True}, {"_id": 0}).limit(limit)
+    """Newest titles for the homepage "Hot Off the Press" row.
+
+    Previously this matched `new_release: True` literally. No title in the
+    catalogue carries that flag, so the endpoint returned an empty list and the
+    homepage row silently backfilled with arbitrary books — while its own
+    "View all" link (/books?new_release=true) used the release_rank logic and
+    showed a completely different set. Both now agree: explicit flag OR the
+    most recently published titles, ordered newest first.
+    """
+    cursor = (
+        db.books.find(
+            {"$or": [
+                {"new_release": True},
+                {"release_rank": {"$lte": NEW_RELEASE_TOP_N}},
+            ]},
+            {"_id": 0},
+        )
+        .sort("release_rank", 1)
+        .limit(limit)
+    )
     docs = await cursor.to_list(limit)
     return [_decorate_book(d) for d in docs]
 
