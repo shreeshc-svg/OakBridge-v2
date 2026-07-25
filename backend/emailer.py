@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 from typing import Optional
 
 import resend
@@ -36,14 +37,37 @@ def _from_field() -> str:
     return f"{SENDER_NAME} <{SENDER_EMAIL}>" if SENDER_NAME else SENDER_EMAIL
 
 
+def _recipients(to) -> list:
+    """Normalise a recipient into a clean list.
+
+    Accepts a single address, a comma/semicolon-separated string, or a list — so
+    env vars like ADMIN_NOTIFY_EMAIL can name several inboxes
+    ("info@oakbridge.in,orders@oakbridge.in") with no code change.
+    """
+    if not to:
+        return []
+    items = to if isinstance(to, (list, tuple, set)) else re.split(r"[,;]", str(to))
+    seen, out = set(), []
+    for raw in items:
+        addr = str(raw).strip()
+        key = addr.lower()
+        if addr and key not in seen:
+            seen.add(key)
+            out.append(addr)
+    return out
+
+
 async def send_email(
-    to: str,
+    to,
     subject: str,
     html: str,
     reply_to: Optional[str] = None,
     attachments: Optional[list] = None,
 ) -> bool:
     """Send a transactional email. Returns True on success, False on failure. Never raises.
+
+    `to` may be one address, a comma-separated string, or a list — every
+    recipient receives the same message.
 
     `attachments` is a list of (filename, bytes) tuples; each is base64-encoded
     for Resend.
@@ -52,9 +76,14 @@ async def send_email(
         logger.warning("Skipping email — RESEND_API_KEY not set (to=%s, subject=%r)", to, subject)
         return False
 
+    rcpts = _recipients(to)
+    if not rcpts:
+        logger.warning("Skipping email — no recipient (subject=%r)", subject)
+        return False
+
     params: dict = {
         "from": _from_field(),
-        "to": [to],
+        "to": rcpts,
         "subject": subject,
         "html": html,
     }
@@ -302,7 +331,11 @@ async def send_waitlist_welcome(email: str, source: str) -> bool:
 
 # ====== Admin internal alerts ======
 
-ADMIN_NOTIFY_EMAIL = os.environ.get("ADMIN_NOTIFY_EMAIL")  # e.g., orders@oakbridge.in
+# Internal inbox(es) notified about orders, failed payments, desk copies and
+# applications. Accepts SEVERAL addresses, comma-separated, e.g.
+#   ADMIN_NOTIFY_EMAIL=info@oakbridge.in,orders@oakbridge.in
+# Every listed inbox receives the same notification.
+ADMIN_NOTIFY_EMAIL = os.environ.get("ADMIN_NOTIFY_EMAIL")
 
 
 def render_admin_paid_order_html(order: dict) -> str:
