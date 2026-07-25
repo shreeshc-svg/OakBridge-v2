@@ -2,6 +2,13 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "yarn build",
   "outputDirectory": "build",
+  "redirects": [
+    {
+      "source": "/book/:slug*",
+      "destination": "/books",
+      "permanent": true
+    }
+  ],
   "rewrites": [
     { "source": "/sitemap.xml", "destination": "https://api.oakbridge.in/api/sitemap.xml" },
     { "source": "/(.*)", "destination": "/index.html" }
