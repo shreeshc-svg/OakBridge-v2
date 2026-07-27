@@ -443,16 +443,24 @@ export default function Home() {
                                     className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                                 />
                                 <div className="absolute inset-0 bg-gradient-to-t from-[#002B5C]/90 via-[#002B5C]/30 to-transparent" />
+                                {/* Titles and Explore links line up across all five tiles:
+                                    the title box reserves two lines and bottom-aligns its text
+                                    (so one- and two-line names share a baseline), and the tiles
+                                    without an Explore link keep the row as invisible spacing
+                                    rather than collapsing and riding lower than their neighbours. */}
                                 <div className="absolute inset-0 p-5 flex flex-col justify-between text-[#FFFFFF]">
                                     <span className="overline !text-[9px] !text-[#F59E0B]">Imprint</span>
                                     <div>
-                                        <h3 className="font-serif text-xl leading-tight">{name}</h3>
-                                        {!["coffee_table", "curated"].includes(imp.key) && (
-                                            <div className="mt-3 inline-flex items-center gap-1 text-[11px] font-mono uppercase tracking-widest border-b border-[#F59E0B] pb-0.5 text-[#F59E0B]">
-                                                Explore
-                                                <ArrowUpRight size={11} strokeWidth={1.5} />
-                                            </div>
-                                        )}
+                                        <h3 className="font-serif text-xl leading-tight min-h-[3.25rem] flex items-end">
+                                            {name}
+                                        </h3>
+                                        <div
+                                            aria-hidden={["coffee_table", "curated"].includes(imp.key)}
+                                            className={`mt-3 inline-flex items-center gap-1 text-[11px] font-mono uppercase tracking-widest border-b border-[#F59E0B] pb-0.5 text-[#F59E0B] ${["coffee_table", "curated"].includes(imp.key) ? "invisible" : ""}`}
+                                        >
+                                            Explore
+                                            <ArrowUpRight size={11} strokeWidth={1.5} />
+                                        </div>
                                     </div>
                                 </div>
                             </Link>
