@@ -88,11 +88,13 @@ function HeroCarousel({ slides, site }) {
                 {(n ? slides : [{ id: "fallback" }]).map((s, k) => (
                     <div key={s.id || k} className="flex-[0_0_100%] min-w-full">
                         {s.image ? (
+                            /* `fit: "contain"` shows a designed banner whole (nothing cropped);
+                               the default fills the frame, which suits photographs. */
                             <img
                                 src={mediaUrl(s.image) || s.image}
                                 alt={s.alt || ""}
                                 loading={k === 0 ? "eager" : "lazy"}
-                                className="w-full object-cover h-[300px] sm:h-[420px] lg:h-[520px]"
+                                className={`w-full h-[300px] sm:h-[420px] lg:h-[520px] ${s.fit === "contain" ? "object-contain" : "object-cover"}`}
                             />
                         ) : (
                             <div className="w-full h-[300px] sm:h-[420px] lg:h-[520px] bg-[#0d2340]" />
@@ -273,9 +275,13 @@ export default function MediaGallery() {
                             <div className="grid md:grid-cols-[1.15fr_1fr] gap-8" data-testid="media-upcoming">
                                 <div>
                                     <div className="overline !text-[#CC0033]">{site.media_up_overline || "Upcoming"}</div>
+                                    {/* Event artwork is whatever shape the designer made it —
+                                        posters are often square or portrait. `contain` with a
+                                        height cap shows the whole image instead of cropping the
+                                        title off, which `cover` was doing. */}
                                     {site.media_up_image && (
                                         <img src={mediaUrl(site.media_up_image) || site.media_up_image} alt=""
-                                            className="w-full h-[260px] md:h-[340px] object-cover mt-4" loading="lazy" />
+                                            className="w-full max-h-[420px] object-contain object-left mt-4" loading="lazy" />
                                     )}
                                 </div>
                                 <div>

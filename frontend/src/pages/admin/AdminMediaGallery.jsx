@@ -85,6 +85,13 @@ export default function AdminMediaGallery() {
                         fields={[
                             { key: "image", label: "Banner image", type: "image" },
                             { key: "alt", label: "Alt text (for screen readers)" },
+                            {
+                                key: "fit", label: "How it fills the frame", type: "select",
+                                options: [
+                                    { value: "cover", label: "Fill the frame — may crop (photos)" },
+                                    { value: "contain", label: "Show the whole image (designed banners)" },
+                                ],
+                            },
                         ]}
                     />
                 </Block>
