@@ -79,6 +79,24 @@ def _require_client() -> razorpay.Client:
     return _client
 
 
+async def _claim_once(order_id: str, flag: str) -> bool:
+    """Atomically claim a one-time side effect for an order. True only for the winner.
+
+    A paid order is confirmed twice — synchronously by /payments/verify when the
+    browser returns from Checkout, and asynchronously by the payment.captured
+    webhook. Stock already had this protection; the emails did not, so every order
+    sent two customer receipts (two invoice PDFs) and two admin alerts.
+
+    The claim is the Mongo update itself, so whichever path arrives first wins even
+    if both run at the same instant.
+    """
+    res = await db.orders.update_one(
+        {"id": order_id, flag: {"$ne": True}},
+        {"$set": {flag: True}},
+    )
+    return res.modified_count == 1
+
+
 async def _apply_stock_decrement(order_id: str) -> None:
     """Idempotently decrement stock for each item, once, on first paid confirmation."""
     claim = await db.orders.update_one(
@@ -230,7 +248,7 @@ async def verify_payment(payload: VerifyPaymentRequest):
     # Fire-and-forget order receipt + admin notification (best-effort; never block the response)
     try:
         refreshed = await db.orders.find_one({"id": order["id"]}, {"_id": 0})
-        if refreshed:
+        if refreshed and await _claim_once(order["id"], "paid_emails_sent"):
             pdf = None
             try:  # invoice is best-effort — never let it block the receipt email
                 from invoice import build_order_invoice
@@ -310,6 +328,7 @@ async def razorpay_webhook(
             order_doc = await db.orders.find_one({"rzp_order_id": rzp_order_id}, {"_id": 0})
             if order_doc:
                 await _apply_stock_decrement(order_doc["id"])
+            if order_doc and await _claim_once(order_doc["id"], "paid_emails_sent"):
                 pdf = None
                 try:  # invoice is best-effort — never let it block the receipt email
                     from invoice import build_order_invoice
@@ -326,7 +345,11 @@ async def razorpay_webhook(
     if event_type == "payment.failed" and res.matched_count:
         try:
             order_doc = await db.orders.find_one({"rzp_order_id": rzp_order_id}, {"_id": 0})
-            if order_doc and order_doc.get("payment_status") != "paid":
+            if (
+                order_doc
+                and order_doc.get("payment_status") != "paid"
+                and await _claim_once(order_doc["id"], "failed_emails_sent")
+            ):
                 reason = payment.get("error_description") or ""
                 await send_order_failed(order_doc, reason)
                 await send_admin_failed_order(await _with_item_specs(order_doc), reason)
