@@ -17,7 +17,7 @@ Several sidebar screens write through the SAME endpoints — Pages, Navigation,
 Media & Gallery, Careers, Bookstore Page, Book Page and E-Books all persist via
 `site-content` / `collections` / `settings`. A request cannot say which screen it
 came from, so those seven are enforced as one bundle: unticking one hides it from
-the sidebar, but someone technical with any of the six could still reach the
+the sidebar, but someone technical with any of the seven could still reach the
 others' data through the API. The other fourteen sections are genuinely isolated.
 
 Sensitive `settings` keys (tax, shipping, admin nav) are additionally gated to

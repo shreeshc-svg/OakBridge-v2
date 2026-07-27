@@ -328,7 +328,7 @@ export default function BookDetail() {
                             </>
                         )}
                         {/* E-book platform link — renders only once ebook_url is set in admin. */}
-                        <EbookCta variant="inline" className="ml-auto" />
+                        <EbookCta variant="inline" />
                     </div>
 
                     <div className="mt-8 flex items-baseline gap-4 pb-8 border-b border-[#E5E7EB]">
