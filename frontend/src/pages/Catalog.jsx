@@ -483,18 +483,33 @@ export default function Catalog() {
                             {heroCat?.description || site.plp_hero_body ||
                                 "Browse authoritative reference titles, legal commentaries, curated thematic works and scholarly editions from Oakbridge Publishing — all in one place."}
                         </p>
-                        <div
-                            className="mt-8 flex flex-wrap items-center gap-x-8 gap-y-3 text-xs font-mono uppercase tracking-widest text-white/60 fade-up"
-                            style={{ animationDelay: "220ms" }}
-                        >
-                            <span>
-                                <span className="text-[#F59E0B] text-base font-sans tracking-tight mr-2">
-                                    230+
-                                </span>
-                                titles
-                            </span>
-                            <span>5 imprints</span>
-                        </div>
+                        {/* Editable in Admin → Pages → Bookstore. These were hardcoded
+                            ("230+ titles"), which went stale the moment the catalogue
+                            changed size. Clear a value to drop that stat. */}
+                        {(site.plp_stat1_value || site.plp_stat2_value || site.plp_stat1_value === undefined) && (
+                            <div
+                                className="mt-8 flex flex-wrap items-center gap-x-8 gap-y-3 text-xs font-mono uppercase tracking-widest text-white/60 fade-up"
+                                style={{ animationDelay: "220ms" }}
+                                data-testid="plp-hero-stats"
+                            >
+                                {(site.plp_stat1_value ?? "190+") && (
+                                    <span>
+                                        <span className="text-[#F59E0B] text-base font-sans tracking-tight mr-2">
+                                            {site.plp_stat1_value ?? "190+"}
+                                        </span>
+                                        {site.plp_stat1_label || "titles"}
+                                    </span>
+                                )}
+                                {(site.plp_stat2_value ?? "5") && (
+                                    <span>
+                                        <span className="text-[#F59E0B] text-base font-sans tracking-tight mr-2">
+                                            {site.plp_stat2_value ?? "5"}
+                                        </span>
+                                        {site.plp_stat2_label || "imprints"}
+                                    </span>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
             </section>

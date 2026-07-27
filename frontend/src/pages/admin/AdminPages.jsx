@@ -212,6 +212,11 @@ export default function AdminPages() {
                         <TextSlotRow label="Overline" value={site.plp_hero_overline} defaultValue={CONTENT_DEFAULTS.plp_hero_overline} onSave={(v) => saveSite("plp_hero_overline", v)} />
                         <TextSlotRow label="Headline (*word* = amber accent; line breaks allowed)" value={site.plp_hero_title} defaultValue={CONTENT_DEFAULTS.plp_hero_title} onSave={(v) => saveSite("plp_hero_title", v)} multiline />
                         <TextSlotRow label="Description" value={site.plp_hero_body} defaultValue={CONTENT_DEFAULTS.plp_hero_body} onSave={(v) => saveSite("plp_hero_body", v)} multiline />
+                        {/* Hero stat strip — was hardcoded "230+ titles / 5 imprints". */}
+                        <TextSlotRow label="Hero stat 1 — number (blank hides it)" value={site.plp_stat1_value} defaultValue={CONTENT_DEFAULTS.plp_stat1_value} onSave={(v) => saveSite("plp_stat1_value", v)} />
+                        <TextSlotRow label="Hero stat 1 — label" value={site.plp_stat1_label} defaultValue={CONTENT_DEFAULTS.plp_stat1_label} onSave={(v) => saveSite("plp_stat1_label", v)} />
+                        <TextSlotRow label="Hero stat 2 — number (blank hides it)" value={site.plp_stat2_value} defaultValue={CONTENT_DEFAULTS.plp_stat2_value} onSave={(v) => saveSite("plp_stat2_value", v)} />
+                        <TextSlotRow label="Hero stat 2 — label" value={site.plp_stat2_label} defaultValue={CONTENT_DEFAULTS.plp_stat2_label} onSave={(v) => saveSite("plp_stat2_label", v)} />
                     </div>
                     <div className="overline !text-[10px] mt-6 mb-2">Category images</div>
                     <div className="space-y-3">
