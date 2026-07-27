@@ -127,9 +127,16 @@ export default function AdminPages() {
                         {/* E-book platform CTA. Shown on the homepage, Bookstore and every
                             book page — but only once a URL is set, so it can never ship broken. */}
                         <TextSlotRow label="E-books — platform URL (blank hides the button everywhere)" value={site.ebook_url} defaultValue={CONTENT_DEFAULTS.ebook_url} onSave={(v) => saveSite("ebook_url", v)} />
-                        <TextSlotRow label="E-books — button label" value={site.ebook_cta_label} defaultValue={CONTENT_DEFAULTS.ebook_cta_label} onSave={(v) => saveSite("ebook_cta_label", v)} />
-                        <TextSlotRow label="E-books — action text (homepage button)" value={site.ebook_cta_action} defaultValue={CONTENT_DEFAULTS.ebook_cta_action} onSave={(v) => saveSite("ebook_cta_action", v)} />
-                        <TextSlotRow label="E-books — homepage blurb" value={site.ebook_cta_blurb} defaultValue={CONTENT_DEFAULTS.ebook_cta_blurb} onSave={(v) => saveSite("ebook_cta_blurb", v)} multiline />
+                        <TextSlotRow label="E-books — label, all pages" value={site.ebook_cta_label} defaultValue={CONTENT_DEFAULTS.ebook_cta_label} onSave={(v) => saveSite("ebook_cta_label", v)} />
+                        <TextSlotRow label="E-books — action text, all pages" value={site.ebook_cta_action} defaultValue={CONTENT_DEFAULTS.ebook_cta_action} onSave={(v) => saveSite("ebook_cta_action", v)} />
+                        <TextSlotRow label="E-books — blurb, all pages" value={site.ebook_cta_blurb} defaultValue={CONTENT_DEFAULTS.ebook_cta_blurb} onSave={(v) => saveSite("ebook_cta_blurb", v)} multiline />
+                        {/* Per-placement overrides. Leave blank to inherit the three fields above. */}
+                        <TextSlotRow label="E-books · HOMEPAGE — headline (overrides the label above)" value={site.ebook_home_label} defaultValue={CONTENT_DEFAULTS.ebook_cta_label} onSave={(v) => saveSite("ebook_home_label", v)} />
+                        <TextSlotRow label="E-books · HOMEPAGE — button text" value={site.ebook_home_action} defaultValue={CONTENT_DEFAULTS.ebook_cta_action} onSave={(v) => saveSite("ebook_home_action", v)} />
+                        <TextSlotRow label="E-books · HOMEPAGE — blurb" value={site.ebook_home_blurb} defaultValue={CONTENT_DEFAULTS.ebook_cta_blurb} onSave={(v) => saveSite("ebook_home_blurb", v)} multiline />
+                        <TextSlotRow label="E-books · BOOKSTORE — label" value={site.ebook_plp_label} defaultValue={CONTENT_DEFAULTS.ebook_cta_label} onSave={(v) => saveSite("ebook_plp_label", v)} />
+                        <TextSlotRow label="E-books · BOOKSTORE — trailing text" value={site.ebook_plp_action} defaultValue={CONTENT_DEFAULTS.ebook_cta_action} onSave={(v) => saveSite("ebook_plp_action", v)} />
+                        <TextSlotRow label="E-books · BOOK PAGE — button text" value={site.ebook_pdp_label} defaultValue={CONTENT_DEFAULTS.ebook_cta_label} onSave={(v) => saveSite("ebook_pdp_label", v)} />
                         <TextSlotRow label="Bestsellers — overline" value={site.home_bestsellers_overline} defaultValue={CONTENT_DEFAULTS.home_bestsellers_overline} onSave={(v) => saveSite("home_bestsellers_overline", v)} />
                         <TextSlotRow label="Bestsellers — heading" value={site.home_bestsellers_title} defaultValue={CONTENT_DEFAULTS.home_bestsellers_title} onSave={(v) => saveSite("home_bestsellers_title", v)} multiline />
                         <TextSlotRow label="Testimonials — overline" value={site.home_testimonials_overline} defaultValue={CONTENT_DEFAULTS.home_testimonials_overline} onSave={(v) => saveSite("home_testimonials_overline", v)} />

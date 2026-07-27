@@ -35,11 +35,19 @@ export default function EbookCta({ variant = "inline", site: siteProp, className
     const url = (site?.ebook_url ?? DEFAULT_EBOOK_URL).trim();
     if (!url) return null;
 
-    const label = site?.ebook_cta_label || "Interested in e-books?";
-    const action = site?.ebook_cta_action || "Read on Oakbridge eReader";
-    const blurb =
-        site?.ebook_cta_blurb ||
-        "Read Oakbridge titles on any device — searchable, annotatable and always with you.";
+    // Each placement can carry its own wording, falling back to the shared copy
+    // and then to the built-in default — so one edit can change all three, or a
+    // single page can be tuned without touching the others.
+    const scope = { banner: "home", bar: "plp", inline: "pdp" }[variant] || "pdp";
+    const pick = (key, fallback) =>
+        site?.[`ebook_${scope}_${key}`] || site?.[`ebook_cta_${key}`] || fallback;
+
+    const label = pick("label", "Interested in e-books?");
+    const action = pick("action", "Read on Oakbridge eReader");
+    const blurb = pick(
+        "blurb",
+        "Read Oakbridge titles on any device — searchable, annotatable and always with you.",
+    );
 
     const external = /^https?:\/\//i.test(url);
     const linkProps = external
