@@ -115,3 +115,14 @@ backend/mongo.txt
 vidhi_utsav_speakers.csv
 vidhi_utsav_speakers.json
 vidhi_utsav_s3_manifest.csv
+
+# Credential dumps must never be committed. The existing rules only covered
+# credentials.json / *.key, so an exported *_credentials.csv (the kind cloud
+# consoles hand you on key creation) could still be added with `git add -A`.
+# A secret that reaches git history stays there even after deletion.
+*credentials*.csv
+*credentials*.txt
+*credentials*.xlsx
+*_credentials.*
+*accessKeys*.csv
+*_accessKeys.csv
