@@ -1,19 +1,65 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { adminListUsers } from "../../lib/api";
+import { UserPlus } from "lucide-react";
+import { toast } from "sonner";
+import {
+    adminListUsers,
+    adminCreateUser,
+    adminSetUserRole,
+    formatApiError,
+} from "../../lib/api";
 import AdminToolbar from "../../components/AdminToolbar";
+import { useAuth } from "../../context/AuthContext";
+import { ROLE_LABELS, isSuperadmin } from "../../lib/rbac";
+
+const ASSIGNABLE = ["superadmin", "manager", "editor", "fulfilment", "customer"];
+const BLANK = { name: "", email: "", phone: "", password: "", role: "fulfilment" };
 
 export default function AdminUsers() {
+    const { user: me } = useAuth();
+    const canManage = isSuperadmin(me?.role);
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [q, setQ] = useState("");
     const [role, setRole] = useState("all");
     const [sort, setSort] = useState("newest");
+    const [showNew, setShowNew] = useState(false);
+    const [form, setForm] = useState(BLANK);
+    const [saving, setSaving] = useState(false);
 
-    useEffect(() => {
+    const load = () =>
         adminListUsers()
             .then(setUsers)
             .finally(() => setLoading(false));
+
+    useEffect(() => {
+        load();
     }, []);
+
+    const createUser = async (e) => {
+        e.preventDefault();
+        setSaving(true);
+        try {
+            await adminCreateUser(form);
+            toast.success(`${form.email} created as ${form.role}.`);
+            setForm(BLANK);
+            setShowNew(false);
+            load();
+        } catch (err) {
+            toast.error(formatApiError(err));
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const changeRole = async (id, newRole) => {
+        try {
+            await adminSetUserRole(id, newRole);
+            setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, role: newRole } : u)));
+            toast.success(`Role updated to ${newRole}.`);
+        } catch (err) {
+            toast.error(formatApiError(err));
+        }
+    };
 
     const view = useMemo(() => {
         const needle = q.trim().toLowerCase();
@@ -36,9 +82,61 @@ export default function AdminUsers() {
     return (
         <div data-testid="admin-users-page">
             <div className="overline">Accounts</div>
-            <h1 className="font-serif text-4xl mt-2 text-[#002B5C]">
-                Users ({users.length})
-            </h1>
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+                <h1 className="font-serif text-4xl mt-2 text-[#002B5C]">
+                    Users ({users.length})
+                </h1>
+                {canManage && (
+                    <button
+                        onClick={() => setShowNew((s) => !s)}
+                        data-testid="admin-new-user"
+                        className="mt-3 inline-flex items-center gap-2 bg-[#002B5C] text-white px-4 py-2 text-sm font-medium hover:bg-[#001F42]"
+                    >
+                        <UserPlus size={15} strokeWidth={1.5} />
+                        {showNew ? "Cancel" : "New staff account"}
+                    </button>
+                )}
+            </div>
+
+            {canManage && showNew && (
+                <form
+                    onSubmit={createUser}
+                    data-testid="admin-new-user-form"
+                    className="mt-6 border border-[#E5E7EB] bg-white p-5 max-w-3xl"
+                >
+                    <p className="text-[11px] text-[#4B5563]">
+                        Creates a staff login immediately — no email verification needed. Share the
+                        password securely and ask them to change it after first sign-in.
+                    </p>
+                    <div className="grid sm:grid-cols-2 gap-3 mt-4">
+                        <input required placeholder="Full name" value={form.name}
+                            onChange={(e) => setForm({ ...form, name: e.target.value })}
+                            className="border border-[#E5E7EB] px-3 py-2 text-sm outline-none focus:border-[#002B5C]" />
+                        <input required type="email" placeholder="name@oakbridge.in" value={form.email}
+                            onChange={(e) => setForm({ ...form, email: e.target.value })}
+                            className="border border-[#E5E7EB] px-3 py-2 text-sm outline-none focus:border-[#002B5C]" />
+                        <input type="tel" placeholder="Phone (optional)" value={form.phone}
+                            onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                            className="border border-[#E5E7EB] px-3 py-2 text-sm outline-none focus:border-[#002B5C]" />
+                        <input required type="text" minLength={8} placeholder="Password (min 8 chars)" value={form.password}
+                            onChange={(e) => setForm({ ...form, password: e.target.value })}
+                            className="border border-[#E5E7EB] px-3 py-2 text-sm outline-none focus:border-[#002B5C] font-mono" />
+                    </div>
+                    <div className="mt-3">
+                        <label className="overline !text-[10px] block mb-1">Role</label>
+                        <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}
+                            className="border border-[#E5E7EB] px-3 py-2 text-sm outline-none focus:border-[#002B5C] w-full sm:w-auto">
+                            {ASSIGNABLE.map((r) => (
+                                <option key={r} value={r}>{ROLE_LABELS[r] || r}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <button type="submit" disabled={saving}
+                        className="mt-4 bg-[#002B5C] text-white px-5 py-2 text-sm font-medium hover:bg-[#001F42] disabled:opacity-50">
+                        {saving ? "Creating…" : "Create account"}
+                    </button>
+                </form>
+            )}
             <AdminToolbar
                 query={q}
                 onQuery={setQ}
@@ -47,7 +145,11 @@ export default function AdminUsers() {
                 onFilter={setRole}
                 filterOptions={[
                     { value: "all", label: "All roles" },
-                    { value: "admin", label: "Admins" },
+                    { value: "superadmin", label: "Superadmins" },
+                    { value: "admin", label: "Admins (legacy)" },
+                    { value: "manager", label: "Managers" },
+                    { value: "editor", label: "Editors" },
+                    { value: "fulfilment", label: "Fulfilment" },
                     { value: "customer", label: "Customers" },
                 ]}
                 sort={sort}
@@ -88,11 +190,24 @@ export default function AdminUsers() {
                                 <td className="px-4 py-3 font-serif text-[#002B5C]">{u.name}</td>
                                 <td className="px-4 py-3 text-[#4B5563]">{u.email}</td>
                                 <td className="px-4 py-3">
-                                    <span
-                                        className={`font-mono text-[10px] uppercase tracking-widest px-2 py-1 ${u.role === "admin" ? "bg-[#002B5C] text-[#FFFFFF]" : "bg-[#F5F7FA] text-[#002B5C]"}`}
-                                    >
-                                        {u.role}
-                                    </span>
+                                    {canManage ? (
+                                        <select
+                                            value={ASSIGNABLE.includes(u.role) ? u.role : "superadmin"}
+                                            onChange={(e) => changeRole(u.id, e.target.value)}
+                                            data-testid={`user-role-${u.id}`}
+                                            className="border border-[#E5E7EB] bg-white px-2 py-1 text-xs outline-none focus:border-[#002B5C]"
+                                        >
+                                            {ASSIGNABLE.map((r) => (
+                                                <option key={r} value={r}>{r}</option>
+                                            ))}
+                                        </select>
+                                    ) : (
+                                        <span
+                                            className={`font-mono text-[10px] uppercase tracking-widest px-2 py-1 ${u.role !== "customer" ? "bg-[#002B5C] text-[#FFFFFF]" : "bg-[#F5F7FA] text-[#002B5C]"}`}
+                                        >
+                                            {u.role}
+                                        </span>
+                                    )}
                                 </td>
                                 <td className="px-4 py-3 font-mono text-xs text-[#4B5563]">
                                     {new Date(u.created_at).toLocaleDateString("en-IN")}

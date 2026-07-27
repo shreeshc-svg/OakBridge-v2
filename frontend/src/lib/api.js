@@ -210,6 +210,12 @@ export const adminDeleteBook = (id) =>
     api.delete(`/admin/books/${id}`).then((r) => r.data);
 export const adminListUsers = () =>
     api.get("/admin/users").then((r) => r.data);
+export const adminCreateUser = (payload) =>
+    api.post("/admin/users", payload).then((r) => r.data);
+export const adminSetUserRole = (id, role) =>
+    api.patch(`/admin/users/${id}/role`, { role }).then((r) => r.data);
+export const adminFetchRoles = () =>
+    api.get("/admin/roles").then((r) => r.data);
 
 // Coupons
 export const validateCoupon = (code, subtotal) =>

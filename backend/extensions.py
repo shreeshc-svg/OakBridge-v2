@@ -19,6 +19,7 @@ from typing import List, Optional
 
 import bcrypt
 import jwt
+import rbac
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security.utils import get_authorization_scheme_param
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -256,9 +257,29 @@ async def get_current_user_optional(request: Request) -> Optional[dict]:
     return user
 
 
-async def require_admin(user: dict = Depends(get_current_user)) -> dict:
-    if user.get("role") != "admin":
+async def require_admin(request: Request, user: dict = Depends(get_current_user)) -> dict:
+    """Gate every /api/admin/* route on the caller's role tier.
+
+    Area is derived from the request path (see rbac.resolve_area), so this single
+    dependency covers all admin endpoints — including ones added later — and
+    unknown paths fall back to superadmin-only rather than being left open.
+    """
+    role = user.get("role")
+    if role not in rbac.ADMIN_ROLES:
         raise HTTPException(status_code=403, detail="Admin access required")
+    area = rbac.resolve_area(request.url.path)
+    if not rbac.can(role, area):
+        raise HTTPException(
+            status_code=403,
+            detail=f"Your role ({role}) does not have access to {area}.",
+        )
+    return user
+
+
+async def require_superadmin(user: dict = Depends(get_current_user)) -> dict:
+    """For user management: creating admins and changing roles."""
+    if not rbac.is_superadmin(user.get("role")):
+        raise HTTPException(status_code=403, detail="Superadmin access required")
     return user
 
 
@@ -940,6 +961,100 @@ async def admin_update_desk_copy(req_id: str, payload: OrderStatusUpdate):
 async def admin_list_users():
     users = await db.users.find({}, {"_id": 0, "password_hash": 0}).sort([("created_at", -1)]).to_list(500)
     return users
+
+
+@admin_router.get("/roles")
+async def admin_list_roles(user: dict = Depends(get_current_user)):
+    """Role vocabulary + the caller's own permissions, so the UI can hide what it
+    cannot use instead of showing sections that 403 on click."""
+    return {
+        "areas": list(rbac.AREAS),
+        "assignable": list(rbac.ASSIGNABLE_ROLES),
+        "role_areas": {r: sorted(a) for r, a in rbac.ROLE_AREAS.items()},
+        "me": {
+            "role": user.get("role"),
+            "areas": sorted(rbac.allowed_areas(user.get("role"))),
+            "is_superadmin": rbac.is_superadmin(user.get("role")),
+        },
+    }
+
+
+class AdminUserCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=128)
+    phone: str = Field(default="", max_length=20)
+    role: str = "fulfilment"
+
+
+class AdminUserRole(BaseModel):
+    role: str
+
+
+@admin_router.post("/users")
+async def admin_create_user(
+    payload: AdminUserCreate, actor: dict = Depends(require_superadmin)
+):
+    """Create a staff account with a restricted role. Superadmin only."""
+    if payload.role not in rbac.ASSIGNABLE_ROLES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid role. Use one of {list(rbac.ASSIGNABLE_ROLES)}",
+        )
+    email = payload.email.lower().strip()
+    if await db.users.find_one({"email": email}, {"_id": 1}):
+        raise HTTPException(status_code=409, detail="A user with that email already exists")
+
+    now = datetime.now(timezone.utc).isoformat()
+    doc = {
+        "id": str(uuid.uuid4()),
+        "email": email,
+        "name": payload.name.strip(),
+        "phone": (payload.phone or "").strip(),
+        "password_hash": bcrypt.hashpw(payload.password.encode(), bcrypt.gensalt()).decode(),
+        "role": payload.role,
+        "created_at": now,
+        "email_verified": True,  # created by a superadmin, no self-verification needed
+        "created_by": actor.get("email"),
+    }
+    await db.users.insert_one(doc)
+    log.info("Staff account created: %s (%s) by %s", email, payload.role, actor.get("email"))
+    return {"ok": True, "id": doc["id"], "email": email, "role": payload.role}
+
+
+@admin_router.patch("/users/{user_id}/role")
+async def admin_set_user_role(
+    user_id: str, payload: AdminUserRole, actor: dict = Depends(require_superadmin)
+):
+    """Change a user's role. Superadmin only.
+
+    Refuses to remove the last superadmin — including yourself — so the admin can
+    never end up with nobody able to manage users.
+    """
+    if payload.role not in rbac.ASSIGNABLE_ROLES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid role. Use one of {list(rbac.ASSIGNABLE_ROLES)}",
+        )
+    target = await db.users.find_one({"id": user_id}, {"_id": 0, "role": 1, "email": 1})
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if rbac.is_superadmin(target.get("role")) and not rbac.is_superadmin(payload.role):
+        remaining = await db.users.count_documents(
+            {"role": {"$in": list(rbac.SUPERADMIN_ROLES)}, "id": {"$ne": user_id}}
+        )
+        if remaining == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="This is the only superadmin — promote someone else first.",
+            )
+
+    await db.users.update_one({"id": user_id}, {"$set": {"role": payload.role}})
+    log.info(
+        "Role changed: %s -> %s by %s", target.get("email"), payload.role, actor.get("email")
+    )
+    return {"ok": True, "id": user_id, "role": payload.role}
 
 
 # ============== Contact / enquiry messages ==============

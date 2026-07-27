@@ -4,6 +4,7 @@ import { LayoutDashboard, BookOpen, ShoppingBag, Mail, Users, LogOut, ExternalLi
 import { useAuth } from "../../context/AuthContext";
 import { Toaster } from "../../components/ui/sonner";
 import { fetchSettings } from "../../lib/api";
+import { canPath, SECTION_AREA } from "../../lib/rbac";
 
 const LINKS = [
     { to: "/admin", end: true, label: "Dashboard", icon: LayoutDashboard },
@@ -45,16 +46,24 @@ export default function AdminLayout() {
     }, []);
 
     // Reorder the sidebar per the admin's saved order; unlisted items keep their
-    // default position at the end.
+    // default position at the end. Then drop anything this role cannot open, so
+    // staff never see a section that would 403 on click.
     const orderedLinks = React.useMemo(() => {
-        if (!navOrder.length) return LINKS;
-        const byTo = Object.fromEntries(LINKS.map((l) => [l.to, l]));
-        const seen = new Set();
-        const out = [];
-        navOrder.forEach((to) => { if (byTo[to] && !seen.has(to)) { out.push(byTo[to]); seen.add(to); } });
-        LINKS.forEach((l) => { if (!seen.has(l.to)) out.push(l); });
-        return out;
-    }, [navOrder]);
+        let list = LINKS;
+        if (navOrder.length) {
+            const byTo = Object.fromEntries(LINKS.map((l) => [l.to, l]));
+            const seen = new Set();
+            const out = [];
+            navOrder.forEach((to) => { if (byTo[to] && !seen.has(to)) { out.push(byTo[to]); seen.add(to); } });
+            LINKS.forEach((l) => { if (!seen.has(l.to)) out.push(l); });
+            list = out;
+        }
+        return list.filter((l) => canPath(user?.role, l.to));
+    }, [navOrder, user]);
+
+    // Typing a restricted URL directly must not render the page. The API would
+    // refuse anyway, but an empty screen full of failed requests is a poor answer.
+    const allowedHere = canPath(user?.role, loc.pathname);
 
     React.useEffect(() => {
         window.scrollTo(0, 0);
@@ -170,7 +179,31 @@ export default function AdminLayout() {
             </aside>
 
             <main className="p-4 sm:p-6 md:p-8 lg:p-10 min-w-0">
-                <Outlet />
+                {allowedHere ? (
+                    <Outlet />
+                ) : (
+                    <div data-testid="admin-no-access" className="max-w-lg">
+                        <div className="overline !text-[10px]">Restricted</div>
+                        <h1 className="font-serif text-3xl mt-2 text-[#002B5C]">
+                            You don't have access to this section.
+                        </h1>
+                        <p className="text-sm text-[#4B5563] mt-4">
+                            Your role is{" "}
+                            <span className="font-mono text-[#002B5C]">{user?.role || "unknown"}</span>
+                            , which covers{" "}
+                            {(SECTION_AREA[loc.pathname] || "this area") === "governance"
+                                ? "everything except user management, legal pages and settings"
+                                : "a different part of the admin"}
+                            . Ask a superadmin if you need it.
+                        </p>
+                        <NavLink
+                            to="/admin"
+                            className="inline-block mt-6 text-xs font-medium border border-[#002B5C] px-4 py-2 hover:bg-[#F5F7FA]"
+                        >
+                            Back to dashboard
+                        </NavLink>
+                    </div>
+                )}
             </main>
             <Toaster position="bottom-right" />
         </div>
