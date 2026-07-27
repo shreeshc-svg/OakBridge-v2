@@ -1,37 +1,11 @@
 import React from "react";
 import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
-import { LayoutDashboard, BookOpen, ShoppingBag, Mail, Users, LogOut, ExternalLink, Tag, PackageCheck, FileText, Inbox, Image, Settings, Scale, LayoutTemplate, Navigation, Menu, X, Briefcase, Clapperboard, Tablet } from "lucide-react";
+import { LogOut, ExternalLink, Menu, X } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { Toaster } from "../../components/ui/sonner";
 import { fetchSettings } from "../../lib/api";
 import { canPath, sectionForPath, SECTION_LABELS } from "../../lib/rbac";
-
-const LINKS = [
-    { to: "/admin", end: true, label: "Dashboard", icon: LayoutDashboard },
-    { to: "/admin/books", label: "Books", icon: BookOpen },
-    { to: "/admin/inventory", label: "Inventory", icon: PackageCheck },
-    { to: "/admin/pages", label: "Pages", icon: LayoutTemplate },
-    // These two routes existed in App.js but had no sidebar link, so the pages
-    // (incl. the homepage "What leaders are reading" carousel picker) were
-    // effectively unreachable without typing the URL.
-    { to: "/admin/page-bookstore", label: "Bookstore Page", icon: LayoutTemplate },
-    { to: "/admin/page-book", label: "Book Page", icon: BookOpen },
-    { to: "/admin/authors", label: "Authors", icon: Users },
-    { to: "/admin/careers", label: "Careers", icon: Briefcase },
-    { to: "/admin/media-gallery", label: "Media & Gallery", icon: Clapperboard },
-    { to: "/admin/navigation", label: "Navigation", icon: Navigation },
-    { to: "/admin/media", label: "Media Library", icon: Image },
-    { to: "/admin/ebooks", label: "E-Books", icon: Tablet },
-    { to: "/admin/orders", label: "Orders", icon: ShoppingBag },
-    { to: "/admin/coupons", label: "Coupons", icon: Tag },
-    { to: "/admin/messages", label: "Messages", icon: Mail },
-    { to: "/admin/desk-copies", label: "Desk Copies", icon: Mail },
-    { to: "/admin/submissions", label: "Submissions", icon: FileText },
-    { to: "/admin/waitlists", label: "Waitlists", icon: Inbox },
-    { to: "/admin/users", label: "Users", icon: Users },
-    { to: "/admin/legal", label: "Legal", icon: Scale },
-    { to: "/admin/settings", label: "Settings", icon: Settings },
-];
+import { applyNavOrder } from "../../lib/adminNav";
 
 export default function AdminLayout() {
     const { user, logout } = useAuth();
@@ -46,21 +20,12 @@ export default function AdminLayout() {
             .catch(() => {});
     }, []);
 
-    // Reorder the sidebar per the admin's saved order; unlisted items keep their
-    // default position at the end. Then drop anything this role cannot open, so
-    // staff never see a section that would 403 on click.
-    const orderedLinks = React.useMemo(() => {
-        let list = LINKS;
-        if (navOrder.length) {
-            const byTo = Object.fromEntries(LINKS.map((l) => [l.to, l]));
-            const seen = new Set();
-            const out = [];
-            navOrder.forEach((to) => { if (byTo[to] && !seen.has(to)) { out.push(byTo[to]); seen.add(to); } });
-            LINKS.forEach((l) => { if (!seen.has(l.to)) out.push(l); });
-            list = out;
-        }
-        return list.filter((l) => canPath(user, l.to));
-    }, [navOrder, user]);
+    // One source of truth with the reorder screen (lib/adminNav), then drop
+    // anything this role cannot open so staff never see a 403 waiting to happen.
+    const orderedLinks = React.useMemo(
+        () => applyNavOrder(navOrder).filter((l) => canPath(user, l.to)),
+        [navOrder, user],
+    );
 
     // Typing a restricted URL directly must not render the page. The API would
     // refuse anyway, but an empty screen full of failed requests is a poor answer.
@@ -191,7 +156,6 @@ export default function AdminLayout() {
                         <p className="text-sm text-[#4B5563] mt-4">
                             Your role is{" "}
                             <span className="font-mono text-[#002B5C]">{user?.role || "unknown"}</span>
-                            , which covers{" "}
                             . The{" "}
                             <span className="font-mono text-[#002B5C]">
                                 {SECTION_LABELS[sectionForPath(loc.pathname)] || "requested"}

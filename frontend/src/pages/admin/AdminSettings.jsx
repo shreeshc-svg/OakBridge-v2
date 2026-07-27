@@ -3,28 +3,8 @@ import { toast } from "sonner";
 import { Link } from "react-router-dom";
 import { ArrowUp, ArrowDown } from "lucide-react";
 import { fetchSettings, adminSetSetting } from "../../lib/api";
+import { ADMIN_NAV, applyNavOrder } from "../../lib/adminNav";
 
-// Must mirror the sidebar in AdminLayout (path + label).
-const ADMIN_NAV = [
-    { to: "/admin", label: "Dashboard" },
-    { to: "/admin/books", label: "Books" },
-    { to: "/admin/inventory", label: "Inventory" },
-    { to: "/admin/pages", label: "Pages" },
-    { to: "/admin/authors", label: "Authors" },
-    { to: "/admin/careers", label: "Careers" },
-    { to: "/admin/media-gallery", label: "Media & Gallery" },
-    { to: "/admin/navigation", label: "Navigation" },
-    { to: "/admin/media", label: "Media Library" },
-    { to: "/admin/orders", label: "Orders" },
-    { to: "/admin/coupons", label: "Coupons" },
-    { to: "/admin/messages", label: "Messages" },
-    { to: "/admin/desk-copies", label: "Desk Copies" },
-    { to: "/admin/submissions", label: "Submissions" },
-    { to: "/admin/waitlists", label: "Waitlists" },
-    { to: "/admin/users", label: "Users" },
-    { to: "/admin/legal", label: "Legal" },
-    { to: "/admin/settings", label: "Settings" },
-];
 
 export default function AdminSettings() {
     const [s, setS] = useState(null);
@@ -42,10 +22,8 @@ export default function AdminSettings() {
 
     // Admin sidebar order: merge saved order with any new/missing items.
     const savedNav = Array.isArray(s.admin_nav_order) ? s.admin_nav_order : [];
-    const navOrder = [
-        ...savedNav.filter((to) => ADMIN_NAV.some((x) => x.to === to)),
-        ...ADMIN_NAV.map((x) => x.to).filter((to) => !savedNav.includes(to)),
-    ];
+    // Same helper the sidebar uses, so the numbers here are exactly what renders.
+    const navOrder = applyNavOrder(savedNav).map((l) => l.to);
     const navLabel = (to) => ADMIN_NAV.find((x) => x.to === to)?.label || to;
     const moveNav = (i, dir) => {
         const j = i + dir;
