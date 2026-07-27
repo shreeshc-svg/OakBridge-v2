@@ -17,7 +17,7 @@
 const CONTENT_DEFAULTS = {
     ebook_url: "https://ebooks.oakbridge.in/",
     ebook_cta_label: "Interested in e-books?",
-    ebook_cta_action: "Explore the e-book library",
+    ebook_cta_action: "Read on Oakbridge eReader",
     ebook_cta_blurb: "Read Oakbridge titles on any device — searchable, annotatable and always with you.",
     about_body1: "Oakbridge Publishing was founded in 2017 by two veteran publishing professionals with leadership experience at some of the world's most respected publishing companies. The premise was simple — India deserves its own scholarly voice, published from within, for the students, educators and practitioners who live here. We publish across five imprints: Academic, Professional, General, Coffee Table and Curated Works. Every manuscript is shepherded by editors with decades of international publishing experience.",
     about_body2: "We remain a privately-held, independent publisher — which means our editorial choices are made by readers and educators, not shareholders.",

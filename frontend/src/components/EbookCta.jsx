@@ -36,7 +36,7 @@ export default function EbookCta({ variant = "inline", site: siteProp, className
     if (!url) return null;
 
     const label = site?.ebook_cta_label || "Interested in e-books?";
-    const action = site?.ebook_cta_action || "Explore the e-book library";
+    const action = site?.ebook_cta_action || "Read on Oakbridge eReader";
     const blurb =
         site?.ebook_cta_blurb ||
         "Read Oakbridge titles on any device — searchable, annotatable and always with you.";
@@ -85,7 +85,8 @@ export default function EbookCta({ variant = "inline", site: siteProp, className
                     <Tablet size={16} strokeWidth={1.5} className="text-[#CC0033] flex-shrink-0" />
                     <span className="text-sm text-[#002B5C] truncate">
                         {label}{" "}
-                        <span className="text-[#4B5563] hidden sm:inline">— {action.toLowerCase()}</span>
+                        {/* Not lower-cased — "Oakbridge eReader" is a brand name. */}
+                        <span className="text-[#4B5563] hidden sm:inline">— {action}</span>
                     </span>
                 </span>
                 <ArrowUpRight
