@@ -772,6 +772,46 @@ async def admin_upload_cover(file: UploadFile = File(...)):
     return {"url": f"/api/files/{path}", "path": path, "size": len(data)}
 
 
+DOC_TYPES = {
+    "application/pdf": "pdf",
+    "application/zip": "zip",
+    "application/x-zip-compressed": "zip",
+    "application/msword": "doc",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+    "application/vnd.ms-excel": "xls",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+}
+
+
+@admin_router.post("/uploads/doc")
+async def admin_upload_doc(file: UploadFile = File(...)):
+    """Upload a downloadable document (company profile, price list, press release…).
+
+    The media/cover endpoints accept images only, so the Media page's Downloads
+    section had nothing to attach a PDF to. Restricted to document types by MIME
+    so this cannot become a general file drop.
+    """
+    ctype = (file.content_type or "").split(";")[0].strip().lower()
+    if ctype not in DOC_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail="Only PDF, ZIP, Word or Excel files are accepted",
+        )
+    data = await file.read()
+    if len(data) > 25 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File too large (max 25 MB)")
+    ext = DOC_TYPES[ctype]
+    path = f"{APP_NAME}/docs/{uuid.uuid4()}.{ext}"
+    put_object(path, data, ctype)
+    return {
+        "url": f"/api/files/{path}",
+        "path": path,
+        "size": len(data),
+        "format": ext.upper(),
+        "filename": file.filename or f"document.{ext}",
+    }
+
+
 @admin_router.post("/uploads/author-photo")
 async def admin_upload_author_photo(file: UploadFile = File(...)):
     """Upload an author photo. Returns a /api/files URL to store on the author record."""

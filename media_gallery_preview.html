@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Media &amp; Gallery — layout preview v2 · Oakbridge</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@300;400;500;600;700;800&family=Source+Serif+4:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --paper:#ffffff; --paper-muted:#f5f7fa; --ink:#002b5c; --ink-muted:#4b5563;
+    --rule:#e5e7eb; --gold:#f59e0b; --crimson:#cc0033;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:#1a1c1d;
+       font-family:"Public Sans",ui-sans-serif,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  .wrap{padding:0 24px}
+  @media(min-width:768px){.wrap{padding:0 48px}}
+  @media(min-width:1024px){.wrap{padding:0 64px}}
+  @media(min-width:1536px){.wrap{padding:0 96px}}
+  h1,h2,h3{font-family:"Public Sans",sans-serif;font-weight:700;color:var(--ink);margin:0;line-height:1.05}
+  .overline{font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;font-weight:600;color:var(--ink-muted)}
+  .mono{font-family:"JetBrains Mono",ui-monospace,monospace}
+  a{color:inherit}
+  .note{position:relative}
+  .note::before{content:attr(data-note);position:absolute;top:-11px;left:0;
+    font-family:"JetBrains Mono",monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;
+    background:var(--ink);color:#fff;padding:3px 8px;z-index:2}
+  .ph{background:linear-gradient(135deg,#dfe5ee 0%,#eef1f6 100%);display:flex;align-items:center;
+      justify-content:center;color:#8a94a6;font-family:"JetBrains Mono",monospace;font-size:10px;
+      letter-spacing:.1em;text-transform:uppercase;text-align:center;padding:6px}
+  .chip{display:inline-flex;align-items:center;padding:7px 16px;border:1px solid var(--rule);
+        background:#fff;font-size:13px;color:var(--ink-muted);white-space:nowrap;cursor:pointer}
+  .chip.on{background:var(--ink);border-color:var(--ink);color:#fff}
+  .btn{display:inline-flex;align-items:center;gap:8px;padding:13px 26px;font-size:14px;font-weight:500;text-decoration:none}
+  .btn-solid{background:var(--crimson);color:#fff}
+  .btn-ghost{border:1px solid rgba(255,255,255,.55);color:#fff}
+  .link{font-family:"JetBrains Mono",monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;
+        color:var(--ink);text-decoration:none;border-bottom:1px solid var(--ink);padding-bottom:2px}
+  .card{border:1px solid var(--rule);background:#fff}
+  .play{position:absolute;width:50px;height:50px;border-radius:50%;background:rgba(0,43,92,.9);
+        display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px}
+  /* ---- hero carousel ---- */
+  .slide{flex:0 0 100%;min-width:100%}
+  .slide-img{height:clamp(300px,52vw,560px);width:100%}
+  .car-arrow{position:absolute;top:50%;transform:translateY(-50%);width:44px;height:44px;
+    background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.4);color:#fff;
+    font-size:24px;line-height:1;cursor:pointer;display:none;align-items:center;justify-content:center}
+  .car-arrow:hover{background:rgba(255,255,255,.28)}
+  @media(min-width:768px){.car-arrow{display:flex}}
+  .dot{width:28px;height:3px;background:rgba(255,255,255,.35);border:0;padding:0;cursor:pointer}
+  .dot.on{background:var(--gold)}
+  @media(max-width:767px){ .hero-copy{display:none} }
+  /* ---- horizontal rails (occasions + videos) ---- */
+  .rail{display:flex;gap:20px;overflow-x:auto;scroll-snap-type:x mandatory;
+        scroll-behavior:smooth;padding-bottom:6px;scrollbar-width:none}
+  .rail::-webkit-scrollbar{display:none}
+  .rail > *{scroll-snap-align:start;flex:0 0 82%;}
+  @media(min-width:640px){ .rail > *{flex-basis:46%} }
+  @media(min-width:1024px){ .rail > *{flex-basis:31%} }
+  @media(min-width:1536px){ .rail > *{flex-basis:23.5%} }
+  .rail-btn{width:38px;height:38px;border:1px solid var(--rule);background:#fff;color:var(--ink);
+    font-size:19px;line-height:1;cursor:pointer;display:none;align-items:center;justify-content:center}
+  .rail-btn:hover{border-color:var(--ink)}
+  .rail-btn:disabled{opacity:.3;cursor:default;border-color:var(--rule)}
+  @media(min-width:768px){ .rail-btn{display:flex} }
+  .rail-nav{display:flex;gap:8px}
+</style>
+</head>
+<body>
+
+<!-- ============ 1 · HERO CAROUSEL ============ -->
+<section class="note" data-note="1 · Hero carousel" style="position:relative;background:#0d2340;overflow:hidden">
+  <div id="slides" style="display:flex;transition:transform .55s cubic-bezier(.4,0,.2,1);will-change:transform">
+    <!-- 6 admin-uploaded banners -->
+    <div class="slide"><div class="ph slide-img" style="background:linear-gradient(135deg,#0d2340,#1b3f6b);color:#5b7599">Banner 1</div></div>
+    <div class="slide"><div class="ph slide-img" style="background:linear-gradient(135deg,#12304f,#28527f);color:#6d87ab">Banner 2</div></div>
+    <div class="slide"><div class="ph slide-img" style="background:linear-gradient(135deg,#0b1e36,#173a60);color:#5b7599">Banner 3</div></div>
+    <div class="slide"><div class="ph slide-img" style="background:linear-gradient(135deg,#142c48,#2a5688);color:#7791b5">Banner 4</div></div>
+    <div class="slide"><div class="ph slide-img" style="background:linear-gradient(135deg,#0d2340,#1f4877);color:#6d87ab">Banner 5</div></div>
+    <div class="slide"><div class="ph slide-img" style="background:linear-gradient(135deg,#102944,#22497a);color:#6d87ab">Banner 6</div></div>
+  </div>
+
+  <div style="position:absolute;inset:0;background:linear-gradient(to top,rgba(0,43,92,.94),rgba(0,43,92,.30) 58%,transparent);pointer-events:none"></div>
+
+  <div class="wrap" style="position:absolute;left:0;right:0;bottom:0;padding-bottom:72px">
+    <div class="overline" style="color:rgba(255,255,255,.6)">Media &amp; Gallery</div>
+    <h1 style="color:#fff;font-size:clamp(30px,5vw,58px);margin-top:14px;max-width:16ch">
+      Capturing stories<br />beyond the <span style="color:var(--gold)">page.</span>
+    </h1>
+    <p class="hero-copy" style="color:rgba(255,255,255,.78);max-width:60ch;margin:18px 0 0;font-size:16px;line-height:1.7">
+      Moments from our publishing journey — literary events, book launches, author
+      interactions and community celebrations.
+    </p>
+  </div>
+
+  <button class="car-arrow" id="prev" aria-label="Previous banner" style="left:16px">‹</button>
+  <button class="car-arrow" id="next" aria-label="Next banner" style="right:16px">›</button>
+  <div id="dots" style="position:absolute;bottom:20px;left:0;right:0;display:flex;gap:8px;justify-content:center"></div>
+</section>
+
+
+<!-- ============ 3 · UPCOMING ============ -->
+<section class="note" data-note="2 · Upcoming event" style="padding:72px 0;background:var(--paper-muted);border-bottom:1px solid var(--rule)">
+  <div class="wrap" style="display:grid;grid-template-columns:1fr;gap:40px" id="upwrap">
+    <div style="display:grid;grid-template-columns:1fr;gap:32px" id="up">
+      <div>
+        <div class="overline" style="color:var(--crimson)">Upcoming</div>
+        <div class="ph" style="height:340px;margin-top:16px">Upcoming event image</div>
+      </div>
+      <div>
+        <div class="mono" style="font-size:11px;color:var(--crimson);letter-spacing:.12em">12 SEP 2026 · NEW DELHI</div>
+        <h2 style="font-size:34px;max-width:20ch;margin-top:12px">India Law, AI &amp; Tech Summit</h2>
+        <p style="color:var(--ink-muted);line-height:1.75;margin:18px 0 0;max-width:56ch">
+          A gathering of judges, jurists, general counsels, scholars and technologists
+          on the future of legal innovation.
+        </p>
+      </div>
+    </div>
+
+    <aside class="card" style="padding:26px">
+      <div class="overline">Recent events</div>
+      <div style="margin-top:20px">
+        <div style="display:flex;gap:16px;padding:16px 0;border-bottom:1px solid var(--rule)">
+          <div class="ph" style="width:70px;height:70px;flex:none">Img</div>
+          <div>
+            <div class="mono" style="font-size:10px;color:var(--ink-muted)">23 JUL 2026</div>
+            <div style="font-weight:600;color:var(--ink);margin-top:4px">Book Launch</div>
+            <div style="font-size:13px;color:var(--ink-muted)">The Future of Constitutional Law</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:16px;padding:16px 0;border-bottom:1px solid var(--rule)">
+          <div class="ph" style="width:70px;height:70px;flex:none">Img</div>
+          <div>
+            <div class="mono" style="font-size:10px;color:var(--ink-muted)">15 JUN 2026</div>
+            <div style="font-weight:600;color:var(--ink);margin-top:4px">Author Meet</div>
+            <div style="font-size:13px;color:var(--ink-muted)">An Evening with Karan Bajaj</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:16px;padding:16px 0">
+          <div class="ph" style="width:70px;height:70px;flex:none">Img</div>
+          <div>
+            <div class="mono" style="font-size:10px;color:var(--ink-muted)">28 MAY 2026</div>
+            <div style="font-weight:600;color:var(--ink);margin-top:4px">Women's Literature Conference</div>
+            <div style="font-size:13px;color:var(--ink-muted)">Words. Women. Worlds.</div>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:20px"><a class="link" href="#">All events →</a></div>
+    </aside>
+  </div>
+</section>
+
+<!-- ============ 4 · EXPLORE BY OCCASION (swapped up) ============ -->
+<section class="note" data-note="3 · Explore by occasion" style="padding:72px 0">
+  <div class="wrap">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap">
+      <div>
+        <div class="overline">Explore by occasion</div>
+        <h2 style="font-size:34px;margin-top:10px">Browse the albums.</h2>
+      </div>
+      <div class="rail-nav">
+        <button class="rail-btn" data-rail="occ" data-dir="-1" aria-label="Previous albums">‹</button>
+        <button class="rail-btn" data-rail="occ" data-dir="1" aria-label="Next albums">›</button>
+      </div>
+    </div>
+    <div class="rail" id="occ" style="margin-top:36px">
+      <a class="card" href="#" style="text-decoration:none;display:block">
+        <div class="ph" style="height:150px">Book launches</div>
+        <div style="padding:18px"><div style="font-weight:600;color:var(--ink)">Book Launches</div>
+        <div class="mono" style="font-size:11px;color:var(--ink-muted);margin-top:5px">0 photos</div>
+        <div class="link" style="display:inline-block;margin-top:14px">View album →</div></div></a>
+      <a class="card" href="#" style="text-decoration:none;display:block">
+        <div class="ph" style="height:150px">Presentations</div>
+        <div style="padding:18px"><div style="font-weight:600;color:var(--ink)">Book Presentations</div>
+        <div class="mono" style="font-size:11px;color:var(--ink-muted);margin-top:5px">0 photos</div>
+        <div class="link" style="display:inline-block;margin-top:14px">View album →</div></div></a>
+      <a class="card" href="#" style="text-decoration:none;display:block">
+        <div class="ph" style="height:150px">Events</div>
+        <div style="padding:18px"><div style="font-weight:600;color:var(--ink)">Events</div>
+        <div class="mono" style="font-size:11px;color:var(--ink-muted);margin-top:5px">2 photos</div>
+        <div class="link" style="display:inline-block;margin-top:14px">View album →</div></div></a>
+      <a class="card" href="#" style="text-decoration:none;display:block">
+        <div class="ph" style="height:150px">Author interactions</div>
+        <div style="padding:18px"><div style="font-weight:600;color:var(--ink)">Author Interactions</div>
+        <div class="mono" style="font-size:11px;color:var(--ink-muted);margin-top:5px">0 photos</div>
+        <div class="link" style="display:inline-block;margin-top:14px">View album →</div></div></a>
+      <a class="card" href="#" style="text-decoration:none;display:block">
+        <div class="ph" style="height:150px">Literary festivals</div>
+        <div style="padding:18px"><div style="font-weight:600;color:var(--ink)">Literary Festivals</div>
+        <div class="mono" style="font-size:11px;color:var(--ink-muted);margin-top:5px">0 photos</div>
+        <div class="link" style="display:inline-block;margin-top:14px">View album →</div></div></a>
+      <a class="card" href="#" style="text-decoration:none;display:block">
+        <div class="ph" style="height:150px">Panel discussions</div>
+        <div style="padding:18px"><div style="font-weight:600;color:var(--ink)">Panel Discussions</div>
+        <div class="mono" style="font-size:11px;color:var(--ink-muted);margin-top:5px">0 photos</div>
+        <div class="link" style="display:inline-block;margin-top:14px">View album →</div></div></a>
+    </div>
+    <p class="mono" style="font-size:11px;color:var(--ink-muted);margin-top:22px">
+      Albums are admin-managed — add, rename or reorder as many as you need.
+    </p>
+  </div>
+</section>
+
+<!-- ============ 5 · DARKROOM GALLERY (swapped down) ============ -->
+<section class="note" data-note="4 · Darkroom gallery" id="gallery" style="padding:72px 0;background:var(--paper-muted);border-top:1px solid var(--rule);border-bottom:1px solid var(--rule)">
+  <div class="wrap">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap">
+      <div>
+        <div class="overline">Photo gallery</div>
+        <h2 style="font-size:34px;margin-top:10px">Moments from Oakbridge's Darkroom.</h2>
+      </div>
+      <a class="link" href="#">View all photos →</a>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);grid-auto-rows:150px;gap:12px;margin-top:36px" id="mosaic">
+      <div class="ph" style="grid-column:span 2;grid-row:span 2">Launch — 1</div>
+      <div class="ph">Panel</div>
+      <div class="ph">Signing</div>
+      <div class="ph" style="grid-column:span 2">Audience</div>
+      <div class="ph">Author</div>
+      <div class="ph" style="grid-row:span 2">Stage</div>
+      <div class="ph" style="grid-column:span 2">Vidhi Utsav</div>
+      <div class="ph">Summit</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 6 · WATCH THE ROOM ============ -->
+<section class="note" data-note="5 · Watch the room" id="videos" style="padding:72px 0">
+  <div class="wrap">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap">
+      <div>
+        <div class="overline">Video highlights</div>
+        <h2 style="font-size:34px;margin-top:10px">Watch the room.</h2>
+      </div>
+      <a class="link" href="#">View all videos →</a>
+    </div>
+
+    <div style="margin-top:40px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:16px">
+        <div class="overline" style="color:var(--crimson)">Book launch highlights</div>
+        <div class="rail-nav">
+          <button class="rail-btn" data-rail="vid1" data-dir="-1" aria-label="Previous">‹</button>
+          <button class="rail-btn" data-rail="vid1" data-dir="1" aria-label="Next">›</button>
+        </div>
+      </div>
+      <div class="rail" id="vid1" style="margin-top:18px">
+        <div><div class="ph" style="height:190px;position:relative">Launch film<span class="play">▶</span></div>
+          <div style="font-weight:600;color:var(--ink);margin-top:14px">The Future of Constitutional Law</div>
+          <div style="font-size:13px;color:var(--ink-muted);margin-top:4px">Glimpses from the launch evening.</div></div>
+        <div><div class="ph" style="height:190px;position:relative">Launch film<span class="play">▶</span></div>
+          <div style="font-weight:600;color:var(--ink);margin-top:14px">In-House Matters</div>
+          <div style="font-size:13px;color:var(--ink-muted);margin-top:4px">Launch highlights with the authors.</div></div>
+        <div><div class="ph" style="height:190px;position:relative">Launch film<span class="play">▶</span></div>
+          <div style="font-weight:600;color:var(--ink);margin-top:14px">Climate Justice</div>
+          <div style="font-size:13px;color:var(--ink-muted);margin-top:4px">Highlights from the Delhi launch.</div></div>
+      </div>
+    </div>
+
+    <div style="margin-top:48px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:16px">
+        <div class="overline" style="color:var(--crimson)">Testimonials</div>
+        <div class="rail-nav">
+          <button class="rail-btn" data-rail="vid2" data-dir="-1" aria-label="Previous">‹</button>
+          <button class="rail-btn" data-rail="vid2" data-dir="1" aria-label="Next">›</button>
+        </div>
+      </div>
+      <div class="rail" id="vid2" style="margin-top:18px">
+        <div><div class="ph" style="height:190px;position:relative">Testimonial<span class="play">▶</span></div>
+          <div style="font-weight:600;color:var(--ink);margin-top:14px">Why I publish with Oakbridge</div>
+          <div style="font-size:13px;color:var(--ink-muted);margin-top:4px">An author on the editorial process.</div></div>
+        <div><div class="ph" style="height:190px;position:relative">Testimonial<span class="play">▶</span></div>
+          <div style="font-weight:600;color:var(--ink);margin-top:14px">A reader's perspective</div>
+          <div style="font-size:13px;color:var(--ink-muted);margin-top:4px">On the reference titles they rely on.</div></div>
+        <div><div class="ph" style="height:190px;position:relative">Testimonial<span class="play">▶</span></div>
+          <div style="font-weight:600;color:var(--ink);margin-top:14px">From the faculty</div>
+          <div style="font-size:13px;color:var(--ink-muted);margin-top:4px">Adopting Oakbridge titles in the classroom.</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 7 · SOCIALS ============ -->
+<section class="note" data-note="6 · From our socials" style="padding:72px 0;background:var(--paper-muted);border-top:1px solid var(--rule)">
+  <div class="wrap">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap">
+      <div>
+        <div class="overline">From our socials</div>
+        <h2 style="font-size:30px;margin-top:10px">Follow the journey.</h2>
+      </div>
+      <a class="link" href="#">@oakbridgepublishing →</a>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-top:30px">
+      <div class="ph" style="aspect-ratio:1">Post</div><div class="ph" style="aspect-ratio:1">Post</div>
+      <div class="ph" style="aspect-ratio:1">Post</div><div class="ph" style="aspect-ratio:1">Post</div>
+      <div class="ph" style="aspect-ratio:1">Post</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 8 · DOWNLOADS + 9 · ENQUIRY ============ -->
+<section class="note" data-note="7 · Downloads  ·  8 · Media enquiry" style="padding:72px 0">
+  <div class="wrap" style="display:grid;grid-template-columns:1fr;gap:32px" id="presswrap">
+    <div>
+      <div class="overline">Downloads</div>
+      <h2 style="font-size:30px;margin-top:10px">Company resources.</h2>
+      <div style="margin-top:26px;border-top:1px solid var(--rule)">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:17px 0;border-bottom:1px solid var(--rule)">
+          <span style="color:var(--ink)">Company Profile</span><span class="mono" style="font-size:11px;color:var(--ink-muted)">PDF ↓</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:17px 0;border-bottom:1px solid var(--rule)">
+          <span style="color:var(--ink)">Press Release</span><span class="mono" style="font-size:11px;color:var(--ink-muted)">PDF ↓</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:17px 0;border-bottom:1px solid var(--rule)">
+          <span style="color:var(--ink)">Catalogue / Pricelists</span><span class="mono" style="font-size:11px;color:var(--ink-muted)">PDF ↓</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:17px 0;border-bottom:1px solid var(--rule)">
+          <span style="color:var(--ink)">Company Bank Details</span><span class="mono" style="font-size:11px;color:var(--ink-muted)">PDF ↓</span></div>
+      </div>
+    </div>
+    <aside style="background:var(--ink);color:#fff;padding:40px">
+      <div class="overline" style="color:var(--gold)">Media enquiries</div>
+      <h2 style="color:#fff;font-size:28px;margin-top:14px">Interested in covering our events?</h2>
+      <p style="color:rgba(255,255,255,.75);line-height:1.7;margin:16px 0 0">
+        We'd love to work with you — for press passes, interviews and partnerships.
+      </p>
+      <div style="display:flex;flex-direction:column;gap:12px;margin-top:28px">
+        <a class="btn btn-ghost" style="justify-content:center" href="#">Become a media partner</a>
+        <a class="btn btn-solid" style="justify-content:center" href="#">Contact us</a>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<div class="wrap" style="padding-bottom:60px">
+  <div style="border-left:2px solid var(--gold);background:#fffbeb;padding:16px 20px">
+    <div class="overline" style="color:#8a6100">Preview only</div>
+    <p style="margin:8px 0 0;font-size:14px;color:var(--ink);line-height:1.7">
+      Grey blocks are image placeholders; black tags are section numbers, not part of
+      the design. Changes applied: Featured → Upcoming, festival links removed,
+      "Oakbridge's Darkroom" heading, occasions moved above the gallery, more albums,
+      videos split into Book Launch Highlights and Testimonials, downloads reduced to
+      three items.
+    </p>
+  </div>
+</div>
+
+<script>
+  /* Hero carousel — swipe on touch, arrows and dots on desktop, autoplay that
+     pauses on hover and respects prefers-reduced-motion. */
+  (function () {
+    const track = document.getElementById("slides");
+    const dots = document.getElementById("dots");
+    const n = track.children.length;
+    let i = 0, timer = null;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    for (let k = 0; k < n; k++) {
+      const b = document.createElement("button");
+      b.className = "dot" + (k === 0 ? " on" : "");
+      b.setAttribute("aria-label", "Banner " + (k + 1));
+      b.onclick = () => go(k);
+      dots.appendChild(b);
+    }
+    const paint = () => {
+      track.style.transform = `translateX(-${i * 100}%)`;
+      [...dots.children].forEach((d, k) => d.classList.toggle("on", k === i));
+    };
+    const go = (k) => { i = (k + n) % n; paint(); restart(); };
+    const restart = () => {
+      if (reduce) return;
+      clearInterval(timer);
+      timer = setInterval(() => go(i + 1), 6000);
+    };
+    document.getElementById("prev").onclick = () => go(i - 1);
+    document.getElementById("next").onclick = () => go(i + 1);
+
+    const hero = track.parentElement;
+    hero.addEventListener("mouseenter", () => clearInterval(timer));
+    hero.addEventListener("mouseleave", restart);
+
+    let x0 = null;
+    hero.addEventListener("touchstart", (e) => { x0 = e.touches[0].clientX; }, { passive: true });
+    hero.addEventListener("touchend", (e) => {
+      if (x0 === null) return;
+      const dx = e.changedTouches[0].clientX - x0;
+      if (Math.abs(dx) > 45) go(i + (dx < 0 ? 1 : -1));
+      x0 = null;
+    });
+    paint(); restart();
+  })();
+
+  /* Horizontal rails — native scroll-snap (so touch swipe is free) with arrow
+     buttons on desktop that page by one card and disable at either end. */
+  (function () {
+    document.querySelectorAll(".rail").forEach((rail) => {
+      const btns = document.querySelectorAll(`.rail-btn[data-rail="${rail.id}"]`);
+      const step = () => {
+        const first = rail.firstElementChild;
+        return first ? first.getBoundingClientRect().width + 20 : rail.clientWidth * 0.8;
+      };
+      const sync = () => {
+        const max = rail.scrollWidth - rail.clientWidth - 2;
+        btns.forEach((b) => {
+          const dir = Number(b.dataset.dir);
+          b.disabled = dir < 0 ? rail.scrollLeft <= 2 : rail.scrollLeft >= max;
+        });
+      };
+      btns.forEach((b) =>
+        b.addEventListener("click", () =>
+          rail.scrollBy({ left: Number(b.dataset.dir) * step(), behavior: "smooth" }),
+        ),
+      );
+      rail.addEventListener("scroll", sync, { passive: true });
+      window.addEventListener("resize", sync);
+      sync();
+    });
+  })();
+
+  const mq = window.matchMedia("(min-width: 1024px)");
+  const apply = () => {
+    document.getElementById("upwrap").style.gridTemplateColumns = mq.matches ? "1.75fr 1fr" : "1fr";
+    document.getElementById("up").style.gridTemplateColumns = mq.matches ? "1.15fr 1fr" : "1fr";
+    document.getElementById("presswrap").style.gridTemplateColumns = mq.matches ? "1.5fr 1fr" : "1fr";
+    document.getElementById("mosaic").style.gridTemplateColumns = mq.matches ? "repeat(4,1fr)" : "repeat(2,1fr)";
+  };
+  apply();
+  mq.addEventListener("change", apply);
+</script>
+
+</body>
+</html>

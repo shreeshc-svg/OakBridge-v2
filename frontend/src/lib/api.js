@@ -125,6 +125,14 @@ export const adminUploadMedia = (file, alt = "") => {
 };
 export const adminDeleteMedia = (id) =>
     api.delete(`/admin/media/${id}`).then((r) => r.data);
+/** Downloadable documents (company profile, price lists, press releases). */
+export const adminUploadDoc = (file) => {
+    const form = new FormData();
+    form.append("file", file);
+    return api
+        .post("/admin/uploads/doc", form, { headers: { "Content-Type": "multipart/form-data" } })
+        .then((r) => r.data);
+};
 export const adminUpdateCategoryImage = (id, image) =>
     api.patch(`/admin/categories/${id}`, { image }).then((r) => r.data);
 export const mediaUrl = (u) => (u && u.startsWith("/api/") ? `${BACKEND_URL}${u}` : u);
