@@ -1911,7 +1911,23 @@ async def get_settings():
 
 
 @admin_router.put("/settings")
-async def set_setting(payload: SettingSet):
+async def set_setting(payload: SettingSet, user: dict = Depends(get_current_user)):
+    """Write a single setting.
+
+    Page-layout keys (section order, carousel options, PDP badges…) are ordinary
+    content configuration, so content roles may write them — several admin screens
+    besides Settings save through here. Commercial keys are gated to superadmins
+    by name, so arranging a page can never also change the tax rate.
+    """
+    import rbac as _rbac
+
+    if payload.key in _rbac.SUPERADMIN_ONLY_SETTING_KEYS and not _rbac.is_superadmin(
+        user.get("role")
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail=f"'{payload.key}' can only be changed by a superadmin.",
+        )
     await db.settings.update_one(
         {"key": payload.key}, {"$set": {"key": payload.key, "value": payload.value}}, upsert=True
     )

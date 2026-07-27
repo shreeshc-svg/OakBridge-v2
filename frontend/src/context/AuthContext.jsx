@@ -7,9 +7,7 @@ import React, {
     useCallback,
 } from "react";
 import { authLogin, authMe, authRegister } from "../lib/api";
-import { ROLE_AREAS, isSuperadmin } from "../lib/rbac";
-
-const ADMIN_ROLES = Object.keys(ROLE_AREAS);
+import { ADMIN_ROLES, isSuperadmin } from "../lib/rbac";
 
 const AuthContext = createContext(null);
 const TOKEN_KEY = "oakbridge_token";

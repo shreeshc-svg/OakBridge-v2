@@ -4,7 +4,7 @@ import { LayoutDashboard, BookOpen, ShoppingBag, Mail, Users, LogOut, ExternalLi
 import { useAuth } from "../../context/AuthContext";
 import { Toaster } from "../../components/ui/sonner";
 import { fetchSettings } from "../../lib/api";
-import { canPath, SECTION_AREA } from "../../lib/rbac";
+import { canPath, sectionForPath, SECTION_LABELS } from "../../lib/rbac";
 
 const LINKS = [
     { to: "/admin", end: true, label: "Dashboard", icon: LayoutDashboard },
@@ -58,12 +58,12 @@ export default function AdminLayout() {
             LINKS.forEach((l) => { if (!seen.has(l.to)) out.push(l); });
             list = out;
         }
-        return list.filter((l) => canPath(user?.role, l.to));
+        return list.filter((l) => canPath(user, l.to));
     }, [navOrder, user]);
 
     // Typing a restricted URL directly must not render the page. The API would
     // refuse anyway, but an empty screen full of failed requests is a poor answer.
-    const allowedHere = canPath(user?.role, loc.pathname);
+    const allowedHere = canPath(user, loc.pathname);
 
     React.useEffect(() => {
         window.scrollTo(0, 0);
@@ -191,10 +191,11 @@ export default function AdminLayout() {
                             Your role is{" "}
                             <span className="font-mono text-[#002B5C]">{user?.role || "unknown"}</span>
                             , which covers{" "}
-                            {(SECTION_AREA[loc.pathname] || "this area") === "governance"
-                                ? "everything except user management, legal pages and settings"
-                                : "a different part of the admin"}
-                            . Ask a superadmin if you need it.
+                            . The{" "}
+                            <span className="font-mono text-[#002B5C]">
+                                {SECTION_LABELS[sectionForPath(loc.pathname)] || "requested"}
+                            </span>{" "}
+                            section isn't enabled for your account — ask a superadmin to add it.
                         </p>
                         <NavLink
                             to="/admin"

@@ -214,6 +214,8 @@ export const adminCreateUser = (payload) =>
     api.post("/admin/users", payload).then((r) => r.data);
 export const adminSetUserRole = (id, role) =>
     api.patch(`/admin/users/${id}/role`, { role }).then((r) => r.data);
+export const adminSetUserSections = (id, sections) =>
+    api.patch(`/admin/users/${id}/sections`, { sections }).then((r) => r.data);
 export const adminFetchRoles = () =>
     api.get("/admin/roles").then((r) => r.data);
 

@@ -1,111 +1,184 @@
 """
 Role-based access control for the Oakbridge admin.
 
-Before this, every admin endpoint sat behind a single check — `role == "admin"` —
-so any admin could change prices, wipe the catalogue, rewrite the legal pages and
-read every customer's contact details. This adds fixed role tiers with
-section-level access, and keeps user management to superadmins only.
+Permissions are per SECTION — the same 20 entries as the admin sidebar — so a
+superadmin can tick exactly what each person gets. A role only supplies the
+starting set; `user.sections` overrides it once edited.
 
-DESIGN NOTES
+HOW ENFORCEMENT WORKS
 
-* Access is resolved from the REQUEST PATH, not per-endpoint decorators. All 50
-  admin routes live on two shared routers, so a path->area map means a new
-  endpoint is covered the moment it is added, and there is no chance of someone
-  forgetting a decorator.
+Access is resolved from the REQUEST PATH, not per-endpoint decorators: all admin
+routes live on two shared routers, so a path -> section map means new endpoints
+are covered automatically and nobody can forget a decorator.
 
-* Unknown paths resolve to `governance` — i.e. superadmin only. Failing closed
-  means a newly added endpoint is never accidentally world-open to every staff
-  login; the worst case is a superadmin has to widen it deliberately.
+WHAT IS AND ISN'T TRULY SEPARABLE  (important, and deliberately documented)
 
-* The legacy role `"admin"` is treated as `superadmin`. Existing logins (and the
-  account seeded from ADMIN_EMAIL/ADMIN_PASSWORD) therefore keep working exactly
-  as before — nobody can be locked out by deploying this.
+Several sidebar screens write through the SAME endpoints — Pages, Navigation,
+Media & Gallery, Careers, Bookstore Page and Book Page all persist via
+`site-content` / `collections` / `settings`. A request cannot say which screen it
+came from, so those six are enforced as one bundle: unticking one hides it from
+the sidebar, but someone technical with any of the six could still reach the
+others' data through the API. The other fourteen sections are genuinely isolated.
+
+Sensitive `settings` keys (tax, shipping, admin nav) are additionally gated to
+superadmins by key, so letting an editor arrange page sections does not also let
+them change your tax rate.
 """
 from __future__ import annotations
 
-AREAS = ("dashboard", "catalogue", "content", "fulfilment", "enquiries", "governance")
+# ---------------------------------------------------------------- sections ---
+# Mirrors the admin sidebar. Key = path suffix under /admin.
+SECTIONS: tuple[str, ...] = (
+    "dashboard",
+    "books",
+    "inventory",
+    "authors",
+    "page-bookstore",
+    "page-book",
+    "pages",
+    "navigation",
+    "media",
+    "media-gallery",
+    "careers",
+    "orders",
+    "coupons",
+    "messages",
+    "desk-copies",
+    "submissions",
+    "waitlists",
+    "users",
+    "legal",
+    "settings",
+)
 
-# What each tier can reach. Every admin tier gets `dashboard`.
-ROLE_AREAS: dict[str, set[str]] = {
-    # Full control, including user management, legal pages, settings and the
-    # destructive bulk operations.
-    "superadmin": set(AREAS),
-    # Legacy value — identical to superadmin so no existing account loses access.
-    "admin": set(AREAS),
-    # Runs the store day to day, but cannot manage users, legal or settings.
-    "manager": {"dashboard", "catalogue", "content", "fulfilment", "enquiries"},
-    # Dispatch / customer service: orders, stock and incoming requests.
-    "fulfilment": {"dashboard", "fulfilment", "enquiries"},
-    # Marketing / editorial: site copy, media and the catalogue.
-    "editor": {"dashboard", "content", "catalogue"},
+SECTION_LABELS: dict[str, str] = {
+    "dashboard": "Dashboard",
+    "books": "Books",
+    "inventory": "Inventory",
+    "authors": "Authors",
+    "page-bookstore": "Bookstore Page",
+    "page-book": "Book Page",
+    "pages": "Pages",
+    "navigation": "Navigation",
+    "media": "Media Library",
+    "media-gallery": "Media & Gallery",
+    "careers": "Careers",
+    "orders": "Orders",
+    "coupons": "Coupons",
+    "messages": "Messages",
+    "desk-copies": "Desk Copies",
+    "submissions": "Submissions",
+    "waitlists": "Waitlists",
+    "users": "Users",
+    "legal": "Legal",
+    "settings": "Settings",
 }
 
-# Roles that may sign in to the admin at all.
-ADMIN_ROLES = frozenset(ROLE_AREAS)
+# The six that share endpoints — surfaced to the UI so it can say so honestly.
+SHARED_CONTENT_SECTIONS = frozenset(
+    {"pages", "navigation", "media-gallery", "careers", "page-bookstore", "page-book"}
+)
 
-# Roles allowed to create users and change roles.
+# --------------------------------------------------------------- endpoints ---
+# Section -> the first path segments under /api/admin/ that it unlocks.
+SECTION_PATHS: dict[str, set[str]] = {
+    "dashboard": {"stats", "roles", "search-logs"},
+    "books": {"books", "categories", "uploads", "apply-book-specs", "apply-release-order"},
+    "authors": {"authors", "authors-order", "authors-order-mode", "uploads"},
+    "inventory": {"inventory"},
+    "orders": {"orders", "cart-reminders"},
+    "coupons": {"coupons"},
+    "messages": {"messages"},
+    "desk-copies": {"desk-copies"},
+    "submissions": {"submissions"},
+    "waitlists": {"waitlists"},
+    "careers": {"job-applications", "collections"},
+    "media": {"media", "uploads"},
+    "media-gallery": {"collections", "media", "uploads"},
+    "pages": {"site-content", "collections", "settings", "media", "uploads"},
+    "navigation": {"site-content", "collections"},
+    "page-bookstore": {"settings", "books"},
+    "page-book": {"settings"},
+    "users": {"users"},
+    "legal": {"legal"},
+    "settings": {"settings"},
+}
+
+# Bulk/destructive operations — always superadmin, never grantable.
+SUPERADMIN_ONLY_PATHS = frozenset(
+    {"reset-test-data", "merge-titles", "delete-coverless", "find-generated-covers", "reseed-authors"}
+)
+
+# Settings keys only a superadmin may write. Everything else (page layout,
+# section order, carousel options) is ordinary content configuration.
+SUPERADMIN_ONLY_SETTING_KEYS = frozenset(
+    {
+        "tax_percent",
+        "free_ship_threshold",
+        "ship_flat",
+        "admin_nav_order",
+    }
+)
+
+# Reverse index: path segment -> sections that grant it.
+_PATH_SECTIONS: dict[str, set[str]] = {}
+for _section, _paths in SECTION_PATHS.items():
+    for _p in _paths:
+        _PATH_SECTIONS.setdefault(_p, set()).add(_section)
+
+# ------------------------------------------------------------------- roles ---
+ROLE_PRESETS: dict[str, tuple[str, ...]] = {
+    "superadmin": SECTIONS,
+    "admin": SECTIONS,  # legacy value — identical, so no existing login breaks
+    "manager": tuple(s for s in SECTIONS if s not in {"users", "legal", "settings"}),
+    "editor": (
+        "dashboard", "books", "authors", "pages", "navigation",
+        "media", "media-gallery", "careers", "page-bookstore", "page-book",
+    ),
+    "fulfilment": (
+        "dashboard", "inventory", "orders", "coupons",
+        "messages", "desk-copies", "submissions", "waitlists",
+    ),
+}
+
+ADMIN_ROLES = frozenset(ROLE_PRESETS)
 SUPERADMIN_ROLES = frozenset({"superadmin", "admin"})
-
-# Roles a superadmin may assign in the UI (legacy "admin" is deliberately absent —
-# new accounts should be created as "superadmin").
 ASSIGNABLE_ROLES = ("superadmin", "manager", "editor", "fulfilment", "customer")
-
-# First path segment after /api/admin/ -> area.
-_PATH_AREA: dict[str, str] = {
-    "stats": "dashboard",
-    "roles": "dashboard",  # every tier reads its own permissions to render the sidebar
-    # Catalogue
-    "books": "catalogue",
-    "categories": "catalogue",
-    "uploads": "catalogue",
-    "authors": "catalogue",
-    "authors-order": "catalogue",
-    "authors-order-mode": "catalogue",
-    "apply-book-specs": "catalogue",
-    "apply-release-order": "catalogue",
-    # Content
-    "site-content": "content",
-    "collections": "content",
-    "media": "content",
-    # Fulfilment
-    "orders": "fulfilment",
-    "coupons": "fulfilment",
-    "inventory": "fulfilment",
-    "cart-reminders": "fulfilment",
-    # Enquiries
-    "messages": "enquiries",
-    "desk-copies": "enquiries",
-    "submissions": "enquiries",
-    "waitlists": "enquiries",
-    "job-applications": "enquiries",
-    "search-logs": "enquiries",
-    # Governance — superadmin only
-    "users": "governance",
-    "legal": "governance",
-    "settings": "governance",
-    "reset-test-data": "governance",
-    "merge-titles": "governance",
-    "delete-coverless": "governance",
-    "find-generated-covers": "governance",
-    "reseed-authors": "governance",
-}
-
-
-def resolve_area(path: str) -> str:
-    """Map an admin request path to its permission area (fails closed)."""
-    marker = "/api/admin/"
-    tail = path.split(marker, 1)[1] if marker in path else path.strip("/")
-    segment = tail.split("/", 1)[0].split("?", 1)[0]
-    return _PATH_AREA.get(segment, "governance")
-
-
-def allowed_areas(role: str | None) -> set[str]:
-    return set(ROLE_AREAS.get(role or "", ()))
-
-
-def can(role: str | None, area: str) -> bool:
-    return area in allowed_areas(role)
 
 
 def is_superadmin(role: str | None) -> bool:
     return (role or "") in SUPERADMIN_ROLES
+
+
+def effective_sections(user: dict) -> set[str]:
+    """Sections this user may reach: their explicit list, else the role preset.
+
+    Superadmins always get everything, so a bad override can never orphan the
+    account that manages the others.
+    """
+    role = user.get("role")
+    if is_superadmin(role):
+        return set(SECTIONS)
+    override = user.get("sections")
+    if isinstance(override, list):
+        return {s for s in override if s in SECTIONS}
+    return set(ROLE_PRESETS.get(role or "", ()))
+
+
+def sections_for_path(path: str) -> set[str]:
+    """Which sections would grant this admin path. Empty = superadmin only."""
+    marker = "/api/admin/"
+    tail = path.split(marker, 1)[1] if marker in path else path.strip("/")
+    segment = tail.split("/", 1)[0].split("?", 1)[0]
+    if segment in SUPERADMIN_ONLY_PATHS:
+        return set()
+    return set(_PATH_SECTIONS.get(segment, ()))
+
+
+def can_path(user: dict, path: str) -> bool:
+    if is_superadmin(user.get("role")):
+        return True
+    granting = sections_for_path(path)
+    if not granting:
+        return False  # unknown or destructive -> fail closed
+    return bool(granting & effective_sections(user))

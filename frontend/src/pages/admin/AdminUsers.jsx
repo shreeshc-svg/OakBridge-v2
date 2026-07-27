@@ -5,14 +5,69 @@ import {
     adminListUsers,
     adminCreateUser,
     adminSetUserRole,
+    adminSetUserSections,
     formatApiError,
 } from "../../lib/api";
 import AdminToolbar from "../../components/AdminToolbar";
 import { useAuth } from "../../context/AuthContext";
-import { ROLE_LABELS, isSuperadmin } from "../../lib/rbac";
+import {
+    ROLE_LABELS,
+    ROLE_PRESETS,
+    SECTION_GROUPS,
+    SECTION_LABELS,
+    SHARED_CONTENT_SECTIONS,
+    effectiveSections,
+    isSuperadmin,
+} from "../../lib/rbac";
 
 const ASSIGNABLE = ["superadmin", "manager", "editor", "fulfilment", "customer"];
-const BLANK = { name: "", email: "", phone: "", password: "", role: "fulfilment" };
+const BLANK = {
+    name: "", email: "", phone: "", password: "",
+    role: "fulfilment", sections: ROLE_PRESETS.fulfilment,
+};
+
+/** Tickable list of every admin section, grouped for scanning. */
+function SectionPicker({ value, onChange, disabled }) {
+    const toggle = (s) =>
+        onChange(value.includes(s) ? value.filter((x) => x !== s) : [...value, s]);
+    return (
+        <div className={disabled ? "opacity-50 pointer-events-none" : ""}>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-4">
+                {SECTION_GROUPS.map((g) => (
+                    <div key={g.label}>
+                        <div className="overline !text-[9px] text-[#4B5563] mb-1.5">{g.label}</div>
+                        {g.sections.map((s) => (
+                            <label
+                                key={s}
+                                className="flex items-center gap-2 text-sm py-0.5 cursor-pointer"
+                            >
+                                <input
+                                    type="checkbox"
+                                    checked={value.includes(s)}
+                                    onChange={() => toggle(s)}
+                                    data-testid={`section-${s}`}
+                                    className="accent-[#002B5C] w-4 h-4"
+                                />
+                                <span className="text-[#002B5C]">{SECTION_LABELS[s]}</span>
+                                {SHARED_CONTENT_SECTIONS.includes(s) && (
+                                    <span title="Shares data endpoints with the other Site content screens — hiding it is not full isolation." className="text-[10px] text-[#F59E0B] font-mono">
+                                        ~
+                                    </span>
+                                )}
+                            </label>
+                        ))}
+                    </div>
+                ))}
+            </div>
+            <p className="text-[11px] text-[#4B5563] mt-3">
+                Dashboard is always included. Items marked{" "}
+                <span className="text-[#F59E0B] font-mono">~</span> share the same save
+                endpoints, so unticking one hides it but doesn't fully isolate it from the
+                others in that group.
+            </p>
+        </div>
+    );
+}
 
 export default function AdminUsers() {
     const { user: me } = useAuth();
@@ -26,6 +81,7 @@ export default function AdminUsers() {
     const [form, setForm] = useState(BLANK);
     const [saving, setSaving] = useState(false);
     const [created, setCreated] = useState(null);
+    const [editing, setEditing] = useState(null); // { id, sections }
 
     const load = () =>
         adminListUsers()
@@ -57,9 +113,27 @@ export default function AdminUsers() {
 
     const changeRole = async (id, newRole) => {
         try {
-            await adminSetUserRole(id, newRole);
-            setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, role: newRole } : u)));
+            const res = await adminSetUserRole(id, newRole);
+            // The backend resets bespoke sections to the new role's preset.
+            setUsers((prev) =>
+                prev.map((u) =>
+                    u.id === id ? { ...u, role: newRole, sections: res.sections } : u,
+                ),
+            );
             toast.success(`Role updated to ${newRole}.`);
+        } catch (err) {
+            toast.error(formatApiError(err));
+        }
+    };
+
+    const saveSections = async (id, sections) => {
+        try {
+            const res = await adminSetUserSections(id, sections);
+            setUsers((prev) =>
+                prev.map((u) => (u.id === id ? { ...u, sections: res.sections } : u)),
+            );
+            toast.success("Sections updated.");
+            setEditing(null);
         } catch (err) {
             toast.error(formatApiError(err));
         }
@@ -170,14 +244,45 @@ export default function AdminUsers() {
                             className="border border-[#E5E7EB] px-3 py-2 text-sm outline-none focus:border-[#002B5C] font-mono" />
                     </div>
                     <div className="mt-3">
-                        <label className="overline !text-[10px] block mb-1">Role</label>
-                        <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}
-                            className="border border-[#E5E7EB] px-3 py-2 text-sm outline-none focus:border-[#002B5C] w-full sm:w-auto">
+                        <label className="overline !text-[10px] block mb-1">Role — sets the starting sections</label>
+                        <select
+                            value={form.role}
+                            onChange={(e) =>
+                                setForm({
+                                    ...form,
+                                    role: e.target.value,
+                                    sections: ROLE_PRESETS[e.target.value] || [],
+                                })
+                            }
+                            className="border border-[#E5E7EB] px-3 py-2 text-sm outline-none focus:border-[#002B5C] w-full sm:w-auto"
+                        >
                             {ASSIGNABLE.map((r) => (
                                 <option key={r} value={r}>{ROLE_LABELS[r] || r}</option>
                             ))}
                         </select>
                     </div>
+
+                    {form.role !== "customer" && (
+                        <div className="mt-5 border-t border-[#E5E7EB] pt-4">
+                            <div className="flex items-center justify-between gap-3 flex-wrap">
+                                <div className="overline !text-[10px]">
+                                    Sections this person can open ({form.sections.length})
+                                </div>
+                                {isSuperadmin(form.role) && (
+                                    <span className="text-[11px] text-[#4B5563]">
+                                        Superadmins always have everything.
+                                    </span>
+                                )}
+                            </div>
+                            <div className="mt-3">
+                                <SectionPicker
+                                    value={form.sections}
+                                    onChange={(sections) => setForm({ ...form, sections })}
+                                    disabled={isSuperadmin(form.role)}
+                                />
+                            </div>
+                        </div>
+                    )}
                     <button type="submit" disabled={saving}
                         className="mt-4 bg-[#002B5C] text-white px-5 py-2 text-sm font-medium hover:bg-[#001F42] disabled:opacity-50">
                         {saving ? "Creating…" : "Create account"}
@@ -218,19 +323,20 @@ export default function AdminUsers() {
                             <th className="text-left px-4 py-3">Email</th>
                             <th className="text-left px-4 py-3">Role</th>
                             <th className="text-left px-4 py-3">Joined</th>
+                            <th className="px-4 py-3"></th>
                         </tr>
                     </thead>
                     <tbody>
                         {loading && (
                             <tr>
-                                <td colSpan={4} className="px-4 py-10 text-center">
+                                <td colSpan={5} className="px-4 py-10 text-center">
                                     Loading…
                                 </td>
                             </tr>
                         )}
                         {view.map((u) => (
+                            <React.Fragment key={u.id}>
                             <tr
-                                key={u.id}
                                 className="border-t border-[#E5E7EB]"
                                 data-testid={`admin-user-row-${u.id}`}
                             >
@@ -259,7 +365,54 @@ export default function AdminUsers() {
                                 <td className="px-4 py-3 font-mono text-xs text-[#4B5563]">
                                     {new Date(u.created_at).toLocaleDateString("en-IN")}
                                 </td>
+                                <td className="px-4 py-3 text-right">
+                                    {canManage && u.role !== "customer" && !isSuperadmin(u.role) && (
+                                        <button
+                                            onClick={() =>
+                                                setEditing(
+                                                    editing?.id === u.id
+                                                        ? null
+                                                        : { id: u.id, sections: effectiveSections(u) },
+                                                )
+                                            }
+                                            data-testid={`edit-sections-${u.id}`}
+                                            className="text-xs font-medium border border-[#002B5C] px-3 py-1.5 hover:bg-[#F5F7FA] whitespace-nowrap"
+                                        >
+                                            {editing?.id === u.id ? "Close" : `Sections (${effectiveSections(u).length})`}
+                                        </button>
+                                    )}
+                                </td>
                             </tr>
+                            {editing?.id === u.id && (
+                                <tr className="bg-[#F5F7FA] border-t border-[#E5E7EB]">
+                                    <td colSpan={5} className="px-4 py-5">
+                                        <div className="overline !text-[10px] mb-3">
+                                            {u.name} — tick the sections they can open
+                                        </div>
+                                        <SectionPicker
+                                            value={editing.sections}
+                                            onChange={(sections) => setEditing({ ...editing, sections })}
+                                        />
+                                        <div className="mt-4 flex gap-2">
+                                            <button
+                                                onClick={() => saveSections(u.id, editing.sections)}
+                                                className="bg-[#002B5C] text-white px-5 py-2 text-sm font-medium hover:bg-[#001F42]"
+                                            >
+                                                Save sections
+                                            </button>
+                                            <button
+                                                onClick={() =>
+                                                    setEditing({ ...editing, sections: ROLE_PRESETS[u.role] || [] })
+                                                }
+                                                className="text-sm border border-[#E5E7EB] px-4 py-2 hover:bg-white"
+                                            >
+                                                Reset to {u.role} preset
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            )}
+                            </React.Fragment>
                         ))}
                     </tbody>
                 </table>

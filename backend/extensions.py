@@ -267,11 +267,10 @@ async def require_admin(request: Request, user: dict = Depends(get_current_user)
     role = user.get("role")
     if role not in rbac.ADMIN_ROLES:
         raise HTTPException(status_code=403, detail="Admin access required")
-    area = rbac.resolve_area(request.url.path)
-    if not rbac.can(role, area):
+    if not rbac.can_path(user, request.url.path):
         raise HTTPException(
             status_code=403,
-            detail=f"Your role ({role}) does not have access to {area}.",
+            detail="You don't have access to this section. Ask a superadmin to enable it.",
         )
     return user
 
@@ -968,12 +967,14 @@ async def admin_list_roles(user: dict = Depends(get_current_user)):
     """Role vocabulary + the caller's own permissions, so the UI can hide what it
     cannot use instead of showing sections that 403 on click."""
     return {
-        "areas": list(rbac.AREAS),
+        "sections": list(rbac.SECTIONS),
+        "section_labels": rbac.SECTION_LABELS,
+        "shared_content_sections": sorted(rbac.SHARED_CONTENT_SECTIONS),
         "assignable": list(rbac.ASSIGNABLE_ROLES),
-        "role_areas": {r: sorted(a) for r, a in rbac.ROLE_AREAS.items()},
+        "role_presets": {r: list(s) for r, s in rbac.ROLE_PRESETS.items()},
         "me": {
             "role": user.get("role"),
-            "areas": sorted(rbac.allowed_areas(user.get("role"))),
+            "sections": sorted(rbac.effective_sections(user)),
             "is_superadmin": rbac.is_superadmin(user.get("role")),
         },
     }
@@ -985,10 +986,16 @@ class AdminUserCreate(BaseModel):
     password: str = Field(min_length=8, max_length=128)
     phone: str = Field(default="", max_length=20)
     role: str = "fulfilment"
+    # Optional explicit section list. Omit to inherit the role's preset.
+    sections: Optional[List[str]] = None
 
 
 class AdminUserRole(BaseModel):
     role: str
+
+
+class AdminUserSections(BaseModel):
+    sections: List[str]
 
 
 @admin_router.post("/users")
@@ -1017,6 +1024,8 @@ async def admin_create_user(
         "email_verified": True,  # created by a superadmin, no self-verification needed
         "created_by": actor.get("email"),
     }
+    if payload.sections is not None and payload.role != "customer":
+        doc["sections"] = [s for s in payload.sections if s in rbac.SECTIONS]
     await db.users.insert_one(doc)
     log.info("Staff account created: %s (%s) by %s", email, payload.role, actor.get("email"))
     return {"ok": True, "id": doc["id"], "email": email, "role": payload.role}
@@ -1050,11 +1059,46 @@ async def admin_set_user_role(
                 detail="This is the only superadmin — promote someone else first.",
             )
 
-    await db.users.update_one({"id": user_id}, {"$set": {"role": payload.role}})
+    # Changing role resets any bespoke section list back to that role's preset,
+    # so a demoted account cannot keep permissions from its old tier.
+    await db.users.update_one(
+        {"id": user_id}, {"$set": {"role": payload.role}, "$unset": {"sections": ""}}
+    )
     log.info(
         "Role changed: %s -> %s by %s", target.get("email"), payload.role, actor.get("email")
     )
-    return {"ok": True, "id": user_id, "role": payload.role}
+    return {
+        "ok": True,
+        "id": user_id,
+        "role": payload.role,
+        "sections": list(rbac.ROLE_PRESETS.get(payload.role, ())),
+    }
+
+
+@admin_router.patch("/users/{user_id}/sections")
+async def admin_set_user_sections(
+    user_id: str, payload: AdminUserSections, actor: dict = Depends(require_superadmin)
+):
+    """Set exactly which admin sections a user can open. Superadmin only.
+
+    Superadmins always hold every section, so their list is not editable — that
+    keeps at least one account able to restore everyone else's access.
+    """
+    target = await db.users.find_one({"id": user_id}, {"_id": 0, "role": 1, "email": 1})
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    if rbac.is_superadmin(target.get("role")):
+        raise HTTPException(
+            status_code=400,
+            detail="Superadmins always have every section. Change the role first to restrict them.",
+        )
+
+    clean = [s for s in payload.sections if s in rbac.SECTIONS]
+    if "dashboard" not in clean:
+        clean.append("dashboard")  # always needed for a usable landing page
+    await db.users.update_one({"id": user_id}, {"$set": {"sections": clean}})
+    log.info("Sections set for %s by %s: %s", target.get("email"), actor.get("email"), clean)
+    return {"ok": True, "id": user_id, "sections": clean}
 
 
 # ============== Contact / enquiry messages ==============

@@ -1,20 +1,96 @@
 /**
- * Admin permission areas — mirrors backend/rbac.py.
+ * Admin section permissions — mirrors backend/rbac.py.
  *
- * The backend is the real gate (it resolves the area from the request path and
- * 403s). This copy exists only so the UI can hide what a user cannot use, rather
- * than showing sections that fail on click.
+ * The backend is the real gate; this copy lets the UI hide what a user cannot
+ * open instead of showing sections that 403 on click.
  *
- * Keep ROLE_AREAS and SECTION_AREA in sync with backend/rbac.py.
+ * Keep SECTIONS / ROLE_PRESETS in sync with backend/rbac.py.
  */
 
-export const ROLE_AREAS = {
-    superadmin: ["dashboard", "catalogue", "content", "fulfilment", "enquiries", "governance"],
-    // Legacy role, identical to superadmin so existing logins keep full access.
-    admin: ["dashboard", "catalogue", "content", "fulfilment", "enquiries", "governance"],
-    manager: ["dashboard", "catalogue", "content", "fulfilment", "enquiries"],
-    fulfilment: ["dashboard", "fulfilment", "enquiries"],
-    editor: ["dashboard", "content", "catalogue"],
+export const SECTIONS = [
+    "dashboard",
+    "books",
+    "inventory",
+    "authors",
+    "page-bookstore",
+    "page-book",
+    "pages",
+    "navigation",
+    "media",
+    "media-gallery",
+    "careers",
+    "orders",
+    "coupons",
+    "messages",
+    "desk-copies",
+    "submissions",
+    "waitlists",
+    "users",
+    "legal",
+    "settings",
+];
+
+export const SECTION_LABELS = {
+    dashboard: "Dashboard",
+    books: "Books",
+    inventory: "Inventory",
+    authors: "Authors",
+    "page-bookstore": "Bookstore Page",
+    "page-book": "Book Page",
+    pages: "Pages",
+    navigation: "Navigation",
+    media: "Media Library",
+    "media-gallery": "Media & Gallery",
+    careers: "Careers",
+    orders: "Orders",
+    coupons: "Coupons",
+    messages: "Messages",
+    "desk-copies": "Desk Copies",
+    submissions: "Submissions",
+    waitlists: "Waitlists",
+    users: "Users",
+    legal: "Legal",
+    settings: "Settings",
+};
+
+/** Grouping for the permission picker only — not a security boundary. */
+export const SECTION_GROUPS = [
+    { label: "Catalogue", sections: ["books", "authors", "inventory"] },
+    {
+        label: "Site content",
+        sections: ["pages", "navigation", "media", "media-gallery", "careers", "page-bookstore", "page-book"],
+    },
+    { label: "Fulfilment", sections: ["orders", "coupons"] },
+    { label: "Enquiries", sections: ["messages", "desk-copies", "submissions", "waitlists"] },
+    { label: "Governance", sections: ["users", "legal", "settings"] },
+];
+
+/**
+ * These six write through shared endpoints (site-content / collections /
+ * settings), so unticking one hides it but cannot fully isolate it from the
+ * others. Surfaced in the UI rather than quietly overpromising.
+ */
+export const SHARED_CONTENT_SECTIONS = [
+    "pages",
+    "navigation",
+    "media-gallery",
+    "careers",
+    "page-bookstore",
+    "page-book",
+];
+
+export const ROLE_PRESETS = {
+    superadmin: SECTIONS,
+    admin: SECTIONS,
+    manager: SECTIONS.filter((s) => !["users", "legal", "settings"].includes(s)),
+    editor: [
+        "dashboard", "books", "authors", "pages", "navigation",
+        "media", "media-gallery", "careers", "page-bookstore", "page-book",
+    ],
+    fulfilment: [
+        "dashboard", "inventory", "orders", "coupons",
+        "messages", "desk-copies", "submissions", "waitlists",
+    ],
 };
 
 export const ROLE_LABELS = {
@@ -26,36 +102,23 @@ export const ROLE_LABELS = {
     customer: "Customer — no admin access",
 };
 
-/** Admin sidebar path -> permission area. */
-export const SECTION_AREA = {
-    "/admin": "dashboard",
-    "/admin/books": "catalogue",
-    "/admin/inventory": "fulfilment",
-    "/admin/authors": "catalogue",
-    "/admin/page-bookstore": "catalogue",
-    "/admin/page-book": "catalogue",
-    "/admin/pages": "content",
-    "/admin/navigation": "content",
-    "/admin/media": "content",
-    "/admin/media-gallery": "content",
-    "/admin/careers": "content",
-    "/admin/orders": "fulfilment",
-    "/admin/coupons": "fulfilment",
-    "/admin/messages": "enquiries",
-    "/admin/desk-copies": "enquiries",
-    "/admin/submissions": "enquiries",
-    "/admin/waitlists": "enquiries",
-    "/admin/users": "governance",
-    "/admin/legal": "governance",
-    "/admin/settings": "governance",
-};
-
-export const areasFor = (role) => ROLE_AREAS[role] || [];
-
-export const canArea = (role, area) => areasFor(role).includes(area);
-
-/** Can this role open this admin path? Unknown paths fail closed (superadmin only). */
-export const canPath = (role, path) =>
-    canArea(role, SECTION_AREA[path] || "governance");
+export const ADMIN_ROLES = Object.keys(ROLE_PRESETS);
 
 export const isSuperadmin = (role) => role === "superadmin" || role === "admin";
+
+/** Sidebar path -> section key. "/admin" is the dashboard. */
+export const sectionForPath = (path) => {
+    if (!path || path === "/admin" || path === "/admin/") return "dashboard";
+    return path.replace(/^\/admin\//, "").split("/")[0];
+};
+
+/** A user's sections: explicit list if set, else the role preset. */
+export const effectiveSections = (user) => {
+    if (!user) return [];
+    if (isSuperadmin(user.role)) return SECTIONS;
+    if (Array.isArray(user.sections)) return user.sections.filter((s) => SECTIONS.includes(s));
+    return ROLE_PRESETS[user.role] || [];
+};
+
+export const canPath = (user, path) =>
+    effectiveSections(user).includes(sectionForPath(path));
