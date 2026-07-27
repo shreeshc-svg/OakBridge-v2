@@ -1653,6 +1653,8 @@ async def apply_book_specs(dry_run: bool = True):
             no_size.append({"isbn": b.get("isbn"), "title": b.get("title")})
         if e.get("binding"):
             fields["binding"] = e["binding"]
+        if e.get("edition"):
+            fields["edition"] = e["edition"]
         if fields:
             plan.append((b["id"], fields))
 

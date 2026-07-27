@@ -72,6 +72,7 @@ class Book(BaseModel):
     category: str  # school | higher-ed | professional | test-prep | children
     subject: str
     grade: Optional[str] = None
+    edition: Optional[str] = None  # e.g. "3" — from the Title Master's Edition column
     binding: Optional[str] = None  # read-only spec (e.g. "Hardcover"), shown in Specs tab
     size: Optional[str] = None     # read-only spec (e.g. "6.5 x 9.5 in"), shown in Specs tab
     description: str

@@ -80,7 +80,7 @@ export default function AdminOrders() {
                 // Searchable across contact details, city/pincode and the titles
                 // ordered — so dispatch can find an order from a phone call or a
                 // customer asking about a specific book.
-                `${o.order_number || ""} ${o.full_name || ""} ${o.email || ""} ${o.phone || ""} ${o.city || ""} ${o.pincode || ""} ${(o.items || []).map((i) => i.title).join(" ")}`
+                `${o.order_number || ""} ${o.full_name || ""} ${o.email || ""} ${o.phone || ""} ${o.city || ""} ${o.pincode || ""} ${(o.items || []).map((i) => `${i.title} ${i.isbn || ""} ${i.author || ""}`).join(" ")}`
                     .toLowerCase()
                     .includes(needle),
         );
@@ -193,15 +193,31 @@ export default function AdminOrders() {
                                 <td className="px-4 py-3 align-top font-mono text-xs text-[#4B5563] whitespace-nowrap">
                                     {new Date(o.created_at).toLocaleString("en-IN")}
                                 </td>
-                                <td className="px-4 py-3 align-top text-xs max-w-[260px]">
+                                {/* Title, author, ISBN and edition — everything needed to pick
+                                    the right stock. ISBN/edition are joined from the catalogue
+                                    server-side, since order items only snapshot title/author. */}
+                                <td className="px-4 py-3 align-top text-xs max-w-[300px]">
                                     {o.items.map((it, i) => (
-                                        <div key={i} className="text-[#002B5C] leading-snug mb-1 last:mb-0">
-                                            <span className="font-mono text-[#4B5563]">{it.quantity}×</span>{" "}
-                                            {it.title}
+                                        <div key={i} className="leading-snug mb-2 last:mb-0">
+                                            <div className="text-[#002B5C]">
+                                                <span className="font-mono text-[#4B5563]">{it.quantity}×</span>{" "}
+                                                {it.title}
+                                                {it.edition && Number(it.edition) > 1 && (
+                                                    <span className="text-[#4B5563]"> ({it.edition}/e)</span>
+                                                )}
+                                            </div>
+                                            {it.author && (
+                                                <div className="text-[10px] text-[#4B5563]">{it.author}</div>
+                                            )}
+                                            {it.isbn && (
+                                                <div className="font-mono text-[10px] text-[#4B5563]">
+                                                    ISBN {it.isbn}
+                                                </div>
+                                            )}
                                             {(it.binding || it.size) && (
-                                                <span className="block text-[10px] text-[#4B5563]">
+                                                <div className="text-[10px] text-[#4B5563]">
                                                     {[it.binding, it.size].filter(Boolean).join(" · ")}
-                                                </span>
+                                                </div>
                                             )}
                                         </div>
                                     ))}

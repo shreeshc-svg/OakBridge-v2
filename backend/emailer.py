@@ -382,10 +382,22 @@ def _order_titles(order: dict) -> str:
     for it in order.get("items", []) or []:
         qty = it.get("quantity", 1)
         title = _html.escape(str(it.get("title", "")))
-        extra = " · ".join(x for x in [it.get("binding"), it.get("size")] if x)
+        ed = str(it.get("edition") or "").strip()
+        if ed and ed not in ("1", "1.0"):
+            title += f" ({_html.escape(ed)}/e)"
+        meta = " · ".join(
+            _html.escape(str(x))
+            for x in [
+                it.get("author"),
+                f"ISBN {it['isbn']}" if it.get("isbn") else None,
+                it.get("binding"),
+                it.get("size"),
+            ]
+            if x
+        )
         rows.append(
             f"{qty} × {title}"
-            + (f'<span style="color:{BRAND_GREY};"> ({_html.escape(extra)})</span>' if extra else "")
+            + (f'<br><span style="color:{BRAND_GREY};font-size:12px;">{meta}</span>' if meta else "")
         )
     return "<br>".join(rows) or "—"
 

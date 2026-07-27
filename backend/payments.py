@@ -23,7 +23,37 @@ from pydantic import BaseModel, Field
 from extensions import db
 from emailer import send_admin_failed_order, send_admin_paid_order, send_order_failed, send_order_receipt
 
+
 logger = logging.getLogger(__name__)
+
+
+async def _with_item_specs(order: dict) -> dict:
+    """Attach ISBN + edition to each line item before an internal alert goes out.
+
+    Order items are a checkout-time snapshot (title/author/price/qty only), so the
+    packing email would otherwise omit the two fields needed to pick the right
+    stock. Never raises — an email is worth more than perfect metadata.
+    """
+    try:
+        ids = [it.get("book_id") for it in (order.get("items") or []) if it.get("book_id")]
+        if not ids:
+            return order
+        books = await db.books.find(
+            {"id": {"$in": ids}}, {"_id": 0, "id": 1, "isbn": 1, "edition": 1, "author": 1}
+        ).to_list(None)
+        by_id = {b["id"]: b for b in books}
+        for it in order.get("items") or []:
+            b = by_id.get(it.get("book_id"))
+            if not b:
+                continue
+            it.setdefault("isbn", b.get("isbn"))
+            it.setdefault("edition", b.get("edition"))
+            if not it.get("author"):
+                it["author"] = b.get("author")
+    except Exception:  # noqa: BLE001
+        logger.exception("Could not enrich order items for %s", order.get("id"))
+    return order
+
 
 RAZORPAY_KEY_ID = os.environ.get("RAZORPAY_KEY_ID")
 RAZORPAY_KEY_SECRET = os.environ.get("RAZORPAY_KEY_SECRET")
@@ -209,7 +239,7 @@ async def verify_payment(payload: VerifyPaymentRequest):
             except Exception:  # noqa: BLE001
                 logger.exception("Invoice build failed for order %s (sending receipt without it)", order["id"])
             await send_order_receipt(refreshed, invoice_pdf=pdf or None)
-            await send_admin_paid_order(refreshed)
+            await send_admin_paid_order(await _with_item_specs(refreshed))
     except Exception:  # noqa: BLE001
         logger.exception("Order receipt email failed for order %s", order["id"])
 
@@ -288,7 +318,7 @@ async def razorpay_webhook(
                 except Exception:  # noqa: BLE001
                     logger.exception("Invoice build failed for %s (sending receipt without it)", rzp_order_id)
                 await send_order_receipt(order_doc, invoice_pdf=pdf or None)
-                await send_admin_paid_order(order_doc)
+                await send_admin_paid_order(await _with_item_specs(order_doc))
         except Exception:  # noqa: BLE001
             logger.exception("Webhook receipt email failed for rzp_order_id=%s", rzp_order_id)
 
@@ -299,7 +329,7 @@ async def razorpay_webhook(
             if order_doc and order_doc.get("payment_status") != "paid":
                 reason = payment.get("error_description") or ""
                 await send_order_failed(order_doc, reason)
-                await send_admin_failed_order(order_doc, reason)
+                await send_admin_failed_order(await _with_item_specs(order_doc), reason)
         except Exception:  # noqa: BLE001
             logger.exception("Webhook failure email failed for rzp_order_id=%s", rzp_order_id)
 

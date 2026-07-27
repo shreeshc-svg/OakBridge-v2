@@ -861,7 +861,36 @@ async def admin_delete_book(book_id: str):
 
 @admin_router.get("/orders")
 async def admin_list_orders():
+    """Orders newest-first, with each line item enriched for fulfilment.
+
+    Order items only persist book_id/title/author/price/qty (a snapshot taken at
+    checkout), so ISBN and edition — what a packer actually needs to pick the
+    right stock — are joined from the catalogue here. Done server-side in one
+    query so it also applies to orders placed before these fields existed.
+    """
     orders = await db.orders.find({}, {"_id": 0}).sort([("created_at", -1)]).to_list(500)
+
+    ids = {
+        it.get("book_id")
+        for o in orders
+        for it in (o.get("items") or [])
+        if it.get("book_id")
+    }
+    if ids:
+        books = await db.books.find(
+            {"id": {"$in": list(ids)}},
+            {"_id": 0, "id": 1, "isbn": 1, "edition": 1, "author": 1},
+        ).to_list(None)
+        by_id = {b["id"]: b for b in books}
+        for o in orders:
+            for it in o.get("items") or []:
+                b = by_id.get(it.get("book_id"))
+                if not b:
+                    continue
+                it.setdefault("isbn", b.get("isbn"))
+                it.setdefault("edition", b.get("edition"))
+                if not it.get("author"):
+                    it["author"] = b.get("author")
     return orders
 
 
