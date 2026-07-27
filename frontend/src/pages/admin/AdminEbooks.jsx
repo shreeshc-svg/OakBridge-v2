@@ -33,7 +33,10 @@ export default function AdminEbooks() {
     };
 
     const url = site.ebook_url ?? CONTENT_DEFAULTS.ebook_url;
-    const live = Boolean((url || "").trim());
+    const enabled = String(site.ebook_enabled ?? "on").toLowerCase() !== "off";
+    const live = enabled && Boolean((url || "").trim());
+
+    const setEnabled = (on) => saveSite("ebook_enabled", on ? "on" : "off");
 
     return (
         <div data-testid="admin-ebooks-page">
@@ -62,11 +65,41 @@ export default function AdminEbooks() {
                     </p>
                 ) : (
                     <p className="text-sm text-[#002B5C]">
-                        The URL is empty, so the e-book buttons are <strong>hidden</strong> on every
-                        page. Add a URL below to switch them back on.
+                        The e-book buttons are <strong>hidden</strong> on every page
+                        {enabled ? " because no URL is set" : " — they're switched off below"}.
                     </p>
                 )}
             </div>
+
+            <section className="mt-8 max-w-3xl border border-[#E5E7EB] bg-white p-5">
+                <h2 className="font-serif text-xl text-[#002B5C]">Show e-book buttons</h2>
+                <p className="text-[11px] text-[#4B5563] mt-1">
+                    Turns the homepage band, Bookstore strip and book-page button on or off
+                    together. The URL and wording below are kept either way, so switching back
+                    on restores exactly what you had.
+                </p>
+                <div className="mt-4 flex flex-wrap gap-6">
+                    {[
+                        { on: true, label: "Enabled", hint: "Buttons visible to customers" },
+                        { on: false, label: "Disabled", hint: "Hidden everywhere" },
+                    ].map((opt) => (
+                        <label key={opt.label} className="flex items-start gap-2.5 cursor-pointer">
+                            <input
+                                type="radio"
+                                name="ebook-enabled"
+                                checked={enabled === opt.on}
+                                onChange={() => setEnabled(opt.on)}
+                                data-testid={`ebook-enabled-${opt.on ? "on" : "off"}`}
+                                className="accent-[#002B5C] w-4 h-4 mt-0.5"
+                            />
+                            <span>
+                                <span className="block text-sm text-[#002B5C]">{opt.label}</span>
+                                <span className="block text-[11px] text-[#4B5563]">{opt.hint}</span>
+                            </span>
+                        </label>
+                    ))}
+                </div>
+            </section>
 
             {loading ? (
                 <p className="mt-8 font-mono text-xs text-[#4B5563]">Loading…</p>

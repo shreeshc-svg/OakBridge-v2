@@ -15,6 +15,7 @@
  * the *highlight* convention that renderRich understands.
  */
 const CONTENT_DEFAULTS = {
+    ebook_enabled: "on",
     ebook_url: "https://ebooks.oakbridge.in/",
     ebook_cta_label: "Interested in e-books?",
     ebook_cta_action: "Read on Oakbridge eReader",

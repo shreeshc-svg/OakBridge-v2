@@ -30,6 +30,10 @@ export default function EbookCta({ variant = "inline", site: siteProp, className
             .catch(() => setSite({}));
     }, [siteProp]);
 
+    // Explicit off switch, independent of the URL — so the buttons can be hidden
+    // for a launch window without losing the configured destination.
+    if (String(site?.ebook_enabled ?? "on").toLowerCase() === "off") return null;
+
     // `??` not `||`: an unset key falls back to the platform URL, but a key an
     // admin has deliberately emptied stays empty and hides the CTA everywhere.
     const url = (site?.ebook_url ?? DEFAULT_EBOOK_URL).trim();
