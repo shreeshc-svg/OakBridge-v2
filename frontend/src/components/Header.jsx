@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
-import { ShoppingBag, Menu, X, User, LogOut } from "lucide-react";
+import { ShoppingBag, Menu, X, User, LogOut, Search } from "lucide-react";
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
 import CartSheet from "./CartSheet";
@@ -22,6 +22,7 @@ export default function Header() {
     const { count, setIsOpen } = useCart();
     const { isAuthenticated, isAdmin, user, logout } = useAuth();
     const [mobileOpen, setMobileOpen] = useState(false);
+    const [searchOpen, setSearchOpen] = useState(false);
     const [accountOpen, setAccountOpen] = useState(false);
     const [navItems, setNavItems] = useState(DEFAULT_NAV);
     const nav = useNavigate();
@@ -188,8 +189,26 @@ export default function Header() {
                             </Link>
                         )}
 
+                        {/* Phones hide the inline search box, so without this there was
+                            no way to search from the header at all. */}
                         <button
-                            onClick={() => setMobileOpen(!mobileOpen)}
+                            onClick={() => {
+                                setSearchOpen((o) => !o);
+                                setMobileOpen(false);
+                            }}
+                            data-testid="mobile-search-toggle"
+                            aria-label={searchOpen ? "Close search" : "Search"}
+                            aria-expanded={searchOpen}
+                            className="md:hidden p-2 hover:bg-[#F5F7FA]"
+                        >
+                            {searchOpen ? <X size={18} strokeWidth={1.5} /> : <Search size={18} strokeWidth={1.5} />}
+                        </button>
+
+                        <button
+                            onClick={() => {
+                                setMobileOpen(!mobileOpen);
+                                setSearchOpen(false);
+                            }}
                             data-testid="mobile-menu-toggle"
                             className="lg:hidden p-2 hover:bg-[#F5F7FA]"
                             aria-label="Menu"
@@ -202,6 +221,12 @@ export default function Header() {
                         </button>
                     </div>
                 </div>
+
+                {searchOpen && (
+                    <div className="md:hidden border-t border-[#002B5C]/10 bg-white px-6 py-3" data-testid="mobile-search-row">
+                        <SearchBox className="w-full" autoFocus onNavigate={() => setSearchOpen(false)} />
+                    </div>
+                )}
 
                 {mobileOpen && (
                     <div className="lg:hidden border-t border-[#002B5C]/10 bg-[#FFFFFF]">

@@ -20,8 +20,9 @@ export default function Layout() {
                 <Outlet />
             </main>
             <Footer />
-            {/* Spacer so page content clears the mobile bottom tray */}
-            <div className="h-16 md:hidden" aria-hidden="true" />
+            {/* Spacer so page content clears the mobile bottom tray, including the
+                home-indicator inset on notched phones (a flat 4rem left content hidden). */}
+            <div className="h-tray md:hidden" aria-hidden="true" />
             <BackToTop />
             <ChatWidget />
             <BottomTray />

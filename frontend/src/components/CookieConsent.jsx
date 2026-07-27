@@ -28,7 +28,7 @@ export default function CookieConsent() {
     return (
         <div
             data-testid="cookie-consent"
-            className="fixed z-[45] left-4 right-4 bottom-20 md:bottom-4 md:right-auto md:max-w-md bg-white border border-[#E5E7EB] shadow-2xl p-4"
+            className="fixed z-[45] left-4 right-4 bottom-above-tray md:bottom-4 md:right-auto md:max-w-md bg-white border border-[#E5E7EB] shadow-2xl p-4"
         >
             <div className="text-sm text-[#4B5563] leading-relaxed">
                 We use essential cookies and local storage to keep you signed in and

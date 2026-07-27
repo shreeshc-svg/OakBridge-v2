@@ -647,6 +647,13 @@ export default function Catalog() {
                         </div>
                     )}
 
+                    {/* The sidebar search is hidden below lg, which left phone users
+                        with no way to search the catalogue at all. Same component,
+                        surfaced above the Filters / Sort row. */}
+                    <div className="lg:hidden mb-4" data-testid="catalog-search-mobile">
+                        <CatalogSearch value={search} onSearch={(v) => update("search", v)} />
+                    </div>
+
                     {/*
                       Phone: the count sits on its own line and the two controls
                       share a full-width row, so "24+ titles" can't wrap and the

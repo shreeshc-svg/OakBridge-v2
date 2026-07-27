@@ -30,7 +30,7 @@ export default function BottomTray() {
     return (
         <nav
             data-testid="bottom-tray"
-            className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-[#E5E7EB] flex items-stretch shadow-[0_-2px_10px_rgba(0,0,0,0.05)] pb-[env(safe-area-inset-bottom)]"
+            className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-[#E5E7EB] flex items-stretch shadow-[0_-2px_10px_rgba(0,0,0,0.05)] pb-[env(safe-area-inset-bottom)] fixed-stable"
         >
             <Link
                 to="/"

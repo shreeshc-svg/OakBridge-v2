@@ -5,6 +5,10 @@
 @tailwind utilities;
 
 :root {
+    /* Height of the mobile bottom tray, including the iPhone home-indicator inset.
+       Everything that floats above the tray measures from this, so the gap stays
+       correct on notched devices instead of overlapping by ~34px. */
+    --tray-h: calc(4rem + env(safe-area-inset-bottom, 0px));
     --paper: #ffffff;
     --paper-muted: #f5f7fa;
     --ink: #002b5c;
@@ -160,3 +164,12 @@ button,
 a {
     transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease;
 }
+
+/* ---- mobile bottom tray helpers ---- */
+.h-tray { height: var(--tray-h); }
+.bottom-above-tray { bottom: calc(var(--tray-h) + 0.75rem); }
+.bottom-above-tray-2 { bottom: calc(var(--tray-h) + 5rem); }
+.bottom-above-tray-3 { bottom: calc(var(--tray-h) + 9rem); }
+/* iOS Safari can detach position:fixed elements mid-scroll; promoting the tray to
+   its own compositing layer keeps it pinned while the toolbar shows and hides. */
+.fixed-stable { transform: translateZ(0); will-change: transform; backface-visibility: hidden; }

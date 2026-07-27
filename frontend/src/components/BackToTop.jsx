@@ -31,7 +31,7 @@ export default function BackToTop({ showAfter = 400 }) {
             aria-label="Back to top"
             title="Back to top"
             data-testid="back-to-top"
-            className={`fixed z-40 bottom-36 right-5 md:bottom-24 w-11 h-11 rounded-full bg-[#002B5C] text-white shadow-lg flex items-center justify-center hover:bg-[#001F42] active:scale-95 transition-all duration-300 touch-manipulation ${
+            className={`fixed z-40 bottom-above-tray-2 right-5 md:bottom-24 fixed-stable w-11 h-11 rounded-full bg-[#002B5C] text-white shadow-lg flex items-center justify-center hover:bg-[#001F42] active:scale-95 transition-all duration-300 touch-manipulation ${
                 visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2 pointer-events-none"
             }`}
         >
