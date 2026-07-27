@@ -7,11 +7,14 @@ const DEFAULT_COLUMNS = [
     {
         title: "Shop",
         links: [
+            // Category ids must match the catalogue: academic | professional | bgr.
+            // "business" and "general-reference" were invented and returned an
+            // empty shelf on every click.
             { to: "/books?category=professional&subject=Law", label: "Law" },
             { to: "/books?category=professional&subject=Tax", label: "Taxation" },
-            { to: "/books?category=business", label: "Business & Management" },
             { to: "/books?category=academic", label: "Academic" },
-            { to: "/books?category=general-reference", label: "General & Reference" },
+            { to: "/books?category=bgr", label: "Business & General" },
+            { to: "/books", label: "All Titles" },
         ],
     },
     {
