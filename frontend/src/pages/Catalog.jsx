@@ -2,10 +2,11 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Breadcrumbs from "../components/Breadcrumbs";
 import Seo from "../components/Seo";
 import { Link, useSearchParams } from "react-router-dom";
-import { Search, SlidersHorizontal, X } from "lucide-react";
+import { Search, SlidersHorizontal, X, Clock, BookOpen } from "lucide-react";
 import BookCard from "../components/BookCard";
 import { fetchBooks, fetchCategories, fetchSiteContent, fetchSettings, mediaUrl, logSearch, fetchSuggestIndex } from "../lib/api";
 import EbookCta from "../components/EbookCta";
+import { loadIndex, suggestFrom, readRecent, pushRecent } from "../components/SearchBox";
 
 // Renders admin copy where *text* becomes the accent colour and \n a line break.
 function renderRich(text, color = "#CC0033") {
@@ -22,6 +23,163 @@ function renderRich(text, color = "#CC0033") {
 
 // How many books to pull per infinite-scroll page.
 const PAGE_SIZE = 24;
+
+/**
+ * Bookstore search — the same capabilities as the header search, plus live results.
+ *
+ * Typing filters the listing after a short pause (no request per keystroke) and
+ * writes the term to the URL, so any search is shareable and bookmarkable. The
+ * suggestion index, matching rules and recent-search store are imported from
+ * SearchBox rather than reimplemented, so both boxes stay identical in behaviour
+ * and share one cached index fetch.
+ */
+function CatalogSearch({ value, onSearch }) {
+    const [q, setQ] = useState(value || "");
+    const [books, setBooks] = useState([]);
+    const [recent, setRecent] = useState([]);
+    const [open, setOpen] = useState(false);
+    const [active, setActive] = useState(-1);
+    const boxRef = useRef(null);
+    const dirty = useRef(false);
+
+    useEffect(() => {
+        loadIndex().then(setBooks);
+        setRecent(readRecent());
+    }, []);
+
+    // Reflect external changes (chip cleared, browser Back) without clobbering typing.
+    useEffect(() => {
+        if (!dirty.current) setQ(value || "");
+    }, [value]);
+
+    // Debounced live search — 250ms is long enough to avoid a request per keystroke,
+    // short enough to feel immediate.
+    useEffect(() => {
+        if (!dirty.current) return undefined;
+        const t = setTimeout(() => {
+            if ((q || "").trim() !== (value || "").trim()) onSearch(q.trim());
+        }, 250);
+        return () => clearTimeout(t);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [q]);
+
+    useEffect(() => {
+        const onDown = (e) => {
+            if (boxRef.current && !boxRef.current.contains(e.target)) setOpen(false);
+        };
+        document.addEventListener("mousedown", onDown);
+        return () => document.removeEventListener("mousedown", onDown);
+    }, []);
+
+    const suggestions = useMemo(() => suggestFrom(books, q), [books, q]);
+    const showRecent = open && (q || "").trim().length < 2 && recent.length > 0;
+    const rows = showRecent ? recent : suggestions;
+
+    const apply = (term) => {
+        const t = (term || "").trim();
+        dirty.current = false;
+        setQ(t);
+        setOpen(false);
+        setActive(-1);
+        if (t) {
+            pushRecent(t);
+            setRecent(readRecent());
+        }
+        onSearch(t);
+    };
+
+    const onKeyDown = (e) => {
+        if (!open || rows.length === 0) {
+            if (e.key === "Enter") apply(q);
+            return;
+        }
+        if (e.key === "ArrowDown") {
+            e.preventDefault();
+            setActive((i) => (i + 1) % rows.length);
+        } else if (e.key === "ArrowUp") {
+            e.preventDefault();
+            setActive((i) => (i <= 0 ? rows.length - 1 : i - 1));
+        } else if (e.key === "Enter") {
+            e.preventDefault();
+            const row = active >= 0 ? rows[active] : null;
+            apply(showRecent ? row || q : row ? row.t : q);
+        } else if (e.key === "Escape") {
+            setOpen(false);
+            setActive(-1);
+        }
+    };
+
+    return (
+        <div ref={boxRef} className="relative mt-3">
+            <div className="flex items-center border border-[#E5E7EB] bg-white h-10 px-3 focus-within:border-[#002B5C]">
+                <Search size={14} strokeWidth={1.5} className="text-[#4B5563] flex-shrink-0" />
+                <input
+                    data-testid="filter-search-input"
+                    value={q}
+                    onChange={(e) => {
+                        dirty.current = true;
+                        setQ(e.target.value);
+                        setOpen(true);
+                        setActive(-1);
+                    }}
+                    onFocus={() => setOpen(true)}
+                    onKeyDown={onKeyDown}
+                    placeholder="Title, author, ISBN"
+                    aria-label="Search the bookstore"
+                    className="bg-transparent text-sm px-2 w-full outline-none"
+                />
+                {q && (
+                    <button
+                        onClick={() => apply("")}
+                        aria-label="Clear search"
+                        data-testid="filter-search-clear"
+                        className="p-1 -mr-1 text-[#4B5563] hover:text-[#CC0033] flex-shrink-0"
+                    >
+                        <X size={14} strokeWidth={1.5} />
+                    </button>
+                )}
+            </div>
+
+            {open && rows.length > 0 && (
+                <div
+                    data-testid="catalog-search-suggestions"
+                    className="absolute z-30 left-0 right-0 mt-1 bg-white border border-[#E5E7EB] shadow-lg max-h-80 overflow-y-auto"
+                >
+                    {showRecent && (
+                        <div className="overline !text-[9px] px-3 pt-2.5 pb-1 text-[#4B5563]">
+                            Recent searches
+                        </div>
+                    )}
+                    {rows.map((row, i) => {
+                        const isRecent = showRecent;
+                        const label = isRecent ? row : row.t;
+                        return (
+                            <button
+                                key={`${label}-${i}`}
+                                onMouseDown={(e) => e.preventDefault()}
+                                onClick={() => apply(isRecent ? row : row.t)}
+                                onMouseEnter={() => setActive(i)}
+                                className={`w-full text-left px-3 py-2 flex items-start gap-2.5 ${active === i ? "bg-[#F5F7FA]" : ""}`}
+                            >
+                                {isRecent ? (
+                                    <Clock size={13} strokeWidth={1.5} className="text-[#4B5563] mt-0.5 flex-shrink-0" />
+                                ) : (
+                                    <BookOpen size={13} strokeWidth={1.5} className="text-[#CC0033] mt-0.5 flex-shrink-0" />
+                                )}
+                                <span className="min-w-0">
+                                    <span className="block text-sm text-[#002B5C] truncate">{label}</span>
+                                    {!isRecent && row.a && (
+                                        <span className="block text-[11px] text-[#4B5563] truncate">{row.a}</span>
+                                    )}
+                                </span>
+                            </button>
+                        );
+                    })}
+                </div>
+            )}
+        </div>
+    );
+}
 
 // Fallbacks used until settings load (mirror backend SETTINGS_DEFAULTS).
 const DEFAULT_SORTS = [
@@ -350,19 +508,7 @@ export default function Catalog() {
                                     </button>
                                 )}
                             </div>
-                            <div className="mt-3 flex items-center border border-[#E5E7EB] bg-white h-10 px-3">
-                                <Search size={14} strokeWidth={1.5} className="text-[#4B5563]" />
-                                <input
-                                    data-testid="filter-search-input"
-                                    defaultValue={search}
-                                    onKeyDown={(e) => {
-                                        if (e.key === "Enter")
-                                            update("search", e.currentTarget.value);
-                                    }}
-                                    placeholder="Title, author, ISBN"
-                                    className="bg-transparent text-sm px-2 w-full outline-none"
-                                />
-                            </div>
+                            <CatalogSearch value={search} onSearch={(v) => update("search", v)} />
                         </div>
 
                         <div>

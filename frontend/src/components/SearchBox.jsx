@@ -21,7 +21,7 @@ const MAX_SUGGESTIONS = 7;
 // module-level cache — one fetch per page load, shared by every SearchBox
 let indexCache = null;
 let indexPromise = null;
-function loadIndex() {
+export function loadIndex() {
     if (indexCache) return Promise.resolve(indexCache);
     if (!indexPromise) {
         indexPromise = fetchSuggestIndex()
@@ -54,7 +54,29 @@ export function pushRecent(q) {
     }
 }
 
-const norm = (s) => (s || "").toLowerCase().replace(/['']/g, "'");
+/**
+ * Fold a string for comparison: case, curly apostrophes, and ALL punctuation —
+ * so "978-93-9576-4544" matches "9789395764544" and "e-commerce" matches
+ * "e commerce". Mirrors the tolerance the backend applies server-side.
+ */
+export const norm = (s) =>
+    (s || "").toLowerCase().replace(/['']/g, "'").replace(/[^0-9a-z]+/g, "");
+
+/** Titles/authors matching `q`, prefix hits first. Shared by the header and the Bookstore. */
+export function suggestFrom(books, q, max = MAX_SUGGESTIONS) {
+    const term = norm(q);
+    if (term.length < 2) return [];
+    const starts = [];
+    const contains = [];
+    for (const b of books) {
+        const t = norm(b.t);
+        const a = norm(b.a);
+        if (t.startsWith(term) || a.startsWith(term)) starts.push(b);
+        else if (t.includes(term) || a.includes(term)) contains.push(b);
+        if (starts.length >= max) break;
+    }
+    return [...starts, ...contains].slice(0, max);
+}
 
 export default function SearchBox({
     className = "",
@@ -85,20 +107,7 @@ export default function SearchBox({
         return () => document.removeEventListener("mousedown", onDown);
     }, []);
 
-    const suggestions = useMemo(() => {
-        const term = norm(q).trim();
-        if (term.length < 2) return [];
-        const starts = [];
-        const contains = [];
-        for (const b of books) {
-            const t = norm(b.t);
-            const a = norm(b.a);
-            if (t.startsWith(term) || a.startsWith(term)) starts.push(b);
-            else if (t.includes(term) || a.includes(term)) contains.push(b);
-            if (starts.length >= MAX_SUGGESTIONS) break;
-        }
-        return [...starts, ...contains].slice(0, MAX_SUGGESTIONS);
-    }, [q, books]);
+    const suggestions = useMemo(() => suggestFrom(books, q), [q, books]);
 
     const go = useCallback(
         (term) => {

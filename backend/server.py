@@ -418,6 +418,41 @@ async def list_categories():
 # book carries an explicit new_release flag. release_rank 1 = most recent.
 NEW_RELEASE_TOP_N = 24
 
+# Fields a storefront search looks at, best-match first.
+SEARCH_FIELDS = ("title", "subtitle", "author", "subject", "isbn", "description")
+
+
+def _search_clauses(search: str) -> List[dict]:
+    """Build a forgiving, injection-safe query for a storefront search.
+
+    Three things the previous single-regex version got wrong:
+
+    * The raw term went straight to the regex engine, so a title containing
+      "(2 Vol. Set)" — or any query with ( [ * + — was parsed as a PATTERN and
+      could 500 the endpoint. Every character is escaped now.
+    * Punctuation had to match exactly, so "978-93-9576-4544" found nothing
+      because the stored ISBN has no hyphens. Separators are stripped from the
+      query and made optional between characters, so hyphens, spaces and full
+      stops match in either direction ("e-commerce" == "e commerce", "P.R." == "P R").
+    * A multi-word query was treated as one phrase. Words are now AND-ed and may
+      land in different fields, so "malhotra global indians" finds the book.
+
+    Case-insensitivity comes from the "i" option, as before.
+    """
+    import re as _re
+
+    out: List[dict] = []
+    for token in str(search).split():
+        alnum = _re.sub(r"[^0-9A-Za-z]+", "", token)
+        if not alnum:
+            continue
+        # Allow any run of separators between the characters the user typed.
+        pattern = "[^0-9A-Za-z]*".join(_re.escape(ch) for ch in alnum)
+        out.append(
+            {"$or": [{f: {"$regex": pattern, "$options": "i"}} for f in SEARCH_FIELDS]}
+        )
+    return out
+
 
 async def _curated_bestseller_ids() -> List[str]:
     """Book IDs the admin curated for the home bestseller carousel.
@@ -491,14 +526,7 @@ async def list_books(
         query["price"] = price_q
 
     if search:
-        clauses.append(
-            {"$or": [
-                {"title": {"$regex": search, "$options": "i"}},
-                {"author": {"$regex": search, "$options": "i"}},
-                {"subject": {"$regex": search, "$options": "i"}},
-                {"isbn": {"$regex": search, "$options": "i"}},
-            ]}
-        )
+        clauses.extend(_search_clauses(search))
 
     if clauses:
         query["$and"] = clauses
