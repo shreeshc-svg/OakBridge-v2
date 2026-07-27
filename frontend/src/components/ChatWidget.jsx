@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { MessageCircle, X, Send, ArrowRight } from "lucide-react";
 import { sendChat } from "../lib/api";
 
@@ -43,9 +43,39 @@ function parseGo(reply) {
 
 const labelFor = (path) => ROUTES[path.split("?")[0]] || "the page";
 
+/*
+ * First-visit nudge. Plenty of people never notice a floating chat button, so on
+ * the first few homepage landings Oaky introduces itself in a small bubble beside
+ * the launcher. Capped at NUDGE_LIMIT views and dismissed for good once the
+ * visitor closes it or opens the chat — a greeting that keeps reappearing stops
+ * being a welcome and starts being an irritation.
+ */
+const NUDGE_KEY = "oakbridge_oaky_nudges";
+const NUDGE_LIMIT = 5;
+const NUDGE_TEXT =
+    "Hi, I'm Oaky, your personal AI assistant. Let me know how I can help you today?";
+
+const readNudges = () => {
+    try {
+        const v = JSON.parse(localStorage.getItem(NUDGE_KEY) || "{}");
+        return { count: Number(v.count) || 0, done: Boolean(v.done) };
+    } catch {
+        return { count: 0, done: false };
+    }
+};
+const writeNudges = (v) => {
+    try {
+        localStorage.setItem(NUDGE_KEY, JSON.stringify(v));
+    } catch {
+        /* private mode — the nudge simply shows again next time */
+    }
+};
+
 export default function ChatWidget() {
     const nav = useNavigate();
+    const loc = useLocation();
     const [open, setOpen] = useState(false);
+    const [nudge, setNudge] = useState(false);
     const [msgs, setMsgs] = useState([{ role: "assistant", content: GREETING }]);
     const [input, setInput] = useState("");
     const [busy, setBusy] = useState(false);
@@ -53,6 +83,27 @@ export default function ChatWidget() {
     const inputRef = useRef(null);
     const panelRef = useRef(null);
     const launcherRef = useRef(null);
+
+    // Count homepage landings and show the greeting for the first few.
+    useEffect(() => {
+        if (loc.pathname !== "/") {
+            setNudge(false);
+            return;
+        }
+        const v = readNudges();
+        if (v.done || v.count >= NUDGE_LIMIT) return;
+        writeNudges({ ...v, count: v.count + 1 });
+        const t = setTimeout(() => setNudge(true), 1200); // let the hero settle first
+        return () => clearTimeout(t);
+    }, [loc.pathname]);
+
+    // Opening the chat means the nudge did its job — never show it again.
+    useEffect(() => {
+        if (open && nudge) {
+            setNudge(false);
+            writeNudges({ ...readNudges(), done: true });
+        }
+    }, [open, nudge]);
 
     // Close the flyout when the user clicks / taps outside it (but not on the launcher).
     useEffect(() => {
@@ -115,6 +166,36 @@ export default function ChatWidget() {
 
     return (
         <>
+            {/* First-visit greeting */}
+            {nudge && !open && (
+                <div
+                    data-testid="oaky-nudge"
+                    role="status"
+                    className="fixed z-50 bottom-36 right-5 md:bottom-[5.5rem] max-w-[16rem] bg-white border border-[#E5E7EB] shadow-lg p-4 fade-up"
+                >
+                    <button
+                        onClick={() => {
+                            setNudge(false);
+                            writeNudges({ ...readNudges(), done: true });
+                        }}
+                        aria-label="Dismiss"
+                        className="absolute top-2 right-2 text-[#4B5563] hover:text-[#CC0033]"
+                    >
+                        <X size={14} strokeWidth={1.75} />
+                    </button>
+                    <div className="overline !text-[9px] !text-[#CC0033]">Oaky</div>
+                    <p className="text-sm text-[#002B5C] mt-1.5 leading-snug pr-3">{NUDGE_TEXT}</p>
+                    <button
+                        onClick={() => setOpen(true)}
+                        className="mt-3 font-mono text-[10px] uppercase tracking-widest text-[#002B5C] border-b border-[#002B5C] pb-0.5 hover:text-[#CC0033] hover:border-[#CC0033]"
+                    >
+                        Start chatting
+                    </button>
+                    {/* little pointer toward the launcher */}
+                    <span className="absolute -bottom-[7px] right-7 w-3 h-3 bg-white border-r border-b border-[#E5E7EB] rotate-45" />
+                </div>
+            )}
+
             {/* Launcher */}
             <button
                 ref={launcherRef}
