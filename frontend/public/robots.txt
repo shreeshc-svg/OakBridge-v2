@@ -1,6 +1,29 @@
+# Oakbridge Publishing — https://www.oakbridge.in
+#
+# NOTE ON THE DIVISION OF LABOUR BELOW.
+#
+# Disallow stops a CRAWL. It does not stop INDEXING: a URL discovered from an
+# external link can still be listed, which is where "No information is available
+# for this page" results come from. Worse, a disallowed URL can never be fetched,
+# so Google never reads the `noindex` tag on it — the two directives cancel out.
+#
+# So:
+#   * Pages that must never be fetched at all -> Disallow (below).
+#   * Pages that are publicly reachable but should not rank -> `noindex, follow`
+#     via components/NoIndex.jsx, and deliberately NOT listed here, so the
+#     crawler can reach the page and act on the tag.
+#
+# Currently noindex-via-meta and intentionally absent from this file: /cart,
+# /payment-failed/*, /login, /register, /forgot-password, /reset-password.
+
 User-agent: *
 Allow: /
+
+# Admin console — no crawlable content, and nothing here should ever be fetched.
 Disallow: /admin
+
+# Auth-gated: a crawler is bounced to /login, so there is nothing to fetch here.
+# These also carry `noindex` now, as a second line of defence.
 Disallow: /account
 Disallow: /checkout
 Disallow: /order-confirmation

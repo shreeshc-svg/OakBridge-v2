@@ -53,7 +53,7 @@ const labelFor = (path) => ROUTES[path.split("?")[0]] || "the page";
 const NUDGE_KEY = "oakbridge_oaky_nudges";
 const NUDGE_LIMIT = 5;
 const NUDGE_TEXT =
-    "Hi, I'm Oaky, your personal AI assistant. Let me know how I can help you today?";
+    "Hi, I'm Oaky, your personal AI assistant. How can I help you today?";
 
 const readNudges = () => {
     try {

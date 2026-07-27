@@ -3,6 +3,7 @@ import "@/App.css";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Layout from "@/components/Layout";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import NoIndex from "@/components/NoIndex";
 import Home from "@/pages/Home";
 import Catalog from "@/pages/Catalog";
 import BookDetail from "@/pages/BookDetail";
@@ -64,18 +65,41 @@ function App() {
                                 <Route path="/" element={<Home />} />
                                 <Route path="/books" element={<Catalog />} />
                                 <Route path="/books/:id" element={<BookDetail />} />
-                                <Route path="/cart" element={<Cart />} />
+                                {/* Transactional routes are wrapped in <NoIndex> so
+                                    every render branch carries the tag — see
+                                    components/NoIndex.jsx for why this lives here
+                                    and not inside the page components. */}
+                                <Route
+                                    path="/cart"
+                                    element={
+                                        <>
+                                            <NoIndex title="Your Cart" />
+                                            <Cart />
+                                        </>
+                                    }
+                                />
                                 <Route
                                     path="/checkout"
                                     element={
-                                        <ProtectedRoute>
-                                            <Checkout />
-                                        </ProtectedRoute>
+                                        <>
+                                            {/* Outside ProtectedRoute on purpose: it
+                                                does `return children`, so two children
+                                                would make it return an unkeyed array. */}
+                                            <NoIndex title="Checkout" />
+                                            <ProtectedRoute>
+                                                <Checkout />
+                                            </ProtectedRoute>
+                                        </>
                                     }
                                 />
                                 <Route
                                     path="/order-confirmation/:id"
-                                    element={<OrderConfirmation />}
+                                    element={
+                                        <>
+                                            <NoIndex title="Order Confirmation" />
+                                            <OrderConfirmation />
+                                        </>
+                                    }
                                 />
                                 <Route path="/about" element={<About />} />
                                 <Route path="/solutions" element={<Solutions />} />
@@ -98,17 +122,63 @@ function App() {
                                 <Route path="/refund-policy" element={<LegalPage slug="refund" />} />
                                 <Route path="/shipping-policy" element={<LegalPage slug="shipping" />} />
                                 <Route path="/cookie-policy" element={<LegalPage slug="cookie" />} />
-                                <Route path="/payment-failed/:id" element={<PaymentFailed />} />
-                                <Route path="/login" element={<Login />} />
-                                <Route path="/register" element={<Register />} />
-                                <Route path="/forgot-password" element={<ForgotPassword />} />
-                                <Route path="/reset-password" element={<ResetPassword />} />
+                                <Route
+                                    path="/payment-failed/:id"
+                                    element={
+                                        <>
+                                            <NoIndex title="Payment Unsuccessful" />
+                                            <PaymentFailed />
+                                        </>
+                                    }
+                                />
+                                {/* Auth screens: no search value, and /reset-password
+                                    carries a token in the query string that must never
+                                    reach an index. */}
+                                <Route
+                                    path="/login"
+                                    element={
+                                        <>
+                                            <NoIndex title="Sign In" />
+                                            <Login />
+                                        </>
+                                    }
+                                />
+                                <Route
+                                    path="/register"
+                                    element={
+                                        <>
+                                            <NoIndex title="Create an Account" />
+                                            <Register />
+                                        </>
+                                    }
+                                />
+                                <Route
+                                    path="/forgot-password"
+                                    element={
+                                        <>
+                                            <NoIndex title="Forgot Password" />
+                                            <ForgotPassword />
+                                        </>
+                                    }
+                                />
+                                <Route
+                                    path="/reset-password"
+                                    element={
+                                        <>
+                                            <NoIndex title="Reset Password" />
+                                            <ResetPassword />
+                                        </>
+                                    }
+                                />
                                 <Route
                                     path="/account"
                                     element={
-                                        <ProtectedRoute>
-                                            <Account />
-                                        </ProtectedRoute>
+                                        <>
+                                            <NoIndex title="My Account" />
+                                            <ProtectedRoute>
+                                                <Account />
+                                            </ProtectedRoute>
+                                        </>
                                     }
                                 />
                                 {/* Catch-all: without this, any unknown URL (incl. every

@@ -44,6 +44,9 @@ export default function DigitalSolutions() {
     return (
         <ComingSoon
             pageTestId="coming-soon-page"
+            seoTitle="Digital Solutions — AI Legal Research & Licensed APIs"
+            seoDescription="AI-powered legal research built on Oakbridge's scholarly catalogue — semantic search, research copilots and licensed content APIs for law firms, universities, corporates and the judiciary. Join the waitlist."
+            seoPath="/digital-solutions"
             eyebrow={site.ds_eyebrow || DEFAULTS.eyebrow}
             headline={site.ds_headline || DEFAULTS.headline}
             headlineAccent={site.ds_accent ?? DEFAULTS.accent}

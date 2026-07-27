@@ -22,6 +22,15 @@ export default function ComingSoon({
     featuresKicker = "What's coming",
     featuresHeadline = "",
     features = [],
+    // SEO is passed in explicitly rather than derived from the visible copy.
+    // It used to fall back to `eyebrow` + `window.location.pathname`, which gave
+    // Academy the title "Oakbridge · Academy · Oakbridge Publishing" — the brand
+    // twice and not one word a person would ever search for. `path` read from
+    // window is also wrong under prerendering, where the crawled URL and the
+    // rendering context are not guaranteed to agree.
+    seoTitle,
+    seoDescription,
+    seoPath,
 }) {
     const [email, setEmail] = useState("");
     const [busy, setBusy] = useState(false);
@@ -45,9 +54,9 @@ export default function ComingSoon({
     return (
         <div data-testid={pageTestId}>
             <Seo
-                title={eyebrow}
-                description={body}
-                path={typeof window !== "undefined" ? window.location.pathname : undefined}
+                title={seoTitle || eyebrow}
+                description={seoDescription || body}
+                path={seoPath || (typeof window !== "undefined" ? window.location.pathname : undefined)}
             />
             {/* HERO */}
             <section className="relative overflow-hidden border-b border-[#E5E7EB] bg-[#002B5C] text-white">

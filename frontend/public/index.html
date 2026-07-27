@@ -4,13 +4,24 @@
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="theme-color" content="#002B5C" />
-        <meta name="robots" content="index, follow" />
+        <!--
+            NO hardcoded <meta name="robots"> here. Seo.jsx emits `noindex, follow`
+            on 404s, cart, checkout and account pages, and React 19 APPENDS head
+            tags rather than replacing them — a static `index, follow` left two
+            contradictory robots directives on exactly the pages we want hidden.
+            Absent a robots tag, crawlers default to index/follow, so the public
+            pages are unaffected.
+
+            Every URL below names the www host. The apex 308-redirects to www, so
+            an apex canonical points Google at a URL that only redirects, and some
+            social scrapers will not follow a redirect when fetching og:image.
+        -->
         <title>Oakbridge Publishing — Law Books &amp; Academic Publishing House</title>
         <meta
             name="description"
             content="Oakbridge Publishing is a leading law and academic publishing house — authoritative law books, tax, business and reference titles, plus events, training and AI-powered digital solutions for students, professionals and institutions."
         />
-        <link rel="canonical" href="https://oakbridge.in/" />
+        <link rel="canonical" href="https://www.oakbridge.in/" />
 
         <!-- Icons & manifest -->
         <link rel="icon" href="/favicon.png" type="image/png" />
@@ -22,14 +33,14 @@
         <meta property="og:site_name" content="Oakbridge Publishing" />
         <meta property="og:title" content="Oakbridge Publishing — Law Books & Academic Publishing House" />
         <meta property="og:description" content="A leading law and academic publishing house — law books, tax, business and reference titles, events, training and digital solutions." />
-        <meta property="og:url" content="https://oakbridge.in/" />
-        <meta property="og:image" content="https://oakbridge.in/og-image.jpg" />
+        <meta property="og:url" content="https://www.oakbridge.in/" />
+        <meta property="og:image" content="https://www.oakbridge.in/og-image.jpg" />
 
         <!-- Twitter -->
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content="Oakbridge Publishing — Law Books & Academic Publishing House" />
         <meta name="twitter:description" content="A leading law and academic publishing house — law books, tax, business titles, events, training and digital solutions." />
-        <meta name="twitter:image" content="https://oakbridge.in/og-image.jpg" />
+        <meta name="twitter:image" content="https://www.oakbridge.in/og-image.jpg" />
 
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -41,8 +52,8 @@
           "@context": "https://schema.org",
           "@type": "Organization",
           "name": "Oakbridge Publishing",
-          "url": "https://oakbridge.in/",
-          "logo": "https://oakbridge.in/favicon.png",
+          "url": "https://www.oakbridge.in/",
+          "logo": "https://www.oakbridge.in/favicon.png",
           "foundingDate": "2017",
           "description": "A leading law and academic publishing house — law books, tax, business and academic titles, reference works, events, training and digital solutions.",
           "email": "info@oakbridge.in",
@@ -55,10 +66,10 @@
           "@context": "https://schema.org",
           "@type": "WebSite",
           "name": "Oakbridge Publishing",
-          "url": "https://oakbridge.in/",
+          "url": "https://www.oakbridge.in/",
           "potentialAction": {
             "@type": "SearchAction",
-            "target": { "@type": "EntryPoint", "urlTemplate": "https://oakbridge.in/books?search={search_term_string}" },
+            "target": { "@type": "EntryPoint", "urlTemplate": "https://www.oakbridge.in/books?search={search_term_string}" },
             "query-input": "required name=search_term_string"
           }
         }

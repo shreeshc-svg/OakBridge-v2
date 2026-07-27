@@ -46,6 +46,9 @@ export default function Academy() {
     return (
         <ComingSoon
             pageTestId="coming-soon-page"
+            seoTitle="Academy — Legal & Tax Training Programmes"
+            seoDescription="Oakbridge Academy: self-paced e-learning, certification tracks in Tax, Corporate Law, GST and Governance, and in-house workshops for law firms and corporate legal teams. Join the waitlist."
+            seoPath="/academy"
             eyebrow={site.ac_eyebrow || DEFAULTS.eyebrow}
             headline={site.ac_headline || DEFAULTS.headline}
             headlineAccent={site.ac_accent ?? DEFAULTS.accent}
