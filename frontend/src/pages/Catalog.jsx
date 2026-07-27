@@ -5,6 +5,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { Search, SlidersHorizontal, X } from "lucide-react";
 import BookCard from "../components/BookCard";
 import { fetchBooks, fetchCategories, fetchSiteContent, fetchSettings, mediaUrl, logSearch, fetchSuggestIndex } from "../lib/api";
+import EbookCta from "../components/EbookCta";
 
 // Renders admin copy where *text* becomes the accent colour and \n a line break.
 function renderRich(text, color = "#CC0033") {
@@ -456,6 +457,10 @@ export default function Catalog() {
 
                 {/* ============ GRID ============ */}
                 <section className="lg:col-span-9">
+                    {/* E-book platform strip — above the listing so it reads as an
+                        alternative format, not an advert. Hidden until configured. */}
+                    <EbookCta variant="bar" site={site} className="mb-6" />
+
                     {/*
                       Phone: the count sits on its own line and the two controls
                       share a full-width row, so "24+ titles" can't wrap and the

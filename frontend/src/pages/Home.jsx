@@ -15,6 +15,7 @@ import {
     mediaUrl,
 } from "../lib/api";
 import { hiddenSet, resolveSectionOrder } from "../lib/sections";
+import EbookCta from "../components/EbookCta";
 
 // Default top-to-bottom order of the reorderable homepage sections. Admin can
 // override via Admin → Pages → Section order & visibility (home_section_order).
@@ -304,6 +305,12 @@ export default function Home() {
                     </div>
                 </div>
             </section>
+
+            {/* E-book platform band. No `order` style, so it ties with the hero at 0
+                and DOM order keeps it directly beneath — visible immediately without
+                displacing the admin-managed section ordering below. Hidden until an
+                `ebook_url` is set in admin. */}
+            <EbookCta variant="banner" site={site} />
 
             {/* ============== BUSINESS VERTICALS (prominent, directly after hero) ============== */}
             {!hidden.has("home.businesses") && (

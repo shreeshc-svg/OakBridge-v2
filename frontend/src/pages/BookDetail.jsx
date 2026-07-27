@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import Breadcrumbs from "../components/Breadcrumbs";
 import BookPreview from "../components/BookPreview";
 import Seo from "../components/Seo";
+import EbookCta from "../components/EbookCta";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { Minus, Plus, ShoppingBag, ArrowLeft, Star, GraduationCap, ChevronLeft, ChevronRight, BookOpen } from "lucide-react";
 import BookCard from "../components/BookCard";
@@ -307,24 +308,28 @@ export default function BookDetail() {
                         `hasOptions` block further down only renders for titles with
                         selectable variants, so without this a book's binding was
                         never surfaced outside the Specifications tab. */}
-                    {book.binding && (
-                        <div className="mt-4 flex items-center gap-2">
-                            <span
-                                data-testid="book-binding-badge"
-                                className="inline-flex items-center gap-2 border border-[#002B5C]/20 bg-[#F5F7FA] px-3 py-1.5"
-                            >
-                                <BookOpen size={14} strokeWidth={1.5} className="text-[#002B5C]" />
-                                <span className="font-mono text-[11px] uppercase tracking-widest text-[#002B5C]">
-                                    {book.binding}
+                    <div className="mt-4 flex items-center gap-3 flex-wrap">
+                        {book.binding && (
+                            <>
+                                <span
+                                    data-testid="book-binding-badge"
+                                    className="inline-flex items-center gap-2 border border-[#002B5C]/20 bg-[#F5F7FA] px-3 py-1.5"
+                                >
+                                    <BookOpen size={14} strokeWidth={1.5} className="text-[#002B5C]" />
+                                    <span className="font-mono text-[11px] uppercase tracking-widest text-[#002B5C]">
+                                        {book.binding}
+                                    </span>
                                 </span>
-                            </span>
-                            {book.size && (
-                                <span className="font-mono text-[11px] text-[#4B5563]">
-                                    {book.size}
-                                </span>
-                            )}
-                        </div>
-                    )}
+                                {book.size && (
+                                    <span className="font-mono text-[11px] text-[#4B5563]">
+                                        {book.size}
+                                    </span>
+                                )}
+                            </>
+                        )}
+                        {/* E-book platform link — renders only once ebook_url is set in admin. */}
+                        <EbookCta variant="inline" className="ml-auto" />
+                    </div>
 
                     <div className="mt-8 flex items-baseline gap-4 pb-8 border-b border-[#E5E7EB]">
                         <span
