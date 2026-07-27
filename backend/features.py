@@ -1637,10 +1637,10 @@ async def apply_book_specs(dry_run: bool = True):
         specs = _json.load(fh)
 
     books = await db.books.find(
-        {}, {"_id": 0, "id": 1, "isbn": 1, "title": 1, "size": 1, "binding": 1}
+        {}, {"_id": 0, "id": 1, "isbn": 1, "title": 1, "size": 1, "binding": 1, "author": 1}
     ).to_list(None)
 
-    plan, no_entry, no_size = [], [], []
+    plan, no_entry, no_size, authors_fixed = [], [], [], []
     for b in books:
         e = specs.get(_re.sub(r"\D", "", str(b.get("isbn") or "")))
         if not e:
@@ -1655,6 +1655,14 @@ async def apply_book_specs(dry_run: bool = True):
             fields["binding"] = e["binding"]
         if e.get("edition"):
             fields["edition"] = e["edition"]
+        # Multi-author titles were stored with the master's raw separators
+        # ("A \nB"), which HTML collapses to a space — so two authors read as one
+        # person's name. book_specs.json holds the normalised "A, B & C" form.
+        if e.get("author") and e["author"] != b.get("author"):
+            fields["author"] = e["author"]
+            authors_fixed.append(
+                {"isbn": b.get("isbn"), "was": b.get("author"), "now": e["author"]}
+            )
         if fields:
             plan.append((b["id"], fields))
 
@@ -1671,6 +1679,8 @@ async def apply_book_specs(dry_run: bool = True):
         "no_spec_entry": len(no_entry),
         "no_spec_entry_titles": no_entry[:20],
         "no_size_titles": no_size[:20],
+        "authors_corrected": len(authors_fixed),
+        "authors_corrected_sample": authors_fixed[:15],
         "sample": [
             {"title": next(b["title"] for b in books if b["id"] == bid), **f}
             for bid, f in plan[:5]
