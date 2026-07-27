@@ -353,14 +353,16 @@ def render_admin_paid_order_html(order: dict) -> str:
     <table cellpadding="0" cellspacing="0" border="0" width="100%" style="font-size:13px;">
       <tr><td style="color:{BRAND_GREY};padding:6px 0;width:140px;">Customer</td>
           <td style="color:{BRAND_NAVY};padding:6px 0;">{order.get('full_name','')} &lt;{order.get('email','')}&gt;</td></tr>
-      <tr><td style="color:{BRAND_GREY};padding:6px 0;">Items</td>
-          <td style="color:{BRAND_NAVY};padding:6px 0;">{items_count} unit(s) · {len(order.get('items', []))} title(s)</td></tr>
+      <tr><td style="color:{BRAND_GREY};padding:6px 0;">Phone</td>
+          <td style="color:{BRAND_NAVY};padding:6px 0;font-family:monospace;">{order.get('phone','—')}</td></tr>
+      <tr><td style="color:{BRAND_GREY};padding:6px 0;vertical-align:top;">Titles</td>
+          <td style="color:{BRAND_NAVY};padding:6px 0;">{_order_titles(order)}</td></tr>
       <tr><td style="color:{BRAND_GREY};padding:6px 0;">Total paid</td>
           <td style="color:{BRAND_NAVY};padding:6px 0;font-family:Georgia,serif;font-size:18px;">{_money(order.get('total',0))}</td></tr>
       <tr><td style="color:{BRAND_GREY};padding:6px 0;">Razorpay payment</td>
           <td style="color:{BRAND_NAVY};padding:6px 0;font-family:monospace;">{rzp_id}</td></tr>
-      <tr><td style="color:{BRAND_GREY};padding:6px 0;">Ship to</td>
-          <td style="color:{BRAND_NAVY};padding:6px 0;">{order.get('city','')}, {order.get('state','')} {order.get('pincode','')}</td></tr>
+      <tr><td style="color:{BRAND_GREY};padding:6px 0;vertical-align:top;">Ship to</td>
+          <td style="color:{BRAND_NAVY};padding:6px 0;">{_ship_to(order)}</td></tr>
     </table>
     <div style="margin-top:18px;padding-top:18px;border-top:1px solid #E5E7EB;font-size:12px;color:{BRAND_GREY};">
       Manage this order in the admin dashboard.
@@ -369,6 +371,36 @@ def render_admin_paid_order_html(order: dict) -> str:
 </table>
 </body></html>
 """
+
+
+def _order_titles(order: dict) -> str:
+    """Titles + quantities for the internal order alert, so whoever packs the
+    order can do it straight from the email without opening the admin."""
+    import html as _html
+
+    rows = []
+    for it in order.get("items", []) or []:
+        qty = it.get("quantity", 1)
+        title = _html.escape(str(it.get("title", "")))
+        extra = " · ".join(x for x in [it.get("binding"), it.get("size")] if x)
+        rows.append(
+            f"{qty} × {title}"
+            + (f'<span style="color:{BRAND_GREY};"> ({_html.escape(extra)})</span>' if extra else "")
+        )
+    return "<br>".join(rows) or "—"
+
+
+def _ship_to(order: dict) -> str:
+    """Full delivery address (was city/state/pincode only, which is not postable)."""
+    import html as _html
+
+    parts = [
+        order.get("address_line1", ""),
+        order.get("address_line2", ""),
+        ", ".join(x for x in [order.get("city", ""), order.get("state", "")] if x),
+        order.get("pincode", ""),
+    ]
+    return "<br>".join(_html.escape(str(p)) for p in parts if str(p).strip()) or "—"
 
 
 async def send_admin_paid_order(order: dict) -> bool:
