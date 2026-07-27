@@ -14,6 +14,9 @@ import { fetchSiteContent } from "../lib/api";
  *   "bar"    — slim strip above the Bookstore listing
  *   "inline" — compact button beside a book's format on the PDP
  */
+/** Oakbridge's e-book platform. Overridable per-site via the `ebook_url` slot. */
+const DEFAULT_EBOOK_URL = "https://ebooks.oakbridge.in/";
+
 export default function EbookCta({ variant = "inline", site: siteProp, className = "" }) {
     const [site, setSite] = useState(siteProp || null);
 
@@ -27,7 +30,9 @@ export default function EbookCta({ variant = "inline", site: siteProp, className
             .catch(() => setSite({}));
     }, [siteProp]);
 
-    const url = (site?.ebook_url || "").trim();
+    // `??` not `||`: an unset key falls back to the platform URL, but a key an
+    // admin has deliberately emptied stays empty and hides the CTA everywhere.
+    const url = (site?.ebook_url ?? DEFAULT_EBOOK_URL).trim();
     if (!url) return null;
 
     const label = site?.ebook_cta_label || "Interested in e-books?";
