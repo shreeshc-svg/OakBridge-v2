@@ -63,6 +63,25 @@ const DEFAULTS = {
     copyright: "Oakbridge Publishing Pvt. Ltd. — ISBN Registrar 978-81-XXXX.",
 };
 
+/**
+ * Pages that aren't live yet. Matched on destination rather than a flag in the
+ * link data, because the footer columns are admin-overridable (site_footer_columns)
+ * — a flag set in the code defaults would be invisible the moment an admin saves
+ * their own column layout, which is exactly the state this site is in.
+ */
+const COMING_SOON_PATHS = new Set(["/solutions/higher-ed", "/solutions/educators"]);
+
+const isComingSoon = (to) => {
+    if (!to) return false;
+    try {
+        // Tolerate absolute URLs saved in the admin collection.
+        const path = to.startsWith("http") ? new URL(to).pathname : to.split(/[?#]/)[0];
+        return COMING_SOON_PATHS.has(path.replace(/\/$/, "") || "/");
+    } catch {
+        return COMING_SOON_PATHS.has(to);
+    }
+};
+
 export default function Footer() {
     const [email, setEmail] = useState("");
     const [loading, setLoading] = useState(false);
@@ -169,9 +188,14 @@ export default function Footer() {
                                             <Link
                                                 to={l.to}
                                                 data-testid={`footer-link-${l.label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}
-                                                className="text-sm text-white/80 hover:text-[#F59E0B] transition-colors"
+                                                className="text-sm text-white/80 hover:text-[#F59E0B] transition-colors inline-flex items-center gap-2 flex-wrap"
                                             >
                                                 {l.label}
+                                                {(l.soon || isComingSoon(l.to)) && (
+                                                    <span className="font-mono text-[9px] uppercase tracking-widest text-[#F59E0B] border border-[#F59E0B]/40 px-1.5 py-0.5 leading-none whitespace-nowrap">
+                                                        Coming soon
+                                                    </span>
+                                                )}
                                             </Link>
                                         </li>
                                     ))}
