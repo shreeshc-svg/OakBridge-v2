@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { ChevronLeft, ChevronRight, Play, X, Download, ArrowUpRight } from "lucide-react";
 import Seo from "../components/Seo";
-import { fetchSiteContent, fetchCollection, fetchSettings, mediaUrl } from "../lib/api";
+import { fetchSiteContent, fetchCollection, fetchSettings, fetchAlbumPhotos, mediaUrl } from "../lib/api";
 import { hiddenSet } from "../lib/sections";
 
 /**
@@ -217,6 +217,17 @@ export default function MediaGallery() {
     const [socials, setSocials] = useState([]);
     const [downloads, setDownloads] = useState([]);
     const [lightbox, setLightbox] = useState(null);
+    // Album opened from the occasions rail: { album, photos, loading, error }
+    const [album, setAlbumRaw] = useState(null);
+    const [albumPhotos, setAlbumPhotos] = useState({ loading: false, photos: [], error: "" });
+    const setAlbum = (a) => {
+        setAlbumRaw(a);
+        if (!a?.prefix) return;
+        setAlbumPhotos({ loading: true, photos: [], error: "" });
+        fetchAlbumPhotos(a.prefix)
+            .then((d) => setAlbumPhotos({ loading: false, photos: d.photos || [], error: "" }))
+            .catch(() => setAlbumPhotos({ loading: false, photos: [], error: "Could not load this album." }));
+    };
 
     useEffect(() => {
         fetchSiteContent().then(setSite).catch(() => {});
@@ -230,6 +241,17 @@ export default function MediaGallery() {
         grab("media_socials", setSocials);
         grab("media_downloads", setDownloads);
     }, []);
+
+    useEffect(() => {
+        if (!album) return undefined;
+        const esc = (e) => e.key === "Escape" && setAlbumRaw(null);
+        document.addEventListener("keydown", esc);
+        document.body.style.overflow = "hidden";
+        return () => {
+            document.removeEventListener("keydown", esc);
+            document.body.style.overflow = "";
+        };
+    }, [album]);
 
     useEffect(() => {
         if (!lightbox) return undefined;
@@ -346,14 +368,27 @@ export default function MediaGallery() {
                                             <img src={mediaUrl(a.image) || a.image} alt="" loading="lazy"
                                                 className="w-full h-[150px] object-cover" />
                                         )}
-                                        <div className="p-4">
-                                            <div className="font-medium text-[#002B5C]">{a.title}</div>
+                                        <div className="p-4 text-left">
+                                            <div className="font-medium text-[#002B5C] leading-snug">{a.title}</div>
+                                            {a.date && (
+                                                <div className="font-mono text-[11px] text-[#CC0033] mt-1.5">{a.date}</div>
+                                            )}
                                             {a.caption && <div className="font-mono text-[11px] text-[#4B5563] mt-1">{a.caption}</div>}
                                         </div>
                                     </>
                                 );
+                                const cls = "block w-full border border-[#E5E7EB] bg-white hover:border-[#002B5C] transition-colors";
+                                // An album backed by a storage folder opens its photos in place;
+                                // otherwise fall back to a plain link, or a static card.
+                                if (a.prefix) {
+                                    return (
+                                        <button key={a.id || i} onClick={() => setAlbum(a)} className={cls} data-testid={`album-${i}`}>
+                                            {inner}
+                                        </button>
+                                    );
+                                }
                                 return a.link ? (
-                                    <SmartLink key={a.id || i} to={a.link} className="block border border-[#E5E7EB] bg-white hover:border-[#002B5C] transition-colors">{inner}</SmartLink>
+                                    <SmartLink key={a.id || i} to={a.link} className={cls}>{inner}</SmartLink>
                                 ) : (
                                     <div key={a.id || i} className="border border-[#E5E7EB] bg-white">{inner}</div>
                                 );
@@ -509,6 +544,45 @@ export default function MediaGallery() {
                         )}
                     </div>
                 </section>
+            )}
+
+            {/* ---------- album overlay ---------- */}
+            {album && (
+                <div className="fixed inset-0 z-[55] bg-[#002B5C]/95 overflow-y-auto" data-testid="album-overlay">
+                    <div className="min-h-full px-6 md:px-12 lg:px-16 py-14">
+                        <div className="flex items-start justify-between gap-6">
+                            <div>
+                                <div className="overline !text-[#F59E0B]">Album</div>
+                                <h2 className="font-serif text-2xl md:text-3xl text-white mt-2">{album.title}</h2>
+                                {album.date && <div className="font-mono text-[11px] text-white/60 mt-2">{album.date}</div>}
+                                {!albumPhotos.loading && albumPhotos.photos.length > 0 && (
+                                    <div className="font-mono text-[11px] text-white/50 mt-1">
+                                        {albumPhotos.photos.length} photo{albumPhotos.photos.length === 1 ? "" : "s"}
+                                    </div>
+                                )}
+                            </div>
+                            <button onClick={() => setAlbumRaw(null)} aria-label="Close album" className="text-white/80 hover:text-white flex-shrink-0">
+                                <X size={26} strokeWidth={1.5} />
+                            </button>
+                        </div>
+
+                        {albumPhotos.loading && <p className="font-mono text-xs text-white/60 mt-10">Loading photos…</p>}
+                        {albumPhotos.error && <p className="text-sm text-white/70 mt-10">{albumPhotos.error}</p>}
+                        {!albumPhotos.loading && !albumPhotos.error && albumPhotos.photos.length === 0 && (
+                            <p className="text-sm text-white/70 mt-10">This album is empty.</p>
+                        )}
+
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mt-9">
+                            {albumPhotos.photos.map((p, i) => (
+                                <button key={p.url || i} onClick={() => setLightbox({ url: p.url, title: album.title })}
+                                    className="relative aspect-[4/3] overflow-hidden bg-[#0d2340]">
+                                    <img src={mediaUrl(p.url) || p.url} alt="" loading="lazy"
+                                        className="absolute inset-0 w-full h-full object-cover hover:opacity-90 transition-opacity" />
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                </div>
             )}
 
             {/* ---------- lightbox ---------- */}

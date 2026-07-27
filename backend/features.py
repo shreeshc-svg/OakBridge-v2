@@ -1954,6 +1954,67 @@ class SettingSet(BaseModel):
     value: Any
 
 
+IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif")
+
+# Storage areas an album may never point at, whatever an admin types.
+BLOCKED_ALBUM_PREFIXES = ("ebooks", "docs", "previews")
+
+
+@public_router.get("/media/album")
+async def album_photos(prefix: str, limit: int = 300):
+    """List the images inside one storage folder, for a Media & Gallery album.
+
+    Lets the team drop a shoot into an S3 folder and have it appear on the site
+    without re-uploading each photo through the admin. Read-only, images only,
+    and confined to this app's own media area — an admin cannot point an album at
+    e-books, invoices or any other private prefix.
+    """
+    raw = (prefix or "").strip().strip("/")
+    if not raw or ".." in raw:
+        raise HTTPException(status_code=400, detail="Invalid folder")
+
+    # Accept "albums/x" or the fully-qualified "oakbridge/albums/x".
+    rel = raw[len(APP_NAME) + 1:] if raw.startswith(f"{APP_NAME}/") else raw
+    if rel.split("/", 1)[0].lower() in BLOCKED_ALBUM_PREFIXES:
+        raise HTTPException(status_code=403, detail="That folder can't be used for an album")
+
+    base = f"{APP_NAME}/{rel}".rstrip("/") + "/"
+    photos = []
+    try:
+        if _s3_enabled():
+            token = None
+            while len(photos) < limit:
+                kwargs = {"Bucket": S3_BUCKET, "Prefix": _safe_key(base), "MaxKeys": 1000}
+                if token:
+                    kwargs["ContinuationToken"] = token
+                resp = _s3().list_objects_v2(**kwargs)
+                for obj in resp.get("Contents", []) or []:
+                    key = obj["Key"]
+                    if not key.lower().endswith(IMAGE_EXTS):
+                        continue
+                    # Strip any configured S3_PREFIX back off for the public URL.
+                    rel_key = key[len(S3_PREFIX) + 1:] if S3_PREFIX and key.startswith(S3_PREFIX + "/") else key
+                    photos.append({"url": f"/api/files/{rel_key}", "name": key.rsplit("/", 1)[-1]})
+                    if len(photos) >= limit:
+                        break
+                if resp.get("IsTruncated") and len(photos) < limit:
+                    token = resp.get("NextContinuationToken")
+                else:
+                    break
+        else:
+            folder = _resolve(base)
+            if os.path.isdir(folder):
+                for name in sorted(os.listdir(folder)):
+                    if name.lower().endswith(IMAGE_EXTS):
+                        photos.append({"url": f"/api/files/{base}{name}", "name": name})
+    except Exception as e:  # noqa: BLE001
+        log.exception("Album listing failed for %s: %s", base, e)
+        raise HTTPException(status_code=502, detail="Could not read that folder")
+
+    photos.sort(key=lambda p: p["name"].lower())
+    return {"prefix": base, "count": len(photos), "photos": photos}
+
+
 @public_router.get("/settings")
 async def get_settings():
     docs = await db.settings.find({}, {"_id": 0}).to_list(200)

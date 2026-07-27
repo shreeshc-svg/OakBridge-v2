@@ -125,6 +125,9 @@ export const adminUploadMedia = (file, alt = "") => {
 };
 export const adminDeleteMedia = (id) =>
     api.delete(`/admin/media/${id}`).then((r) => r.data);
+/** Photos inside one storage folder — powers Media & Gallery albums. */
+export const fetchAlbumPhotos = (prefix) =>
+    api.get("/media/album", { params: { prefix } }).then((r) => r.data);
 /** Downloadable documents (company profile, price lists, press releases). */
 export const adminUploadDoc = (file) => {
     const form = new FormData();

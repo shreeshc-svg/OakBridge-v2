@@ -134,12 +134,14 @@ export default function AdminMediaGallery() {
                     <MediaListEditor
                         collectionKey="media_albums"
                         addLabel="Add album"
-                        help={`Cards scroll horizontally. ${IMG_HINT}`}
+                        help={`Cards scroll horizontally. ${IMG_HINT} Point an album at a storage folder and every photo in it opens when the card is clicked — no need to upload them again here.`}
                         fields={[
                             { key: "title", label: "Album name" },
-                            { key: "caption", label: "Caption (e.g. 120 photos)" },
+                            { key: "date", label: "Date shown under the name (e.g. 07/2026)" },
                             { key: "image", label: "Cover image", type: "image" },
-                            { key: "link", label: "Link (optional)" },
+                            { key: "prefix", label: "Storage folder (e.g. albums/in-house-matters-2026)" },
+                            { key: "caption", label: "Caption (optional)" },
+                            { key: "link", label: "Link instead of opening photos (optional)" },
                         ]}
                     />
                 </Block>
