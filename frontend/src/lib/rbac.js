@@ -18,6 +18,7 @@ export const SECTIONS = [
     "navigation",
     "media",
     "media-gallery",
+    "ebooks",
     "careers",
     "orders",
     "coupons",
@@ -41,6 +42,7 @@ export const SECTION_LABELS = {
     navigation: "Navigation",
     media: "Media Library",
     "media-gallery": "Media & Gallery",
+    ebooks: "E-Books",
     careers: "Careers",
     orders: "Orders",
     coupons: "Coupons",
@@ -58,7 +60,7 @@ export const SECTION_GROUPS = [
     { label: "Catalogue", sections: ["books", "authors", "inventory"] },
     {
         label: "Site content",
-        sections: ["pages", "navigation", "media", "media-gallery", "careers", "page-bookstore", "page-book"],
+        sections: ["pages", "navigation", "media", "media-gallery", "careers", "page-bookstore", "page-book", "ebooks"],
     },
     { label: "Fulfilment", sections: ["orders", "coupons"] },
     { label: "Enquiries", sections: ["messages", "desk-copies", "submissions", "waitlists"] },
@@ -77,6 +79,7 @@ export const SHARED_CONTENT_SECTIONS = [
     "careers",
     "page-bookstore",
     "page-book",
+    "ebooks",
 ];
 
 export const ROLE_PRESETS = {
@@ -85,7 +88,7 @@ export const ROLE_PRESETS = {
     manager: SECTIONS.filter((s) => !["users", "legal", "settings"].includes(s)),
     editor: [
         "dashboard", "books", "authors", "pages", "navigation",
-        "media", "media-gallery", "careers", "page-bookstore", "page-book",
+        "media", "media-gallery", "careers", "page-bookstore", "page-book", "ebooks",
     ],
     fulfilment: [
         "dashboard", "inventory", "orders", "coupons",

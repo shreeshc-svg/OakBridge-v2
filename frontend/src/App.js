@@ -40,6 +40,7 @@ import AdminCareers from "@/pages/admin/AdminCareers";
 import AdminMediaGallery from "@/pages/admin/AdminMediaGallery";
 import AdminLegal from "@/pages/admin/AdminLegal";
 import AdminMessages from "@/pages/admin/AdminMessages";
+import AdminEbooks from "@/pages/admin/AdminEbooks";
 import NotFound from "@/pages/NotFound";
 import Submissions from "@/pages/Submissions";
 import Careers from "@/pages/Careers";
@@ -138,6 +139,7 @@ function App() {
                                 <Route path="pages" element={<AdminPages />} />
                                 <Route path="navigation" element={<AdminNavigation />} />
                                 <Route path="media" element={<AdminMedia />} />
+                                <Route path="ebooks" element={<AdminEbooks />} />
                                 <Route path="page-bookstore" element={<AdminPLP />} />
                                 <Route path="page-book" element={<AdminPDP />} />
                                 <Route path="authors" element={<AdminAuthors />} />

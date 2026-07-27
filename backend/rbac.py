@@ -14,9 +14,9 @@ are covered automatically and nobody can forget a decorator.
 WHAT IS AND ISN'T TRULY SEPARABLE  (important, and deliberately documented)
 
 Several sidebar screens write through the SAME endpoints — Pages, Navigation,
-Media & Gallery, Careers, Bookstore Page and Book Page all persist via
+Media & Gallery, Careers, Bookstore Page, Book Page and E-Books all persist via
 `site-content` / `collections` / `settings`. A request cannot say which screen it
-came from, so those six are enforced as one bundle: unticking one hides it from
+came from, so those seven are enforced as one bundle: unticking one hides it from
 the sidebar, but someone technical with any of the six could still reach the
 others' data through the API. The other fourteen sections are genuinely isolated.
 
@@ -39,6 +39,7 @@ SECTIONS: tuple[str, ...] = (
     "navigation",
     "media",
     "media-gallery",
+    "ebooks",
     "careers",
     "orders",
     "coupons",
@@ -62,6 +63,7 @@ SECTION_LABELS: dict[str, str] = {
     "navigation": "Navigation",
     "media": "Media Library",
     "media-gallery": "Media & Gallery",
+    "ebooks": "E-Books",
     "careers": "Careers",
     "orders": "Orders",
     "coupons": "Coupons",
@@ -76,7 +78,7 @@ SECTION_LABELS: dict[str, str] = {
 
 # The six that share endpoints — surfaced to the UI so it can say so honestly.
 SHARED_CONTENT_SECTIONS = frozenset(
-    {"pages", "navigation", "media-gallery", "careers", "page-bookstore", "page-book"}
+    {"pages", "navigation", "media-gallery", "careers", "page-bookstore", "page-book", "ebooks"}
 )
 
 # --------------------------------------------------------------- endpoints ---
@@ -97,6 +99,7 @@ SECTION_PATHS: dict[str, set[str]] = {
     "media-gallery": {"collections", "media", "uploads"},
     "pages": {"site-content", "collections", "settings", "media", "uploads"},
     "navigation": {"site-content", "collections"},
+    "ebooks": {"site-content"},
     "page-bookstore": {"settings", "books"},
     "page-book": {"settings"},
     "users": {"users"},
@@ -133,7 +136,7 @@ ROLE_PRESETS: dict[str, tuple[str, ...]] = {
     "manager": tuple(s for s in SECTIONS if s not in {"users", "legal", "settings"}),
     "editor": (
         "dashboard", "books", "authors", "pages", "navigation",
-        "media", "media-gallery", "careers", "page-bookstore", "page-book",
+        "media", "media-gallery", "careers", "page-bookstore", "page-book", "ebooks",
     ),
     "fulfilment": (
         "dashboard", "inventory", "orders", "coupons",
