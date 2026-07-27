@@ -25,6 +25,7 @@ export default function AdminUsers() {
     const [showNew, setShowNew] = useState(false);
     const [form, setForm] = useState(BLANK);
     const [saving, setSaving] = useState(false);
+    const [created, setCreated] = useState(null);
 
     const load = () =>
         adminListUsers()
@@ -41,6 +42,9 @@ export default function AdminUsers() {
         try {
             await adminCreateUser(form);
             toast.success(`${form.email} created as ${form.role}.`);
+            // Surface the sign-in details once so they can be handed over. The
+            // password is never retrievable afterwards — only reset.
+            setCreated({ email: form.email, password: form.password, role: form.role });
             setForm(BLANK);
             setShowNew(false);
             load();
@@ -97,6 +101,49 @@ export default function AdminUsers() {
                     </button>
                 )}
             </div>
+
+            {created && (
+                <div
+                    data-testid="admin-created-credentials"
+                    className="mt-6 border border-[#002B5C] bg-[#F5F7FA] p-5 max-w-3xl"
+                >
+                    <div className="flex items-start justify-between gap-4">
+                        <div className="overline !text-[10px]">Account created — share these once</div>
+                        <button onClick={() => setCreated(null)} className="text-xs text-[#4B5563] hover:text-[#CC0033]">
+                            Dismiss
+                        </button>
+                    </div>
+                    <dl className="mt-3 grid sm:grid-cols-[120px_1fr] gap-x-4 gap-y-2 text-sm">
+                        <dt className="text-[#4B5563]">Sign-in page</dt>
+                        <dd className="font-mono text-[#002B5C] break-all">
+                            {window.location.origin}/login
+                        </dd>
+                        <dt className="text-[#4B5563]">Login ID</dt>
+                        <dd className="font-mono text-[#002B5C] break-all">{created.email}</dd>
+                        <dt className="text-[#4B5563]">Password</dt>
+                        <dd className="font-mono text-[#002B5C] break-all">{created.password}</dd>
+                        <dt className="text-[#4B5563]">Role</dt>
+                        <dd className="font-mono text-[#002B5C]">{created.role}</dd>
+                    </dl>
+                    <button
+                        onClick={() => {
+                            navigator.clipboard
+                                ?.writeText(
+                                    `Oakbridge admin\nSign in: ${window.location.origin}/login\nLogin ID: ${created.email}\nPassword: ${created.password}\nRole: ${created.role}`,
+                                )
+                                .then(() => toast.success("Copied."))
+                                .catch(() => toast.error("Could not copy."));
+                        }}
+                        className="mt-4 text-xs font-medium border border-[#002B5C] px-4 py-2 hover:bg-white"
+                    >
+                        Copy details
+                    </button>
+                    <p className="mt-3 text-[11px] text-[#4B5563]">
+                        Signing in with this ID goes straight to the admin dashboard. Send the
+                        password over a secure channel, not email, and ask them to change it.
+                    </p>
+                </div>
+            )}
 
             {canManage && showNew && (
                 <form

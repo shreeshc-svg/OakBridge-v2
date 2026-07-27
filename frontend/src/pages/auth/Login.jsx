@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { formatApiError } from "../../lib/api";
+import { ROLE_AREAS } from "../../lib/rbac";
 import { toast } from "sonner";
 
 export default function Login() {
@@ -25,7 +26,12 @@ export default function Login() {
         try {
             const user = await login(email, password);
             toast.success(`Welcome back, ${user.name.split(" ")[0]}.`);
-            nav(user.role === "admin" ? "/admin" : from, { replace: true });
+            // Any staff tier lands in the admin, not just the legacy "admin" role —
+            // otherwise a new manager/editor/fulfilment login is sent to /account
+            // and has no obvious way in. An explicit `next` still wins.
+            const isStaff = ROLE_AREAS[user.role] !== undefined;
+            const target = sp.get("next") || (isStaff ? "/admin" : from);
+            nav(target, { replace: true });
         } catch (err) {
             setError(formatApiError(err));
         } finally {

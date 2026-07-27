@@ -7,6 +7,9 @@ import React, {
     useCallback,
 } from "react";
 import { authLogin, authMe, authRegister } from "../lib/api";
+import { ROLE_AREAS, isSuperadmin } from "../lib/rbac";
+
+const ADMIN_ROLES = Object.keys(ROLE_AREAS);
 
 const AuthContext = createContext(null);
 const TOKEN_KEY = "oakbridge_token";
@@ -60,7 +63,10 @@ export function AuthProvider({ children }) {
         () => ({
             user: user || null,
             isAuthenticated: !!user && user !== false,
-            isAdmin: !!user && user.role === "admin",
+            // Any admin tier — not just the legacy "admin" role — may enter /admin.
+            // What they can do inside is decided per-section by lib/rbac.
+            isAdmin: !!user && ADMIN_ROLES.includes(user.role),
+            isSuperadmin: !!user && isSuperadmin(user.role),
             loading,
             login,
             register,
