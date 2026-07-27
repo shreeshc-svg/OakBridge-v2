@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom";
 import { Search, X, Clock, BookOpen, User } from "lucide-react";
 import { fetchSuggestIndex } from "../lib/api";
+import { fuzzySearch } from "../lib/fuzzy";
 
 /**
  * Search box with autocomplete and recent searches.
@@ -75,7 +76,11 @@ export function suggestFrom(books, q, max = MAX_SUGGESTIONS) {
         else if (t.includes(term) || a.includes(term)) contains.push(b);
         if (starts.length >= max) break;
     }
-    return [...starts, ...contains].slice(0, max);
+    const exact = [...starts, ...contains];
+    if (exact.length) return exact.slice(0, max);
+    // Nothing matched literally — offer the closest titles rather than an empty
+    // dropdown, so a typo still leads somewhere.
+    return fuzzySearch(books, q, max);
 }
 
 export default function SearchBox({

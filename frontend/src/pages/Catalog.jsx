@@ -7,6 +7,7 @@ import BookCard from "../components/BookCard";
 import { fetchBooks, fetchCategories, fetchSiteContent, fetchSettings, mediaUrl, logSearch, fetchSuggestIndex } from "../lib/api";
 import EbookCta from "../components/EbookCta";
 import { loadIndex, suggestFrom, readRecent, pushRecent } from "../components/SearchBox";
+import { fuzzySearch, didYouMean as didYouMeanTerm } from "../lib/fuzzy";
 
 // Renders admin copy where *text* becomes the accent colour and \n a line break.
 function renderRich(text, color = "#CC0033") {
@@ -355,32 +356,41 @@ export default function Catalog() {
         }
     }, [loading, search, books.length, indexBooks.length]);
 
-    // Cheap similarity: shared-prefix + token overlap. Good enough to catch
-    // typos and partial titles without pulling in a fuzzy-match dependency.
-    const didYouMean = useMemo(() => {
-        const term = (search || "").toLowerCase().trim();
-        if (!term || indexBooks.length === 0) return [];
-        const tokens = term.split(/\s+/).filter((t) => t.length > 2);
-        const score = (s) => {
-            const v = (s || "").toLowerCase();
-            let n = 0;
-            for (const t of tokens) if (v.includes(t)) n += 2;
-            // forgiving prefix match catches "moneylaunder" -> "money laundering"
-            for (let len = Math.min(term.length, 8); len >= 4; len--) {
-                if (v.includes(term.slice(0, len))) {
-                    n += len / 4;
-                    break;
-                }
-            }
-            return n;
-        };
-        return indexBooks
-            .map((b) => ({ b, s: score(b.t) + score(b.a) * 0.6 }))
-            .filter((x) => x.s > 0)
-            .sort((a, b) => b.s - a.s)
-            .slice(0, 4)
-            .map((x) => x.b);
-    }, [search, indexBooks]);
+    // Typo-tolerant suggestions. The previous version scored on substrings, so a
+    // slip like "cconstitution" or "intermidiaries" matched nothing at all — the
+    // search logs show those exact queries returning an empty shelf.
+    const didYouMean = useMemo(
+        () => (search && indexBooks.length ? fuzzySearch(indexBooks, search, 4) : []),
+        [search, indexBooks],
+    );
+
+    /*
+     * Auto-correct rather than dead-end. When a search finds nothing but the
+     * catalogue clearly contains what was meant, re-run it with the corrected
+     * spelling and say so — with a one-click way back to the literal search.
+     * `triedRef` stops a correction that also finds nothing from looping.
+     */
+    const [correctedFrom, setCorrectedFrom] = useState(null);
+    const triedRef = useRef(new Set());
+
+    useEffect(() => {
+        if (loading || !search || books.length > 0 || indexBooks.length === 0) return;
+        if (triedRef.current.has(search)) return;
+        triedRef.current.add(search);
+        const fixed = didYouMeanTerm(indexBooks, search);
+        if (fixed && fixed !== search.toLowerCase().trim()) {
+            triedRef.current.add(fixed);
+            setCorrectedFrom(search);
+            update("search", fixed);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [loading, search, books.length, indexBooks.length]);
+
+    // A fresh search by the user clears the "showing results for" notice.
+    useEffect(() => {
+        if (correctedFrom && search === correctedFrom) setCorrectedFrom(null);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [search]);
 
     const activeFilters = useMemo(() => {
         const arr = [];
@@ -606,6 +616,21 @@ export default function Catalog() {
                     {/* E-book platform strip — above the listing so it reads as an
                         alternative format, not an advert. Hidden until configured. */}
                     <EbookCta variant="bar" site={site} className="mb-6" />
+
+                    {correctedFrom && books.length > 0 && (
+                        <div
+                            data-testid="catalog-autocorrect"
+                            className="mb-6 border-l-2 border-[#F59E0B] bg-[#FFFBEB] pl-3 py-2.5 pr-3 text-sm text-[#002B5C]"
+                        >
+                            Showing results for <strong>{search}</strong>.{" "}
+                            <button
+                                onClick={() => update("search", correctedFrom)}
+                                className="border-b border-[#002B5C] hover:text-[#CC0033] hover:border-[#CC0033]"
+                            >
+                                Search instead for “{correctedFrom}”
+                            </button>
+                        </div>
+                    )}
 
                     {/*
                       Phone: the count sits on its own line and the two controls

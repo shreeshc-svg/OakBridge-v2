@@ -442,12 +442,27 @@ def _search_clauses(search: str) -> List[dict]:
     import re as _re
 
     out: List[dict] = []
-    for token in str(search).split():
+    # "&" and "and" are the same word to a shopper: the catalogue has both
+    # "Legal Aptitude & Reasoning" and "…Health and Working Conditions".
+    normalised = _re.sub(r"\s*&\s*", " and ", str(search))
+    for token in normalised.split():
         alnum = _re.sub(r"[^0-9A-Za-z]+", "", token)
         if not alnum:
             continue
-        # Allow any run of separators between the characters the user typed.
-        pattern = "[^0-9A-Za-z]*".join(_re.escape(ch) for ch in alnum)
+
+        def sep(word: str) -> str:
+            # Allow any run of separators between the characters the user typed.
+            return "[^0-9A-Za-z]*".join(_re.escape(ch) for ch in word)
+
+        variants = {sep(alnum)}
+        if alnum.lower() == "and":
+            variants.add(_re.escape("&"))
+        # Light stemming: a plural query should still find a singular title
+        # ("insights" -> "Insight into the Bharatiya Nagarik Suraksha Sanhita").
+        if len(alnum) > 3 and alnum.lower().endswith("s"):
+            variants.add(sep(alnum[:-1]))
+        pattern = "|".join(f"(?:{v})" for v in sorted(variants))
+
         out.append(
             {"$or": [{f: {"$regex": pattern, "$options": "i"}} for f in SEARCH_FIELDS]}
         )
