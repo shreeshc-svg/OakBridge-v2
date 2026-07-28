@@ -365,7 +365,14 @@ async def health():
 
 # Public site origin used to build absolute URLs in the sitemap. Override with
 # SITE_URL env if the canonical host ever changes.
-SITE_URL = (os.environ.get("SITE_URL") or "https://oakbridge.in").rstrip("/")
+#
+# MUST stay in sync with the canonical host in frontend/src/components/Seo.jsx
+# and frontend/public/index.html — all three are www. This default was the apex,
+# which meant every one of the ~208 sitemap entries submitted a URL that
+# 308-redirects, while the page at the other end declared a www canonical.
+# Google resolves that, but it is a contradictory signal on every URL we own,
+# and redirected sitemap entries are reported as errors in Search Console.
+SITE_URL = (os.environ.get("SITE_URL") or "https://www.oakbridge.in").rstrip("/")
 
 # Top-level pages that should always be in the sitemap (mirrors the storefront
 # routes; excludes the noindex ones already blocked in robots.txt).
