@@ -1,7 +1,13 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "yarn build",
+  "buildCommand": "npx --yes puppeteer browsers install chrome && yarn build:seo",
   "outputDirectory": "build",
+  "build": {
+    "env": {
+      "BACKEND_URL": "https://api.oakbridge.in",
+      "PRERENDER_CONCURRENCY": "6"
+    }
+  },
   "redirects": [
     {
       "source": "/book/:slug*",

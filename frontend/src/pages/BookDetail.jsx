@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import Breadcrumbs from "../components/Breadcrumbs";
 import BookPreview from "../components/BookPreview";
-import Seo from "../components/Seo";
+import Seo, { SITE } from "../components/Seo";
 import EbookCta from "../components/EbookCta";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { Minus, Plus, ShoppingBag, ArrowLeft, Star, GraduationCap, ChevronLeft, ChevronRight, BookOpen } from "lucide-react";
@@ -153,6 +153,11 @@ export default function BookDetail() {
     const low = !oos && stock <= LOW_STOCK;
 
     const seoDesc = (book.description || "").slice(0, 160);
+    // Absolute, www-host cover URL. og:image and schema.org `image` are fetched
+    // by machines that have no page to resolve a relative path against, so the
+    // stored "/api/files/…" value is useless to them as-is.
+    const coverAbs = mediaUrl(book.cover_image);
+    const bookUrl = `${SITE}/books/${book.id}`;
     const bookLd = {
         "@context": "https://schema.org",
         "@type": "Book",
@@ -164,23 +169,32 @@ export default function BookDetail() {
         inLanguage: book.language,
         bookFormat: "https://schema.org/Hardcover",
         publisher: { "@type": "Organization", name: book.publisher },
-        image: book.cover_image,
+        image: coverAbs,
         description: book.description,
-        offers: {
-            "@type": "Offer",
-            price: book.price,
-            priceCurrency: "INR",
-            availability: stock > 0 ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
-            url: `https://oakbridge.in/books/${book.id}`,
-        },
+        url: bookUrl,
+        /*
+         * NO `offers` BLOCK — deliberate, and the reason is prerendering.
+         *
+         * Prerendered HTML is frozen at build time, so anything in it is only as
+         * current as the last deploy. Price and stock are exactly the fields
+         * that change without a deploy, and they are the two an Offer exists to
+         * state. A search result advertising a price we no longer charge is a
+         * consumer-protection problem in India, not merely an SEO one, and
+         * "InStock" on a sold-out title earns a cancelled order and a refund.
+         *
+         * Google simply shows no price rich-result without this, which is the
+         * correct outcome: no claim beats a wrong claim. If price in search is
+         * ever wanted, the fix is a rebuild hook on price changes, not putting
+         * this block back.
+         */
     };
     const crumbLd = {
         "@context": "https://schema.org",
         "@type": "BreadcrumbList",
         itemListElement: [
-            { "@type": "ListItem", position: 1, name: "Home", item: "https://oakbridge.in/" },
-            { "@type": "ListItem", position: 2, name: "Bookstore", item: "https://oakbridge.in/books" },
-            { "@type": "ListItem", position: 3, name: book.title, item: `https://oakbridge.in/books/${book.id}` },
+            { "@type": "ListItem", position: 1, name: "Home", item: `${SITE}/` },
+            { "@type": "ListItem", position: 2, name: "Bookstore", item: `${SITE}/books` },
+            { "@type": "ListItem", position: 3, name: book.title, item: bookUrl },
         ],
     };
 
@@ -212,7 +226,7 @@ export default function BookDetail() {
                 title={book.title}
                 description={seoDesc}
                 path={`/books/${book.id}`}
-                image={book.cover_image}
+                image={coverAbs}
                 type="book"
                 jsonLd={[bookLd, crumbLd]}
             />

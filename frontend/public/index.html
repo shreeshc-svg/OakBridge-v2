@@ -16,31 +16,30 @@
             an apex canonical points Google at a URL that only redirects, and some
             social scrapers will not follow a redirect when fetching og:image.
         -->
-        <title>Oakbridge Publishing — Law Books &amp; Academic Publishing House</title>
-        <meta
-            name="description"
-            content="Oakbridge Publishing is a leading law and academic publishing house — authoritative law books, tax, business and reference titles, plus events, training and AI-powered digital solutions for students, professionals and institutions."
-        />
-        <link rel="canonical" href="https://www.oakbridge.in/" />
+        <!--
+            NO <title>, description, canonical, Open Graph or Twitter tags here.
+
+            React 19 hoists the equivalents out of components/Seo.jsx into <head>,
+            and it APPENDS rather than replaces. Static copies here therefore
+            survive alongside the per-route ones, and a prerendered page would
+            ship two canonicals and two titles — Google discards a page with
+            conflicting canonicals outright, which is worse than the single wrong
+            canonical this file used to emit.
+
+            The trade-off, accepted knowingly: before hydration a route has no
+            title, so the browser tab shows the URL for a moment and a crawler
+            that executes no JavaScript sees none. Prerendering is what closes
+            that gap, by baking the rendered tags into each route's HTML. Do not
+            re-add a "fallback" title here — it would come back as a duplicate on
+            every prerendered page.
+
+            Only genuinely global, route-independent tags belong below.
+        -->
 
         <!-- Icons & manifest -->
         <link rel="icon" href="/favicon.png" type="image/png" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <link rel="manifest" href="/site.webmanifest" />
-
-        <!-- Open Graph -->
-        <meta property="og:type" content="website" />
-        <meta property="og:site_name" content="Oakbridge Publishing" />
-        <meta property="og:title" content="Oakbridge Publishing — Law Books & Academic Publishing House" />
-        <meta property="og:description" content="A leading law and academic publishing house — law books, tax, business and reference titles, events, training and digital solutions." />
-        <meta property="og:url" content="https://www.oakbridge.in/" />
-        <meta property="og:image" content="https://www.oakbridge.in/og-image.jpg" />
-
-        <!-- Twitter -->
-        <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content="Oakbridge Publishing — Law Books & Academic Publishing House" />
-        <meta name="twitter:description" content="A leading law and academic publishing house — law books, tax, business titles, events, training and digital solutions." />
-        <meta name="twitter:image" content="https://www.oakbridge.in/og-image.jpg" />
 
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

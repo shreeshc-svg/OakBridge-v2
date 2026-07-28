@@ -3,7 +3,7 @@ import React from "react";
 // Canonical host is www (the apex 308-redirects to it). Canonical tags and OG
 // URLs must name the host we actually serve, or Google is told to prefer a URL
 // that only redirects.
-const SITE = "https://www.oakbridge.in";
+export const SITE = "https://www.oakbridge.in";
 const DEFAULT_IMG = "https://www.oakbridge.in/og-image.jpg";
 
 /**
