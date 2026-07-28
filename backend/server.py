@@ -376,10 +376,16 @@ SITE_URL = (os.environ.get("SITE_URL") or "https://www.oakbridge.in").rstrip("/"
 
 # Top-level pages that should always be in the sitemap (mirrors the storefront
 # routes; excludes the noindex ones already blocked in robots.txt).
+#
+# If you add a storefront route in frontend/src/App.js, add it here too — a page
+# missing from this list is not forbidden to Google, just never volunteered, so
+# it is only found if something happens to link to it. /solutions, /careers,
+# /media and /cookie-policy were all live and all absent for exactly that reason.
 _SITEMAP_STATIC_PATHS = [
     "/", "/books", "/authors", "/events", "/about", "/contact",
     "/submissions", "/academy", "/digital-solutions", "/what-we-do",
-    "/terms", "/privacy", "/refund-policy", "/shipping-policy",
+    "/solutions", "/careers", "/media",
+    "/terms", "/privacy", "/refund-policy", "/shipping-policy", "/cookie-policy",
 ]
 
 
