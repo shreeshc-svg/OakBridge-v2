@@ -243,6 +243,7 @@ export default function Catalog() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+
     useEffect(() => {
         fetchCategories().then(setCats).catch(() => {});
         fetchSiteContent().then(setSite).catch(() => {});
@@ -335,6 +336,25 @@ export default function Catalog() {
     // imprints (Academic, Business & General) still get their own hero.
     const heroCat = category === "professional" ? null : activeCat;
 
+    /*
+     * Professional IS the bookstore's default view — /books auto-applies it on
+     * landing — so /books and /books?category=professional are the same page
+     * and must describe themselves identically. Same rule `heroCat` above
+     * already uses.
+     *
+     * Deriving this from the URL alone, rather than from "did we apply the
+     * filter or did the visitor?", matters more than it looks. The homepage
+     * imprint tile and two footer links point at /books?category=professional,
+     * and Vercel serves the prerendered build/books/index.html for it because
+     * the filesystem match ignores query strings. If that baked file said
+     * "Bookstore, canonical /books" while the hydrating app decided the same
+     * URL was "Professional, canonical ?category=professional", React would
+     * APPEND its versions instead of replacing them, and the page would ship
+     * two conflicting canonicals — which Google discards outright. Both URLs
+     * agreeing is what keeps hydration consistent.
+     */
+    const isDefaultView = !activeCat || category === "professional";
+
     const update = (key, value) => {
         const next = new URLSearchParams(sp);
         if (!value) next.delete(key);
@@ -416,10 +436,30 @@ export default function Catalog() {
                           : [{ label: "Bookstore" }]
                 }
             />
+            {/*
+              * When the Professional filter was applied automatically on
+              * landing — not chosen by the visitor — this page IS the bookstore
+              * and must say so.
+              *
+              * Previously it took its identity from whatever category happened
+              * to be in the URL, so /books described itself as "Professional"
+              * and set canonical to /books?category=professional. The main
+              * catalogue URL, the one submitted in the sitemap, was telling
+              * Google it was a duplicate of a filtered view of itself — and the
+              * only entry point anyone would search for ("Oakbridge bookstore")
+              * was titled after one category.
+              *
+              * The visible page is unchanged: the visitor still lands on
+              * Professional. Only what the page reports about itself differs.
+              */}
             <Seo
-                title={activeCat ? activeCat.name : search ? `Search: ${search}` : "Bookstore"}
-                description={activeCat ? activeCat.description : "Browse Oakbridge Publishing's full catalogue — law, tax, business, academic, reference, children's and test-prep titles."}
-                path={category ? `/books?category=${category}` : "/books"}
+                title={isDefaultView ? (search ? `Search: ${search}` : "Bookstore") : activeCat.name}
+                description={
+                    isDefaultView
+                        ? "Browse Oakbridge Publishing's full catalogue — law, tax, business, academic, reference, children's and test-prep titles."
+                        : activeCat.description
+                }
+                path={category && category !== "professional" ? `/books?category=${category}` : "/books"}
             />
             {/* ============ HERO BANNER ============ */}
             <section

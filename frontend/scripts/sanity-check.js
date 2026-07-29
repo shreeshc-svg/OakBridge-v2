@@ -432,7 +432,30 @@ function checkVercelFallback() {
     }
 }
 
-/* ------------------------------------------------ 9. No secrets in the repo */
+/* ------------------------------------- 9. No static sitemap shadowing the API
+ * vercel.json rewrites /sitemap.xml to the API, which generates it from the
+ * live catalogue. Rewrites are consulted only AFTER the filesystem, so a
+ * public/sitemap.xml would silently win and freeze the sitemap at whenever it
+ * was generated — dropping new titles and, since scripts/generate-sitemap.js
+ * emits per-category URLs, submitting /books?category=... duplicates.
+ *
+ * `yarn sitemap` produces exactly that file. It is a footgun sitting in
+ * package.json, so this makes it loud instead of silent.
+ */
+function checkNoStaticSitemap() {
+    const p = path.join(FRONTEND, "public", "sitemap.xml");
+    if (exists(p)) {
+        fail(
+            "sitemap",
+            "frontend/public/sitemap.xml exists — it would shadow the live API sitemap " +
+            "(filesystem beats rewrites). Delete it; the API generates the real one.",
+        );
+        return;
+    }
+    pass("sitemap", "no static sitemap shadowing the API");
+}
+
+/* ----------------------------------------------- 10. No secrets in the repo */
 function checkSecrets() {
     const patterns = [
         [/AKIA[0-9A-Z]{16}/, "AWS access key id"],
@@ -489,7 +512,7 @@ function checkSecrets() {
 const CHECKS = [
     checkJsSyntax, checkNodeScripts, checkPython, checkJson,
     checkUnusedImports, checkRouteTitles, checkRouteParity,
-    checkVercelFallback, checkSecrets,
+    checkVercelFallback, checkNoStaticSitemap, checkSecrets,
 ];
 
 for (const c of CHECKS) {

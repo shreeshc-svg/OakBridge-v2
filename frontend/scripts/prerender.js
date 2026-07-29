@@ -91,12 +91,29 @@ const STATIC_ROUTES = [
 const ROUTE_ASSERTIONS = {
     // The catalogue grid. Renders one of these per result, so an empty string
     // here means the API returned nothing.
-    "/books": 'data-testid="book-card-',
+    //
+    // Also asserts the page still calls itself the Bookstore. /books
+    // auto-applies the Professional filter on landing, and it used to take its
+    // title and canonical from that — so the catalogue URL announced itself as
+    // "Professional" and canonicalised to a filtered view of itself. Caught on
+    // a preview, not by any check; now it is a check.
+    // Matched on the title TEXT, not on "<title>Bookstore" — React may add
+    // attributes to the tag, and an assertion that breaks on a framework detail
+    // fails builds for no reason. The href form pins the canonical precisely:
+    // it must be /books with NO query string, which is the actual regression.
+    "/books": [
+        'data-testid="book-card-',
+        "Bookstore · Oakbridge Publishing",
+        'href="https://www.oakbridge.in/books"',
+    ],
     // One tile per author. NOT the bare word "author" — that appears in the
     // canonical URL and several wrapper testids, so it matches a completely
     // empty page and can never fail.
-    "/authors": 'data-testid="author-tile-',
+    "/authors": ['data-testid="author-tile-'],
 };
+
+/** Every route's assertions as an array, so a route can require several things. */
+const assertionsFor = (route) => [].concat(ROUTE_ASSERTIONS[route] || []);
 
 /*
  * NOT asserted, deliberately:
@@ -218,12 +235,14 @@ async function renderTo(browser, base, route) {
          * Polling in the browser until the content appears makes the 15s a real
          * budget instead of a snapshot.
          */
-        const expected = ROUTE_ASSERTIONS[route] || null;
+        const expected = assertionsFor(route);
         await page.waitForFunction(
-            (needle) => {
+            (needles) => {
                 const root = document.getElementById("root");
                 if (!root || root.children.length === 0 || !document.title) return false;
-                return needle ? document.documentElement.outerHTML.includes(needle) : true;
+                if (!needles.length) return true;
+                const html = document.documentElement.outerHTML;
+                return needles.every((n) => html.includes(n));
             },
             { timeout: 15000 },
             expected,
@@ -265,11 +284,12 @@ async function renderTo(browser, base, route) {
             );
         }
 
-        // Belt and braces: the wait above already required this, so reaching
-        // here without it would mean the DOM changed between poll and capture.
-        if (expected && !html.includes(expected)) {
+        // Belt and braces: the wait above already required these, so reaching
+        // here without one would mean the DOM changed between poll and capture.
+        const missing = expected.filter((n) => !html.includes(n));
+        if (missing.length) {
             throw new Error(
-                `content vanished between the wait and the capture (${JSON.stringify(expected)})`,
+                `content vanished between the wait and the capture: ${JSON.stringify(missing)}`,
             );
         }
 
