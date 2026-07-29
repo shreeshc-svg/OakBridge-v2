@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "node scripts/sanity-check.js && npx --yes puppeteer browsers install chrome && yarn build:seo",
+  "buildCommand": "node scripts/sanity-check.js && bash scripts/vercel-chrome-deps.sh && npx --yes puppeteer browsers install chrome && yarn build:seo",
   "outputDirectory": "build",
   "build": {
     "env": {

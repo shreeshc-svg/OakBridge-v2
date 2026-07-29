@@ -42,9 +42,25 @@ export default function BookCard({ book, index = 0, compact = false }) {
     };
 
     return (
+        /*
+         * flex-col + h-full, with the price row pinned by mt-auto further down.
+         *
+         * The card used to be a plain block, so every element sat directly under
+         * the one above it. A book with several authors — "Pramod Rao, Ritvik
+         * Lukose & Balanand Menon" — wraps onto a second line, and that pushed
+         * its price a line lower than every other price in the row. The
+         * "Only N left" warning did the same thing to whichever cards happened
+         * to be low on stock.
+         *
+         * Grid and flex rows already stretch their children to a common height,
+         * so making the card fill that height and pushing the price to the
+         * bottom aligns the prices no matter how much text sits above them. It
+         * fixes the bookstore grid and every carousel at once, because they all
+         * render this one component.
+         */
         <div
             data-testid={`book-card-${book.id}`}
-            className="group fade-up"
+            className="group fade-up flex flex-col h-full"
             style={{ animationDelay: `${Math.min(index, 8) * 60}ms` }}
         >
             <Link to={`/books/${book.id}`} className="block">
@@ -94,19 +110,49 @@ export default function BookCard({ book, index = 0, compact = false }) {
                     <h3 className={`font-serif leading-tight text-[#002B5C] line-clamp-2 ${compact ? "text-sm mt-1 min-h-[2.4rem]" : "text-lg mt-2 min-h-[3rem]"}`}>
                         {book.title}
                     </h3>
-                    <p className={`text-[#4B5563] ${compact ? "text-[11px] mt-0.5" : "text-xs mt-1"}`}>
+                    {/* Three lines, not two. The alignment fix is mt-auto below —
+                        clamping is only a cap on pathological cases, so it should
+                        bite as rarely as possible. Two lines would have silently
+                        hidden the third author on the many titles that have one,
+                        and for a law and academic list co-authorship is the
+                        credential a buyer is looking for. There is no tooltip
+                        here on purpose: line-clamp hides text visually only, so
+                        the full name is already in the DOM and read by screen
+                        readers, and a title attribute on a <p> is unreachable by
+                        keyboard and invisible on touch. */}
+                    <p
+                        className={`text-[#4B5563] line-clamp-3 ${compact ? "text-[11px] mt-0.5" : "text-xs mt-1"}`}
+                    >
                         {book.author}
                     </p>
                 </div>
             </Link>
 
-            {low && (
-                <div data-testid={`low-stock-${book.id}`} className={`font-mono text-[#CC0033] ${compact ? "text-[10px] mt-1.5" : "text-[11px] mt-2"}`}>
-                    Only {stock} left — order soon
-                </div>
-            )}
+            {/*
+             * Everything below the cover is ONE mt-auto block, not three siblings.
+             *
+             * mt-auto absorbs whatever vertical slack the card has, which is what
+             * pins the price to the bottom edge and aligns prices across a row.
+             * But it absorbs the slack at whichever point it appears — so with
+             * the price row alone pinned, expanding the notify form ate ~38px of
+             * slack and dragged the price row (and the "Notify me" button the
+             * visitor had just clicked) up out from under their cursor, and could
+             * grow the grid row enough to slide every neighbouring card's price
+             * down with it.
+             *
+             * Pinning the whole cluster means the form expands downward from a
+             * fixed anchor, nothing above it moves, and the low-stock warning
+             * stays attached to the price it qualifies instead of being stranded
+             * against the author with white space beneath it.
+             */}
+            <div className="mt-auto">
+                {low && (
+                    <div data-testid={`low-stock-${book.id}`} className={`font-mono text-[#CC0033] ${compact ? "text-[10px] pt-1.5" : "text-[11px] pt-2"}`}>
+                        Only {stock} left — order soon
+                    </div>
+                )}
 
-            <div className={`flex items-end justify-between ${compact ? "mt-2" : "mt-3"}`}>
+                <div className={`flex items-end justify-between ${compact ? "pt-2" : "pt-3"}`}>
                 <div className="flex items-baseline gap-2">
                     <span className={`font-serif text-[#002B5C] ${compact ? "text-base" : "text-xl"}`}>
                         {formatINR(book.price)}
@@ -140,7 +186,7 @@ export default function BookCard({ book, index = 0, compact = false }) {
                 )}
             </div>
 
-            {oos && notifyOpen && !notified && (
+                {oos && notifyOpen && !notified && (
                 <form onSubmit={submitNotify} className="mt-2 flex gap-2">
                     <input
                         type="email"
@@ -159,7 +205,8 @@ export default function BookCard({ book, index = 0, compact = false }) {
                         {notifyBusy ? "…" : "Notify"}
                     </button>
                 </form>
-            )}
+                )}
+            </div>
         </div>
     );
 }

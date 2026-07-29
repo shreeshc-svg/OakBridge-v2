@@ -223,7 +223,14 @@ function checkUnusedImports() {
 /* -------------------------------------------------- 6. Every route has a title
  * With the static <title> gone from index.html, a route with no title source
  * renders untitled AND stalls the prerenderer, which waits on document.title
- * before capturing. That is how /authors/:id was found.
+ * before capturing.
+ *
+ * KNOWN FALSE NEGATIVE — do not trust this check further than it goes.
+ * Resolution is per FILE, not per component. Authors.jsx exports both the
+ * authors index and AuthorDetail; the index has a <Seo>, so the file matches
+ * and /authors/:id passes here — even though AuthorDetail itself had no title
+ * at all. That defect was found by reading the code, not by this check. Two
+ * components in one file is the blind spot; splitting them would close it.
  */
 function checkRouteTitles() {
     const appPath = path.join(FRONTEND, "src", "App.js");
@@ -349,14 +356,21 @@ function checkRouteParity() {
         return;
     }
 
-    const grab = (src, marker) => {
-        const i = src.indexOf(marker);
-        if (i === -1) return null;
-        const block = src.slice(i + marker.length, src.indexOf("]", i));
-        return [...block.matchAll(/"([^"]+)"/g)].map((x) => x[1]);
+    const grab = (src, markers) => {
+        for (const marker of [].concat(markers)) {
+            const i = src.indexOf(marker);
+            if (i === -1) continue;
+            const block = src.slice(i + marker.length, src.indexOf("]", i));
+            return [...block.matchAll(/"([^"]+)"/g)].map((x) => x[1]);
+        }
+        return null;
     };
-    const a = grab(read(pre), "const STATIC_ROUTES = [");
-    const b = grab(read(srv), "_SITEMAP_STATIC_PATHS = [");
+    // Both spellings: the module-level STATIC_ROUTES of the rewritten script,
+    // and the function-local `staticRoutes` of the original. Matching only the
+    // first meant this check silently warned forever on any branch still
+    // carrying the old script — a check that reads like a check but isn't one.
+    const a = grab(read(pre), ["const STATIC_ROUTES = [", "const staticRoutes = ["]);
+    const b = grab(read(srv), ["_SITEMAP_STATIC_PATHS = ["]);
     if (!a || !b) {
         warn("route-parity", "could not locate one of the route lists — NOT checked");
         return;
@@ -416,10 +430,40 @@ function checkSecrets() {
         [/rzp_live_[A-Za-z0-9]+/, "Razorpay LIVE key"],
         [/-----BEGIN (?:RSA )?PRIVATE KEY-----/, "private key"],
     ];
-    const files = [
-        ...walk(path.join(FRONTEND, "src"), (n) => /\.(js|jsx|json)$/.test(n)),
-        ...walk(BACKEND, (n) => /\.(py|json)$/.test(n)),
-    ];
+    /*
+     * Extensions matter here. An earlier version scanned only .js/.jsx/.py/.json
+     * and therefore could not see backend/mongo.txt — a real file in this repo
+     * holding a live mongodb+srv URI, password and all. It is gitignored, so
+     * nothing leaked, but a scanner that cannot see the one file most likely to
+     * hold a credential is worse than none: it grants confidence it hasn't
+     * earned. Plain text, env and config files are where secrets actually get
+     * parked "just for a minute".
+     */
+    const scannable = (n) => /\.(js|jsx|json|py|txt|env|ya?ml|md|cfg|ini|sh)$/.test(n) || /^\.env/.test(n);
+
+    /*
+     * Scan what git TRACKS, not what is on disk. The distinction is the whole
+     * point: a credential in a gitignored file has not leaked and never will,
+     * while the same string in a tracked file is public the moment you push.
+     * Walking the disk would fail this gate forever on backend/mongo.txt, which
+     * is correctly ignored — and a gate that cries wolf gets bypassed, which
+     * costs more than it saves.
+     */
+    let files;
+    try {
+        files = execFileSync("git", ["ls-files", "-z"], { cwd: REPO, maxBuffer: 32 * 1024 * 1024 })
+            .toString()
+            .split("\0")
+            .filter((f) => f && scannable(path.basename(f)))
+            .map((f) => path.join(REPO, f))
+            .filter(exists);
+    } catch {
+        // Not a git checkout (or git missing) — fall back to disk, minus ignored.
+        files = [
+            ...walk(path.join(FRONTEND, "src"), scannable),
+            ...walk(BACKEND, scannable),
+        ];
+    }
     const hits = [];
     for (const f of files) {
         const src = read(f);

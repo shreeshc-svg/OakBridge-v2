@@ -117,6 +117,43 @@ intended outcome: no claim beats a wrong claim. If price in search becomes
 worth having, the fix is a deploy hook triggered by price changes — not
 restoring the block.
 
+## Build attempt 1 — what happened, and what changed
+
+The first preview build (commit `8a774f8`) got further than expected and then
+died at the last step:
+
+```
+Sanity check — All 8 checks passed
+chrome@131.0.6778.204 ... /chrome-linux64/chrome
+Compiled successfully.
+Wrote build/app-shell.html (SPA fallback shell).
+Discovered 194 book routes.
+Discovered 142 author routes.
+Prerender failed: Failed to launch the browser process!
+  libnss3.so: cannot open shared object file
+```
+
+Everything up to the browser worked: the gate ran in CI, the app compiled, the
+shell was published, and both API calls resolved — 194 books, 142 authors. Only
+the launch failed.
+
+`puppeteer browsers install chrome` downloads the Chrome **binary** but not its
+system **libraries**. Vercel's builder is Amazon Linux 2023 and is minimal;
+Chrome needs about eighteen shared libraries it doesn't ship. `libnss3` is
+simply the first one missing alphabetically — installing only that moves the
+error to the next.
+
+`scripts/vercel-chrome-deps.sh` now installs the full set before the build. It
+deliberately does **not** abort if the package manager refuses: better to reach
+the launch and get Chrome's own error naming the exact missing library than a
+bare "dnf exited 1".
+
+**If attempt 2 fails the same way**, the fallback is `@sparticuz/chromium` — a
+Chromium built for Lambda with its libraries bundled, driven through
+`puppeteer-core` with an explicit `executablePath`. It needs no system packages.
+It's a larger change (new dependency, a code change in `prerender.js`, an older
+pinned Chromium), which is why it is second rather than first.
+
 ## Check this BEFORE deploying
 
 `REACT_APP_BACKEND_URL` must be set in the Vercel project for the preview
