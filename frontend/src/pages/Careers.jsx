@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import Breadcrumbs from "../components/Breadcrumbs";
 import Seo from "../components/Seo";
+import RichText from "../components/RichText";
 import { CheckCircle2, Briefcase, MapPin, Upload, FileText } from "lucide-react";
 import { fetchJobs, applyForJob, fetchSiteContent, fetchSettings, formatApiError } from "../lib/api";
 import { hiddenSet, resolveSectionOrder } from "../lib/sections";
@@ -118,9 +119,13 @@ export default function Careers() {
                                         Apply →
                                     </button>
                                 </div>
-                                {j.description && (
-                                    <p className="mt-3 text-sm text-[#4B5563] leading-relaxed">{j.description}</p>
-                                )}
+                                {/* Descriptions are written in Markdown in the
+                                    admin. Rendered as a plain <p> they came out
+                                    as one wall of literal "## Key
+                                    Responsibilities * Identify and connect…",
+                                    because HTML collapses newlines and nothing
+                                    interpreted the syntax. */}
+                                {j.description && <RichText text={j.description} className="mt-3" />}
                             </div>
                         ))}
                         {jobs.length === 0 && (
