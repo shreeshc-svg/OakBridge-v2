@@ -39,10 +39,14 @@ function makeServer() {
 }
 
 async function getRoutes() {
+    // Keep in sync with backend/server.py _SITEMAP_STATIC_PATHS — the sanity
+    // check enforces it. These four were added to the sitemap and not here,
+    // which is precisely the drift that check exists to catch.
     const staticRoutes = [
         "/", "/books", "/authors", "/events", "/about", "/contact",
         "/submissions", "/academy", "/digital-solutions", "/what-we-do",
-        "/terms", "/privacy", "/refund-policy", "/shipping-policy",
+        "/solutions", "/careers", "/media",
+        "/terms", "/privacy", "/refund-policy", "/shipping-policy", "/cookie-policy",
     ];
     const dynamic = [];
     try {

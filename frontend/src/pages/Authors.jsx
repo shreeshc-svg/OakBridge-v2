@@ -52,6 +52,21 @@ function AuthorDetail({ id }) {
 
     return (
         <div data-testid="author-detail">
+            {/* Without this the author pages were the ONLY routed pages on the
+                site with no title source at all. That was survivable while
+                index.html carried a static one; it is not now that the static
+                title has gone, and the prerenderer waits for document.title
+                before capturing — so these pages would have timed out and
+                shipped the empty shell. */}
+            <Seo
+                title={author.name}
+                description={
+                    (author.bio || `Books by ${author.name}, published by Oakbridge Publishing.`).slice(0, 160)
+                }
+                path={`/authors/${id}`}
+                image={author.photo ? mediaUrl(author.photo) : undefined}
+                type="profile"
+            />
             <div className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 pt-10">
                 <Link
                     to="/authors"

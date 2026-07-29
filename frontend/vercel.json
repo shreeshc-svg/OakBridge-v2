@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "yarn build",
+  "buildCommand": "node scripts/sanity-check.js && yarn build",
   "outputDirectory": "build",
   "redirects": [
     {

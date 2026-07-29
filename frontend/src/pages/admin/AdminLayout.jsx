@@ -5,6 +5,7 @@ import { useAuth } from "../../context/AuthContext";
 import { Toaster } from "../../components/ui/sonner";
 import { fetchSettings } from "../../lib/api";
 import { canPath, sectionForPath, SECTION_LABELS } from "../../lib/rbac";
+import NoIndex from "../../components/NoIndex";
 import { applyNavOrder } from "../../lib/adminNav";
 
 export default function AdminLayout() {
@@ -89,6 +90,12 @@ export default function AdminLayout() {
 
     return (
         <div data-testid="admin-layout" className="min-h-screen bg-[#F5F7FA] lg:grid lg:grid-cols-[260px_1fr]">
+            {/* The admin previously borrowed its tab title from the static one in
+                index.html. That tag had to go (it duplicated the per-route title
+                React emits), so the shell now names itself — and takes a noindex
+                while it is here, which robots.txt alone cannot guarantee. The
+                section name means several open admin tabs stay tellable apart. */}
+            <NoIndex title={current ? `${current.label} · Admin` : "Admin"} />
             {/* Top bar — phone & tablet only */}
             <div className="lg:hidden sticky top-0 z-30 flex items-center justify-between gap-3 bg-[#002B5C] text-white px-4 h-14">
                 <button
