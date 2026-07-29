@@ -3,9 +3,10 @@ import Breadcrumbs from "../components/Breadcrumbs";
 import Seo from "../components/Seo";
 import NoIndex from "../components/NoIndex";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, ArrowUpRight, ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, ChevronLeft, ChevronRight, Search, X } from "lucide-react";
 import BookCard from "../components/BookCard";
 import { fetchAuthor, fetchAuthorBooks, fetchAuthors, fetchSiteContent, fetchSettings, mediaUrl } from "../lib/api";
+import { fold, fuzzySearch, didYouMean } from "../lib/fuzzy";
 
 const AUTHORS_DEFAULTS = {
     overline: "Our Authors",
@@ -277,10 +278,166 @@ function AuthorRail({ authors, title, startIdx = 0, autoplay, seconds, hideSpeci
 
 const authorGroupKey = (a) => ((a.category || a.specialty || "").trim() || "Other");
 
+/**
+ * Search across the author list.
+ *
+ * Runs entirely in the browser: the page already holds every author, so there
+ * is no request to make and results land on the keystroke. Matching is
+ * deliberately forgiving, because the names here are exactly the ones people
+ * get slightly wrong — honorifics, initials, transliterated spellings.
+ *
+ *   case + accent      "khandelwal" finds "K K Khandelwal"
+ *   punctuation        "kk khandelwal" finds "K K Khandelwal"
+ *   any field          name, specialty, affiliation and bio
+ *   any word order     "khandelwal kk" works too
+ *   typos             "khandelwl" still finds him, via fuzzySearch
+ *   did-you-mean       offers the nearest real spelling when nothing matches
+ *
+ * fuzzySearch/didYouMean are the same helpers the bookstore search uses. They
+ * expect a {t, a} shape, so authors are mapped onto it rather than having a
+ * second typo-matching implementation grow alongside the first.
+ */
+function useAuthorSearch(authors, query) {
+    return React.useMemo(() => {
+        const q = (query || "").trim();
+        if (!q) return { results: authors, active: false, suggestion: null };
+
+        const nq = fold(q);
+        const words = nq.split(" ").filter(Boolean);
+        const hay = (a) =>
+            fold(`${a.name || ""} ${a.specialty || ""} ${a.affiliation || ""} ${a.category || ""} ${a.bio || ""}`);
+        // Same text with every separator removed. This is what makes initials
+        // work: the list stores "K K Khandelwal", and almost nobody types the
+        // spaces — they type "KK Khandelwal". Against the spaced haystack the
+        // word "kk" matches nothing at all, so that search returned zero for a
+        // name we very much have. Matching either form fixes it in both
+        // directions, and "khandelwal kk" too, since each word is tested
+        // independently of order.
+        const tight = (s) => s.replace(/[^a-z0-9]/g, "");
+
+        /*
+         * Every word must appear somewhere, in any order and any field.
+         *
+         * A single letter is matched as a WHOLE WORD, never as a substring.
+         * Under substring matching "k" appears inside half the list — searching
+         * "C K" for Saji Narayanan C K returned every author with a c or a k
+         * anywhere in their name, specialty or bio. Requiring initials to be
+         * real words keeps "K K Khandelwal" and "C K" precise, while words of
+         * two or more characters still match loosely.
+         */
+        let results = authors.filter((a) => {
+            const h = hay(a);
+            const ht = tight(h);
+            const hWords = h.split(" ").filter(Boolean);
+            return words.every((w) =>
+                w.length === 1 ? hWords.includes(w) : h.includes(w) || ht.includes(tight(w)),
+            );
+        });
+
+        let suggestion = null;
+        if (!results.length) {
+            // Nothing literal — allow typos.
+            const shaped = authors.map((a) => ({
+                id: a.id,
+                t: a.name || "",
+                a: `${a.specialty || ""} ${a.affiliation || ""}`,
+            }));
+            const fuzzy = fuzzySearch(shaped, q, 24);
+            const ids = new Set(fuzzy.map((f) => f.id));
+            results = authors.filter((a) => ids.has(a.id));
+            if (!results.length) suggestion = didYouMean(shaped, q);
+        }
+
+        // Exact name matches first — searching a surname should not bury the
+        // person behind everyone who merely mentions them in a bio.
+        const scored = results.map((a) => {
+            const name = fold(a.name || "");
+            const nameTight = tight(name);
+            let rank = 4;
+            if (name === nq || nameTight === tight(nq)) rank = 0;
+            else if (name.startsWith(nq) || nameTight.startsWith(tight(nq))) rank = 1;
+            else if (words.every((w) => name.includes(w))) rank = 2;
+            else if (words.every((w) => nameTight.includes(tight(w)))) rank = 3;
+            return { a, rank };
+        });
+        scored.sort((x, y) => x.rank - y.rank || (x.a.name || "").localeCompare(y.a.name || ""));
+
+        return { results: scored.map((s) => s.a), active: true, suggestion };
+    }, [authors, query]);
+}
+
+function AuthorSearch({ value, onChange, count, total, suggestion, onSuggestion }) {
+    const inputRef = React.useRef(null);
+    return (
+        <div className="mt-8 max-w-xl">
+            <div className="relative">
+                <Search
+                    size={16}
+                    strokeWidth={1.5}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-[#4B5563] pointer-events-none"
+                />
+                <input
+                    ref={inputRef}
+                    type="search"
+                    value={value}
+                    onChange={(e) => onChange(e.target.value)}
+                    onKeyDown={(e) => e.key === "Escape" && onChange("")}
+                    placeholder="Search authors by name, subject or institution"
+                    aria-label="Search authors"
+                    data-testid="authors-search-input"
+                    className="w-full border border-[#E5E7EB] bg-white pl-10 pr-10 py-3 text-sm outline-none focus:border-[#002B5C] transition-colors"
+                />
+                {value && (
+                    <button
+                        onClick={() => {
+                            onChange("");
+                            inputRef.current?.focus();
+                        }}
+                        aria-label="Clear search"
+                        data-testid="authors-search-clear"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-[#4B5563] hover:text-[#CC0033]"
+                    >
+                        <X size={15} strokeWidth={1.75} />
+                    </button>
+                )}
+            </div>
+
+            {value.trim() && (
+                <p className="mt-2 text-xs text-[#4B5563]" data-testid="authors-search-count" aria-live="polite">
+                    {count > 0 ? (
+                        <>
+                            {count} of {total} author{total === 1 ? "" : "s"}
+                        </>
+                    ) : (
+                        <>
+                            No authors match “{value.trim()}”.
+                            {suggestion && (
+                                <>
+                                    {" "}Did you mean{" "}
+                                    <button
+                                        onClick={() => onSuggestion(suggestion)}
+                                        data-testid="authors-search-suggestion"
+                                        className="text-[#002B5C] border-b border-[#002B5C] hover:text-[#CC0033] hover:border-[#CC0033]"
+                                    >
+                                        {suggestion}
+                                    </button>
+                                    ?
+                                </>
+                            )}
+                        </>
+                    )}
+                </p>
+            )}
+        </div>
+    );
+}
+
 function AuthorsIndex() {
     const [authors, setAuthors] = useState([]);
     const [site, setSite] = useState({});
     const [settings, setSettings] = useState({});
+    const [query, setQuery] = useState("");
+    const { results, active: searching, suggestion } = useAuthorSearch(authors, query);
 
     useEffect(() => {
         fetchAuthors().then(setAuthors);
@@ -323,9 +480,31 @@ function AuthorsIndex() {
                 <h1 className="font-serif text-5xl md:text-7xl mt-4 text-[#002B5C] leading-[0.95] max-w-3xl whitespace-pre-line">
                     {site.authors_title || AUTHORS_DEFAULTS.title}
                 </h1>
+                <AuthorSearch
+                    value={query}
+                    onChange={setQuery}
+                    count={results.length}
+                    total={authors.length}
+                    suggestion={suggestion}
+                    onSuggestion={setQuery}
+                />
             </section>
 
-            {grouped ? (
+            {/* While searching, results replace the configured layout entirely.
+                Category rails and the "More from our list" overflow carousel are
+                merchandising for browsing; someone who has typed a name wants a
+                single flat list of matches, not their matches scattered across
+                three auto-rotating carousels. */}
+            {searching ? (
+                <section
+                    data-testid="authors-search-results"
+                    className={`px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 pt-12 pb-20 grid gap-x-6 gap-y-10 xl:gap-x-8 ${AUTHOR_GRID_COLS[perRow]}`}
+                >
+                    {results.map((a, idx) => (
+                        <AuthorTile key={a.id} a={a} idx={idx} />
+                    ))}
+                </section>
+            ) : grouped ? (
                 <div data-testid="authors-grouped" className="pt-4">
                     {groupSections.map((g) => (
                         <AuthorRail key={g.title} title={g.title} authors={g.items} autoplay={autoplay} seconds={seconds} hideSpecialty />
