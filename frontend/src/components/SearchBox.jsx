@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Search, X, Clock, BookOpen, User } from "lucide-react";
-import { fetchSuggestIndex } from "../lib/api";
+import { fetchSuggestIndex, fetchAuthors } from "../lib/api";
 import { fuzzySearch } from "../lib/fuzzy";
 
 /**
@@ -33,6 +33,36 @@ export function loadIndex() {
             .catch(() => []);
     }
     return indexPromise;
+}
+
+/**
+ * Authors, shaped like the book index so the same matcher works on both.
+ *
+ * Kept SEPARATE from loadIndex() on purpose. The Bookstore's own search box
+ * shares that index, and folding authors into it would make the bookstore
+ * suggest people and then try to open them as books — /books/<authorId>, a
+ * "Book not found." for every click. Only the header merges the two.
+ *
+ * `kind` is what tells a suggestion where it leads.
+ */
+let authorCache = null;
+let authorPromise = null;
+export function loadAuthorIndex() {
+    if (authorCache) return Promise.resolve(authorCache);
+    if (!authorPromise) {
+        authorPromise = fetchAuthors()
+            .then((list) => {
+                authorCache = (Array.isArray(list) ? list : []).map((a) => ({
+                    kind: "author",
+                    id: a.id,
+                    t: a.name || "",
+                    a: [a.specialty, a.affiliation].filter(Boolean).join(" · "),
+                }));
+                return authorCache;
+            })
+            .catch(() => []);
+    }
+    return authorPromise;
 }
 
 export function readRecent() {
@@ -93,6 +123,7 @@ export default function SearchBox({
     const [q, setQ] = useState("");
     const [open, setOpen] = useState(false);
     const [books, setBooks] = useState([]);
+    const [authors, setAuthors] = useState([]);
     const [active, setActive] = useState(-1);
     const [recent, setRecent] = useState([]);
     const boxRef = useRef(null);
@@ -100,6 +131,7 @@ export default function SearchBox({
 
     useEffect(() => {
         loadIndex().then(setBooks);
+        loadAuthorIndex().then(setAuthors);
         setRecent(readRecent());
     }, []);
 
@@ -112,7 +144,19 @@ export default function SearchBox({
         return () => document.removeEventListener("mousedown", onDown);
     }, []);
 
-    const suggestions = useMemo(() => suggestFrom(books, q), [q, books]);
+    /*
+     * Authors first, then books.
+     *
+     * Someone typing a person's name usually wants the person — and if they
+     * wanted that author's titles, the author page lists them. Capped at three
+     * so a prolific author cannot push every book out of a seven-row dropdown;
+     * a search for "Khandelwal" should still show his books underneath.
+     */
+    const suggestions = useMemo(() => {
+        const a = suggestFrom(authors, q, 3);
+        const b = suggestFrom(books, q, MAX_SUGGESTIONS - a.length);
+        return [...a, ...b];
+    }, [q, books, authors]);
 
     const go = useCallback(
         (term) => {
@@ -128,13 +172,16 @@ export default function SearchBox({
         [nav, onNavigate],
     );
 
-    const openBook = useCallback(
-        (b) => {
-            pushRecent(b.t);
+    // One handler for both kinds — an author leads to their page, a book to
+    // its own. `kind` is set only by loadAuthorIndex, so anything without it
+    // is a book and the previous behaviour is unchanged.
+    const openResult = useCallback(
+        (item) => {
+            pushRecent(item.t);
             setRecent(readRecent());
             setOpen(false);
             setQ("");
-            nav(`/books/${b.id}`);
+            nav(item.kind === "author" ? `/authors/${item.id}` : `/books/${item.id}`);
             onNavigate && onNavigate();
         },
         [nav, onNavigate],
@@ -158,7 +205,7 @@ export default function SearchBox({
             setActive((i) => (i <= 0 ? rows.length - 1 : i - 1));
         } else if (e.key === "Enter" && active >= 0) {
             e.preventDefault();
-            showRecent ? go(rows[active]) : openBook(rows[active]);
+            showRecent ? go(rows[active]) : openResult(rows[active]);
         }
     };
 
@@ -192,7 +239,7 @@ export default function SearchBox({
                     onKeyDown={onKeyDown}
                     placeholder={placeholder}
                     autoFocus={autoFocus}
-                    aria-label="Search books"
+                    aria-label="Search books and authors"
                     aria-autocomplete="list"
                     aria-expanded={open && rows.length > 0}
                     data-testid="header-search-input"
@@ -245,23 +292,40 @@ export default function SearchBox({
                         </>
                     ) : (
                         <>
-                            {rows.map((b, i) => (
-                                <button
-                                    key={b.id}
-                                    type="button"
-                                    onMouseEnter={() => setActive(i)}
-                                    onClick={() => openBook(b)}
-                                    className={`w-full flex items-start gap-2.5 px-3 py-2.5 text-left ${i === active ? "bg-[#F5F7FA]" : ""}`}
-                                >
-                                    <BookOpen size={13} strokeWidth={1.5} className="text-[#F59E0B] mt-0.5 flex-shrink-0" />
-                                    <span className="min-w-0">
-                                        <span className="block text-sm text-[#002B5C] truncate">{b.t}</span>
-                                        <span className="flex items-center gap-1 text-[11px] text-[#4B5563] truncate">
-                                            <User size={10} strokeWidth={1.5} /> {b.a}
+                            {rows.map((b, i) => {
+                                const isAuthor = b.kind === "author";
+                                return (
+                                    <button
+                                        key={`${b.kind || "book"}-${b.id}`}
+                                        type="button"
+                                        onMouseEnter={() => setActive(i)}
+                                        onClick={() => openResult(b)}
+                                        data-testid={isAuthor ? "suggestion-author" : "suggestion-book"}
+                                        className={`w-full flex items-start gap-2.5 px-3 py-2.5 text-left ${i === active ? "bg-[#F5F7FA]" : ""}`}
+                                    >
+                                        {isAuthor ? (
+                                            <User size={13} strokeWidth={1.5} className="text-[#002B5C] mt-0.5 flex-shrink-0" />
+                                        ) : (
+                                            <BookOpen size={13} strokeWidth={1.5} className="text-[#F59E0B] mt-0.5 flex-shrink-0" />
+                                        )}
+                                        <span className="min-w-0 flex-1">
+                                            <span className="block text-sm text-[#002B5C] truncate">{b.t}</span>
+                                            {b.a && (
+                                                <span className="flex items-center gap-1 text-[11px] text-[#4B5563] truncate">
+                                                    {!isAuthor && <User size={10} strokeWidth={1.5} />} {b.a}
+                                                </span>
+                                            )}
                                         </span>
-                                    </span>
-                                </button>
-                            ))}
+                                        {/* Says where the row leads before you click it — otherwise
+                                            an author and a book of the same name are indistinguishable. */}
+                                        {isAuthor && (
+                                            <span className="font-mono text-[9px] uppercase tracking-widest text-[#4B5563] border border-[#E5E7EB] px-1.5 py-0.5 mt-0.5 flex-shrink-0">
+                                                Author
+                                            </span>
+                                        )}
+                                    </button>
+                                );
+                            })}
                             <button
                                 type="button"
                                 onClick={() => go(q)}
