@@ -48,16 +48,45 @@ const STATIC_ROUTES = [
     "/terms", "/privacy", "/refund-policy", "/shipping-policy", "/cookie-policy",
 ];
 
+/*
+ * `shell` is the ORIGINAL build/index.html, read into memory once before any
+ * route is written, and served for every unmatched path.
+ *
+ * It must not be re-read from disk. Rendering "/" overwrites build/index.html
+ * with the prerendered homepage, and that file doubles as the SPA fallback this
+ * server hands to every other route. Reading from disk therefore meant: "/"
+ * finishes first (it is first in STATIC_ROUTES), and every route after it gets
+ * served the prerendered HOMEPAGE as its starting shell — complete with the
+ * homepage's baked <title> and canonical, which React cannot remove because it
+ * never created them. Roughly 200 pages would have shipped two titles and two
+ * conflicting canonicals: the exact failure this whole change exists to fix.
+ *
+ * Serving from memory also removes a read/write race — six workers reading the
+ * file while a seventh truncates it mid-write.
+ */
+let shell = null;
+
 function makeServer() {
     return http.createServer((req, res) => {
-        const urlPath = decodeURIComponent(req.url.split("?")[0]);
+        // decodeURIComponent throws URIError on a malformed escape ("/a%zz").
+        // Unguarded, that is an uncaught exception inside the request handler,
+        // which kills the process and the whole build mid-render.
+        let urlPath;
+        try {
+            urlPath = decodeURIComponent(req.url.split("?")[0]);
+        } catch {
+            res.writeHead(400).end();
+            return;
+        }
         const filePath = path.join(BUILD, urlPath);
-        if (urlPath !== "/" && fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+        // Confine to build/ — a crafted id must not read outside it.
+        const inBuild = path.resolve(filePath).startsWith(path.resolve(BUILD) + path.sep);
+        if (urlPath !== "/" && inBuild && fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
             res.writeHead(200, { "Content-Type": MIME[path.extname(filePath)] || "application/octet-stream" });
             fs.createReadStream(filePath).pipe(res);
         } else {
-            res.writeHead(200, { "Content-Type": "text/html" }); // SPA fallback
-            fs.createReadStream(path.join(BUILD, "index.html")).pipe(res);
+            res.writeHead(200, { "Content-Type": "text/html" });
+            res.end(shell);
         }
     });
 }
@@ -98,8 +127,14 @@ async function getRoutes() {
 }
 
 async function renderTo(browser, base, route) {
-    const page = await browser.newPage();
+    // newPage() and close() are INSIDE the try/finally on purpose. Both reject
+    // occasionally under concurrency ("Target closed"), and when they did so
+    // outside it the rejection escaped the worker, rejected Promise.all, and
+    // failed the entire build — bypassing the 10%-tolerance policy below and
+    // leaving Chrome and the http server running.
+    let page = null;
     try {
+        page = await browser.newPage();
         /*
          * networkidle0 waits for EVERY connection to go quiet. A single poller,
          * websocket or analytics beacon that never settles turns each page into
@@ -117,19 +152,39 @@ async function renderTo(browser, base, route) {
         );
         const html = "<!doctype html>\n" + (await page.evaluate(() => document.documentElement.outerHTML));
 
-        // Never write the very thing this script exists to eliminate.
-        if (html.includes("You need to enable JavaScript to run this app")) {
-            throw new Error("output still contains the empty-shell noscript text");
+        /*
+         * Guard against writing an unrendered page.
+         *
+         * This used to search for the "You need to enable JavaScript" noscript
+         * text — which is present in EVERY rendered page, because <noscript>
+         * survives serialisation whether or not scripting is on. That check
+         * would have failed 100% of routes and made the build red on its first
+         * run. What actually distinguishes an unrendered page is an empty root.
+         */
+        if (/<div id="root">\s*<\/div>/.test(html)) {
+            throw new Error("#root is empty — the app did not render");
         }
 
         const outDir = route === "/" ? BUILD : path.join(BUILD, route);
+        /*
+         * `startsWith(BUILD)` alone is a prefix match, not containment: it
+         * accepts sibling directories whose names merely begin with the same
+         * characters, so a crafted id could write into build-backup/ or buildX/.
+         * The separator has to be part of the test — with an explicit equality
+         * case, because route "/" legitimately resolves to BUILD itself.
+         */
+        const resolved = path.resolve(outDir);
+        const root = path.resolve(BUILD);
+        if (resolved !== root && !resolved.startsWith(root + path.sep)) {
+            throw new Error(`route would write outside build/: ${route}`);
+        }
         fs.mkdirSync(outDir, { recursive: true });
         fs.writeFileSync(path.join(outDir, "index.html"), html);
         return { route, ok: true };
     } catch (e) {
         return { route, ok: false, error: e.message };
     } finally {
-        await page.close();
+        if (page) await page.close().catch(() => {});
     }
 }
 
@@ -147,7 +202,25 @@ async function main() {
     }
 
     const routes = await getRoutes();
+
+    /*
+     * The shell comes from app-shell.html, written by scripts/app-shell.js at
+     * the end of the ordinary build — NOT from index.html, which this script is
+     * about to overwrite with the rendered homepage. Reading index.html made a
+     * second run over the same build/ serve the homepage as every route's
+     * starting shell, baking the homepage title and canonical into ~200 pages.
+     */
+    const shellPath = path.join(BUILD, "app-shell.html");
+    if (!fs.existsSync(shellPath)) {
+        throw new Error(
+            "build/app-shell.html is missing. `yarn build` should have created it — " +
+            "run the full build rather than invoking this script alone.",
+        );
+    }
+    shell = fs.readFileSync(shellPath, "utf8");
+
     const server = makeServer().listen(PORT);
+    server.unref();
     const base = `http://localhost:${PORT}`;
     const browser = await puppeteer.launch({
         headless: true,

@@ -1,0 +1,31 @@
+#!/bin/sh
+#
+# Blocks a commit that fails the static sanity checks.
+#
+# Enable once per clone (git does not share hooks automatically):
+#
+#     git config core.hooksPath .githooks
+#
+# Bypass in a genuine emergency with `git commit --no-verify`. That is why the
+# same script also runs inside the Vercel build: a bypassed commit still cannot
+# reach production.
+
+REPO="$(git rev-parse --show-toplevel)"
+CHECK="$REPO/frontend/scripts/sanity-check.js"
+
+[ -f "$CHECK" ] && {
+    command -v node >/dev/null 2>&1 || {
+        echo "pre-commit: node not on PATH — cannot run sanity checks." >&2
+        echo "Install node, or commit with --no-verify if you accept the risk." >&2
+        exit 1
+    }
+
+    ( cd "$REPO/frontend" && node scripts/sanity-check.js ) || {
+        echo "" >&2
+        echo "Commit blocked by sanity check. Fix the failures above." >&2
+        echo "To override (the site is live — be sure): git commit --no-verify" >&2
+        exit 1
+    }
+}
+
+exit 0

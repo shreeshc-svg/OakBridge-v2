@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "npx --yes puppeteer browsers install chrome && yarn build:seo",
+  "buildCommand": "node scripts/sanity-check.js && npx --yes puppeteer browsers install chrome && yarn build:seo",
   "outputDirectory": "build",
   "build": {
     "env": {
@@ -17,6 +17,6 @@
   ],
   "rewrites": [
     { "source": "/sitemap.xml", "destination": "https://api.oakbridge.in/api/sitemap.xml" },
-    { "source": "/(.*)", "destination": "/index.html" }
+    { "source": "/(.*)", "destination": "/app-shell.html" }
   ]
 }
