@@ -409,6 +409,45 @@ async def sitemap():
                 f"  <url><loc>{SITE_URL}/books/{bid}</loc>"
                 f"<lastmod>{today}</lastmod><changefreq>weekly</changefreq></url>"
             )
+
+    # Author pages, filtered — NOT the whole roster.
+    #
+    # All ~143 are prerendered and indexable, but a sitemap is a recommendation,
+    # not an inventory: submitting pages with nothing on them invites Google to
+    # judge the site by its weakest URLs. Two conditions:
+    #
+    #   bio present   — otherwise the page is a name, a photo and whitespace.
+    #   has a book    — an author with no live titles is a dead end for a
+    #                   shopper, however good the bio.
+    #
+    # The book test DELIBERATELY IGNORES the stored `title_count`. That field is
+    # stale: it reads 0 for Sudhir Mishra, whose Climate Justice is live and on
+    # sale right now, so filtering on it would have withheld authors who do have
+    # books. Instead this repeats the rule /authors/{id}/books uses — honorifics
+    # stripped, case-insensitive substring against the book's author string — so
+    # a page is advertised only if it will actually show titles when opened.
+    #
+    # Cost is one extra query and an in-memory scan (roughly 143 x 194 substring
+    # checks), not a query per author.
+    authors = await db.authors.find(
+        {"enabled": {"$ne": False}}, {"_id": 0, "id": 1, "name": 1, "bio": 1}
+    ).to_list(None)
+    book_authors = [
+        (b.get("author") or "").lower()
+        for b in await db.books.find({}, {"_id": 0, "author": 1}).to_list(None)
+    ]
+    for a in authors:
+        aid = escape(str(a.get("id", "")))
+        if not aid or not (a.get("bio") or "").strip():
+            continue
+        core = (a.get("name") or "").replace("Prof. ", "").replace("Dr. ", "").strip().lower()
+        if not core or not any(core in ba for ba in book_authors):
+            continue
+        urls.append(
+            f"  <url><loc>{SITE_URL}/authors/{aid}</loc>"
+            f"<lastmod>{today}</lastmod><changefreq>monthly</changefreq></url>"
+        )
+
     xml = (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
         '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
