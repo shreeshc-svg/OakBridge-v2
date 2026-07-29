@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import Breadcrumbs from "../components/Breadcrumbs";
 import BookPreview from "../components/BookPreview";
 import Seo, { SITE } from "../components/Seo";
+import NoIndex from "../components/NoIndex";
 import EbookCta from "../components/EbookCta";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { Minus, Plus, ShoppingBag, ArrowLeft, Star, GraduationCap, ChevronLeft, ChevronRight, BookOpen } from "lucide-react";
@@ -57,10 +58,22 @@ export default function BookDetail() {
 
     useEffect(() => {
         setLoading(true);
+        /*
+         * The two requests have SEPARATE error handling, and that is the point.
+         *
+         * They used to share one .catch at the end of the chain, so a failure
+         * fetching the RELATED books — a nice-to-have carousel at the bottom of
+         * the page — ran `setBook(null)` and rendered "Book not found." for a
+         * book that had loaded perfectly. One flaky secondary request told a
+         * customer the product does not exist.
+         *
+         * Related books now fail to an empty array. Only the book's own request
+         * can produce the not-found state.
+         */
         fetchBook(id)
             .then((b) => {
                 setBook(b);
-                return fetchBooks({ category: b.category, limit: 20 });
+                return fetchBooks({ category: b.category, limit: 20 }).catch(() => []);
             })
             .then((list) => setRelated(list.filter((x) => x.id !== id).slice(0, 12)))
             .catch(() => setBook(null))
@@ -99,6 +112,11 @@ export default function BookDetail() {
     if (!book) {
         return (
             <div className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-32 text-center">
+                {/* This branch had no title source at all, so a dead book URL
+                    showed whatever title the previous page left behind and was
+                    indexable. noindex also stops a mistyped or retired ID
+                    accumulating in search results. */}
+                <NoIndex title="Book not found" />
                 <h1 className="font-serif text-4xl text-[#002B5C]">Book not found.</h1>
                 <Link
                     to="/books"

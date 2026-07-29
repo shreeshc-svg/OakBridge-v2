@@ -225,12 +225,22 @@ function checkUnusedImports() {
  * renders untitled AND stalls the prerenderer, which waits on document.title
  * before capturing.
  *
- * KNOWN FALSE NEGATIVE — do not trust this check further than it goes.
- * Resolution is per FILE, not per component. Authors.jsx exports both the
- * authors index and AuthorDetail; the index has a <Seo>, so the file matches
- * and /authors/:id passes here — even though AuthorDetail itself had no title
- * at all. That defect was found by reading the code, not by this check. Two
- * components in one file is the blind spot; splitting them would close it.
+ * KNOWN FALSE NEGATIVES — do not trust this check further than it goes. It
+ * answers "does this file mention a title source anywhere", not "does every
+ * render path produce a title". Two ways it has already been fooled:
+ *
+ * 1. PER FILE, NOT PER COMPONENT. Authors.jsx exports both the authors index
+ *    and AuthorDetail; the index has a <Seo>, so the file matched and
+ *    /authors/:id passed — while AuthorDetail had no title at all.
+ *
+ * 2. BRANCH-INSENSITIVE. BookDetail.jsx passed this check throughout the period
+ *    its `loading` and `!book` early-return branches emitted no title. That gap
+ *    is what made every book page time out during prerendering: the wait
+ *    requires document.title, and the not-found branch never set one. The
+ *    check reported "31 routes have a title source" the whole time.
+ *
+ * Both were found by reading code. A real version would walk each return path
+ * separately; until then, treat a pass here as "nobody deleted the Seo import".
  */
 function checkRouteTitles() {
     const appPath = path.join(FRONTEND, "src", "App.js");

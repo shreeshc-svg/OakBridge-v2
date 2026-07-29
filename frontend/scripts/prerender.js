@@ -9,8 +9,14 @@
  *
  * Environment:
  *   BACKEND_URL            API to enumerate books/authors from. REQUIRED.
+ *   PRERENDER_PORT         default 3000 — NOT arbitrary, see the note below.
  *   PRERENDER_CONCURRENCY  parallel pages (default 6)
  *   PRERENDER_ALLOW_EMPTY  set to "1" to tolerate zero book routes
+ *
+ * Also required, though read by CRA at compile time rather than by this script:
+ *   REACT_APP_BACKEND_URL  set in the Vercel project, not in vercel.json. If it
+ *                          is missing the bundle calls "undefined/api" and every
+ *                          page renders its not-found state. Checked below.
  *
  * WHY THIS FAILS THE BUILD RATHER THAN WARNING
  *
@@ -27,7 +33,28 @@ const path = require("path");
 
 const BUILD = path.join(__dirname, "..", "build");
 const BACKEND = (process.env.BACKEND_URL || "").replace(/\/$/, "");
-const PORT = Number(process.env.PRERENDER_PORT || 45678);
+/*
+ * PORT 3000 IS LOAD-BEARING — it is not an arbitrary free port.
+ *
+ * The rendered page runs in a real browser at http://localhost:PORT and calls
+ * the API at REACT_APP_BACKEND_URL, which is a different origin, so the browser
+ * enforces CORS. backend/server.py's allowlist is oakbridge.in,
+ * www.oakbridge.in, oak-bridge-v2.vercel.app and http://localhost:3000 (plus
+ * anything in the CORS_ORIGINS env var). On the old port 45678 every API call
+ * from every prerendered page was blocked.
+ *
+ * The failure was disguised: the Node-side fetch that enumerates routes is not
+ * subject to CORS, so the log cheerfully said "Discovered 194 book routes"
+ * while the browser could not load a single one of them. Book and author pages
+ * then fell into their not-found branch, which sets no title, and each burned
+ * the full 15s wait before failing.
+ *
+ * Serving on 3000 makes the prerenderer look exactly like the dev server, which
+ * is what it is. If that origin is ever removed from the backend allowlist,
+ * this breaks again — loudly, at least, since the content guard below refuses
+ * to write a data-less page.
+ */
+const PORT = Number(process.env.PRERENDER_PORT || 3000);
 const CONCURRENCY = Math.max(1, Number(process.env.PRERENDER_CONCURRENCY || 6));
 const ALLOW_EMPTY = process.env.PRERENDER_ALLOW_EMPTY === "1";
 
@@ -47,6 +74,42 @@ const STATIC_ROUTES = [
     "/solutions", "/careers", "/media",
     "/terms", "/privacy", "/refund-policy", "/shipping-policy", "/cookie-policy",
 ];
+
+/*
+ * Routes whose rendered HTML must contain a given string, or the render counts
+ * as a failure.
+ *
+ * The CORS outage that broke the first two attempts was invisible on these
+ * pages: they render their <Seo> unconditionally, so they got a title, passed
+ * every structural check and were recorded as successes — while containing not
+ * one book. A prerendered bookstore listing zero titles is worse than no
+ * prerendering at all, because it is exactly what a crawler would index.
+ *
+ * Only assert on pages where emptiness is unambiguously wrong. A page that is
+ * legitimately empty some of the time does not belong here.
+ */
+const ROUTE_ASSERTIONS = {
+    // The catalogue grid. Renders one of these per result, so an empty string
+    // here means the API returned nothing.
+    "/books": 'data-testid="book-card-',
+    // One tile per author. NOT the bare word "author" — that appears in the
+    // canonical URL and several wrapper testids, so it matches a completely
+    // empty page and can never fail.
+    "/authors": 'data-testid="author-tile-',
+};
+
+/*
+ * NOT asserted, deliberately:
+ *
+ * "/" — the homepage's only book cards live in the "Hot Off the Press" section,
+ * which an admin can hide from Admin → Pages. A content editor unticking a
+ * section they are entitled to hide would red every subsequent deploy, on a
+ * live shop, with an error message about API data. An assertion that a
+ * non-technical colleague can trip is a worse bug than the one it guards.
+ *
+ * Note also that "/books" mounts with category=professional applied, so this
+ * asserts that one category is non-empty rather than the whole catalogue.
+ */
 
 /*
  * `shell` is the ORIGINAL build/index.html, read into memory once before any
@@ -143,12 +206,27 @@ async function renderTo(browser, base, route) {
          * explicit wait below is what actually proves React has rendered.
          */
         await page.goto(base + route, { waitUntil: "networkidle2", timeout: 30000 });
+        /*
+         * The required substring is part of the WAIT, not a check afterwards.
+         *
+         * networkidle2 resolves once at most two connections have been quiet for
+         * 500ms — the homepage fires about seven at once, so `goto` can return
+         * while the catalogue request is still in flight. Asserting after the
+         * fact would then fail a page that was merely a moment from being
+         * correct: a race dressed up as a check, red builds at random.
+         *
+         * Polling in the browser until the content appears makes the 15s a real
+         * budget instead of a snapshot.
+         */
+        const expected = ROUTE_ASSERTIONS[route] || null;
         await page.waitForFunction(
-            () => {
+            (needle) => {
                 const root = document.getElementById("root");
-                return root && root.children.length > 0 && !!document.title;
+                if (!root || root.children.length === 0 || !document.title) return false;
+                return needle ? document.documentElement.outerHTML.includes(needle) : true;
             },
             { timeout: 15000 },
+            expected,
         );
         const html = "<!doctype html>\n" + (await page.evaluate(() => document.documentElement.outerHTML));
 
@@ -163,6 +241,36 @@ async function renderTo(browser, base, route) {
          */
         if (/<div id="root">\s*<\/div>/.test(html)) {
             throw new Error("#root is empty — the app did not render");
+        }
+
+        /*
+         * Refuse to write an error page to a real URL.
+         *
+         * An empty-root check is not enough. When the data layer fails, these
+         * pages render a perfectly well-formed "Book not found." — real markup,
+         * real title, passes every structural check — and baking that into
+         * /books/<id> would serve a 200-OK "this book does not exist" to every
+         * crawler and every visitor arriving from search, for a book we sell.
+         * Silently shipping that is far worse than failing the build.
+         *
+         * These strings are the not-found copy in BookDetail, Authors and
+         * NotFound. If that copy is reworded, reword it here too.
+         */
+        const ERROR_MARKERS = ["Book not found.", "Author not found.", "Page not found"];
+        const marker = ERROR_MARKERS.find((m) => html.includes(m));
+        if (marker) {
+            throw new Error(
+                `rendered the "${marker}" state — the page's data did not load ` +
+                `(check CORS on the API for origin http://localhost:${PORT})`,
+            );
+        }
+
+        // Belt and braces: the wait above already required this, so reaching
+        // here without it would mean the DOM changed between poll and capture.
+        if (expected && !html.includes(expected)) {
+            throw new Error(
+                `content vanished between the wait and the capture (${JSON.stringify(expected)})`,
+            );
         }
 
         const outDir = route === "/" ? BUILD : path.join(BUILD, route);
@@ -210,6 +318,46 @@ async function main() {
      * second run over the same build/ serve the homepage as every route's
      * starting shell, baking the homepage title and canonical into ~200 pages.
      */
+    /*
+     * Prove the bundle can actually reach the API before rendering 350 pages.
+     *
+     * REACT_APP_BACKEND_URL is baked into the JS at build time, not read at
+     * runtime. If it is unset on the builder, CRA substitutes the literal
+     * `undefined`, every request goes to "undefined/api" — which this very
+     * server answers with the SPA shell, HTTP 200 — and each page quietly falls
+     * into its not-found branch. That produces EXACTLY the same symptom as the
+     * CORS failure this port change addresses: 100% of dynamic routes timing
+     * out. Two very different causes, one indistinguishable log line.
+     *
+     * So read it out of the compiled bundle and say which world we are in,
+     * rather than burning a ten-minute build to find out.
+     */
+    const bundles = fs
+        .readdirSync(path.join(BUILD, "static", "js"))
+        .filter((f) => f.startsWith("main.") && f.endsWith(".js"));
+    if (bundles.length) {
+        const js = fs.readFileSync(path.join(BUILD, "static", "js", bundles[0]), "utf8");
+        const apiHost = (BACKEND.match(/^https?:\/\/[^/]+/) || [])[0] || "";
+        if (js.includes("undefined/api")) {
+            throw new Error(
+                "The bundle contains \"undefined/api\" — REACT_APP_BACKEND_URL was not set when " +
+                "CRA compiled. Set it in the Vercel project's Environment Variables (it is NOT " +
+                "in vercel.json) and rebuild. Prerendering every page would produce 'not found'.",
+            );
+        }
+        if (js.includes("localhost:8000")) {
+            throw new Error(
+                "The bundle points at localhost:8000 — a .env file leaked into the build. " +
+                "Every prerendered page would fail to load data.",
+            );
+        }
+        console.log(
+            apiHost && js.includes(apiHost)
+                ? `Bundle targets ${apiHost} — good.`
+                : `WARNING: could not confirm the bundle targets ${apiHost || "the API"}.`,
+        );
+    }
+
     const shellPath = path.join(BUILD, "app-shell.html");
     if (!fs.existsSync(shellPath)) {
         throw new Error(
@@ -219,7 +367,26 @@ async function main() {
     }
     shell = fs.readFileSync(shellPath, "utf8");
 
-    const server = makeServer().listen(PORT);
+    const server = makeServer();
+    /*
+     * Without this, an EADDRINUSE emits an 'error' event with no listener,
+     * which becomes an uncaught exception on a later tick — outside
+     * main().catch() — so the operator gets a bare Node stack trace instead of
+     * any of the diagnostics written here. Locally that is not hypothetical:
+     * port 3000 is the CRA dev server, so `yarn build:seo` while `yarn start`
+     * is running hits it every time.
+     */
+    server.on("error", (e) => {
+        console.error(
+            e.code === "EADDRINUSE"
+                ? `Port ${PORT} is already in use — stop whatever is on it (the dev server?), ` +
+                  `or set PRERENDER_PORT. Note that 3000 is not arbitrary: it is the origin the ` +
+                  `API's CORS allowlist accepts, so any replacement must be added there too.`
+                : `Prerender server error: ${e.message}`,
+        );
+        process.exit(1);
+    });
+    server.listen(PORT);
     server.unref();
     const base = `http://localhost:${PORT}`;
     const browser = await puppeteer.launch({

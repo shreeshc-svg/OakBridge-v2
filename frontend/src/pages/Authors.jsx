@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import Breadcrumbs from "../components/Breadcrumbs";
 import Seo from "../components/Seo";
+import NoIndex from "../components/NoIndex";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, ArrowUpRight, ChevronLeft, ChevronRight } from "lucide-react";
 import BookCard from "../components/BookCard";
@@ -37,6 +38,9 @@ function AuthorDetail({ id }) {
     if (!author) {
         return (
             <div className="py-32 text-center">
+                {/* Same gap as the book page: no title source, so a dead author
+                    URL inherited whatever was there before, and was indexable. */}
+                <NoIndex title="Author not found" />
                 <h1 className="font-serif text-4xl text-[#002B5C]">
                     Author not found.
                 </h1>

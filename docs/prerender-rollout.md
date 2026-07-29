@@ -148,11 +148,48 @@ deliberately does **not** abort if the package manager refuses: better to reach
 the launch and get Chrome's own error naming the exact missing library than a
 bare "dnf exited 1".
 
-**If attempt 2 fails the same way**, the fallback is `@sparticuz/chromium` — a
-Chromium built for Lambda with its libraries bundled, driven through
+**If a future build fails the same way**, the fallback is `@sparticuz/chromium` —
+a Chromium built for Lambda with its libraries bundled, driven through
 `puppeteer-core` with an explicit `executablePath`. It needs no system packages.
-It's a larger change (new dependency, a code change in `prerender.js`, an older
-pinned Chromium), which is why it is second rather than first.
+
+## Build attempt 2 — Chrome launched, every book page timed out
+
+The library fix worked. Chrome started, the app compiled, and then every single
+`/books/<id>` failed with `Waiting failed: 15000ms exceeded`, while the static
+routes passed.
+
+That asymmetry was the diagnosis. **CORS.** The prerender server was on
+`localhost:45678`; `backend/server.py` allows `www.oakbridge.in`,
+`oak-bridge-v2.vercel.app` and `localhost:3000`. Every API call the *browser*
+made was blocked.
+
+The tell is in the log: `Discovered 194 book routes`. The Node-side fetch that
+enumerates routes is not subject to CORS, so the script reached the API
+perfectly while the browser could not load a single page's data.
+
+Why only the dynamic routes failed: static pages render `<Seo>` unconditionally,
+so they got a title and passed the wait — **while containing no data at all**.
+`BookDetail` renders `<Seo>` only after the book loads, so a blocked fetch put
+it in the "Book not found." branch, which had no title, and it burned the full
+15-second wait.
+
+Three changes came out of this:
+
+1. **The server now listens on port 3000**, an origin the API already allows.
+   The prerenderer is doing exactly what the dev server does, so it should look
+   like it.
+2. **A render that produced "Book not found." / "Author not found." now fails
+   the route.** Without this, fixing CORS would have introduced a worse bug: a
+   genuinely missing book renders a well-formed error page *with* a title, which
+   passes every structural check — and baking that into `/books/<id>` serves a
+   200-OK "this book does not exist" for a book we sell.
+3. **`/`, `/books` and `/authors` must contain real content**, asserted by
+   substring. Those three passed attempt 2 while completely empty. A prerendered
+   bookstore listing zero titles is worse than no prerendering, because it is
+   precisely what gets indexed.
+
+Note what did work: the 10% failure gate would have failed this build rather
+than shipping 336 broken pages. The guard earned its place.
 
 ## Check this BEFORE deploying
 
