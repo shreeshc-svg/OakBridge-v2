@@ -127,6 +127,45 @@ function checkPython() {
         pass("python", `${files.length} modules compile`);
     } catch (e) {
         fail("python", String(e.stderr || e).trim().split("\n").slice(-3).join(" | "));
+        return;
+    }
+
+    /*
+     * Compiling is not enough. A module that uses `re.split` without importing
+     * `re` compiles perfectly and then raises NameError the first time that line
+     * runs — which, for a fallback path like typo correction, might be days
+     * later and only for the customer who typed the typo. Caught exactly that
+     * while adding search correction to server.py.
+     *
+     * pyflakes finds undefined names without executing anything. If it is not
+     * installed we say so rather than passing silently.
+     */
+    const checker = path.join(FRONTEND, "scripts", "undefined_names.py");
+    if (!exists(checker)) {
+        warn("python-names", "undefined_names.py missing — undefined names NOT checked");
+        return;
+    }
+    try {
+        execFileSync(py, [checker, ...files], { stdio: "pipe" });
+        pass("python-names", `no undefined names in ${files.length} modules`);
+    } catch (e) {
+        /*
+         * Exit 1 means "findings"; anything else means the checker itself blew
+         * up. Distinguishing them matters: an empty stdout Buffer is TRUTHY in
+         * JS, so `e.stdout || e.stderr` returned "" on a crash, .filter(Boolean)
+         * removed everything, and the check reported neither pass nor fail — it
+         * vanished from the output and the commit went through. A gate that can
+         * disappear silently is worse than no gate.
+         */
+        const findings = String(e.stdout || "").split("\n").filter(Boolean);
+        if (e.status === 1 && findings.length) {
+            findings.forEach((l) => fail("python-names", l.trim()));
+        } else {
+            fail(
+                "python-names",
+                `checker failed to run (exit ${e.status}): ${String(e.stderr || e).trim().split("\n").slice(-2).join(" | ")}`,
+            );
+        }
     }
 }
 

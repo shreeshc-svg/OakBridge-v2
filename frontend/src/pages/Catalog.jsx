@@ -4,7 +4,7 @@ import Seo from "../components/Seo";
 import { Link, useSearchParams } from "react-router-dom";
 import { Search, SlidersHorizontal, X, Clock, BookOpen } from "lucide-react";
 import BookCard from "../components/BookCard";
-import { fetchBooks, fetchCategories, fetchSiteContent, fetchSettings, mediaUrl, logSearch, fetchSuggestIndex } from "../lib/api";
+import { fetchBooks, fetchBooksWithMeta, fetchCategories, fetchSiteContent, fetchSettings, mediaUrl, logSearch, fetchSuggestIndex } from "../lib/api";
 import EbookCta from "../components/EbookCta";
 import { loadIndex, suggestFrom, readRecent, pushRecent } from "../components/SearchBox";
 import { fuzzySearch, didYouMean as didYouMeanTerm } from "../lib/fuzzy";
@@ -275,13 +275,30 @@ export default function Catalog() {
         setBooks([]);
         setHasMore(true);
         skipRef.current = 0;
-        fetchBooks({ ...buildParams(), skip: 0, limit: PAGE_SIZE })
-            .then((data) => {
+        fetchBooksWithMeta({ ...buildParams(), skip: 0, limit: PAGE_SIZE })
+            .then(({ items: data, correctedTo }) => {
                 if (cancelled) return;
                 setBooks(data);
                 skipRef.current = data.length;
                 setHasMore(data.length === PAGE_SIZE);
-                if (search) logSearch(search, data.length, category || null);
+                /*
+                 * Log the term AS TYPED with the count it TRULY matched.
+                 *
+                 * When the server corrected the spelling, the literal query
+                 * matched nothing — logging data.length would file it as a
+                 * successful search and erase it from the "found nothing"
+                 * report. That report is the only place typo demand is visible;
+                 * it is how this whole feature was found in the first place.
+                 */
+                if (search) logSearch(search, correctedTo ? 0 : data.length, category || null);
+
+                /*
+                 * The server fixed the spelling and told us to what. Kept
+                 * separately from the client-side correction because the URL is
+                 * NOT rewritten here — the visitor keeps the query they typed,
+                 * and the results are already for the corrected one.
+                 */
+                setServerCorrection(correctedTo && data.length ? { from: search, to: correctedTo } : null);
             })
             .catch(() => {
                 if (!cancelled) setHasMore(false);
@@ -391,6 +408,10 @@ export default function Catalog() {
      * `triedRef` stops a correction that also finds nothing from looping.
      */
     const [correctedFrom, setCorrectedFrom] = useState(null);
+    // {from, to} when the SERVER corrected the spelling. The URL still holds
+    // what the visitor typed, so this is tracked separately from the
+    // client-side correction above, which rewrites the URL to the fixed term.
+    const [serverCorrection, setServerCorrection] = useState(null);
     const triedRef = useRef(new Set());
 
     useEffect(() => {
@@ -672,6 +693,9 @@ export default function Catalog() {
                         alternative format, not an advert. Hidden until configured. */}
                     <EbookCta variant="bar" site={site} className="mb-6" />
 
+                    {/* Client-side correction: the URL was rewritten to the fixed
+                        spelling, so `search` is the correction and correctedFrom
+                        is what was typed. */}
                     {correctedFrom && books.length > 0 && (
                         <div
                             data-testid="catalog-autocorrect"
@@ -684,6 +708,21 @@ export default function Catalog() {
                             >
                                 Search instead for “{correctedFrom}”
                             </button>
+                        </div>
+                    )}
+
+                    {/* Server-side correction: the opposite way round. The URL
+                        still holds what the visitor typed, and the results are
+                        already for the corrected spelling — so there is nothing
+                        to offer as "search instead", only a note that we did not
+                        take them literally. */}
+                    {!correctedFrom && serverCorrection && books.length > 0 && (
+                        <div
+                            data-testid="catalog-server-autocorrect"
+                            className="mb-6 border-l-2 border-[#F59E0B] bg-[#FFFBEB] pl-3 py-2.5 pr-3 text-sm text-[#002B5C]"
+                        >
+                            No exact matches for <strong>“{serverCorrection.from}”</strong> — showing
+                            results for <strong>“{serverCorrection.to}”</strong>.
                         </div>
                     )}
 

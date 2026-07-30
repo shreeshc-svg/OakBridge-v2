@@ -46,6 +46,18 @@ api.interceptors.response.use(
 export const fetchCategories = () => api.get("/categories").then((r) => r.data);
 export const fetchBooks = (params = {}) =>
     api.get("/books", { params }).then((r) => r.data);
+/**
+ * Same call, but also reports a spelling the server corrected on our behalf.
+ *
+ * Separate from fetchBooks because that returns a bare array and a dozen call
+ * sites destructure it as one; changing its shape to carry metadata would mean
+ * touching every one of them for the benefit of a single screen.
+ */
+export const fetchBooksWithMeta = (params = {}) =>
+    api.get("/books", { params }).then((r) => ({
+        items: r.data,
+        correctedTo: r.headers?.["x-search-corrected-to"] || null,
+    }));
 export const fetchFeatured = () =>
     api.get("/books/featured").then((r) => r.data);
 export const fetchNewReleases = (limit = 12) =>

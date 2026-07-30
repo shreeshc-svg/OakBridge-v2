@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
+import re
 import logging
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict, EmailStr
@@ -521,6 +522,163 @@ def _search_clauses(search: str) -> List[dict]:
     return out
 
 
+# ---------------------------------------------------------- typo tolerance ---
+# Vocabulary of every word in the catalogue, cached briefly.
+#
+# WHY THIS EXISTS SERVER-SIDE WHEN THE BROWSER ALREADY CORRECTS
+#
+# Catalog.jsx recovers a typo by noticing an empty result set and re-running the
+# search — two round trips, with a flash of "no results" in between, and only if
+# its suggest-index has finished loading. Correcting here removes the second
+# trip, removes the flash, and keeps working when that index is slow, blocked or
+# fails. It also makes /api/books?search= self-sufficient for anything that is
+# not our React app.
+#
+# The cache is deliberate: rebuilding on every zero-result search would re-read
+# every book, and zero-result searches are exactly what a bot hammering the
+# endpoint produces. Sixty seconds is short enough that a newly-added title
+# becomes searchable-by-typo almost immediately.
+_VOCAB_TTL = 60.0
+# A SORTED TUPLE, not a set — determinism depends on it. The scan below stops
+# early on a distance-1 hit, and Python randomises string hashing per process,
+# so iterating a set made the same typo correct differently after every restart:
+# "cost" became "most" in one process and "post" in the next. Identical input,
+# identical data, different answer.
+_vocab_cache: "tuple[float, tuple]" = (0.0, ())
+
+
+async def _catalogue_vocabulary() -> tuple:
+    import time as _time
+
+    ts, words = _vocab_cache
+    now = _time.monotonic()
+    # `is not None`, not truthiness: an empty catalogue is a legitimate answer
+    # and must be cached too, or every zero-result search re-reads the whole
+    # collection while the shelf is empty.
+    if words is not None and ts and now - ts < _VOCAB_TTL:
+        return words
+
+    docs = await db.books.find(
+        {}, {"_id": 0, "title": 1, "subtitle": 1, "author": 1, "subject": 1}
+    ).to_list(None)
+    fresh = set()
+    for d in docs:
+        blob = " ".join(str(d.get(f) or "") for f in ("title", "subtitle", "author", "subject"))
+        for w in re.split(r"[^0-9A-Za-z]+", blob.lower()):
+            # Two-character words carry no signal and make every correction
+            # ambiguous — "of" is within one edit of "on", "or", "if".
+            # Pure numbers are excluded as well: the catalogue is full of years
+            # (1988, 2013, 2023) and without this an ISBN fragment or a numeric
+            # query gets "corrected" into an unrelated year.
+            if len(w) > 2 and not w.isdigit():
+                fresh.add(w)
+
+    ordered = tuple(sorted(fresh))
+    globals()["_vocab_cache"] = (now, ordered)
+    return ordered
+
+
+def _edit_distance(a: str, b: str, max_d: int) -> int:
+    """Levenshtein, abandoned once it provably exceeds max_d."""
+    if a == b:
+        return 0
+    if abs(len(a) - len(b)) > max_d:
+        return max_d + 1
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        cur = [i]
+        best = i
+        for j, cb in enumerate(b, 1):
+            cur.append(min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (ca != cb)))
+            best = min(best, cur[j])
+        if best > max_d:
+            return max_d + 1
+        prev = cur
+    return prev[-1]
+
+
+def _budget(word: str) -> int:
+    """How wrong a word may be before we stop guessing.
+
+    MUST match `budget` in frontend/src/lib/fuzzy.js exactly:
+        w.length <= 4 ? 0 : w.length <= 7 ? 1 : 2
+
+    An earlier, looser version of this (1 edit at length 4, 2 at length 6) was
+    measurably worse, not just inconsistent. On the real catalogue it turned
+    "cost" into "post" and "cooking" into "working" — a shopper searching for a
+    subject we simply do not publish got a shelf of unrelated law books under a
+    notice claiming they were the closest titles. Short words are short: one
+    edit is usually a different word, not a typo.
+    """
+    n = len(word)
+    if n <= 4:
+        return 0
+    if n <= 7:
+        return 1
+    return 2
+
+
+# Longest query we will attempt to correct.
+#
+# This is a CPU bound, not a UX one. The distance scan is pure Python with no
+# await in it, so it blocks the event loop — and Render runs a single uvicorn
+# worker that also serves checkout and the Razorpay webhook. Nonsense input is
+# the worst case AND the common case for bots, because the early exit never
+# fires: 2000 junk words measured at ~3s of solid CPU, which is a stalled
+# checkout for everyone else. Nobody searching a bookshop types nine words.
+_MAX_CORRECT_WORDS = 8
+
+
+async def _correct_search(search: str) -> Optional[str]:
+    """Nearest in-catalogue spelling of `search`, or None if nothing is close.
+
+    Deliberately mirrors didYouMean() in frontend/src/lib/fuzzy.js — same
+    length-scaled edit budget — so a typo cannot correct one way in the browser
+    and another way on the server. The vocabularies still differ slightly (this
+    one also reads subtitle and subject), so treat that as "the same rules over
+    a slightly wider dictionary" rather than a guarantee of identical output.
+    """
+    words = [w for w in re.split(r"[^0-9A-Za-z]+", (search or "").lower()) if w]
+    if not words or len(words) > _MAX_CORRECT_WORDS:
+        return None
+
+    vocab = await _catalogue_vocabulary()
+    if not vocab:
+        return None
+
+    corrected: List[str] = []
+    changed = False
+    vocab_set = set(vocab)
+    for w in words:
+        # Digits are never corrected — an ISBN fragment or a year must be taken
+        # literally, not nudged toward a nearby number.
+        if w in vocab_set or len(w) <= 2 or w.isdigit():
+            corrected.append(w)
+            continue
+        allow = _budget(w)
+        best, best_d = None, allow + 1
+        if allow:
+            # Full scan, no early exit. Stopping at the first distance-1 hit
+            # made the result depend on iteration order; even over a sorted
+            # vocabulary it would return the alphabetically-first near match
+            # rather than the closest one. The vocabulary is under a thousand
+            # words and this only runs when a search found nothing.
+            for v in vocab:
+                d = _edit_distance(w, v, allow)
+                if d < best_d:
+                    best_d, best = d, v
+        if best:
+            corrected.append(best)
+            changed = True
+        else:
+            corrected.append(w)
+
+    if not changed:
+        return None
+    fixed = " ".join(corrected)
+    return fixed if fixed != (search or "").lower().strip() else None
+
+
 async def _curated_bestseller_ids() -> List[str]:
     """Book IDs the admin curated for the home bestseller carousel.
 
@@ -534,6 +692,7 @@ async def _curated_bestseller_ids() -> List[str]:
 
 @api_router.get("/books", response_model=List[Book])
 async def list_books(
+    response: Response,
     category: Optional[str] = None,
     subject: Optional[str] = None,
     search: Optional[str] = None,
@@ -630,6 +789,35 @@ async def list_books(
         {"$project": {"_id": 0, "_in_stock": 0, "_rank": 0}},
     ]
     docs = await db.books.aggregate(pipeline).to_list(limit)
+
+    # Nothing matched a search term — try the nearest in-catalogue spelling
+    # before giving up, and report what we changed in a response header so the
+    # storefront can explain itself.
+    #
+    # EVERY PAGE, NOT JUST THE FIRST. This was originally gated on `skip == 0`,
+    # on the reasoning that page two would already carry the corrected term.
+    # It does not: the storefront deliberately leaves the URL showing what the
+    # visitor typed, so infinite scroll re-sends the ORIGINAL misspelling with
+    # skip=24. The server then declined to correct, returned nothing, and the
+    # page concluded it had reached the end — a corrected search matching 33
+    # titles showed 24 and said "that's everything". Correction is idempotent
+    # and the vocabulary is cached, so simply doing it on every page is both
+    # cheaper to reason about and correct.
+    if search and not docs:
+        fixed = await _correct_search(search)
+        if fixed:
+            retry_clauses = [c for c in clauses if c not in _search_clauses(search)]
+            retry_clauses.extend(_search_clauses(fixed))
+            retry_query = dict(query)
+            if retry_clauses:
+                retry_query["$and"] = retry_clauses
+            else:
+                retry_query.pop("$and", None)
+            retry_pipeline = [{"$match": retry_query}] + pipeline[1:]
+            docs = await db.books.aggregate(retry_pipeline).to_list(limit)
+            if docs:
+                response.headers["X-Search-Corrected-To"] = fixed
+
     return [_decorate_book(d) for d in docs]
 
 
@@ -950,6 +1138,11 @@ app.add_middleware(
     allow_origins=_ALLOWED_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
+    # A browser cannot READ a custom response header unless it is exposed here —
+    # "*" on allow_headers governs the request side only. Without this line the
+    # search-correction header is sent, arrives, and is invisible to JavaScript,
+    # so the "Showing results for …" notice would silently never appear.
+    expose_headers=["X-Search-Corrected-To"],
 )
 
 
