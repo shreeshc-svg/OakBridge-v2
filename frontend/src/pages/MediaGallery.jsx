@@ -302,7 +302,8 @@ export default function MediaGallery() {
                                         height cap shows the whole image instead of cropping the
                                         title off, which `cover` was doing. */}
                                     {site.media_up_image && (
-                                        <img src={mediaUrl(site.media_up_image) || site.media_up_image} alt=""
+                                        <img src={mediaUrl(site.media_up_image) || site.media_up_image}
+                                            alt={site.media_up_title ? `${site.media_up_title} — event poster` : "Poster for the upcoming Oakbridge event"}
                                             className="w-full max-h-[420px] object-contain object-left mt-4" loading="lazy" />
                                     )}
                                 </div>
@@ -330,7 +331,9 @@ export default function MediaGallery() {
                                     {recent.map((r, i) => (
                                         <div key={r.id || i} className={`flex gap-4 py-4 ${i < recent.length - 1 ? "border-b border-[#E5E7EB]" : ""}`}>
                                             {r.image && (
-                                                <img src={mediaUrl(r.image) || r.image} alt="" loading="lazy"
+                                                <img src={mediaUrl(r.image) || r.image}
+                                                    alt={r.title ? `${r.title}${r.date ? `, ${r.date}` : ""}` : "Photograph from a recent Oakbridge event"}
+                                                    loading="lazy"
                                                     className="w-[70px] h-[70px] object-cover flex-shrink-0" />
                                             )}
                                             <div className="min-w-0">
@@ -365,7 +368,9 @@ export default function MediaGallery() {
                                 const inner = (
                                     <>
                                         {a.image && (
-                                            <img src={mediaUrl(a.image) || a.image} alt="" loading="lazy"
+                                            <img src={mediaUrl(a.image) || a.image}
+                                                alt={a.title ? `${a.title} — photo album` : "Oakbridge photo album"}
+                                                loading="lazy"
                                                 className="w-full h-[150px] object-cover" />
                                         )}
                                         <div className="p-4 text-left">
@@ -445,7 +450,9 @@ export default function MediaGallery() {
                                             <button key={v.id || i} onClick={() => setLightbox({ ...v, isVideo: true })} className="text-left w-full">
                                                 <span className="relative block bg-[#002B5C] h-[190px] overflow-hidden">
                                                     {poster && (
-                                                        <img src={mediaUrl(poster) || poster} alt="" loading="lazy"
+                                                        <img src={mediaUrl(poster) || poster}
+                                                            alt={v.title ? `Video: ${v.title}` : "Oakbridge video"}
+                                                            loading="lazy"
                                                             className="absolute inset-0 w-full h-full object-cover opacity-85" />
                                                     )}
                                                     <span className="absolute inset-0 flex items-center justify-center">
@@ -486,7 +493,9 @@ export default function MediaGallery() {
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mt-8">
                         {socials.map((s, i) => {
                             const img = (
-                                <img src={mediaUrl(s.image) || s.image} alt="" loading="lazy"
+                                <img src={mediaUrl(s.image) || s.image}
+                                    alt={`Oakbridge social media post ${i + 1}`}
+                                    loading="lazy"
                                     className="w-full aspect-square object-cover hover:opacity-90 transition-opacity" />
                             );
                             return s.link ? (
@@ -576,7 +585,9 @@ export default function MediaGallery() {
                             {albumPhotos.photos.map((p, i) => (
                                 <button key={p.url || i} onClick={() => setLightbox({ url: p.url, title: album.title })}
                                     className="relative aspect-[4/3] overflow-hidden bg-[#0d2340]">
-                                    <img src={mediaUrl(p.url) || p.url} alt="" loading="lazy"
+                                    <img src={mediaUrl(p.url) || p.url}
+                                        alt={`${album.title || "Album"} — photograph ${i + 1} of ${albumPhotos.photos.length}`}
+                                        loading="lazy"
                                         className="absolute inset-0 w-full h-full object-cover hover:opacity-90 transition-opacity" />
                                 </button>
                             ))}

@@ -471,7 +471,51 @@ function checkVercelFallback() {
     }
 }
 
-/* ------------------------------------- 9. No static sitemap shadowing the API
+/* --------------------------------------------- 9. Every <img> declares an alt
+ * A MISSING alt and an EMPTY alt mean different things to a screen reader, and
+ * only one of them is a decision. alt="" says "this is decoration, skip it";
+ * no attribute at all makes the reader fall back to announcing the filename,
+ * so a customer hears "9789395764544 dot jpg".
+ *
+ * This does not judge whether the text is any good — it cannot. It only insists
+ * that somebody chose.
+ */
+function checkImgAlt() {
+    try {
+        require("@babel/parser");
+    } catch {
+        warn("img-alt", "@babel/parser unavailable — skipped");
+        return;
+    }
+    const files = walk(path.join(FRONTEND, "src"), (n) => /\.jsx$/.test(n));
+    const offenders = [];
+    let total = 0;
+    for (const f of files) {
+        let ast;
+        try {
+            ast = parseFile(f);
+        } catch {
+            continue;
+        }
+        walkAst(ast.program.body, (node) => {
+            if (node.type !== "JSXOpeningElement") return true;
+            if (!node.name || node.name.name !== "img") return true;
+            total++;
+            const attrs = node.attributes || [];
+            const hasAlt = attrs.some((a) => a.name && a.name.name === "alt");
+            // A spread ({...props}) may supply it; can't prove otherwise.
+            const hasSpread = attrs.some((a) => a.type === "JSXSpreadAttribute");
+            if (!hasAlt && !hasSpread) {
+                offenders.push(`${path.relative(REPO, f)}:${node.loc ? node.loc.start.line : "?"}`);
+            }
+            return true;
+        });
+    }
+    if (offenders.length) offenders.forEach((o) => fail("img-alt", `<img> with no alt attribute: ${o}`));
+    else pass("img-alt", `all ${total} <img> tags declare an alt`);
+}
+
+/* ------------------------------------ 10. No static sitemap shadowing the API
  * vercel.json rewrites /sitemap.xml to the API, which generates it from the
  * live catalogue. Rewrites are consulted only AFTER the filesystem, so a
  * public/sitemap.xml would silently win and freeze the sitemap at whenever it
@@ -551,7 +595,7 @@ function checkSecrets() {
 const CHECKS = [
     checkJsSyntax, checkNodeScripts, checkPython, checkJson,
     checkUnusedImports, checkRouteTitles, checkRouteParity,
-    checkVercelFallback, checkNoStaticSitemap, checkSecrets,
+    checkVercelFallback, checkImgAlt, checkNoStaticSitemap, checkSecrets,
 ];
 
 for (const c of CHECKS) {

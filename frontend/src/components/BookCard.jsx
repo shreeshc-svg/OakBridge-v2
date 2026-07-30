@@ -68,7 +68,12 @@ export default function BookCard({ book, index = 0, compact = false }) {
                     {hasCover ? (
                         <img
                             src={mediaUrl(book.cover_image)}
-                            alt={book.title}
+                            /* Names the object AND the thing it depicts. "Legal
+                               Aptitude & Reasoning" alone reads as though the
+                               image were the book itself; a screen-reader user
+                               scanning a grid of 24 gets the author too, which
+                               is what they are usually choosing between. */
+                            alt={book.author ? `${book.title} — book cover, by ${book.author}` : `${book.title} — book cover`}
                             onError={() => setImgErr(true)}
                             className={`absolute inset-0 w-full h-full object-contain book-tilt ${oos ? "opacity-40 grayscale" : ""}`}
                             loading="lazy"

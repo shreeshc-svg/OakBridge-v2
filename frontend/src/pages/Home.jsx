@@ -286,7 +286,14 @@ export default function Home() {
                     <div className="lg:col-span-5 relative min-h-[420px] lg:min-h-[720px] bg-[#002B5C]">
                         <img
                             src={mediaUrl(site.home_hero) || "https://images.unsplash.com/photo-1507842217343-583bb7270b66?auto=format&fit=crop&w=1600&q=85"}
-                            alt="A vibrant wall of books"
+                            /* Decorative: a mood image behind a gradient, with the
+                               headline beside it carrying the actual meaning. An
+                               empty alt is the correct answer — a screen reader
+                               should skip it, not read a caption. It was also
+                               hardcoded while the image is admin-replaceable, so
+                               the description became a lie the moment anyone
+                               uploaded a different banner. */
+                            alt=""
                             className="absolute inset-0 w-full h-full object-cover"
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-[#002B5C]/95 via-[#002B5C]/30 to-transparent" />

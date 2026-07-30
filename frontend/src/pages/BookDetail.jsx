@@ -265,7 +265,7 @@ export default function BookDetail() {
                         <div className="relative aspect-[2/3] bg-[#F5F7FA] border border-[#E5E7EB] overflow-hidden shadow-sm group">
                             <img
                                 src={mediaUrl(book.cover_image)}
-                                alt={book.title}
+                                alt={book.author ? `${book.title} — book cover, by ${book.author}` : `${book.title} — book cover`}
                                 className="absolute inset-0 w-full h-full object-contain"
                             />
                             {book.bestseller && (

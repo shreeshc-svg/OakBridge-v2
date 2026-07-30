@@ -490,7 +490,10 @@ export default function Catalog() {
                 <div className="relative min-h-[320px] md:min-h-[400px]">
                     <img
                         src={mediaUrl(site.plp_banner) || "https://images.unsplash.com/photo-1507842217343-583bb7270b66?auto=format&fit=crop&w=2000&q=85"}
-                        alt="A vibrant wall of books"
+                        /* Decorative — see the note on the homepage hero. The
+                           heading over it carries the meaning, and the banner
+                           itself is admin-replaceable. */
+                        alt=""
                         className="absolute inset-0 w-full h-full object-cover"
                     />
                     <div className="absolute inset-0 bg-gradient-to-r from-[#002B5C]/95 via-[#002B5C]/70 to-[#002B5C]/35" />
