@@ -471,6 +471,113 @@ function checkVercelFallback() {
     }
 }
 
+/* ------------------------------- 8b. Every JSX component used is in scope
+ * <CareersNudge /> without its import parses perfectly, builds perfectly, and
+ * renders a blank page with a console error the moment anyone opens that route.
+ * Caught exactly that while adding a careers link to the auth pages — the same
+ * shape of bug as the missing `re` import in server.py, in the other language.
+ *
+ * Scope-blind on purpose, like the Python checker: it collects every name bound
+ * ANYWHERE in the file and only reports what is bound nowhere at all. That
+ * under-reports rather than crying wolf, which is what keeps a commit gate
+ * usable.
+ */
+function checkJsxDefined() {
+    try {
+        require("@babel/parser");
+    } catch {
+        warn("jsx-defined", "@babel/parser unavailable — skipped");
+        return;
+    }
+    // Names React resolves itself, or that are lower-cased host elements.
+    const BUILTIN = new Set(["Fragment", "React", "Suspense", "StrictMode", "Profiler"]);
+    const files = walk(path.join(FRONTEND, "src"), (n) => /\.jsx$/.test(n));
+    const offenders = [];
+    for (const f of files) {
+        let ast;
+        try {
+            ast = parseFile(f);
+        } catch {
+            continue;
+        }
+        const bound = new Set(BUILTIN);
+        const used = new Map(); // name -> line
+
+        /*
+         * Binds every identifier a pattern introduces, not just a plain name.
+         * Components are routinely passed in and renamed on the way —
+         * `({ icon: I }) => <I />` in BottomTray, `{ icon: Icon }` in
+         * AdminDashboard — and treating those as undefined produced two false
+         * failures on perfectly good code, which would have blocked every
+         * commit in the repo.
+         */
+        const bindPattern = (n) => {
+            if (!n) return;
+            switch (n.type) {
+                case "Identifier":
+                    bound.add(n.name);
+                    break;
+                case "ObjectPattern":
+                    for (const p of n.properties) bindPattern(p.value || p.argument);
+                    break;
+                case "ArrayPattern":
+                    for (const el of n.elements) bindPattern(el);
+                    break;
+                case "AssignmentPattern":
+                    bindPattern(n.left);
+                    break;
+                case "RestElement":
+                    bindPattern(n.argument);
+                    break;
+                default:
+                    break;
+            }
+        };
+
+        walkAst(ast.program.body, (node) => {
+            switch (node.type) {
+                case "ImportDeclaration":
+                    for (const s of node.specifiers) bound.add(s.local.name);
+                    return false;
+                case "FunctionDeclaration":
+                case "FunctionExpression":
+                case "ArrowFunctionExpression":
+                    if (node.id) bound.add(node.id.name);
+                    for (const p of node.params || []) bindPattern(p);
+                    break;
+                case "ClassDeclaration":
+                    if (node.id) bound.add(node.id.name);
+                    break;
+                case "VariableDeclarator":
+                    bindPattern(node.id);
+                    break;
+                case "CatchClause":
+                    bindPattern(node.param);
+                    break;
+                case "JSXOpeningElement": {
+                    const n = node.name;
+                    // Only bare <Foo />. <Foo.Bar /> and <ns:foo /> resolve
+                    // through an object that is checked on its own.
+                    if (n && n.type === "JSXIdentifier" && /^[A-Z]/.test(n.name)) {
+                        if (!used.has(n.name)) used.set(n.name, node.loc ? node.loc.start.line : "?");
+                    }
+                    break;
+                }
+                default:
+                    break;
+            }
+            return true;
+        });
+        for (const [name, line] of used) {
+            if (!bound.has(name)) {
+                offenders.push(`${path.relative(REPO, f)}:${line} — <${name}> is used but never imported or defined`);
+            }
+        }
+    }
+    if (offenders.length) offenders.forEach((o) => fail("jsx-defined", o));
+    else pass("jsx-defined", `every JSX component resolves in ${files.length} files`);
+}
+
 /* --------------------------------------------- 9. Every <img> declares an alt
  * A MISSING alt and an EMPTY alt mean different things to a screen reader, and
  * only one of them is a decision. alt="" says "this is decoration, skip it";
@@ -595,7 +702,7 @@ function checkSecrets() {
 const CHECKS = [
     checkJsSyntax, checkNodeScripts, checkPython, checkJson,
     checkUnusedImports, checkRouteTitles, checkRouteParity,
-    checkVercelFallback, checkImgAlt, checkNoStaticSitemap, checkSecrets,
+    checkVercelFallback, checkJsxDefined, checkImgAlt, checkNoStaticSitemap, checkSecrets,
 ];
 
 for (const c of CHECKS) {

@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { formatApiError } from "../../lib/api";
+import CareersNudge from "../../components/CareersNudge";
 import { toast } from "sonner";
 
 export default function Register() {
@@ -142,6 +143,8 @@ export default function Register() {
                             Sign in
                         </Link>
                     </p>
+
+                    <CareersNudge />
                 </div>
             </div>
             <div className="hidden md:block relative bg-[#002B5C] overflow-hidden md:order-2 order-1">
