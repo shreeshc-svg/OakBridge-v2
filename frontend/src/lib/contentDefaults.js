@@ -42,6 +42,12 @@ const CONTENT_DEFAULTS = {
     contact_body: "Questions about our books, bulk orders for your school, press inquiries, or manuscripts — reach us through the form below or at the addresses to the right.",
     contact_overline: "Get in Touch",
     contact_title: "We read every letter.",
+    // Sets expectations so nobody is left wondering whether their message
+    // arrived. Kept free of specific times on purpose — deliberately vague is
+    // better than precise and wrong, and a stated hour becomes a promise the
+    // day someone answers at 7pm or nobody answers at 9am.
+    contact_phone_hours: "Available during office hours",
+    contact_reply_time: "We usually reply within 1–2 working days. Anything sent outside office hours is picked up the next working day.",
     ds_accent: "books you trust.",
     ds_body: "We're building a new line of digital products on top of Oakbridge's scholarly catalogue — semantic search, research copilots and licensed APIs for law firms, universities and Corporate & Judiciary. Launching soon.",
     ds_eyebrow: "Oakbridge · Digital Solutions",

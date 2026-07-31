@@ -423,6 +423,30 @@ export default function AdminPages() {
                         <TextSlotRow label="Heading" value={site.contact_title} defaultValue={CONTENT_DEFAULTS.contact_title} onSave={(v) => saveSite("contact_title", v)} multiline />
                         <TextSlotRow label="Intro" value={site.contact_body} defaultValue={CONTENT_DEFAULTS.contact_body} onSave={(v) => saveSite("contact_body", v)} multiline />
                     </div>
+
+                    <div className="overline !text-[10px] mt-6 mb-2">What to expect</div>
+                    <div className="space-y-3">
+                        <TextSlotRow
+                            label="Phone availability"
+                            value={site.contact_phone_hours}
+                            defaultValue={CONTENT_DEFAULTS.contact_phone_hours}
+                            onSave={(v) => saveSite("contact_phone_hours", v)}
+                        />
+                        <TextSlotRow
+                            label="Email reply time"
+                            value={site.contact_reply_time}
+                            defaultValue={CONTENT_DEFAULTS.contact_reply_time}
+                            onSave={(v) => saveSite("contact_reply_time", v)}
+                            multiline
+                        />
+                    </div>
+                    <p className="text-[11px] text-[#4B5563] mt-2">
+                        Shown under the phone number, under the email address, and beside the Send
+                        Message button. Clearing a field restores the default text. Say only what
+                        you can keep to — a stated turnaround is a promise, and one you miss costs
+                        more than having said nothing.
+                    </p>
+
                     <p className="text-[11px] text-[#4B5563] mt-3">Direct-line emails are in <Link to="/admin/settings" className="text-[#002B5C] border-b border-[#002B5C]">Settings</Link>.</p>
                 </PageGroup>
 

@@ -4,6 +4,7 @@ import Seo from "../components/Seo";
 import { Mail, MapPin, Phone } from "lucide-react";
 import { submitContact, fetchSettings, fetchSiteContent } from "../lib/api";
 import { hiddenSet, resolveSectionOrder } from "../lib/sections";
+import CONTENT_DEFAULTS from "../lib/contentDefaults";
 
 const CONTACT_DEFAULT_ORDER = ["form", "details"];
 import { toast } from "sonner";
@@ -36,6 +37,17 @@ export default function Contact() {
             ? settings.contact_direct_lines
             : DEFAULT_LINES;
 
+    /*
+     * Resolved once, used in three places, so the three cannot disagree.
+     *
+     * `||` not `??`, matching the convention documented in contentDefaults.js:
+     * an empty override falls back to the built-in text, so clearing a field in
+     * the admin restores the default rather than blanking the line. An admin who
+     * has learned that rule everywhere else should not meet an exception here.
+     */
+    const replyTime = site.contact_reply_time || CONTENT_DEFAULTS.contact_reply_time;
+    const phoneHours = site.contact_phone_hours || CONTENT_DEFAULTS.contact_phone_hours;
+
     const onChange = (e) =>
         setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
 
@@ -44,9 +56,13 @@ export default function Contact() {
         setSubmitting(true);
         try {
             await submitContact(form);
-            toast.success(
-                "Thank you — our team will respond within two working days.",
-            );
+            // No turnaround stated here on purpose. It used to say "within two
+            // working days", hardcoded, which now contradicts the admin-editable
+            // "1–2 working days" shown three times on this page — and would drift
+            // again the moment that field is edited. The timing is stated
+            // directly beside the button they just pressed; the toast only needs
+            // to confirm the message left.
+            toast.success("Thank you — your message has been sent.");
             setForm({
                 name: "",
                 email: "",
@@ -157,6 +173,16 @@ export default function Contact() {
                         >
                             {submitting ? "Sending…" : "Send Message"}
                         </button>
+                        {/* Third and last placement: beside the button, where the
+                            expectation is set BEFORE they commit. Someone who
+                            knows a reply takes a day or two waits; someone who
+                            doesn't sends the same message again on three
+                            channels, or writes you off after an afternoon. */}
+                        {replyTime && (
+                            <p className="text-xs text-[#4B5563] mt-4 max-w-md leading-relaxed">
+                                {replyTime}
+                            </p>
+                        )}
                     </form>
                 </div>
                 )}
@@ -194,12 +220,22 @@ export default function Contact() {
                                 strokeWidth={1.5}
                                 className="text-[#CC0033] mt-0.5"
                             />
-                            <a
-                                href="mailto:info@oakbridge.in"
-                                className="text-sm text-[#002B5C] hover:text-[#CC0033]"
-                            >
-                                info@oakbridge.in
-                            </a>
+                            {/* Reply time sits with the email address, where the
+                                question "how long will this take?" is actually
+                                being asked — not buried at the foot of the page. */}
+                            <div>
+                                <a
+                                    href="mailto:info@oakbridge.in"
+                                    className="text-sm text-[#002B5C] hover:text-[#CC0033]"
+                                >
+                                    info@oakbridge.in
+                                </a>
+                                {replyTime && (
+                                    <p className="text-xs text-[#4B5563] mt-1 leading-relaxed max-w-[22rem]">
+                                        {replyTime}
+                                    </p>
+                                )}
+                            </div>
                         </div>
                         <div className="mt-4 flex gap-4">
                             <Phone
@@ -207,12 +243,19 @@ export default function Contact() {
                                 strokeWidth={1.5}
                                 className="text-[#CC0033] mt-0.5"
                             />
-                            <a
-                                href="tel:+918800337299"
-                                className="text-sm text-[#002B5C] hover:text-[#CC0033]"
-                            >
-                                +91 88003 37299
-                            </a>
+                            <div>
+                                <a
+                                    href="tel:+918800337299"
+                                    className="text-sm text-[#002B5C] hover:text-[#CC0033]"
+                                >
+                                    +91 88003 37299
+                                </a>
+                                {phoneHours && (
+                                    <p className="text-xs text-[#4B5563] mt-1">
+                                        {phoneHours}
+                                    </p>
+                                )}
+                            </div>
                         </div>
                     </div>
 
