@@ -63,7 +63,20 @@ export default function BookCard({ book, index = 0, compact = false }) {
             className="group fade-up flex flex-col h-full"
             style={{ animationDelay: `${Math.min(index, 8) * 60}ms` }}
         >
-            <Link to={`/books/${book.id}`} className="block">
+            {/* shrink-0 is load-bearing, not tidiness.
+             *
+             * Making the card a flex column turned this into a flex item, and a
+             * flex item shrinks by default. The row's height is set by its
+             * tallest card, so on THAT card the children sum to exactly the
+             * container — and the title reserves min-h-[3rem] (48px) while two
+             * lines of text-lg/leading-tight measure 45px. The flex algorithm
+             * reclaimed the difference from this block, and because the title is
+             * a -webkit-box with overflow:hidden, the second line was clipped
+             * mid-glyph instead of the box simply being smaller.
+             *
+             * Nothing in this card should ever shrink: the slack is absorbed by
+             * mt-auto on the block below, as margin, not by squeezing content. */}
+            <Link to={`/books/${book.id}`} className="block flex-shrink-0">
                 <div className="relative aspect-[2/3] overflow-hidden bg-white border border-[#E5E7EB]">
                     {hasCover ? (
                         <img
@@ -150,7 +163,7 @@ export default function BookCard({ book, index = 0, compact = false }) {
              * stays attached to the price it qualifies instead of being stranded
              * against the author with white space beneath it.
              */}
-            <div className="mt-auto">
+            <div className="mt-auto flex-shrink-0">
                 {low && (
                     <div data-testid={`low-stock-${book.id}`} className={`font-mono text-[#CC0033] ${compact ? "text-[10px] pt-1.5" : "text-[11px] pt-2"}`}>
                         Only {stock} left — order soon
