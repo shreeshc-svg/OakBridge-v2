@@ -77,3 +77,41 @@ services:
         sync: false
       - key: AWS_SECRET_ACCESS_KEY  # IAM user secret key (secret)
         sync: false
+
+  # ---------------------------------------------------------------------------
+  # Scheduled stock sync — Google Sheet -> website.
+  #
+  # SCHEDULE IS IN UTC. Render does not run cron in your local timezone, and
+  # this is the single easiest thing to get wrong here. IST is UTC+5:30:
+  #
+  #     03:30 UTC  =  09:00 IST   (morning)
+  #     12:30 UTC  =  18:00 IST   (evening)
+  #
+  # "1-6" is Monday to Saturday (0 = Sunday). One job, both times.
+  #
+  # If you change the times, convert first: subtract 5h30m from the IST time you
+  # want. Anything up to 18:29 IST stays on the same UTC day; later than that and
+  # the day-of-week field shifts too, which would silently move a Saturday run
+  # onto Sunday.
+  #
+  # TASK_TOKEN must match the web service's value. It is `generateValue` there,
+  # so Render will generate a DIFFERENT one here unless you copy it across in
+  # the dashboard — the sync would then return 401 twice a day, forever. Either
+  # paste the web service's value in, or move both to a shared environment group.
+  - type: cron
+    name: oakbridge-inventory-sync
+    runtime: python
+    rootDir: backend
+    plan: starter
+    schedule: "30 3,12 * * 1-6"
+    buildCommand: "echo no build needed"
+    # --fail makes a 4xx/5xx exit non-zero, so a failed sync shows as a failed
+    # run in Render rather than a green tick over a 401. --silent keeps the log
+    # to the response body; --show-error still prints the reason when it breaks.
+    startCommand: >-
+      curl --fail --silent --show-error --max-time 120
+      -X POST https://api.oakbridge.in/api/tasks/inventory-sync
+      -H "X-Task-Token: $TASK_TOKEN"
+    envVars:
+      - key: TASK_TOKEN
+        sync: false           # paste the SAME value as the web service

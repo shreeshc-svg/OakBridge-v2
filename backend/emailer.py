@@ -424,6 +424,67 @@ async def send_admin_paid_order(order: dict) -> bool:
     return await send_email(to=ADMIN_NOTIFY_EMAIL, subject=subject, html=html)
 
 
+async def send_admin_inventory_alert(summary: dict, error: str = "") -> bool:
+    """Tell the internal inbox when a scheduled stock sync needs a human.
+
+    ONLY ON PROBLEMS. A cron that reports success twice a day trains everyone to
+    filter it, and then the one that matters goes unread too. A clean run stays
+    silent; the "Last sync" panel in Admin -> Inventory is there for anyone who
+    wants to look.
+
+    Unmatched ISBNs are deliberately NOT a problem. The stock sheet tracks the
+    full 251-title master while the site sells 194 on purpose, so a large
+    unmatched count is the expected steady state — alerting on it would mean
+    alerting on every single run.
+    """
+    if not ADMIN_NOTIFY_EMAIL:
+        return False
+
+    import html as _html
+
+    if error:
+        kicker = "Sync failed"
+        subject = "⚠️ Oakbridge stock sync FAILED"
+        body = (
+            f'<p style="margin:0 0 12px;color:{BRAND_RED};font-weight:600;">'
+            "The scheduled stock sync did not run.</p>"
+            f'<p style="margin:0 0 12px;">{_html.escape(str(error))}</p>'
+            '<p style="margin:0;">Stock levels on the site are unchanged since the last '
+            "successful sync. Usual causes: the sheet is no longer published to the web, it "
+            "was renamed or moved, or the API could not reach Google.</p>"
+        )
+    else:
+        invalid = int(summary.get("invalid_rows") or 0)
+        kicker = "Needs a look"
+        subject = f"⚠️ Oakbridge stock sync — {invalid} unreadable row{'' if invalid == 1 else 's'}"
+        body = (
+            f'<p style="margin:0 0 12px;">The sync ran, but <strong>{invalid}</strong> row'
+            f"{'' if invalid == 1 else 's'} in the sheet had a stock value it could not read "
+            "— blank, a dash, or text where a number was expected.</p>"
+            f'<p style="margin:0 0 12px;"><strong>Those titles kept their previous stock '
+            "level</strong>, so the site may still be selling something the sheet considers "
+            "finished.</p>"
+            f'<p style="margin:0;color:{BRAND_GREY};font-size:12px;">'
+            f"Updated {summary.get('updated', 0)} · restocked {summary.get('restocked', 0)} · "
+            f"unmatched {summary.get('unmatched_count', 0)}. Unmatched is expected — the sheet "
+            "tracks more titles than the site sells.</p>"
+        )
+
+    html = f"""\
+<!DOCTYPE html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:24px;background-color:#FFFFFF;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:{BRAND_NAVY};">
+<table cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:600px;border:1px solid #E5E7EB;">
+  <tr><td style="background-color:{BRAND_NAVY};color:#FFFFFF;padding:18px 24px;">
+    <div style="font-family:monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:{BRAND_AMBER};">{kicker}</div>
+    <div style="font-family:Georgia,serif;font-size:20px;margin-top:4px;">Inventory sync</div>
+  </td></tr>
+  <tr><td style="padding:24px;font-size:14px;line-height:1.6;">{body}</td></tr>
+</table>
+</body></html>
+"""
+    return await send_email(to=ADMIN_NOTIFY_EMAIL, subject=subject, html=html)
+
+
 def render_admin_failed_order_html(order: dict, reason: str = "") -> str:
     reason_row = (
         f'<tr><td style="color:{BRAND_GREY};padding:6px 0;">Reason</td>'

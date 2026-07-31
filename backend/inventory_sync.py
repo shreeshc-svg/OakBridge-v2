@@ -141,11 +141,42 @@ async def admin_sync_from_sheet(_: dict = Depends(require_admin)):
 
 @inventory_router.post("/tasks/inventory-sync")
 async def task_inventory_sync(x_task_token: Optional[str] = Header(None)):
-    """Daily cron target. Protected by the shared TASK_TOKEN secret."""
+    """Scheduled cron target. Protected by the shared TASK_TOKEN secret.
+
+    Alerts on trouble, and only on trouble. Nobody is watching this run, so a
+    silent failure means the site keeps selling from stock figures that stopped
+    updating days ago — but a mail on every success trains the inbox to ignore
+    the sender, and then the one that matters is missed too.
+
+    Alerting lives HERE rather than in sync_stock_from_sheet() so that an admin
+    pressing "Sync from sheet" and watching the result panel does not also
+    generate an email about what they can already see.
+    """
+    from emailer import send_admin_inventory_alert
+
     token = os.environ.get("TASK_TOKEN")
     if not token or x_task_token != token:
         raise HTTPException(status_code=401, detail="Invalid task token")
-    return await sync_stock_from_sheet()
+
+    try:
+        result = await sync_stock_from_sheet()
+    except HTTPException as e:
+        # The sheet was unreachable or unparseable. Tell someone, then re-raise
+        # so the cron run is recorded as failed rather than quietly succeeding.
+        await send_admin_inventory_alert({}, error=str(e.detail))
+        raise
+    except Exception as e:  # noqa: BLE001
+        await send_admin_inventory_alert({}, error=f"Unexpected error: {e}")
+        raise
+
+    # Unmatched ISBNs are NOT a fault: the sheet tracks the full master list
+    # while the site sells a deliberate subset, so a large unmatched count is
+    # the normal steady state. Unreadable stock values are different — those
+    # rows were skipped, so those titles are still on sale at a stale number.
+    if int(result.get("invalid_rows") or 0) > 0:
+        await send_admin_inventory_alert(result)
+
+    return result
 
 
 @inventory_router.get("/admin/inventory/sold-today")
