@@ -149,6 +149,25 @@ export default function Login() {
                             Create an account
                         </Link>
                     </p>
+
+                    {/* Separated by a rule rather than stacked as a third
+                        sentence: signing in and applying for a job are different
+                        errands, and running them together reads as one confused
+                        paragraph. The wording stays true whether there are five
+                        openings or none — the careers page handles an empty list
+                        gracefully, so this never becomes a broken promise. */}
+                    <div className="mt-8 pt-6 border-t border-[#E5E7EB]">
+                        <p className="text-sm text-[#4B5563]">
+                            Not here to shop? We&rsquo;re hiring.{" "}
+                            <Link
+                                to="/careers"
+                                data-testid="login-to-careers-link"
+                                className="text-[#002B5C] border-b border-[#002B5C] hover:text-[#CC0033] hover:border-[#CC0033] pb-0.5"
+                            >
+                                See open roles at Oakbridge
+                            </Link>
+                        </p>
+                    </div>
                 </div>
             </div>
         </div>
