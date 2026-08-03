@@ -26,7 +26,9 @@ const CONTENT_DEFAULTS = {
     about_team_overline: "Our Management Team",
     about_team_title: "The people behind\nthe imprint.",
     about_timeline_overline: "Our Timeline",
-    about_timeline_title: "Eight years, many states,\none standard.",
+    // "Eight" was right when it was written. 2017 to 2026 is nine — a number
+    // that goes stale every January, so it is worth a diary note.
+    about_timeline_title: "Nine years, many firsts,\none standard.",
     about_title: "A modern press\nfor a *country*\nbeing rewritten.",
     ac_accent: "authors you read.",
     ac_body: "The Oakbridge Academy is a new home for self-paced e-learning, certification programmes and in-house workshops — drawing from the same practitioner-authors who write our reference titles. Cohorts open soon.",

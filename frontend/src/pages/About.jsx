@@ -31,12 +31,60 @@ const DEFAULTS = {
     timeline_title: "Eight years, many states,\none standard.",
 };
 
+/*
+ * One line per point. The renderer turns two or more lines into bullets and
+ * leaves a single line as a paragraph.
+ *
+ * NOTE: these are the built-in defaults, which the live site does NOT use —
+ * page_about_milestones is `configured` in the database, so resolveCollection
+ * ignores everything here. They matter for a fresh environment and as the
+ * reference copy; changing the live timeline means editing it in
+ * Admin → Pages → About, or running the update script.
+ */
 const DEFAULT_MILESTONES = [
-    { year: "2017", text: "Oakbridge Publishing founded in New Delhi by two veteran publishing professionals with leadership experience at some of the world's most respected publishing houses." },
-    { year: "2019", text: "First School list rolled out across 120 schools in four states." },
-    { year: "2022", text: "Launch of the Higher Education and Professional lists — including our flagship Law and Tax titles." },
-    { year: "2024", text: "Coffee Table & Curated Works imprints added, serving corporations, institutions and estates." },
-    { year: "2025", text: "Oakbridge Digital — a companion platform for interactive learning — goes live." },
+    {
+        year: "2017",
+        text:
+            "Founded on 25 July 2017 by two publishing veterans with over two decades of experience at global publishing companies.\n" +
+            "Published our first five titles and hosted a conference on GST.",
+    },
+    {
+        year: "2018",
+        text:
+            "First full year of operations, with 46 titles across the academic and professional lists.\n" +
+            "Conducted a conference on the Insolvency and Bankruptcy Code.",
+    },
+    {
+        year: "2019",
+        text:
+            "The list crossed 85 titles.\n" +
+            "Law, Justice & Judicial Power was released by the President of India, Sh Ram Nath Kovind.\n" +
+            "Conducted a conference on arbitration.\n" +
+            "Constitutional Supremacy was cited in the Supreme Court of India.",
+    },
+    { year: "2020", text: "Moved into general books under the CURSIVE imprint." },
+    {
+        year: "2021",
+        text:
+            "The list crossed 100 titles.\n" +
+            "Accelerating India was released by the Vice President of India, Sh M Venkaiah Naidu.",
+    },
+    { year: "2022", text: "Growth resumed after Covid, surpassing pre-pandemic revenues." },
+    { year: "2023", text: "The catalogue crossed 250 titles." },
+    { year: "2024", text: "Hosted Vidhi Utsav, India's first law and legal literature festival, with 90 speakers and over 800 attendees." },
+    {
+        year: "2025",
+        text:
+            "Introduced the India Legal Tech and AI Summit, with 40+ speakers and over 200 attendees.\n" +
+            "Partnered with the CTC and published a series of journals in their centenary year.",
+    },
+    {
+        year: "2026",
+        text:
+            "Launched our new website.\n" +
+            "Moved into coffee-table books.\n" +
+            "eBook store coming soon.",
+    },
 ];
 
 const DEFAULT_COLUMNS = [
@@ -129,9 +177,32 @@ export default function About() {
                                     <div className="col-span-3 md:col-span-2 font-serif text-3xl text-[#CC0033]">
                                         {m.year}
                                     </div>
-                                    <p className="col-span-9 md:col-span-10 text-[#002B5C] leading-relaxed">
-                                        {m.text}
-                                    </p>
+                                    {/* A year with several things in it becomes a
+                                        bulleted list; a year with one stays a
+                                        paragraph. Split on line breaks, which is
+                                        what the admin textarea already produces,
+                                        so nothing about the data shape or the
+                                        editor has to change — an existing entry
+                                        with two lines simply starts reading
+                                        properly instead of running together. */}
+                                    <div className="col-span-9 md:col-span-10 text-[#002B5C] leading-relaxed">
+                                        {(() => {
+                                            const points = String(m.text || "")
+                                                .split("\n")
+                                                // Tolerate an author who types their own
+                                                // bullet character or dash out of habit.
+                                                .map((l) => l.replace(/^\s*[-•*]\s*/, "").trim())
+                                                .filter(Boolean);
+                                            if (points.length <= 1) return <p>{points[0] || ""}</p>;
+                                            return (
+                                                <ul className="space-y-2 list-disc pl-5 marker:text-[#CC0033]">
+                                                    {points.map((p, j) => (
+                                                        <li key={j}>{p}</li>
+                                                    ))}
+                                                </ul>
+                                            );
+                                        })()}
+                                    </div>
                                 </div>
                             ))}
                         </div>
