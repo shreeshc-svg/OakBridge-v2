@@ -578,6 +578,133 @@ function checkJsxDefined() {
     else pass("jsx-defined", `every JSX component resolves in ${files.length} files`);
 }
 
+/* ------------------------------ 8c. Every identifier used in src/ is in scope
+ * The JS twin of undefined_names.py. `useRef(null)` without adding useRef to
+ * the React import parses, builds, and throws ReferenceError the moment that
+ * component mounts — the third time this class of mistake reached a commit,
+ * after `re` in server.py and <CareersNudge> in the auth pages.
+ *
+ * Scope-blind like its Python counterpart: it collects every name bound
+ * ANYWHERE in the file and reports only what is bound nowhere. It under-reports
+ * rather than crying wolf, because a gate that blocks correct code gets
+ * bypassed and then guards nothing.
+ */
+const JS_GLOBALS = new Set([
+    "window", "document", "console", "navigator", "location", "history", "screen",
+    "localStorage", "sessionStorage", "fetch", "Request", "Response", "Headers",
+    "setTimeout", "clearTimeout", "setInterval", "clearInterval", "queueMicrotask",
+    "requestAnimationFrame", "cancelAnimationFrame", "requestIdleCallback",
+    "Math", "JSON", "Object", "Array", "String", "Number", "Boolean", "Date",
+    "RegExp", "Error", "TypeError", "RangeError", "URIError", "SyntaxError",
+    "Promise", "Symbol", "Map", "Set", "WeakMap", "WeakSet", "Proxy", "Reflect",
+    "Intl", "BigInt", "globalThis", "structuredClone", "queueMicrotask",
+    "URL", "URLSearchParams", "FormData", "Blob", "File", "FileReader",
+    "AbortController", "Event", "CustomEvent", "IntersectionObserver",
+    "ResizeObserver", "MutationObserver", "PerformanceObserver", "performance",
+    "encodeURIComponent", "decodeURIComponent", "encodeURI", "decodeURI",
+    "parseInt", "parseFloat", "isNaN", "isFinite", "NaN", "Infinity", "undefined",
+    "alert", "confirm", "prompt", "atob", "btoa", "crypto", "matchMedia",
+    "process", "module", "require", "exports", "__dirname", "__filename",
+    "Image", "Audio", "Notification", "getComputedStyle", "DOMParser",
+    "HTMLElement", "Node", "Text", "Buffer", "TextEncoder", "TextDecoder",
+    "arguments", "this", "super",
+]);
+
+function checkJsDefined() {
+    try {
+        require("@babel/parser");
+    } catch {
+        warn("js-defined", "@babel/parser unavailable — skipped");
+        return;
+    }
+    const files = walk(path.join(FRONTEND, "src"), (n) => /\.(js|jsx)$/.test(n));
+    const offenders = [];
+    for (const f of files) {
+        let ast;
+        try {
+            ast = parseFile(f);
+        } catch {
+            continue;
+        }
+        const bound = new Set(JS_GLOBALS);
+        const used = new Map();
+        const skip = new Set();
+
+        const bindPattern = (n) => {
+            if (!n) return;
+            switch (n.type) {
+                case "Identifier": bound.add(n.name); break;
+                case "ObjectPattern":
+                    for (const p of n.properties) bindPattern(p.value || p.argument);
+                    break;
+                case "ArrayPattern":
+                    for (const el of n.elements) bindPattern(el);
+                    break;
+                case "AssignmentPattern": bindPattern(n.left); break;
+                case "RestElement": bindPattern(n.argument); break;
+                default: break;
+            }
+        };
+
+        walkAst(ast.program.body, (node) => {
+            switch (node.type) {
+                case "ImportDeclaration":
+                    for (const s of node.specifiers) bound.add(s.local.name);
+                    return false;
+                case "FunctionDeclaration":
+                case "FunctionExpression":
+                case "ArrowFunctionExpression":
+                    if (node.id) bound.add(node.id.name);
+                    for (const p of node.params || []) bindPattern(p);
+                    break;
+                case "ClassDeclaration":
+                case "ClassExpression":
+                    if (node.id) bound.add(node.id.name);
+                    break;
+                case "VariableDeclarator": bindPattern(node.id); break;
+                case "CatchClause": bindPattern(node.param); break;
+                case "LabeledStatement": bound.add(node.label.name); break;
+                /*
+                 * `obj.foo`, `{ foo: 1 }` and `<div foo=…>` contain an
+                 * Identifier node named foo that is NOT a variable read.
+                 * Counting them would flag every property in the codebase.
+                 *
+                 * The parent is visited before its children in this walk, so
+                 * marking the node here is enough — no re-walking, and none of
+                 * the recursion the first attempt tripped over.
+                 */
+                case "MemberExpression":
+                case "OptionalMemberExpression":
+                    if (!node.computed) skip.add(node.property);
+                    break;
+                case "ObjectProperty":
+                case "Property":
+                case "ObjectMethod":
+                    if (!node.computed) skip.add(node.key);
+                    break;
+                case "JSXAttribute":
+                    skip.add(node.name);
+                    break;
+                case "Identifier":
+                    if (!skip.has(node) && !used.has(node.name)) {
+                        used.set(node.name, node.loc ? node.loc.start.line : "?");
+                    }
+                    break;
+                default: break;
+            }
+            return true;
+        });
+
+        for (const [name, line] of used) {
+            if (!bound.has(name)) {
+                offenders.push(`${path.relative(REPO, f)}:${line} — '${name}' is used but never imported or defined`);
+            }
+        }
+    }
+    if (offenders.length) offenders.forEach((o) => fail("js-defined", o));
+    else pass("js-defined", `every identifier resolves in ${files.length} files`);
+}
+
 /* --------------------------------------------- 9. Every <img> declares an alt
  * A MISSING alt and an EMPTY alt mean different things to a screen reader, and
  * only one of them is a decision. alt="" says "this is decoration, skip it";
@@ -702,7 +829,8 @@ function checkSecrets() {
 const CHECKS = [
     checkJsSyntax, checkNodeScripts, checkPython, checkJson,
     checkUnusedImports, checkRouteTitles, checkRouteParity,
-    checkVercelFallback, checkJsxDefined, checkImgAlt, checkNoStaticSitemap, checkSecrets,
+    checkVercelFallback, checkJsxDefined, checkJsDefined, checkImgAlt,
+    checkNoStaticSitemap, checkSecrets,
 ];
 
 for (const c of CHECKS) {

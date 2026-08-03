@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Breadcrumbs from "../components/Breadcrumbs";
 import Seo from "../components/Seo";
 import { Link } from "react-router-dom";
@@ -107,51 +107,110 @@ const DEFAULT_MILESTONES = [
  * mirrors, where it would be a redundant preamble rather than a use of space
  * that would otherwise sit empty.
  */
-function TimelineSpine({ items }) {
-    if (!items.length) return null;
+/**
+ * Vertical year spine, aligned to the milestone rows it indexes.
+ *
+ * WHY THIS MEASURES INSTEAD OF CALCULATING
+ *
+ * The first version spaced dots evenly, 34px apart. They lined up with nothing:
+ * the rows beside them are wildly uneven — 2019 carries four bullets and runs
+ * nearly 300px, 2023 carries one and runs 130 — and row height also changes
+ * with viewport width as text rewraps, and again when the webfont loads. No
+ * formula predicts that. The only reliable source of a row's position is the
+ * row, so each one is measured after layout and the dots are placed at the
+ * measured centres.
+ *
+ * A ResizeObserver on the list re-measures whenever anything reflows: window
+ * resize, font swap, or an admin adding a bullet. Without it the spine would be
+ * correct exactly once, at the width it first rendered.
+ *
+ * `offsets` starts empty and the spine renders nothing until the first measure,
+ * rather than flashing an evenly-spaced version and snapping into place.
+ */
+function TimelineSpine({ items, listRef, rowRefs }) {
+    const [offsets, setOffsets] = React.useState([]);
 
-    const ROW = 34;
-    const PAD = 12;
-    const X = 118;
-    const height = PAD * 2 + (items.length - 1) * ROW;
+    React.useLayoutEffect(() => {
+        const list = listRef.current;
+        if (!list) return undefined;
 
+        const measure = () => {
+            const top = list.getBoundingClientRect().top;
+            setOffsets(
+                rowRefs.current.map((el) => {
+                    if (!el) return null;
+                    const r = el.getBoundingClientRect();
+                    // The year sits at the top of a tall row, so anchor to the
+                    // year's own line rather than the row's centre — otherwise a
+                    // four-bullet year's dot drifts far below its heading.
+                    return r.top - top + 30;
+                }),
+            );
+        };
+
+        measure();
+        const ro = new ResizeObserver(measure);
+        ro.observe(list);
+        rowRefs.current.forEach((el) => el && ro.observe(el));
+        window.addEventListener("resize", measure);
+        return () => {
+            ro.disconnect();
+            window.removeEventListener("resize", measure);
+        };
+    }, [items, listRef, rowRefs]);
+
+    const valid = offsets.filter((o) => typeof o === "number");
+    if (!valid.length) return null;
+
+    const X = 150;
+    const height = Math.max(...valid) + 24;
     const points = (m) =>
         String(m.text || "").split("\n").filter((l) => l.trim()).length || 1;
 
     return (
         <svg
-            viewBox={`0 0 170 ${height}`}
-            width="170"
+            viewBox={`0 0 168 ${height}`}
+            width="168"
             height={height}
             aria-hidden="true"
             focusable="false"
-            className="hidden lg:block mt-10"
+            className="hidden lg:block"
+            style={{ overflow: "visible" }}
         >
             <line
                 x1={X}
-                y1={PAD}
+                y1={valid[0]}
                 x2={X}
-                y2={height - PAD}
+                y2={valid[valid.length - 1]}
                 stroke="#002B5C"
                 strokeWidth="0.5"
-                opacity="0.3"
+                opacity="0.25"
             />
             {items.map((m, i) => {
-                const y = PAD + i * ROW;
+                const y = offsets[i];
+                if (typeof y !== "number") return null;
                 const n = points(m);
                 const newest = i === items.length - 1;
-                // 1 point reads as a quiet year, 4+ as a loud one. Capped so a
-                // year with eight entries cannot swallow the line.
-                const r = n <= 1 ? 3 : Math.min(3 + n, 8);
+                const r = n <= 1 ? 3.5 : Math.min(3.5 + n * 0.9, 7.5);
                 return (
                     <g key={m.year || i}>
+                        <line
+                            x1={X + 8}
+                            y1={y}
+                            x2={X + 26}
+                            y2={y}
+                            stroke="#002B5C"
+                            strokeWidth="0.5"
+                            opacity="0.18"
+                        />
                         <text
                             x={X - 16}
                             y={y + 4}
                             textAnchor="end"
                             fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
                             fontSize="11"
-                            fill="#4B5563"
+                            letterSpacing="0.5"
+                            fill={newest ? "#CC0033" : "#4B5563"}
                         >
                             {m.year}
                         </text>
@@ -160,7 +219,7 @@ function TimelineSpine({ items }) {
                             cy={y}
                             r={r}
                             fill={newest ? "#CC0033" : "#002B5C"}
-                            opacity={newest || n > 1 ? 1 : 0.5}
+                            opacity={newest ? 1 : 0.25 + Math.min(n, 4) * 0.18}
                         />
                     </g>
                 );
@@ -216,6 +275,11 @@ export default function About() {
     const cols = resolveCollection(columnsData, DEFAULT_COLUMNS);
     const people = resolveCollection(teamData, DEFAULT_TEAM);
 
+    // The spine reads these to place its dots against the real rows.
+    const listRef = useRef(null);
+    const rowRefs = useRef([]);
+    rowRefs.current.length = items.length;
+
     return (
         <div data-testid="about-page">
             <Breadcrumbs items={[{ label: "About" }]} />
@@ -242,19 +306,32 @@ export default function About() {
             </section>
 
             <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-24 bg-[#F5F7FA] border-b border-[#E5E7EB]">
+                {/* The heading sits ABOVE the grid rather than in the left
+                    column. It has to: the spine can only line up with the years
+                    if it starts level with the first row, and a heading in that
+                    column pushed it 270px down — which is why the dots matched
+                    nothing. Moving it out also gives it the full width it wants
+                    at 5xl. */}
+                <div className="max-w-2xl mb-14">
+                    <div className="overline">{c.timeline_overline}</div>
+                    <h2 className="font-serif text-4xl md:text-5xl mt-3 text-[#002B5C] leading-tight whitespace-pre-line">
+                        {renderRich(c.timeline_title)}
+                    </h2>
+                </div>
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
-                    <div className="lg:col-span-4">
-                        <div className="overline">{c.timeline_overline}</div>
-                        <h2 className="font-serif text-4xl md:text-5xl mt-3 text-[#002B5C] leading-tight whitespace-pre-line">
-                            {renderRich(c.timeline_title)}
-                        </h2>
-                        <TimelineSpine items={items} />
+                    {/* Right-aligned so the rail sits against the list it
+                        indexes rather than stranded on the far left. */}
+                    <div className="lg:col-span-3 hidden lg:flex justify-end">
+                        <TimelineSpine items={items} listRef={listRef} rowRefs={rowRefs} />
                     </div>
-                    <div className="lg:col-span-8">
-                        <div className="space-y-0">
+                    <div className="lg:col-span-9">
+                        <div className="space-y-0" ref={listRef}>
                             {items.map((m, i) => (
                                 <div
                                     key={m.year || i}
+                                    ref={(el) => {
+                                        rowRefs.current[i] = el;
+                                    }}
                                     className="grid grid-cols-12 gap-6 py-8 border-t border-[#002B5C]/20"
                                 >
                                     <div className="col-span-3 md:col-span-2 font-serif text-3xl text-[#CC0033]">
