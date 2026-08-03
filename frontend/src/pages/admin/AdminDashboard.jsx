@@ -71,10 +71,17 @@ export default function AdminDashboard() {
                 </button>
             </div>
 
+            {/* This block is ALL TIME; the block below it is the last 7 days.
+                Without a header saying so, two revenue figures differing by
+                ₹920 read as a contradiction rather than as two periods. The
+                7-day block has always had a header — this one needs the
+                matching one, or neither is self-explanatory. */}
+            <div className="mt-12 overline">All time</div>
+
             {/* Money first, catalogue second. Revenue and the amount never
                 collected sit side by side deliberately: the second number is
                 only legible next to the first. */}
-            <div className="mt-10 grid grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="mt-4 grid grid-cols-2 lg:grid-cols-3 gap-4">
                 <Stat
                     label="Revenue · paid"
                     value={stats ? formatINR(stats.revenue) : "—"}
