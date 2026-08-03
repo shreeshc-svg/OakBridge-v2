@@ -1,9 +1,10 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import Breadcrumbs from "../components/Breadcrumbs";
 import Seo from "../components/Seo";
 import { Link } from "react-router-dom";
 import { ArrowUpRight } from "lucide-react";
 import { fetchSiteContent, fetchCollection, resolveCollection, mediaUrl } from "../lib/api";
+import TimelineRoad, { splitPoints } from "../components/about/TimelineRoad";
 
 /**
  * Renders admin-editable copy. Text wrapped in *asterisks* is shown in the
@@ -87,147 +88,6 @@ const DEFAULT_MILESTONES = [
     },
 ];
 
-/**
- * Vertical year spine for the timeline's left column.
- *
- * Drawn from the SAME milestones the list beside it renders, so it can never
- * fall out of step: add a year in the admin and a dot appears, add a point to a
- * year and its dot grows. Nothing to re-export, no second copy of the history.
- *
- * Dot size is the count of points in that year, which turns the busy years into
- * the visually heavy ones — 2019 and 2026 read as denser than 2022 because they
- * were. The newest year is accented, so the eye lands on "now" rather than on
- * the founding.
- *
- * aria-hidden, and deliberately so: every word here is already in the list
- * immediately to its right. A screen reader should not read the same decade
- * twice, and there is nothing in the shape that the text does not say.
- *
- * lg only. Below that breakpoint the column stacks directly above the list it
- * mirrors, where it would be a redundant preamble rather than a use of space
- * that would otherwise sit empty.
- */
-/**
- * Vertical year spine, aligned to the milestone rows it indexes.
- *
- * WHY THIS MEASURES INSTEAD OF CALCULATING
- *
- * The first version spaced dots evenly, 34px apart. They lined up with nothing:
- * the rows beside them are wildly uneven — 2019 carries four bullets and runs
- * nearly 300px, 2023 carries one and runs 130 — and row height also changes
- * with viewport width as text rewraps, and again when the webfont loads. No
- * formula predicts that. The only reliable source of a row's position is the
- * row, so each one is measured after layout and the dots are placed at the
- * measured centres.
- *
- * A ResizeObserver on the list re-measures whenever anything reflows: window
- * resize, font swap, or an admin adding a bullet. Without it the spine would be
- * correct exactly once, at the width it first rendered.
- *
- * `offsets` starts empty and the spine renders nothing until the first measure,
- * rather than flashing an evenly-spaced version and snapping into place.
- */
-function TimelineSpine({ items, listRef, rowRefs }) {
-    const [offsets, setOffsets] = React.useState([]);
-
-    React.useLayoutEffect(() => {
-        const list = listRef.current;
-        if (!list) return undefined;
-
-        const measure = () => {
-            const top = list.getBoundingClientRect().top;
-            setOffsets(
-                rowRefs.current.map((el) => {
-                    if (!el) return null;
-                    const r = el.getBoundingClientRect();
-                    // The year sits at the top of a tall row, so anchor to the
-                    // year's own line rather than the row's centre — otherwise a
-                    // four-bullet year's dot drifts far below its heading.
-                    return r.top - top + 30;
-                }),
-            );
-        };
-
-        measure();
-        const ro = new ResizeObserver(measure);
-        ro.observe(list);
-        rowRefs.current.forEach((el) => el && ro.observe(el));
-        window.addEventListener("resize", measure);
-        return () => {
-            ro.disconnect();
-            window.removeEventListener("resize", measure);
-        };
-    }, [items, listRef, rowRefs]);
-
-    const valid = offsets.filter((o) => typeof o === "number");
-    if (!valid.length) return null;
-
-    const X = 150;
-    const height = Math.max(...valid) + 24;
-    const points = (m) =>
-        String(m.text || "").split("\n").filter((l) => l.trim()).length || 1;
-
-    return (
-        <svg
-            viewBox={`0 0 168 ${height}`}
-            width="168"
-            height={height}
-            aria-hidden="true"
-            focusable="false"
-            className="hidden lg:block"
-            style={{ overflow: "visible" }}
-        >
-            <line
-                x1={X}
-                y1={valid[0]}
-                x2={X}
-                y2={valid[valid.length - 1]}
-                stroke="#002B5C"
-                strokeWidth="0.5"
-                opacity="0.25"
-            />
-            {items.map((m, i) => {
-                const y = offsets[i];
-                if (typeof y !== "number") return null;
-                const n = points(m);
-                const newest = i === items.length - 1;
-                const r = n <= 1 ? 3.5 : Math.min(3.5 + n * 0.9, 7.5);
-                return (
-                    <g key={m.year || i}>
-                        <line
-                            x1={X + 8}
-                            y1={y}
-                            x2={X + 26}
-                            y2={y}
-                            stroke="#002B5C"
-                            strokeWidth="0.5"
-                            opacity="0.18"
-                        />
-                        <text
-                            x={X - 16}
-                            y={y + 4}
-                            textAnchor="end"
-                            fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-                            fontSize="11"
-                            letterSpacing="0.5"
-                            fill={newest ? "#CC0033" : "#4B5563"}
-                        >
-                            {m.year}
-                        </text>
-                        <circle
-                            cx={X}
-                            cy={y}
-                            r={r}
-                            fill={newest ? "#CC0033" : "#002B5C"}
-                            opacity={newest ? 1 : 0.25 + Math.min(n, 4) * 0.18}
-                        />
-                    </g>
-                );
-            })}
-        </svg>
-    );
-}
-
 const DEFAULT_COLUMNS = [
     { id: "careers", overline: "Careers", title: "Join our list.", text: "We hire editors, designers, and field specialists who believe publishing is a craft of public service. See our open roles and apply.", link_label: "View open roles", link_to: "/careers" },
     { id: "press", overline: "Press", title: "Media inquiries.", text: "For review copies, interviews with our authors or editorial briefings, reach out to our press team.", link_label: "press@oakbridge.in", link_to: "/contact" },
@@ -275,11 +135,6 @@ export default function About() {
     const cols = resolveCollection(columnsData, DEFAULT_COLUMNS);
     const people = resolveCollection(teamData, DEFAULT_TEAM);
 
-    // The spine reads these to place its dots against the real rows.
-    const listRef = useRef(null);
-    const rowRefs = useRef([]);
-    rowRefs.current.length = items.length;
-
     return (
         <div data-testid="about-page">
             <Breadcrumbs items={[{ label: "About" }]} />
@@ -318,55 +173,42 @@ export default function About() {
                         {renderRich(c.timeline_title)}
                     </h2>
                 </div>
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
-                    {/* Right-aligned so the rail sits against the list it
-                        indexes rather than stranded on the far left. */}
-                    <div className="lg:col-span-3 hidden lg:flex justify-end">
-                        <TimelineSpine items={items} listRef={listRef} rowRefs={rowRefs} />
-                    </div>
-                    <div className="lg:col-span-9">
-                        <div className="space-y-0" ref={listRef}>
-                            {items.map((m, i) => (
-                                <div
-                                    key={m.year || i}
-                                    ref={(el) => {
-                                        rowRefs.current[i] = el;
-                                    }}
-                                    className="grid grid-cols-12 gap-6 py-8 border-t border-[#002B5C]/20"
-                                >
-                                    <div className="col-span-3 md:col-span-2 font-serif text-3xl text-[#CC0033]">
-                                        {m.year}
-                                    </div>
-                                    {/* A year with several things in it becomes a
-                                        bulleted list; a year with one stays a
-                                        paragraph. Split on line breaks, which is
-                                        what the admin textarea already produces,
-                                        so nothing about the data shape or the
-                                        editor has to change — an existing entry
-                                        with two lines simply starts reading
-                                        properly instead of running together. */}
-                                    <div className="col-span-9 md:col-span-10 text-[#002B5C] leading-relaxed">
-                                        {(() => {
-                                            const points = String(m.text || "")
-                                                .split("\n")
-                                                // Tolerate an author who types their own
-                                                // bullet character or dash out of habit.
-                                                .map((l) => l.replace(/^\s*[-•*]\s*/, "").trim())
-                                                .filter(Boolean);
-                                            if (points.length <= 1) return <p>{points[0] || ""}</p>;
-                                            return (
-                                                <ul className="space-y-2 list-disc pl-5 marker:text-[#CC0033]">
-                                                    {points.map((p, j) => (
-                                                        <li key={j}>{p}</li>
-                                                    ))}
-                                                </ul>
-                                            );
-                                        })()}
-                                    </div>
-                                </div>
-                            ))}
+                {/* lg and up: the climb, which shows nine years in one frame.
+                    Below that: the list, unchanged. A 1120-wide mountain does
+                    not survive a 375px screen, and a miniature of it would be
+                    worse than the list at both reading and looking. */}
+                <div className="hidden lg:block">
+                    <TimelineRoad items={items} />
+                </div>
+
+                {/* Below lg the list is the whole timeline, so it keeps the
+                    bulleting it always had. splitPoints is shared with the road
+                    so the two can never disagree about how many things happened
+                    in a year. */}
+                <div className="lg:hidden space-y-0">
+                    {items.map((m, i) => (
+                        <div
+                            key={m.year || i}
+                            className="grid grid-cols-12 gap-6 py-8 border-t border-[#002B5C]/20"
+                        >
+                            <div className="col-span-3 md:col-span-2 font-serif text-3xl text-[#CC0033]">
+                                {m.year}
+                            </div>
+                            <div className="col-span-9 md:col-span-10 text-[#002B5C] leading-relaxed">
+                                {(() => {
+                                    const points = splitPoints(m.text);
+                                    if (points.length <= 1) return <p>{points[0] || ""}</p>;
+                                    return (
+                                        <ul className="space-y-2 list-disc pl-5 marker:text-[#CC0033]">
+                                            {points.map((p, j) => (
+                                                <li key={j}>{p}</li>
+                                            ))}
+                                        </ul>
+                                    );
+                                })()}
+                            </div>
                         </div>
-                    </div>
+                    ))}
                 </div>
             </section>
 
