@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { BookOpen, ShoppingBag, Users, Mail, TrendingUp, FileText, Inbox, AlertTriangle, Sparkles, Search as SearchIcon } from "lucide-react";
 import { adminStats, adminRunCartReminders, formatINR, adminSearchLogs } from "../../lib/api";
+import PaymentBadge from "../../components/admin/PaymentBadge";
 import { toast } from "sonner";
 
 function Stat({ label, value, icon: Icon, accent }) {
@@ -168,10 +169,13 @@ export default function AdminDashboard() {
                             <div className="col-span-3 font-mono text-xs text-[#002B5C]">
                                 {o.order_number}
                             </div>
-                            <div className="col-span-4 font-serif text-[#002B5C]">
+                            <div className="col-span-3 font-serif text-[#002B5C]">
                                 {o.full_name}
                             </div>
-                            <div className="col-span-3 font-mono text-xs text-[#4B5563]">
+                            <div className="col-span-2">
+                                <PaymentBadge status={o.payment_status} />
+                            </div>
+                            <div className="col-span-2 font-mono text-[11px] text-[#4B5563]">
                                 {new Date(o.created_at).toLocaleString("en-IN")}
                             </div>
                             <div className="col-span-2 text-right font-serif text-xl text-[#002B5C]">

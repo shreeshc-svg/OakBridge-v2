@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { MailCheck, FileDown } from "lucide-react";
+import PaymentBadge from "../../components/admin/PaymentBadge";
 import {
     adminListOrders,
     adminResendReceipt,
@@ -160,6 +161,12 @@ export default function AdminOrders() {
                             >
                                 <td className="px-4 py-3 font-mono text-xs text-[#002B5C]">
                                     {o.order_number}
+                                    {/* Directly under the order number, because
+                                        that is what someone reads first when
+                                        they are about to act on an order. */}
+                                    <div className="mt-1.5">
+                                        <PaymentBadge status={o.payment_status} />
+                                    </div>
                                 </td>
                                 <td className="px-4 py-3 align-top">
                                     <div className="font-serif text-[#002B5C]">
