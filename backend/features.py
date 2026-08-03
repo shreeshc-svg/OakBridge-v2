@@ -303,6 +303,29 @@ async def create_submission(payload: SubmissionCreate):
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.submissions.insert_one({**doc})
+
+    # Alert the team, and confirm to the author that it arrived.
+    #
+    # Both are awaited inline, so they do add latency to this response — the same
+    # shape as the contact form (server.py). Neither can fail the request: the
+    # manuscript is already saved, send_email never raises, and these try/excepts
+    # are the second belt. A mail outage must never surface to the author as a 500
+    # telling them their submission failed.
+    #
+    # Kept as two statements so a Resend-side rejection of one does not skip the
+    # other — though note the author's address also rides along as reply_to on the
+    # internal alert, so isolation is not total.
+    try:
+        from emailer import send_submission_admin  # late import avoids cycle
+        await send_submission_admin(doc)
+    except Exception:  # noqa: BLE001
+        log.exception("submission admin email failed for %s", doc["email"])
+    try:
+        from emailer import send_submission_ack
+        await send_submission_ack(doc)
+    except Exception:  # noqa: BLE001
+        log.exception("submission ack email failed for %s", doc["email"])
+
     return Submission(**doc)
 
 

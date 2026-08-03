@@ -14,6 +14,7 @@ Design notes:
 from __future__ import annotations
 
 import asyncio
+import html as _html  # module-level: several renderers escape author-supplied text
 import logging
 import os
 import re
@@ -924,6 +925,151 @@ async def send_contact_ack(msg: dict) -> bool:
         to=to,
         subject="We've received your message — Oakbridge Publishing",
         html=render_contact_ack_html(msg),
+    )
+
+
+# ====== Manuscript submissions ======
+#
+# Until now a submission was written to the database and nothing else happened:
+# no internal alert, and no acknowledgement to the author. A prospective author
+# is the most valuable lead this site receives, and one could sit unread for as
+# long as it took someone to remember to open Admin → Submissions.
+
+# Stored as slugs; spelled out for humans reading the email.
+_SUBMISSION_CATEGORIES = {
+    "school": "School",
+    "higher-ed": "Higher Education",
+    "professional": "Professional",
+    "test-prep": "Test Preparation",
+    "children": "Children's",
+    "other": "Other",
+}
+
+
+def _category_label(slug: str) -> str:
+    key = str(slug or "").strip().lower()
+    return _SUBMISSION_CATEGORIES.get(key, (slug or "—").replace("-", " ").title())
+
+
+def render_submission_admin_html(sub: dict) -> str:
+    esc = lambda v: _html.escape(str(v or ""))
+    para = lambda v: esc(v).replace("\n", "<br>") or "—"
+    words = int(sub.get("word_count") or 0)
+    rows = [
+        ("Author", esc(sub.get("name"))),
+        ("Email", f'<a href="mailto:{esc(sub.get("email"))}" style="color:{BRAND_NAVY};">{esc(sub.get("email"))}</a>'),
+        ("Phone", esc(sub.get("phone")) or "—"),
+        ("Affiliation", esc(sub.get("affiliation")) or "—"),
+        ("Category", esc(_category_label(sub.get("category")))),
+        ("Length", f"{words:,} words" if words else "—"),
+    ]
+    rows_html = "".join(
+        f'<tr><td style="color:{BRAND_GREY};padding:6px 0;width:100px;vertical-align:top;">{k}</td>'
+        f'<td style="padding:6px 0;">{v}</td></tr>'
+        for k, v in rows
+    )
+    bio = para(sub.get("bio"))
+    bio_block = (
+        f'<div style="margin-top:18px;"><div style="font-family:monospace;text-transform:uppercase;'
+        f'letter-spacing:1.5px;font-size:10px;color:{BRAND_GREY};">About the author</div>'
+        f'<div style="margin-top:8px;font-size:13px;line-height:1.6;color:{BRAND_NAVY};">{bio}</div></div>'
+        if bio != "—" else ""
+    )
+    # SITE_URL is dashboard-set (sync: false) and absent from backend/.env, so it
+    # can legitimately be empty. A root-relative href in an email is dead — clients
+    # resolve it against the webmail origin — so the button is omitted rather than
+    # shipped broken. Every other renderer here guards the same way.
+    cta = (
+        f'<div style="margin-top:22px;"><a href="{SITE_URL}/admin/submissions" '
+        f'style="display:inline-block;background-color:{BRAND_NAVY};color:#FFFFFF;text-decoration:none;'
+        f'font-size:14px;font-weight:600;padding:12px 24px;">Open in admin</a></div>'
+        if SITE_URL else ""
+    )
+    return f"""\
+<!DOCTYPE html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:24px;background-color:#FFFFFF;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:{BRAND_NAVY};">
+<table cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:600px;border:1px solid #E5E7EB;">
+  <tr><td style="background-color:{BRAND_NAVY};color:#FFFFFF;padding:18px 24px;">
+    <div style="font-family:monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:{BRAND_AMBER};">New manuscript submission</div>
+    <div style="font-family:Georgia,serif;font-size:20px;margin-top:6px;">{esc(sub.get('working_title'))}</div>
+  </td></tr>
+  <tr><td style="padding:24px;">
+    <table cellpadding="0" cellspacing="0" border="0" width="100%" style="font-size:13px;">{rows_html}</table>
+    <div style="margin-top:20px;">
+      <div style="font-family:monospace;text-transform:uppercase;letter-spacing:1.5px;font-size:10px;color:{BRAND_GREY};">Synopsis</div>
+      <div style="margin-top:8px;padding:14px 16px;background:#F5F7FA;border:1px solid #E5E7EB;font-size:13px;line-height:1.6;color:{BRAND_NAVY};">{para(sub.get('synopsis'))}</div>
+    </div>
+    {bio_block}
+    {cta}
+    <div style="margin-top:18px;font-size:12px;color:{BRAND_GREY};">Reply directly to this email to respond to {esc(sub.get('name')) or 'the author'}.</div>
+  </td></tr>
+</table>
+</body></html>
+"""
+
+
+async def send_submission_admin(sub: dict) -> bool:
+    """Notify the internal inbox(es) of a new manuscript; reply-to is the author."""
+    if not ADMIN_NOTIFY_EMAIL:
+        return False
+    return await send_email(
+        to=ADMIN_NOTIFY_EMAIL,
+        subject=f"New manuscript — {sub.get('working_title','Untitled')} (from {sub.get('name','')})",
+        html=render_submission_admin_html(sub),
+        reply_to=sub.get("email"),
+    )
+
+
+def render_submission_ack_html(sub: dict) -> str:
+    esc = lambda v: _html.escape(str(v or ""))
+    who = esc((sub.get("name") or "there").split(" ")[0])
+    return f"""\
+<!DOCTYPE html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background-color:#F5F7FA;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:{BRAND_NAVY};">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#F5F7FA;padding:40px 16px;">
+  <tr><td align="center">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="560" style="max-width:560px;background-color:#FFFFFF;border:1px solid #E5E7EB;">
+      <tr><td style="background-color:{BRAND_NAVY};padding:28px 36px;color:#FFFFFF;">
+        <div style="font-family:Georgia,serif;font-size:22px;">Oakbridge <span style="color:{BRAND_AMBER};">Publishing</span></div>
+        <div style="font-family:monospace;text-transform:uppercase;letter-spacing:2px;font-size:11px;margin-top:6px;color:rgba(255,255,255,0.6);">Your manuscript has reached us</div>
+      </td></tr>
+      <tr><td style="padding:36px 36px 8px;">
+        <h1 style="margin:0;font-family:Georgia,serif;font-weight:normal;font-size:24px;color:{BRAND_NAVY};">Thank you, {who}.</h1>
+        <p style="margin:14px 0 0;font-size:15px;line-height:1.6;color:{BRAND_GREY};">
+          Your proposal has been received and passed to our editorial team. Every manuscript is
+          read properly rather than screened, so a considered reply takes a little time — but you
+          will hear from us either way.
+        </p>
+      </td></tr>
+      <tr><td style="padding:16px 36px 8px;">
+        <div style="font-family:monospace;text-transform:uppercase;letter-spacing:1.5px;font-size:10px;color:{BRAND_GREY};">Submitted</div>
+        <div style="margin-top:8px;padding:14px 16px;background:#F5F7FA;border:1px solid #E5E7EB;">
+          <div style="font-family:Georgia,serif;font-size:17px;color:{BRAND_NAVY};">{esc(sub.get('working_title'))}</div>
+          <div style="font-size:13px;color:{BRAND_GREY};margin-top:4px;">{esc(_category_label(sub.get('category')))}</div>
+        </div>
+      </td></tr>
+      <tr><td style="padding:24px 36px 36px;">
+        <div style="border-top:1px solid #E5E7EB;padding-top:20px;font-size:12px;line-height:1.6;color:{BRAND_GREY};">
+          This is an automated confirmation — no need to reply. If you need to add to your
+          submission, write to <a href="mailto:info@oakbridge.in" style="color:{BRAND_NAVY};">info@oakbridge.in</a>.
+        </div>
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+</body></html>
+"""
+
+
+async def send_submission_ack(sub: dict) -> bool:
+    """Confirm to the author that their manuscript arrived."""
+    to = sub.get("email")
+    if not to:
+        return False
+    return await send_email(
+        to=to,
+        subject="We've received your manuscript — Oakbridge Publishing",
+        html=render_submission_ack_html(sub),
     )
 
 
