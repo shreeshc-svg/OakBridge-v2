@@ -87,6 +87,88 @@ const DEFAULT_MILESTONES = [
     },
 ];
 
+/**
+ * Vertical year spine for the timeline's left column.
+ *
+ * Drawn from the SAME milestones the list beside it renders, so it can never
+ * fall out of step: add a year in the admin and a dot appears, add a point to a
+ * year and its dot grows. Nothing to re-export, no second copy of the history.
+ *
+ * Dot size is the count of points in that year, which turns the busy years into
+ * the visually heavy ones — 2019 and 2026 read as denser than 2022 because they
+ * were. The newest year is accented, so the eye lands on "now" rather than on
+ * the founding.
+ *
+ * aria-hidden, and deliberately so: every word here is already in the list
+ * immediately to its right. A screen reader should not read the same decade
+ * twice, and there is nothing in the shape that the text does not say.
+ *
+ * lg only. Below that breakpoint the column stacks directly above the list it
+ * mirrors, where it would be a redundant preamble rather than a use of space
+ * that would otherwise sit empty.
+ */
+function TimelineSpine({ items }) {
+    if (!items.length) return null;
+
+    const ROW = 34;
+    const PAD = 12;
+    const X = 118;
+    const height = PAD * 2 + (items.length - 1) * ROW;
+
+    const points = (m) =>
+        String(m.text || "").split("\n").filter((l) => l.trim()).length || 1;
+
+    return (
+        <svg
+            viewBox={`0 0 170 ${height}`}
+            width="170"
+            height={height}
+            aria-hidden="true"
+            focusable="false"
+            className="hidden lg:block mt-10"
+        >
+            <line
+                x1={X}
+                y1={PAD}
+                x2={X}
+                y2={height - PAD}
+                stroke="#002B5C"
+                strokeWidth="0.5"
+                opacity="0.3"
+            />
+            {items.map((m, i) => {
+                const y = PAD + i * ROW;
+                const n = points(m);
+                const newest = i === items.length - 1;
+                // 1 point reads as a quiet year, 4+ as a loud one. Capped so a
+                // year with eight entries cannot swallow the line.
+                const r = n <= 1 ? 3 : Math.min(3 + n, 8);
+                return (
+                    <g key={m.year || i}>
+                        <text
+                            x={X - 16}
+                            y={y + 4}
+                            textAnchor="end"
+                            fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
+                            fontSize="11"
+                            fill="#4B5563"
+                        >
+                            {m.year}
+                        </text>
+                        <circle
+                            cx={X}
+                            cy={y}
+                            r={r}
+                            fill={newest ? "#CC0033" : "#002B5C"}
+                            opacity={newest || n > 1 ? 1 : 0.5}
+                        />
+                    </g>
+                );
+            })}
+        </svg>
+    );
+}
+
 const DEFAULT_COLUMNS = [
     { id: "careers", overline: "Careers", title: "Join our list.", text: "We hire editors, designers, and field specialists who believe publishing is a craft of public service. See our open roles and apply.", link_label: "View open roles", link_to: "/careers" },
     { id: "press", overline: "Press", title: "Media inquiries.", text: "For review copies, interviews with our authors or editorial briefings, reach out to our press team.", link_label: "press@oakbridge.in", link_to: "/contact" },
@@ -166,6 +248,7 @@ export default function About() {
                         <h2 className="font-serif text-4xl md:text-5xl mt-3 text-[#002B5C] leading-tight whitespace-pre-line">
                             {renderRich(c.timeline_title)}
                         </h2>
+                        <TimelineSpine items={items} />
                     </div>
                     <div className="lg:col-span-8">
                         <div className="space-y-0">
