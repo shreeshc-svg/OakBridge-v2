@@ -5,10 +5,12 @@ import { adminStats, adminRunCartReminders, formatINR, adminSearchLogs } from ".
 import PaymentBadge from "../../components/admin/PaymentBadge";
 import { toast } from "sonner";
 
-function Stat({ label, value, icon: Icon, accent }) {
+function Stat({ label, value, icon: Icon, accent, hint }) {
     return (
         <div
-            data-testid={`stat-${label.toLowerCase().replace(/\s+/g, "-")}`}
+            /* Slug on alphanumerics only. Labels carry "·" and "(7d)", and
+               previously those went straight into the attribute. */
+            data-testid={`stat-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`}
             className="bg-white border border-[#E5E7EB] p-6"
         >
             <div className="flex items-center justify-between">
@@ -16,6 +18,13 @@ function Stat({ label, value, icon: Icon, accent }) {
                 <Icon size={16} strokeWidth={1.5} className={accent || "text-[#4B5563]"} />
             </div>
             <div className="font-serif text-4xl mt-4 text-[#002B5C]">{value}</div>
+            {/* A rupee figure on its own does not say whether the money arrived.
+                The hint carries that, so the tile cannot be misread. */}
+            {hint && (
+                <div className="mt-2 font-mono text-[10px] uppercase tracking-widest text-[#4B5563]">
+                    {hint}
+                </div>
+            )}
         </div>
     );
 }
@@ -62,14 +71,38 @@ export default function AdminDashboard() {
                 </button>
             </div>
 
-            <div className="mt-10 grid grid-cols-2 lg:grid-cols-5 gap-4">
+            {/* Money first, catalogue second. Revenue and the amount never
+                collected sit side by side deliberately: the second number is
+                only legible next to the first. */}
+            <div className="mt-10 grid grid-cols-2 lg:grid-cols-3 gap-4">
                 <Stat
-                    label="Revenue"
+                    label="Revenue · paid"
                     value={stats ? formatINR(stats.revenue) : "—"}
                     icon={TrendingUp}
                     accent="text-[#CC0033]"
+                    hint={
+                        stats
+                            ? `${stats.paid_orders ?? 0} paid order${(stats.paid_orders ?? 0) === 1 ? "" : "s"}`
+                            : null
+                    }
                 />
-                <Stat label="Orders" value={stats?.orders ?? "—"} icon={ShoppingBag} />
+                <Stat
+                    label="Not collected"
+                    value={stats ? formatINR(stats.pending_revenue || 0) : "—"}
+                    icon={AlertTriangle}
+                    accent={stats?.pending_orders ? "text-[#F59E0B]" : undefined}
+                    hint={
+                        stats
+                            ? `${stats.pending_orders ?? 0} unpaid · ${stats.failed_orders ?? 0} failed`
+                            : null
+                    }
+                />
+                <Stat
+                    label="Orders"
+                    value={stats?.orders ?? "—"}
+                    icon={ShoppingBag}
+                    hint={stats ? "paid and unpaid" : null}
+                />
                 <Stat label="Books" value={stats?.books ?? "—"} icon={BookOpen} />
                 <Stat label="Customers" value={stats?.customers ?? "—"} icon={Users} />
                 <Stat
@@ -95,10 +128,17 @@ export default function AdminDashboard() {
                 </div>
                 <div className="mt-6 grid grid-cols-2 lg:grid-cols-4 gap-4">
                     <Stat
-                        label="Revenue (7d)"
+                        label="Revenue (7d) · paid"
                         value={stats ? formatINR(stats.last_7_days?.revenue || 0) : "—"}
                         icon={TrendingUp}
                         accent="text-[#CC0033]"
+                        hint={
+                            /* new_orders minus paid_orders is the week's drop-off
+                               at the payment step — the number worth watching. */
+                            stats?.last_7_days
+                                ? `${Math.max(0, (stats.last_7_days.new_orders || 0) - (stats.last_7_days.paid_orders || 0))} unpaid this week`
+                                : null
+                        }
                     />
                     <Stat
                         label="Paid orders (7d)"

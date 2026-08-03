@@ -790,8 +790,52 @@ async def admin_stats():
     customers = await db.users.count_documents({"role": "customer"})
     desk_pending = await db.desk_copies.count_documents({"status": "pending"})
     recent = await db.orders.find({}, {"_id": 0}).sort([("created_at", -1)]).limit(5).to_list(5)
-    agg = await db.orders.aggregate([{"$group": {"_id": None, "revenue": {"$sum": "$total"}}}]).to_list(1)
-    revenue = agg[0]["revenue"] if agg else 0
+
+    # ===== Revenue is money RECEIVED =====
+    #
+    # This aggregation used to sum every order regardless of payment state, so
+    # the headline Revenue tile included abandoned checkouts. An order document
+    # is written BEFORE the customer reaches Razorpay — it has to be, since the
+    # payment needs something to attach to — which means a closed payment window
+    # leaves behind a full-looking order carrying a rupee figure that was never
+    # collected. Roughly 40% of recent orders are in that state, so the overstatement
+    # was not marginal.
+    #
+    # Grouping by payment_status in one pass gives paid and unpaid separately at
+    # the cost of a single round trip. There is no refund path in the backend yet
+    # — payments.py only ever writes pending/paid/failed — so no "refunded" bucket
+    # is reported here. When refunds land, they belong in this same aggregation.
+    #
+    # $ifNull guards documents predating the field. Order.payment_status has
+    # defaulted to "pending" since server.py:183, so this should never fire — but
+    # if it ever did, the safe place for an unknown order is unpaid, not revenue.
+    by_state = await db.orders.aggregate([
+        {"$group": {
+            "_id": {"$ifNull": ["$payment_status", "pending"]},
+            "total": {"$sum": "$total"},
+            "count": {"$sum": 1},
+        }},
+    ]).to_list(20)
+    # Accumulate rather than assign. Mongo groups case-sensitively, so "Paid" and
+    # "paid" would arrive as two rows; a dict comprehension keyed on the lowercased
+    # status would silently keep only the last one and drop the other bucket's
+    # money. Every writer is lowercase today, so this cannot fire — but the failure
+    # mode is an understated revenue figure with no error, on the very tile this
+    # change exists to make trustworthy.
+    totals: dict = {}
+    for r in by_state:
+        acc = totals.setdefault(str(r["_id"] or "pending").lower(), {"total": 0, "count": 0})
+        acc["total"] += r.get("total") or 0
+        acc["count"] += r.get("count") or 0
+
+    def _sum(state: str, field: str) -> int:
+        return (totals.get(state) or {}).get(field, 0) or 0
+
+    revenue = _sum("paid", "total")
+    paid_orders = _sum("paid", "count")
+    pending_revenue = _sum("pending", "total")
+    pending_orders = _sum("pending", "count")
+    failed_orders = _sum("failed", "count")
 
     # ===== "Last 7 days" activity snapshot =====
     from datetime import datetime as _dt, timedelta as _td, timezone as _tz
@@ -817,7 +861,11 @@ async def admin_stats():
         "orders": orders,
         "customers": customers,
         "desk_copies_pending": desk_pending,
-        "revenue": revenue,
+        "revenue": revenue,              # paid only — see the aggregation above
+        "paid_orders": paid_orders,
+        "pending_orders": pending_orders,
+        "pending_revenue": pending_revenue,
+        "failed_orders": failed_orders,
         "recent_orders": recent,
         "last_7_days": {
             "new_orders": new_orders_7d,
