@@ -924,14 +924,14 @@ async def get_book(book_id: str):
 
 @api_router.post("/newsletter", response_model=NewsletterResponse)
 async def newsletter_signup(payload: NewsletterSignup, request: Request):
-    from antispam import screen, record_rejection
+    from antispam import screen, record_rejection, normalise_email
 
     reason = await screen(
         request,
         kind="newsletter",
         email=payload.email,
         honeypot=payload.website,
-        dwell_seconds=(payload.form_ms / 1000) if payload.form_ms else None,
+        form_ms=payload.form_ms,
         ip_limit=6,
         email_limit=2,
     )
@@ -944,12 +944,23 @@ async def newsletter_signup(payload: NewsletterSignup, request: Request):
             id="", email=payload.email, created_at=datetime.now(timezone.utc).isoformat()
         )
 
-    existing = await db.newsletter.find_one({"email": payload.email}, {"_id": 0})
+    # One mailbox, one subscription.
+    #
+    # Matching the address as typed let ly.ri.c.l.a.ng.le.y.1.3@gmail.com and
+    # lyriclangley13@gmail.com both subscribe — Gmail delivers them to the same
+    # place. Every welcome email to a duplicate is a send against a real inbox
+    # that did not ask twice, and the reputation cost lands on the receipts
+    # customers actually need.
+    norm = normalise_email(payload.email)
+    existing = await db.newsletter.find_one(
+        {"$or": [{"email": payload.email}, {"email_normalised": norm}]}, {"_id": 0}
+    )
     if existing:
         return NewsletterResponse(**existing)
     doc = {
         "id": str(uuid.uuid4()),
         "email": payload.email,
+        "email_normalised": norm,
         "source": payload.source or "newsletter",
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -975,7 +986,7 @@ async def contact_submit(payload: ContactMessage, request: Request):
         email=payload.email,
         name=payload.name,
         honeypot=payload.website,
-        dwell_seconds=(payload.form_ms / 1000) if payload.form_ms else None,
+        form_ms=payload.form_ms,
         ip_limit=4,
         email_limit=3,
     )

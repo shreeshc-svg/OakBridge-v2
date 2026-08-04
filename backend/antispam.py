@@ -149,7 +149,8 @@ async def screen(
     email: str = "",
     name: str = "",
     honeypot: str = "",
-    dwell_seconds: Optional[float] = None,
+    form_ms: Optional[int] = None,
+    require_shield: bool = True,
     ip_limit: int = 5,
     email_limit: int = 3,
     window_seconds: int = 3600,
@@ -162,15 +163,28 @@ async def screen(
     if honeypot and str(honeypot).strip():
         return "honeypot"
 
-    if dwell_seconds is not None:
+    # A MISSING SHIELD IS THE VERDICT.
+    #
+    # The first version treated an absent form_ms as "no timing information, skip
+    # that check", which quietly made the whole layer optional: a script posting
+    # straight at /api/newsletter sends no honeypot and no timer, so the honeypot
+    # was empty (pass) and the timing was skipped (pass), leaving only rate
+    # limits. Two junk signups walked through it within the hour.
+    #
+    # Our own forms always send this field. Its absence does not mean "unknown",
+    # it means the request did not come from our form.
+    if form_ms is None:
+        if require_shield:
+            return "no_shield"
+    else:
         try:
-            d = float(dwell_seconds)
-            if d < MIN_DWELL_SECONDS:
-                return "too_fast"
-            if d > MAX_DWELL_SECONDS:
-                return "stale_form"
+            d = float(form_ms) / 1000.0
         except (TypeError, ValueError):
-            pass
+            return "no_shield"
+        if d < MIN_DWELL_SECONDS:
+            return "too_fast"
+        if d > MAX_DWELL_SECONDS:
+            return "stale_form"
 
     # NOTE: looks_machine_generated is deliberately NOT consulted here.
     #

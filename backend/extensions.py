@@ -405,7 +405,7 @@ async def register(payload: UserCreate, request: Request):
         email=email,
         name=payload.name,
         honeypot=payload.website,
-        dwell_seconds=(payload.form_ms / 1000) if payload.form_ms else None,
+        form_ms=payload.form_ms,
         ip_limit=3,
         email_limit=2,
     )
