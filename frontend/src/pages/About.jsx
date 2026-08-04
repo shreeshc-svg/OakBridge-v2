@@ -4,7 +4,7 @@ import Seo from "../components/Seo";
 import { Link } from "react-router-dom";
 import { ArrowUpRight } from "lucide-react";
 import { fetchSiteContent, fetchCollection, resolveCollection, mediaUrl } from "../lib/api";
-import TimelineRoad, { splitPoints } from "../components/about/TimelineRoad";
+import TimelineRoad, { MilestoneList } from "../components/about/TimelineRoad";
 
 /**
  * Renders admin-editable copy. Text wrapped in *asterisks* is shown in the
@@ -181,34 +181,10 @@ export default function About() {
                     <TimelineRoad items={items} />
                 </div>
 
-                {/* Below lg the list is the whole timeline, so it keeps the
-                    bulleting it always had. splitPoints is shared with the road
-                    so the two can never disagree about how many things happened
-                    in a year. */}
-                <div className="lg:hidden space-y-0">
-                    {items.map((m, i) => (
-                        <div
-                            key={m.year || i}
-                            className="grid grid-cols-12 gap-6 py-8 border-t border-[#002B5C]/20"
-                        >
-                            <div className="col-span-3 md:col-span-2 font-serif text-3xl text-[#CC0033]">
-                                {m.year}
-                            </div>
-                            <div className="col-span-9 md:col-span-10 text-[#002B5C] leading-relaxed">
-                                {(() => {
-                                    const points = splitPoints(m.text);
-                                    if (points.length <= 1) return <p>{points[0] || ""}</p>;
-                                    return (
-                                        <ul className="space-y-2 list-disc pl-5 marker:text-[#CC0033]">
-                                            {points.map((p, j) => (
-                                                <li key={j}>{p}</li>
-                                            ))}
-                                        </ul>
-                                    );
-                                })()}
-                            </div>
-                        </div>
-                    ))}
+                {/* Same component the road falls back to, so the two renderings
+                    of this history can never drift apart. */}
+                <div className="lg:hidden">
+                    <MilestoneList items={items} />
                 </div>
             </section>
 

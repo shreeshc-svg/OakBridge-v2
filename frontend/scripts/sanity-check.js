@@ -597,6 +597,14 @@ const JS_GLOBALS = new Set([
     "Math", "JSON", "Object", "Array", "String", "Number", "Boolean", "Date",
     "RegExp", "Error", "TypeError", "RangeError", "URIError", "SyntaxError",
     "Promise", "Symbol", "Map", "Set", "WeakMap", "WeakSet", "Proxy", "Reflect",
+    // Typed arrays — the timeline's placement grid uses these, and the checker
+    // reporting a real builtin as undefined is a false positive that blocks a
+    // correct commit. Under-reporting is this checker's design; over-reporting
+    // is the failure it must not have.
+    "ArrayBuffer", "SharedArrayBuffer", "DataView",
+    "Int8Array", "Uint8Array", "Uint8ClampedArray",
+    "Int16Array", "Uint16Array", "Int32Array", "Uint32Array",
+    "Float32Array", "Float64Array", "BigInt64Array", "BigUint64Array",
     "Intl", "BigInt", "globalThis", "structuredClone", "queueMicrotask",
     "URL", "URLSearchParams", "FormData", "Blob", "File", "FileReader",
     "AbortController", "Event", "CustomEvent", "IntersectionObserver",
