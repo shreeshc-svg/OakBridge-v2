@@ -194,6 +194,8 @@ export const adminSaveLegal = (slug, content) =>
 
 // Admin
 export const adminStats = () => api.get("/admin/stats").then((r) => r.data);
+export const adminSetTracking = (id, payload) =>
+    api.post(`/admin/orders/${id}/tracking`, payload).then((r) => r.data);
 export const adminSendPaymentLink = (id) =>
     api.post(`/admin/orders/${id}/payment-link`).then((r) => r.data);
 export const adminListOrders = () =>
@@ -206,6 +208,8 @@ export const adminUpdateOrder = (id, status, opts = {}) =>
             // admin's choice is never inferred from an absent field.
             notify: opts.notify !== false,
             note: opts.note || "",
+            ...(opts.courier !== undefined ? { courier: opts.courier } : {}),
+            ...(opts.tracking_id !== undefined ? { tracking_id: opts.tracking_id } : {}),
         })
         .then((r) => r.data);
 export const adminResendReceipt = (id) =>

@@ -1041,6 +1041,101 @@ async def send_payment_link(order: dict, url: str) -> bool:
     )
 
 
+# ====== Dispatch: the courier has it ======
+#
+# Couriers change their URL schemes without warning, so a wrong link is worse
+# than none — it sends a customer to a 404 while holding a number that works
+# perfectly well pasted into the courier's own site. Only patterns worth
+# trusting are listed; everything else shows the number and names the courier.
+_TRACK_URLS = {
+    "bluedart": "https://www.bluedart.com/tracking?trackFor=0&trackNo={id}",
+    "delhivery": "https://www.delhivery.com/track/package/{id}",
+    "dtdc": "https://www.dtdc.in/tracking/tracking_results.asp?strCnno={id}",
+    "india post": "https://www.indiapost.gov.in/_layouts/15/dop.portal.tracking/trackconsignment.aspx",
+    "xpressbees": "https://www.xpressbees.com/track?awb={id}",
+}
+
+
+def tracking_url(courier: str, tracking_id: str) -> str:
+    key = str(courier or "").strip().lower()
+    tid = str(tracking_id or "").strip()
+    tpl = _TRACK_URLS.get(key)
+    return tpl.format(id=tid) if tpl and tid else ""
+
+
+async def send_order_dispatched(order: dict, note: str = "") -> bool:
+    """Tell the customer the courier has collected their order.
+
+    Separate from the generic status email because this one carries the single
+    fact the customer actually wants — the consignment number — and burying that
+    in a paragraph is how support tickets get created. It leads with the number,
+    at a size you can read on a phone and select with a long press.
+    """
+    to = order.get("email")
+    if not to:
+        return False
+    esc = lambda v: _html.escape(str(v or ""))
+    who = esc((order.get("full_name") or "there").split(" ")[0])
+    courier = str(order.get("courier") or "").strip()
+    tid = str(order.get("tracking_id") or "").strip()
+    url = tracking_url(courier, tid)
+    num = esc(order.get("order_number"))
+
+    link_row = (
+        f'<tr><td style="padding:18px 36px 0;">'
+        f'<a href="{url}" style="display:inline-block;background-color:{BRAND_NAVY};color:#FFFFFF;'
+        f'text-decoration:none;font-size:14px;font-weight:600;padding:12px 26px;">Track this shipment</a>'
+        f"</td></tr>"
+        if url else ""
+    )
+    note_row = (
+        f'<tr><td style="padding:18px 36px 0;font-size:14px;line-height:1.6;color:{BRAND_GREY};">'
+        f'{esc(note).replace(chr(10), "<br>")}</td></tr>'
+        if str(note or "").strip() else ""
+    )
+
+    return await send_email(
+        to=to,
+        subject=f"Your Oakbridge order has been dispatched \u2014 {order.get('order_number','')}",
+        html=f"""\
+<!DOCTYPE html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background-color:#F5F7FA;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:{BRAND_NAVY};">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#F5F7FA;padding:40px 16px;">
+  <tr><td align="center">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="560" style="max-width:560px;background-color:#FFFFFF;border:1px solid #E5E7EB;">
+      <tr><td style="background-color:{BRAND_NAVY};padding:28px 36px;color:#FFFFFF;">
+        <div style="font-family:Georgia,serif;font-size:22px;">Oakbridge <span style="color:{BRAND_AMBER};">Publishing</span></div>
+        <div style="font-family:monospace;text-transform:uppercase;letter-spacing:2px;font-size:11px;margin-top:6px;color:rgba(255,255,255,0.6);">Order {num} &middot; Dispatched</div>
+      </td></tr>
+      <tr><td style="padding:34px 36px 0;">
+        <h1 style="margin:0;font-family:Georgia,serif;font-weight:normal;font-size:23px;">Hi {who}, your order is on its way.</h1>
+        <p style="margin:14px 0 0;font-size:15px;line-height:1.6;color:{BRAND_GREY};">
+          {esc(courier) or "The courier"} has collected your order from us.
+        </p>
+      </td></tr>
+      <tr><td style="padding:20px 36px 0;">
+        <div style="border:1px solid #E5E7EB;background:#F5F7FA;padding:16px 18px;">
+          <div style="font-family:monospace;text-transform:uppercase;letter-spacing:1.6px;font-size:10px;color:{BRAND_GREY};">Tracking number</div>
+          <div style="font-family:monospace;font-size:22px;letter-spacing:1px;color:{BRAND_NAVY};margin-top:6px;word-break:break-all;">{esc(tid)}</div>
+          {f'<div style="font-size:12px;color:{BRAND_GREY};margin-top:8px;">Courier: {esc(courier)}</div>' if courier else ""}
+        </div>
+      </td></tr>
+      {link_row}
+      {note_row}
+      <tr><td style="padding:26px 36px 36px;">
+        <div style="border-top:1px solid #E5E7EB;padding-top:20px;font-size:12px;line-height:1.7;color:{BRAND_GREY};">
+          Tracking can take a few hours to show movement after collection.<br>
+          Anything unexpected, reply to this email with your order number and we will chase it.
+        </div>
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+</body></html>
+""",
+    )
+
+
 # ====== Manuscript submissions ======
 #
 # Until now a submission was written to the database and nothing else happened:

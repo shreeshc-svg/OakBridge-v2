@@ -28,6 +28,10 @@ import { X, Mail, MailX } from "lucide-react";
  * are used to receiving.
  */
 
+// Offered as suggestions, not a fixed list — a courier we have never used is
+// still a courier. Order matches how often Indian trade publishing uses them.
+const COURIERS = ["Bluedart", "Delhivery", "DTDC", "India Post", "Xpressbees", "Ekart", "Shiprocket"];
+
 const COPY = {
     confirmed: {
         title: "Order confirmed",
@@ -65,6 +69,12 @@ const COPY = {
 export default function StatusChangeDialog({ order, nextStatus, busy, onConfirm, onCancel }) {
     const [notify, setNotify] = React.useState(true);
     const [note, setNote] = React.useState("");
+    // Dispatch details are their own fields, not free text in the note: they
+    // belong in the orders list, need correcting later without re-typing the
+    // whole message, and become a tracking link in the email.
+    const [courier, setCourier] = React.useState(order.courier || "");
+    const [trackingId, setTrackingId] = React.useState(order.tracking_id || "");
+    const shipping = nextStatus === "shipped";
     const confirmRef = React.useRef(null);
 
     // Focus moves into the dialog on open.
@@ -169,6 +179,44 @@ export default function StatusChangeDialog({ order, nextStatus, busy, onConfirm,
                                 )}
                             </div>
 
+                            {shipping && (
+                                <div className="mt-4 grid grid-cols-2 gap-3">
+                                    <label className="block">
+                                        <span className="overline !text-[10px]">Courier</span>
+                                        <input
+                                            value={courier}
+                                            onChange={(e) => setCourier(e.target.value)}
+                                            list="oak-couriers"
+                                            placeholder="Bluedart"
+                                            data-testid="tracking-courier"
+                                            className="mt-2 w-full border border-[#E5E7EB] px-3 py-2 text-sm outline-none focus:border-[#002B5C]"
+                                        />
+                                        <datalist id="oak-couriers">
+                                            {COURIERS.map((c) => (
+                                                <option key={c} value={c} />
+                                            ))}
+                                        </datalist>
+                                    </label>
+                                    <label className="block">
+                                        <span className="overline !text-[10px]">Tracking number</span>
+                                        <input
+                                            value={trackingId}
+                                            onChange={(e) => setTrackingId(e.target.value)}
+                                            placeholder="1234567890"
+                                            data-testid="tracking-id"
+                                            className="mt-2 w-full border border-[#E5E7EB] px-3 py-2 text-sm font-mono outline-none focus:border-[#002B5C]"
+                                        />
+                                    </label>
+                                </div>
+                            )}
+
+                            {shipping && trackingId.trim() && (
+                                <p className="mt-3 text-xs text-[#4B5563] leading-relaxed">
+                                    The email will lead with this number rather than the usual
+                                    &ldquo;on its way&rdquo; note{courier.trim() ? `, and name ${courier.trim()} as the courier` : ""}.
+                                </p>
+                            )}
+
                             <label className="block mt-4">
                                 <span className="overline !text-[10px]">
                                     Add to the email {copy.hint ? "" : "(optional)"}
@@ -195,7 +243,15 @@ export default function StatusChangeDialog({ order, nextStatus, busy, onConfirm,
                         Cancel
                     </button>
                     <button
-                        onClick={() => onConfirm({ notify, note: note.trim() })}
+                        onClick={() =>
+                            onConfirm({
+                                notify,
+                                note: note.trim(),
+                                ...(shipping
+                                    ? { courier: courier.trim(), tracking_id: trackingId.trim() }
+                                    : {}),
+                            })
+                        }
                         disabled={busy}
                         ref={confirmRef}
                         data-testid="status-confirm"

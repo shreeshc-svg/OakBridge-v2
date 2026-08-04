@@ -1,11 +1,13 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { MailCheck, FileDown, Send } from "lucide-react";
+import { MailCheck, FileDown, Send, Truck } from "lucide-react";
 import PaymentBadge from "../../components/admin/PaymentBadge";
 import StatusChangeDialog from "../../components/admin/StatusChangeDialog";
+import TrackingDialog from "../../components/admin/TrackingDialog";
 import {
     adminListOrders,
     adminResendReceipt,
     adminSendPaymentLink,
+    adminSetTracking,
     adminDownloadInvoice,
     adminUpdateOrder,
     formatApiError,
@@ -26,6 +28,8 @@ export default function AdminOrders() {
     // { order, nextStatus } while the confirmation is open.
     const [pendingChange, setPendingChange] = useState(null);
     const [savingStatus, setSavingStatus] = useState(false);
+    const [trackingFor, setTrackingFor] = useState(null);
+    const [savingTracking, setSavingTracking] = useState(false);
     const [downloading, setDownloading] = useState(null);
     const [q, setQ] = useState("");
     const [status, setStatus] = useState("all");
@@ -121,6 +125,32 @@ export default function AdminOrders() {
         }
     };
 
+    const applyTracking = async (payload) => {
+        setSavingTracking(true);
+        try {
+            const saved = await adminSetTracking(trackingFor.id, payload);
+            toast[saved?.email_sent || !payload.notify ? "success" : "warning"](
+                !payload.notify
+                    ? "Tracking saved. No email sent."
+                    : saved?.email_sent
+                      ? `Tracking sent to ${trackingFor.email}`
+                      : "Tracking saved, but the email did not send.",
+            );
+            setOrders((prev) =>
+                prev.map((o) =>
+                    o.id === trackingFor.id
+                        ? { ...o, courier: payload.courier, tracking_id: payload.tracking_id }
+                        : o,
+                ),
+            );
+            setTrackingFor(null);
+        } catch (err) {
+            toast.error(formatApiError(err));
+        } finally {
+            setSavingTracking(false);
+        }
+    };
+
     const onDownload = async (id, orderNumber) => {
         setDownloading(id);
         try {
@@ -157,6 +187,15 @@ export default function AdminOrders() {
 
     return (
         <div data-testid="admin-orders-page">
+            {trackingFor && (
+                <TrackingDialog
+                    key={trackingFor.id}
+                    order={trackingFor}
+                    busy={savingTracking}
+                    onConfirm={applyTracking}
+                    onCancel={() => !savingTracking && setTrackingFor(null)}
+                />
+            )}
             {pendingChange && (
                 <StatusChangeDialog
                     /* Keyed per change: without it React reuses the instance,
@@ -239,6 +278,12 @@ export default function AdminOrders() {
                                     <div className="mt-1.5">
                                         <PaymentBadge status={o.payment_status} />
                                     </div>
+                                    {o.tracking_id && (
+                                        <div className="mt-1 font-mono text-[10px] text-[#4B5563] break-all">
+                                            {o.courier ? `${o.courier} ` : ""}
+                                            {o.tracking_id}
+                                        </div>
+                                    )}
                                     {o.payment_link_sent_at && (
                                         <div className="mt-1 text-[10px] text-[#4B5563]">
                                             link sent{" "}
@@ -326,6 +371,21 @@ export default function AdminOrders() {
                                 </td>
                                 <td className="px-4 py-3">
                                     <div className="flex items-center gap-2">
+                                        {["shipped", "delivered"].includes(o.status) && (
+                                            <button
+                                                onClick={() => setTrackingFor(o)}
+                                                data-testid={`order-tracking-${o.id}`}
+                                                title={
+                                                    o.tracking_id
+                                                        ? "Correct the consignment number and tell the customer"
+                                                        : "Add the consignment number and tell the customer"
+                                                }
+                                                className="inline-flex items-center gap-1.5 border border-[#E5E7EB] hover:border-[#002B5C] text-[#002B5C] px-2.5 py-1 text-xs font-medium transition-colors"
+                                            >
+                                                <Truck size={12} strokeWidth={1.5} />
+                                                {o.tracking_id ? "Tracking" : "Add tracking"}
+                                            </button>
+                                        )}
                                         {o.payment_status !== "paid" && (
                                             <button
                                                 onClick={() => onSendPaymentLink(o.id)}

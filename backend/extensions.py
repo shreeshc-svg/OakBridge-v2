@@ -231,6 +231,18 @@ class OrderStatusUpdate(BaseModel):
     # to stop it — a mis-click on the dropdown told them their order had
     # shipped. Defaults to True so nothing silently stops notifying.
     notify: bool = True
+    # Dispatch details. Kept as real fields rather than free text in `note` so
+    # they can be shown in the orders list, corrected later without re-sending
+    # anything, and turned into a tracking link.
+    courier: Optional[str] = None
+    tracking_id: Optional[str] = None
+
+
+class TrackingUpdate(BaseModel):
+    courier: Optional[str] = ""
+    tracking_id: str = Field(min_length=1, max_length=64)
+    note: Optional[str] = ""
+    notify: bool = True
 
 
 # ============== AUTH DEPENDENCIES ==============
@@ -1052,6 +1064,10 @@ async def admin_update_order(order_id: str, payload: OrderStatusUpdate):
     updates = {"status": payload.status}
     if payload.status == "cancelled" and note:
         updates["cancel_reason"] = note
+    if payload.courier is not None:
+        updates["courier"] = payload.courier.strip()
+    if payload.tracking_id is not None:
+        updates["tracking_id"] = payload.tracking_id.strip()
 
     result = await db.orders.update_one({"id": order_id}, {"$set": updates})
     if result.matched_count == 0:
@@ -1064,6 +1080,11 @@ async def admin_update_order(order_id: str, payload: OrderStatusUpdate):
             if payload.status == "cancelled":
                 from emailer import send_order_cancelled
                 sent = await send_order_cancelled(order, note)
+            elif payload.status == "shipped" and order.get("tracking_id"):
+                # A dispatch with a consignment number gets the email built
+                # around that number rather than the generic "on its way".
+                from emailer import send_order_dispatched
+                sent = await send_order_dispatched(order, note)
             else:
                 from emailer import send_order_status_update
                 sent = await send_order_status_update(order, note)
@@ -1096,6 +1117,54 @@ async def admin_update_order(order_id: str, payload: OrderStatusUpdate):
     # Not persisted — lets the admin toast say what actually happened.
     order["email_sent"] = bool(sent)
     return order
+
+
+@admin_router.post("/orders/{order_id}/tracking")
+async def admin_set_tracking(order_id: str, payload: TrackingUpdate):
+    """Add or correct a consignment number, and tell the customer.
+
+    Separate from the status change because the two rarely happen together: a
+    parcel is marked shipped when it leaves the desk, and the courier hands over
+    the number later. Forcing the number into the status transition meant either
+    holding the status back or never recording it at all.
+
+    Re-sending is allowed on purpose — a corrected number that nobody is told
+    about is worse than a second email.
+    """
+    order = await db.orders.find_one({"id": order_id}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    tracking_id = payload.tracking_id.strip()
+    courier = (payload.courier or "").strip()
+    now = datetime.now(timezone.utc).isoformat()
+
+    await db.orders.update_one(
+        {"id": order_id},
+        {
+            "$set": {"tracking_id": tracking_id, "courier": courier, "tracking_set_at": now},
+            "$push": {
+                "status_history": {
+                    "status": order.get("status") or "",
+                    "note": f"Tracking {tracking_id}" + (f" ({courier})" if courier else ""),
+                    "notify_requested": bool(payload.notify),
+                    "at": now,
+                }
+            },
+        },
+    )
+    fresh = await db.orders.find_one({"id": order_id}, {"_id": 0})
+
+    sent = False
+    if payload.notify:
+        try:
+            from emailer import send_order_dispatched
+            sent = await send_order_dispatched(fresh, (payload.note or "").strip())
+        except Exception:  # noqa: BLE001
+            logging.getLogger(__name__).exception("dispatch email failed for %s", order_id)
+
+    fresh["email_sent"] = bool(sent)
+    return fresh
 
 
 @admin_router.get("/desk-copies")
