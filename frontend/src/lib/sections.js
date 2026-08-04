@@ -53,6 +53,11 @@ export const SECTION_REGISTRY = [
         items: [{ key: "media.gallery", label: "Gallery grid" }],
     },
     {
+        page: "Book Page",
+        slug: "book",
+        items: [{ key: "book.desk_copy", label: "‘Request a free desk copy’ CTA" }],
+    },
+    {
         page: "About",
         slug: "about",
         items: [{ key: "about.timeline", label: "Timeline (the mountain road)" }],

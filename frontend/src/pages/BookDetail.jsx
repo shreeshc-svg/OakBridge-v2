@@ -16,6 +16,7 @@ import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
 import { toast } from "sonner";
 import VerifyNotice from "../components/VerifyNotice";
+import { hiddenSet } from "../lib/sections";
 
 // Trust badges under the price. Admin-managed via Settings key `pdp_badges`;
 // this is only the fallback when nothing is saved yet. Spelled-out column
@@ -53,6 +54,9 @@ export default function BookDetail() {
     const [notifyBusy, setNotifyBusy] = useState(false);
     const [notified, setNotified] = useState(false);
     const [settings, setSettings] = useState(null);
+    // Same hidden_sections setting every other page uses; the book page simply
+    // was never listed in SECTION_REGISTRY.
+    const hidden = hiddenSet(settings);
     const [binding, setBinding] = useState(null);
     const [size, setSize] = useState(null);
 
@@ -515,7 +519,11 @@ export default function BookDetail() {
 
                     <VerifyNotice className="mt-6 max-w-md" />
 
-                    {/* Educator CTA */}
+                    {/* Educator CTA — hideable from Admin -> Pages -> Section
+                        visibility. Desk copies are free stock; a press that is
+                        not running the programme should not be advertising it on
+                        every title. */}
+                    {!hidden.has("book.desk_copy") && (
                     <button
                         onClick={() => setDeskCopyOpen(true)}
                         data-testid="request-desk-copy-button"
@@ -534,6 +542,7 @@ export default function BookDetail() {
                             Request →
                         </span>
                     </button>
+                    )}
 
                     {pdpBadges.length > 0 && (
                         <div
@@ -638,7 +647,7 @@ export default function BookDetail() {
 
             <DeskCopyDialog
                 book={book}
-                open={deskCopyOpen}
+                open={deskCopyOpen && !hidden.has("book.desk_copy")}
                 onClose={() => setDeskCopyOpen(false)}
             />
 
