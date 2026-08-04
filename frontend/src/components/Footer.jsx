@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { subscribeNewsletter, fetchSiteContent, fetchCollection } from "../lib/api";
 import { toast } from "sonner";
+import { useFormShield, HoneypotField } from "../lib/formShield";
 
 const DEFAULT_COLUMNS = [
     {
@@ -86,6 +87,7 @@ const isComingSoon = (to) => {
 };
 
 export default function Footer() {
+    const { website, setWebsite, shield } = useFormShield();
     const [email, setEmail] = useState("");
     const [loading, setLoading] = useState(false);
     const [site, setSite] = useState({});
@@ -123,7 +125,7 @@ export default function Footer() {
         if (!email) return;
         setLoading(true);
         try {
-            await subscribeNewsletter(email);
+            await subscribeNewsletter(email, undefined, shield());
             toast.success(c.news_success);
             setEmail("");
         } catch (err) {
@@ -159,6 +161,7 @@ export default function Footer() {
                             data-testid="newsletter-form"
                             className="mt-8 flex border border-white/20"
                         >
+                            <HoneypotField value={website} onChange={setWebsite} />
                             <input
                                 data-testid="newsletter-email-input"
                                 type="email"

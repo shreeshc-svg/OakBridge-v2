@@ -70,6 +70,10 @@ class UserCreate(BaseModel):
     password: str = Field(min_length=6, max_length=128)
     name: str = Field(min_length=1, max_length=120)
     phone: str = Field(min_length=6, max_length=20)
+    # Honeypot: hidden from people, so anything that fills it is a script.
+    website: Optional[str] = ""
+    # Milliseconds between the form rendering and being submitted.
+    form_ms: Optional[int] = None
 
 
 class UserLogin(BaseModel):
@@ -385,10 +389,42 @@ auth_router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 @auth_router.post("/register", response_model=AuthResponse)
-async def register(payload: UserCreate):
+async def register(payload: UserCreate, request: Request):
+    from antispam import screen, record_rejection, normalise_email
+
     email = payload.email.lower()
+
+    reason = await screen(
+        request,
+        kind="register",
+        email=email,
+        name=payload.name,
+        honeypot=payload.website,
+        dwell_seconds=(payload.form_ms / 1000) if payload.form_ms else None,
+        ip_limit=3,
+        email_limit=2,
+    )
+    if reason:
+        await record_rejection(
+            "register",
+            reason,
+            request,
+            {k: v for k, v in payload.model_dump().items() if k != "password"},
+        )
+        # Registration cannot answer a decoy success — the browser expects a
+        # token and would sign the bot in. A flat refusal is the honest answer,
+        # and it tells a script nothing it did not already know.
+        raise HTTPException(status_code=429, detail="Too many attempts. Please try again later.")
+
     existing = await db.users.find_one({"email": email})
     if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+
+    # One mailbox, one account. Gmail ignores dots and everything after a '+',
+    # so te.x.as.f.l.or.i.d.a@gmail.com and texasflorida@gmail.com are the same
+    # inbox — which is exactly how dozens of these accounts were created.
+    norm = normalise_email(email)
+    if norm != email and await db.users.find_one({"email_normalised": norm}):
         raise HTTPException(status_code=400, detail="Email already registered")
     user_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
@@ -396,6 +432,7 @@ async def register(payload: UserCreate):
     doc = {
         "id": user_id,
         "email": email,
+        "email_normalised": normalise_email(email),
         "password_hash": hash_password(payload.password),
         "name": payload.name.strip(),
         "phone": payload.phone.strip(),

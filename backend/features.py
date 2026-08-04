@@ -19,7 +19,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Any, List, Optional
 
 import requests
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Header, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Header, Request, UploadFile
 from fastapi.responses import Response, StreamingResponse
 from motor.motor_asyncio import AsyncIOMotorClient
 from openpyxl import Workbook, load_workbook
@@ -208,6 +208,10 @@ class SubmissionCreate(BaseModel):
     word_count: Optional[int] = 0
     synopsis: str = Field(min_length=10, max_length=4000)
     bio: Optional[str] = ""
+    # Honeypot: hidden from people, so anything that fills it is a script.
+    website: Optional[str] = ""
+    # Milliseconds between the form rendering and being submitted.
+    form_ms: Optional[int] = None
 
 
 class Submission(BaseModel):
@@ -290,7 +294,42 @@ async def public_file(path: str):
 
 
 @public_router.post("/submissions", response_model=Submission)
-async def create_submission(payload: SubmissionCreate):
+async def create_submission(payload: SubmissionCreate, request: Request):
+    from antispam import screen, record_rejection
+
+    reason = await screen(
+        request,
+        kind="submission",
+        email=payload.email,
+        name=payload.name,
+        honeypot=payload.website,
+        dwell_seconds=(payload.form_ms / 1000) if payload.form_ms else None,
+        ip_limit=3,
+        email_limit=2,
+    )
+    if reason:
+        await record_rejection("submission", reason, request, payload.model_dump())
+        if reason.startswith("rate"):
+            raise HTTPException(status_code=429, detail="Too many attempts. Please try again later.")
+        # Nothing stored, and — the point of this — nothing emailed. Submissions
+        # now fan out to three inboxes including senior management, so a junk
+        # run would otherwise reach people who can do nothing about it.
+        d = payload.model_dump()
+        return Submission(
+            id="",
+            name=d["name"],
+            email=str(d["email"]).lower(),
+            phone=d.get("phone") or "",
+            affiliation=d.get("affiliation") or "",
+            working_title=d["working_title"],
+            category=d["category"],
+            word_count=int(d.get("word_count") or 0),
+            synopsis=d["synopsis"],
+            bio=d.get("bio") or "",
+            status="received",
+            created_at=datetime.now(timezone.utc).isoformat(),
+        )
+
     doc = {
         "id": str(uuid.uuid4()),
         **payload.model_dump(),

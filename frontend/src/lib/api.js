@@ -67,8 +67,8 @@ export const fetchBestsellers = (limit = 12) =>
 export const fetchBook = (id) => api.get(`/books/${id}`).then((r) => r.data);
 export const notifyBackInStock = (bookId, email) =>
     api.post(`/books/${bookId}/notify-me`, { email }).then((r) => r.data);
-export const subscribeNewsletter = (email, source) =>
-    api.post("/newsletter", { email, ...(source ? { source } : {}) }).then((r) => r.data);
+export const subscribeNewsletter = (email, source, shield = {}) =>
+    api.post("/newsletter", { email, ...(source ? { source } : {}), ...shield }).then((r) => r.data);
 
 // ====== Razorpay ======
 export const createPaymentOrder = (orderId) =>

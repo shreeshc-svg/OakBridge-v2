@@ -8,8 +8,10 @@ import CONTENT_DEFAULTS from "../lib/contentDefaults";
 
 const CONTACT_DEFAULT_ORDER = ["form", "details"];
 import { toast } from "sonner";
+import { useFormShield, HoneypotField } from "../lib/formShield";
 
 export default function Contact() {
+    const { website, setWebsite, shield } = useFormShield();
     const [form, setForm] = useState({
         name: "",
         email: "",
@@ -55,7 +57,7 @@ export default function Contact() {
         e.preventDefault();
         setSubmitting(true);
         try {
-            await submitContact(form);
+            await submitContact({ ...form, ...shield() });
             // No turnaround stated here on purpose. It used to say "within two
             // working days", hardcoded, which now contradicts the admin-editable
             // "1–2 working days" shown three times on this page — and would drift
@@ -103,6 +105,7 @@ export default function Contact() {
                         className="space-y-6"
                         data-testid="contact-form"
                     >
+                        <HoneypotField value={website} onChange={setWebsite} />
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div>
                                 <label className="overline !text-[10px] block mb-2">

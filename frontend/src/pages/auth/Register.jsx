@@ -4,8 +4,10 @@ import { useAuth } from "../../context/AuthContext";
 import { formatApiError } from "../../lib/api";
 import CareersNudge from "../../components/CareersNudge";
 import { toast } from "sonner";
+import { useFormShield, HoneypotField } from "../../lib/formShield";
 
 export default function Register() {
+    const { website, setWebsite, shield } = useFormShield();
     const [form, setForm] = useState({ name: "", email: "", phone: "", password: "" });
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
@@ -19,7 +21,7 @@ export default function Register() {
         setError("");
         setLoading(true);
         try {
-            const user = await register(form);
+            const user = await register({ ...form, ...shield() });
             toast.success(`Welcome to Oakbridge, ${user.name.split(" ")[0]}.`);
             nav(from, { replace: true });
         } catch (err) {
@@ -46,6 +48,7 @@ export default function Register() {
                     </p>
 
                     <form onSubmit={onSubmit} className="mt-10 space-y-5">
+                        <HoneypotField value={website} onChange={setWebsite} />
                         <div>
                             <label className="overline !text-[10px] block mb-2">
                                 Full Name

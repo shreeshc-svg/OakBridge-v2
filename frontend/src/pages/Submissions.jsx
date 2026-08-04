@@ -6,6 +6,7 @@ import { CheckCircle2, FileText } from "lucide-react";
 import { submitManuscript, fetchSiteContent, fetchSettings, formatApiError } from "../lib/api";
 import { hiddenSet } from "../lib/sections";
 import { toast } from "sonner";
+import { useFormShield, HoneypotField } from "../lib/formShield";
 
 const asLines = (v, fallback) => {
     const s = (v || "").trim();
@@ -25,6 +26,7 @@ const CATEGORIES = [
 ];
 
 export default function Submissions() {
+    const { website, setWebsite, shield } = useFormShield();
     const [form, setForm] = useState({
         name: "",
         email: "",
@@ -56,6 +58,7 @@ export default function Submissions() {
         setSubmitting(true);
         try {
             await submitManuscript({
+                ...shield(),
                 ...form,
                 word_count: Number(form.word_count || 0),
             });
@@ -154,6 +157,7 @@ export default function Submissions() {
                             data-testid="submissions-form"
                             className="space-y-5"
                         >
+                            <HoneypotField value={website} onChange={setWebsite} />
                             <div className="grid grid-cols-2 gap-5">
                                 <div className="col-span-2 sm:col-span-1">
                                     <label className="overline !text-[10px] block mb-2">Your Name</label>

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Query, Depends, Response
+from fastapi import FastAPI, APIRouter, HTTPException, Query, Depends, Request, Response
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -105,6 +105,10 @@ class Category(BaseModel):
 class NewsletterSignup(BaseModel):
     email: EmailStr
     source: Optional[str] = None
+    # Honeypot: hidden from people, so anything that fills it is a script.
+    website: Optional[str] = ""
+    # Milliseconds between the form rendering and being submitted.
+    form_ms: Optional[int] = None
 
 
 class NewsletterResponse(BaseModel):
@@ -118,6 +122,10 @@ class ContactMessage(BaseModel):
     email: EmailStr
     subject: str
     message: str
+    # Honeypot: hidden from people, so anything that fills it is a script.
+    website: Optional[str] = ""
+    # Milliseconds between the form rendering and being submitted.
+    form_ms: Optional[int] = None
 
 
 class ContactResponse(BaseModel):
@@ -915,7 +923,27 @@ async def get_book(book_id: str):
 
 
 @api_router.post("/newsletter", response_model=NewsletterResponse)
-async def newsletter_signup(payload: NewsletterSignup):
+async def newsletter_signup(payload: NewsletterSignup, request: Request):
+    from antispam import screen, record_rejection
+
+    reason = await screen(
+        request,
+        kind="newsletter",
+        email=payload.email,
+        honeypot=payload.website,
+        dwell_seconds=(payload.form_ms / 1000) if payload.form_ms else None,
+        ip_limit=6,
+        email_limit=2,
+    )
+    if reason:
+        await record_rejection("newsletter", reason, request, payload.model_dump())
+        if reason.startswith("rate"):
+            raise HTTPException(status_code=429, detail="Too many attempts. Please try again later.")
+        # Looks like success, stores nothing, emails nobody.
+        return NewsletterResponse(
+            id="", email=payload.email, created_at=datetime.now(timezone.utc).isoformat()
+        )
+
     existing = await db.newsletter.find_one({"email": payload.email}, {"_id": 0})
     if existing:
         return NewsletterResponse(**existing)
@@ -938,7 +966,32 @@ async def newsletter_signup(payload: NewsletterSignup):
 
 
 @api_router.post("/contact", response_model=ContactResponse)
-async def contact_submit(payload: ContactMessage):
+async def contact_submit(payload: ContactMessage, request: Request):
+    from antispam import screen, record_rejection
+
+    reason = await screen(
+        request,
+        kind="contact",
+        email=payload.email,
+        name=payload.name,
+        honeypot=payload.website,
+        dwell_seconds=(payload.form_ms / 1000) if payload.form_ms else None,
+        ip_limit=4,
+        email_limit=3,
+    )
+    if reason:
+        await record_rejection("contact", reason, request, payload.model_dump())
+        if reason.startswith("rate"):
+            raise HTTPException(status_code=429, detail="Too many attempts. Please try again later.")
+        # No row, no admin alert, no acknowledgement — and a 200 the bot believes.
+        return ContactResponse(
+            id="",
+            name=payload.name,
+            email=payload.email,
+            subject=payload.subject,
+            created_at=datetime.now(timezone.utc).isoformat(),
+        )
+
     doc = {
         "id": str(uuid.uuid4()),
         "name": payload.name,

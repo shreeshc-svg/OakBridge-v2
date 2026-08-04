@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { ArrowUpRight, Cpu } from "lucide-react";
 import { toast } from "sonner";
 import { subscribeNewsletter } from "../lib/api";
+import { useFormShield, HoneypotField } from "../lib/formShield";
 
 /**
  * Reusable "Coming Soon" hero / waitlist template.
@@ -32,6 +33,7 @@ export default function ComingSoon({
     seoDescription,
     seoPath,
 }) {
+    const { website, setWebsite, shield } = useFormShield();
     const [email, setEmail] = useState("");
     const [busy, setBusy] = useState(false);
     const [submitted, setSubmitted] = useState(false);
@@ -41,7 +43,7 @@ export default function ComingSoon({
         if (!email) return;
         setBusy(true);
         try {
-            await subscribeNewsletter(email, waitlistSource);
+            await subscribeNewsletter(email, waitlistSource, shield());
             setSubmitted(true);
             toast.success("You're on the waitlist. We'll be in touch.");
         } catch (err) {
@@ -111,6 +113,7 @@ export default function ComingSoon({
                             className="mt-10 flex flex-col sm:flex-row gap-3 max-w-xl fade-up"
                             style={{ animationDelay: "200ms" }}
                         >
+                            <HoneypotField value={website} onChange={setWebsite} />
                             <input
                                 type="email"
                                 required
