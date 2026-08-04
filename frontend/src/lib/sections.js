@@ -52,6 +52,11 @@ export const SECTION_REGISTRY = [
         slug: "media",
         items: [{ key: "media.gallery", label: "Gallery grid" }],
     },
+    {
+        page: "About",
+        slug: "about",
+        items: [{ key: "about.timeline", label: "Timeline (the mountain road)" }],
+    },
 ];
 
 // Resolve a page's section order for the storefront. `saved` is the page's

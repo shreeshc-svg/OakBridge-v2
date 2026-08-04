@@ -3,7 +3,8 @@ import Breadcrumbs from "../components/Breadcrumbs";
 import Seo from "../components/Seo";
 import { Link } from "react-router-dom";
 import { ArrowUpRight } from "lucide-react";
-import { fetchSiteContent, fetchCollection, resolveCollection, mediaUrl } from "../lib/api";
+import { fetchSiteContent, fetchSettings, fetchCollection, resolveCollection, mediaUrl } from "../lib/api";
+import { hiddenSet } from "../lib/sections";
 import TimelineRoad, { MilestoneList } from "../components/about/TimelineRoad";
 
 /**
@@ -112,12 +113,14 @@ const DEFAULT_TEAM = [
 
 export default function About() {
     const [site, setSite] = useState({});
+    const [settings, setSettings] = useState(null);
     const [milestonesData, setMilestonesData] = useState(null);
     const [columnsData, setColumnsData] = useState(null);
     const [teamData, setTeamData] = useState(null);
 
     useEffect(() => {
         fetchSiteContent().then(setSite).catch(() => {});
+        fetchSettings().then(setSettings).catch(() => {});
         fetchCollection("page_about_milestones").then(setMilestonesData).catch(() => {});
         fetchCollection("page_about_columns").then(setColumnsData).catch(() => {});
         fetchCollection("page_about_team").then(setTeamData).catch(() => {});
@@ -131,6 +134,7 @@ export default function About() {
         timeline_overline: site.about_timeline_overline || DEFAULTS.timeline_overline,
         timeline_title: site.about_timeline_title || DEFAULTS.timeline_title,
     };
+    const hidden = hiddenSet(settings);
     const items = resolveCollection(milestonesData, DEFAULT_MILESTONES);
     const cols = resolveCollection(columnsData, DEFAULT_COLUMNS);
     const people = resolveCollection(teamData, DEFAULT_TEAM);
@@ -160,6 +164,10 @@ export default function About() {
                 </div>
             </section>
 
+            {/* Hideable from Admin → Pages → Section visibility, through the
+                same hidden_sections setting every other page already uses.
+                About was simply never listed in SECTION_REGISTRY. */}
+            {!hidden.has("about.timeline") && (
             <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-24 bg-[#F5F7FA] border-b border-[#E5E7EB]">
                 {/* The heading sits ABOVE the grid rather than in the left
                     column. It has to: the spine can only line up with the years
@@ -187,6 +195,7 @@ export default function About() {
                     <MilestoneList items={items} />
                 </div>
             </section>
+            )}
 
             {people.length > 0 && (
                 <section
