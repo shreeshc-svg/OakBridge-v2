@@ -12,22 +12,7 @@ import {
     verifyPayment, verifyOtp, resendOtp, mediaUrl } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { toast } from "sonner";
-
-const RAZORPAY_SCRIPT = "https://checkout.razorpay.com/v1/checkout.js";
-
-function loadRazorpay() {
-    return new Promise((resolve) => {
-        if (window.Razorpay) {
-            resolve(true);
-            return;
-        }
-        const script = document.createElement("script");
-        script.src = RAZORPAY_SCRIPT;
-        script.onload = () => resolve(true);
-        script.onerror = () => resolve(false);
-        document.body.appendChild(script);
-    });
-}
+import { loadRazorpay } from "../lib/razorpay";
 
 const FIELDS = [
     { name: "full_name", label: "Full Name", type: "text", required: true, col: 2 },

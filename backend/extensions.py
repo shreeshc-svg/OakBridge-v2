@@ -820,6 +820,43 @@ async def admin_delete_author(author_id: str):
     return {"ok": True}
 
 
+@admin_router.post("/orders/{order_id}/payment-link")
+async def admin_send_payment_link(order_id: str):
+    """Email the customer a link that reopens this exact order for payment.
+
+    Manual on purpose. An abandoned order is a judgement call — one placed an
+    hour ago by someone still deciding is not the same as one from last week,
+    and nobody wants an automatic chaser to be the site's first instinct. Once
+    there is enough of a pattern to read, the same call can run on a schedule.
+    """
+    order = await db.orders.find_one({"id": order_id}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    if order.get("payment_status") == "paid":
+        raise HTTPException(status_code=400, detail="This order is already paid.")
+    if not order.get("email"):
+        raise HTTPException(status_code=400, detail="This order has no email address.")
+
+    # Late imports: payments imports extensions for `db`, so a module-level
+    # import here would close the loop.
+    from payments import make_payment_token
+    from emailer import send_payment_link
+
+    site = (os.environ.get("SITE_URL") or "https://www.oakbridge.in").rstrip("/")
+    url = f"{site}/pay/{order_id}?t={make_payment_token(order_id)}"
+
+    ok = await send_payment_link(order, url)
+    if ok:
+        await db.orders.update_one(
+            {"id": order_id},
+            {
+                "$set": {"payment_link_sent_at": datetime.now(timezone.utc).isoformat()},
+                "$inc": {"payment_link_count": 1},
+            },
+        )
+    return {"ok": bool(ok), "to": order.get("email")}
+
+
 @admin_router.get("/stats")
 async def admin_stats():
     books = await db.books.count_documents({})

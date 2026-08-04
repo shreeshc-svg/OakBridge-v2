@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { MailCheck, FileDown } from "lucide-react";
+import { MailCheck, FileDown, Send } from "lucide-react";
 import PaymentBadge from "../../components/admin/PaymentBadge";
 import {
     adminListOrders,
     adminResendReceipt,
+    adminSendPaymentLink,
     adminDownloadInvoice,
     adminUpdateOrder,
     formatApiError,
@@ -18,6 +19,7 @@ export default function AdminOrders() {
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
     const [resending, setResending] = useState(null);
+    const [linking, setLinking] = useState(null);
     const [downloading, setDownloading] = useState(null);
     const [q, setQ] = useState("");
     const [status, setStatus] = useState("all");
@@ -59,6 +61,34 @@ export default function AdminOrders() {
             toast.error(formatApiError(err));
         } finally {
             setResending(null);
+        }
+    };
+
+
+    // Only offered on unpaid orders. An order row exists before the customer
+    // reaches Razorpay, so "pending" means they never finished paying — and
+    // nothing else in the app ever chases that. The link reopens this exact
+    // order rather than sending them back to a checkout that reads their cart.
+    const onSendPaymentLink = async (id) => {
+        setLinking(id);
+        try {
+            const res = await adminSendPaymentLink(id);
+            if (res.ok) {
+                toast.success(`Payment link sent to ${res.to}`);
+                setOrders((prev) =>
+                    prev.map((o) =>
+                        o.id === id
+                            ? { ...o, payment_link_sent_at: new Date().toISOString() }
+                            : o,
+                    ),
+                );
+            } else {
+                toast.error("Email could not be sent — check server logs.");
+            }
+        } catch (err) {
+            toast.error(formatApiError(err));
+        } finally {
+            setLinking(null);
         }
     };
 
@@ -167,6 +197,12 @@ export default function AdminOrders() {
                                     <div className="mt-1.5">
                                         <PaymentBadge status={o.payment_status} />
                                     </div>
+                                    {o.payment_link_sent_at && (
+                                        <div className="mt-1 text-[10px] text-[#4B5563]">
+                                            link sent{" "}
+                                            {new Date(o.payment_link_sent_at).toLocaleDateString("en-IN")}
+                                        </div>
+                                    )}
                                 </td>
                                 <td className="px-4 py-3 align-top">
                                     <div className="font-serif text-[#002B5C]">
@@ -250,6 +286,18 @@ export default function AdminOrders() {
                                 </td>
                                 <td className="px-4 py-3">
                                     <div className="flex items-center gap-2">
+                                        {o.payment_status !== "paid" && (
+                                            <button
+                                                onClick={() => onSendPaymentLink(o.id)}
+                                                disabled={linking === o.id}
+                                                data-testid={`order-paylink-${o.id}`}
+                                                title="Email this customer a link to finish paying for this order"
+                                                className="inline-flex items-center gap-1.5 border border-[#F59E0B] text-[#854F0B] bg-[#FAEEDA] hover:bg-[#F6E3C4] px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50"
+                                            >
+                                                <Send size={12} strokeWidth={1.5} />
+                                                {linking === o.id ? "Sending…" : "Payment link"}
+                                            </button>
+                                        )}
                                         <button
                                             onClick={() => onResend(o.id)}
                                             disabled={resending === o.id}

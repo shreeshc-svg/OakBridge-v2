@@ -969,6 +969,78 @@ async def send_contact_ack(msg: dict) -> bool:
     )
 
 
+# ====== Unpaid order: the link that reopens it ======
+
+async def send_payment_link(order: dict, url: str) -> bool:
+    """Ask a customer to finish an order they started but did not pay for.
+
+    Written to be ignorable. No countdown, no invented scarcity, no "last
+    chance" — the order was abandoned, which is a thing people are allowed to
+    do, and a publisher chasing a book sale like a debt collector reads badly.
+    It says what happened, what it costs, how to finish, and that ignoring it
+    is fine. That last line is what keeps it out of the spam folder and out of
+    a complaint.
+
+    It is also honest about stock: nothing is reserved by an unpaid order, and
+    promising otherwise would be a promise the warehouse never agreed to.
+    """
+    to = order.get("email")
+    if not to:
+        return False
+    esc = lambda v: _html.escape(str(v or ""))
+    who = esc((order.get("full_name") or "there").split(" ")[0])
+    rows = "".join(
+        f'<tr><td style="padding:7px 0;font-size:14px;color:{BRAND_NAVY};">'
+        f'<span style="font-family:monospace;color:{BRAND_GREY};">{int(it.get("quantity") or 1)}&times;</span> '
+        f'{esc(it.get("title"))}'
+        + (f'<div style="font-size:12px;color:{BRAND_GREY};">{esc(it.get("author"))}</div>' if it.get("author") else "")
+        + "</td></tr>"
+        for it in (order.get("items") or [])
+    )
+    total = f"{float(order.get('total') or 0):,.0f}"
+    return await send_email(
+        to=to,
+        subject=f"Your Oakbridge order is waiting \u2014 {order.get('order_number','')}",
+        html=f"""\
+<!DOCTYPE html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background-color:#F5F7FA;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:{BRAND_NAVY};">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#F5F7FA;padding:40px 16px;">
+  <tr><td align="center">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="560" style="max-width:560px;background-color:#FFFFFF;border:1px solid #E5E7EB;">
+      <tr><td style="background-color:{BRAND_NAVY};padding:28px 36px;color:#FFFFFF;">
+        <div style="font-family:Georgia,serif;font-size:22px;">Oakbridge <span style="color:{BRAND_AMBER};">Publishing</span></div>
+        <div style="font-family:monospace;text-transform:uppercase;letter-spacing:2px;font-size:11px;margin-top:6px;color:rgba(255,255,255,0.6);">Order {esc(order.get('order_number'))}</div>
+      </td></tr>
+      <tr><td style="padding:34px 36px 8px;">
+        <h1 style="margin:0;font-family:Georgia,serif;font-weight:normal;font-size:23px;">Hi {who}, your order is waiting.</h1>
+        <p style="margin:14px 0 0;font-size:15px;line-height:1.6;color:{BRAND_GREY};">
+          You started this order with us but the payment was not completed, so we have not
+          processed it.
+        </p>
+      </td></tr>
+      <tr><td style="padding:18px 36px 0;">
+        <table cellpadding="0" cellspacing="0" border="0" width="100%" style="border-top:1px solid #E5E7EB;">{rows}</table>
+        <div style="border-top:1px solid #E5E7EB;margin-top:10px;padding-top:12px;font-family:Georgia,serif;font-size:20px;">Total &#8377;{total}</div>
+      </td></tr>
+      <tr><td style="padding:26px 36px 0;">
+        <a href="{url}" style="display:inline-block;background-color:{BRAND_NAVY};color:#FFFFFF;text-decoration:none;font-size:15px;font-weight:600;padding:14px 30px;">Complete payment</a>
+      </td></tr>
+      <tr><td style="padding:24px 36px 36px;">
+        <div style="border-top:1px solid #E5E7EB;padding-top:20px;font-size:12px;line-height:1.7;color:{BRAND_GREY};">
+          If you would rather not go ahead, ignore this &mdash; nothing has been charged and the
+          order will simply lapse.<br>
+          We have not reserved stock, so if a title sells out before you pay we will let you know.<br>
+          This link works for 7 days. Any questions, just reply to this email.
+        </div>
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+</body></html>
+""",
+    )
+
+
 # ====== Manuscript submissions ======
 #
 # Until now a submission was written to the database and nothing else happened:

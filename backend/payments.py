@@ -647,3 +647,81 @@ async def razorpay_webhook(
             logger.exception("Webhook failure email failed for rzp_order_id=%s", rzp_order_id)
 
     return {"received": True, "matched": res_matched, "event": event_type}
+
+
+# ====== Resuming an unpaid order ======
+#
+# An order row is written before the customer reaches Razorpay, so "pending"
+# means that row exists and no capture ever arrived — usually they closed the
+# payment window. Nothing resolved those. The Retry button on the failure page
+# links to /checkout, which reads the cart in THAT browser: open the mail on a
+# phone, or clear the cart, and it lands on an empty page while the original
+# order stays pending for ever. Re-ordering then creates a second row.
+#
+# A signed link fixes the actual problem — it reopens the order that already
+# exists, on any device, with no login.
+PAYMENT_LINK_TTL_DAYS = 7
+
+
+def _link_secret() -> str:
+    return os.environ.get("JWT_SECRET") or RAZORPAY_KEY_SECRET or ""
+
+
+def make_payment_token(order_id: str) -> str:
+    """Sign one order id with an expiry. Not a session — it opens nothing else."""
+    exp = int(time.time()) + PAYMENT_LINK_TTL_DAYS * 86400
+    sig = hmac.new(
+        _link_secret().encode("utf-8"), f"{order_id}:{exp}".encode("utf-8"), hashlib.sha256
+    ).hexdigest()
+    return f"{exp}.{sig[:40]}"
+
+
+def check_payment_token(order_id: str, token: str) -> bool:
+    try:
+        exp_str, sig = str(token or "").split(".", 1)
+        exp = int(exp_str)
+    except (ValueError, AttributeError):
+        return False
+    if exp < time.time():
+        return False
+    expected = hmac.new(
+        _link_secret().encode("utf-8"), f"{order_id}:{exp}".encode("utf-8"), hashlib.sha256
+    ).hexdigest()[:40]
+    return hmac.compare_digest(expected, sig)
+
+
+@payments_router.get("/resume/{order_id}")
+async def resume_order(order_id: str, t: str = ""):
+    """What the emailed link needs to show, and nothing more.
+
+    Deliberately omits the delivery address, email and phone. The link travels
+    by email and may be forwarded or sit in a shared inbox; enough to recognise
+    the order and pay it is enough. The token is required precisely because even
+    this much is the customer's business and not the internet's.
+    """
+    if not check_payment_token(order_id, t):
+        raise HTTPException(status_code=404, detail="This payment link has expired or is not valid.")
+
+    order = await db.orders.find_one({"id": order_id}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    if order.get("payment_status") == "paid":
+        return {"status": "paid", "order_number": order.get("order_number")}
+
+    return {
+        "status": order.get("payment_status") or "pending",
+        "order_id": order["id"],
+        "order_number": order.get("order_number"),
+        "first_name": (order.get("full_name") or "").split(" ")[0],
+        "total": order.get("total"),
+        "items": [
+            {
+                "title": i.get("title"),
+                "author": i.get("author"),
+                "quantity": i.get("quantity"),
+                "price": i.get("price"),
+            }
+            for i in (order.get("items") or [])
+        ],
+    }

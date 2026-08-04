@@ -16,6 +16,7 @@ import Contact from "@/pages/Contact";
 import Authors from "@/pages/Authors";
 import Account from "@/pages/Account";
 import PaymentFailed from "@/pages/PaymentFailed";
+import ResumePayment from "@/pages/ResumePayment";
 import Login from "@/pages/auth/Login";
 import Register from "@/pages/auth/Register";
 import ForgotPassword from "@/pages/auth/ForgotPassword";
@@ -122,6 +123,10 @@ function App() {
                                 <Route path="/refund-policy" element={<LegalPage slug="refund" />} />
                                 <Route path="/shipping-policy" element={<LegalPage slug="shipping" />} />
                                 <Route path="/cookie-policy" element={<LegalPage slug="cookie" />} />
+                                {/* Opened from an emailed payment link. NoIndex is
+                                    set inside the page, which also covers the
+                                    expired-link and already-paid states. */}
+                                <Route path="/pay/:id" element={<ResumePayment />} />
                                 <Route
                                     path="/payment-failed/:id"
                                     element={
