@@ -225,7 +225,12 @@ class AuthorOrder(BaseModel):
 
 class OrderStatusUpdate(BaseModel):
     status: str  # confirmed | processing | shipped | delivered | cancelled
-    reason: Optional[str] = None  # optional note, emailed to the customer on cancellation
+    reason: Optional[str] = None  # legacy name for `note`, kept so old callers still work
+    note: Optional[str] = None  # free text added to the customer's email (tracking, delay, etc.)
+    # The customer has always been emailed on every status change, with no way
+    # to stop it — a mis-click on the dropdown told them their order had
+    # shipped. Defaults to True so nothing silently stops notifying.
+    notify: bool = True
 
 
 # ============== AUTH DEPENDENCIES ==============
@@ -1041,22 +1046,55 @@ async def admin_update_order(order_id: str, payload: OrderStatusUpdate):
     allowed = {"confirmed", "processing", "shipped", "delivered", "cancelled"}
     if payload.status not in allowed:
         raise HTTPException(status_code=400, detail=f"Invalid status. Use one of {sorted(allowed)}")
+    note = (payload.note if payload.note is not None else payload.reason) or ""
+    note = note.strip()
+
     updates = {"status": payload.status}
-    if payload.status == "cancelled" and payload.reason:
-        updates["cancel_reason"] = payload.reason.strip()
+    if payload.status == "cancelled" and note:
+        updates["cancel_reason"] = note
+
     result = await db.orders.update_one({"id": order_id}, {"$set": updates})
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Order not found")
     order = await db.orders.find_one({"id": order_id}, {"_id": 0})
-    try:
-        if payload.status == "cancelled":
-            from emailer import send_order_cancelled
-            await send_order_cancelled(order, payload.reason or "")
-        else:
-            from emailer import send_order_status_update
-            await send_order_status_update(order)
-    except Exception:  # noqa: BLE001
-        logging.getLogger(__name__).exception("order status email failed for %s", order_id)
+
+    sent = False
+    if payload.notify:
+        try:
+            if payload.status == "cancelled":
+                from emailer import send_order_cancelled
+                sent = await send_order_cancelled(order, note)
+            else:
+                from emailer import send_order_status_update
+                sent = await send_order_status_update(order, note)
+        except Exception:  # noqa: BLE001
+            logging.getLogger(__name__).exception("order status email failed for %s", order_id)
+
+    # Pushed AFTER the attempt, carrying its result.
+    #
+    # Recording notify as "notified" before sending would have logged intent and
+    # called it fact: send_order_status_update returns False for an order with no
+    # email address, and a Resend failure is swallowed on purpose so a mail
+    # outage cannot block dispatch. The history exists to answer "did we tell the
+    # customer it shipped?", which only the outcome can answer.
+    await db.orders.update_one(
+        {"id": order_id},
+        {
+            "$push": {
+                "status_history": {
+                    "status": payload.status,
+                    "note": note,
+                    "notify_requested": bool(payload.notify),
+                    "notified": bool(sent),
+                    "at": datetime.now(timezone.utc).isoformat(),
+                }
+            }
+        },
+    )
+
+    order = await db.orders.find_one({"id": order_id}, {"_id": 0})
+    # Not persisted — lets the admin toast say what actually happened.
+    order["email_sent"] = bool(sent)
     return order
 
 

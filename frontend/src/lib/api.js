@@ -198,8 +198,16 @@ export const adminSendPaymentLink = (id) =>
     api.post(`/admin/orders/${id}/payment-link`).then((r) => r.data);
 export const adminListOrders = () =>
     api.get("/admin/orders").then((r) => r.data);
-export const adminUpdateOrder = (id, status) =>
-    api.patch(`/admin/orders/${id}`, { status }).then((r) => r.data);
+export const adminUpdateOrder = (id, status, opts = {}) =>
+    api
+        .patch(`/admin/orders/${id}`, {
+            status,
+            // notify defaults to true server-side; sent explicitly so the
+            // admin's choice is never inferred from an absent field.
+            notify: opts.notify !== false,
+            note: opts.note || "",
+        })
+        .then((r) => r.data);
 export const adminResendReceipt = (id) =>
     api.post(`/admin/orders/${id}/resend-receipt`).then((r) => r.data);
 export const adminDownloadInvoice = async (id, orderNumber) => {

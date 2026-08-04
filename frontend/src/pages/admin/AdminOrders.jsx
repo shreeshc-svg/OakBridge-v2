@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { MailCheck, FileDown, Send } from "lucide-react";
 import PaymentBadge from "../../components/admin/PaymentBadge";
+import StatusChangeDialog from "../../components/admin/StatusChangeDialog";
 import {
     adminListOrders,
     adminResendReceipt,
@@ -13,13 +14,18 @@ import {
 import { toast } from "sonner";
 import AdminToolbar from "../../components/AdminToolbar";
 
-const STATUSES = ["pending", "confirmed", "processing", "shipped", "delivered", "cancelled"];
+// Fulfilment states only. "pending" lives on payment_status and the backend
+// rejects it here, so offering it just built a dialog that 400s on confirm.
+const STATUSES = ["confirmed", "processing", "shipped", "delivered", "cancelled"];
 
 export default function AdminOrders() {
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
     const [resending, setResending] = useState(null);
     const [linking, setLinking] = useState(null);
+    // { order, nextStatus } while the confirmation is open.
+    const [pendingChange, setPendingChange] = useState(null);
+    const [savingStatus, setSavingStatus] = useState(false);
     const [downloading, setDownloading] = useState(null);
     const [q, setQ] = useState("");
     const [status, setStatus] = useState("all");
@@ -36,15 +42,38 @@ export default function AdminOrders() {
         load();
     }, []);
 
-    const onStatusChange = async (id, status) => {
+    // The dropdown no longer acts. It proposes, and the dialog decides —
+    // because writing the status also emails the customer, and a mis-click
+    // used to tell somebody their order had shipped.
+    const onStatusChange = (order, status) => {
+        if (!status || status === order.status) return;
+        setPendingChange({ order, nextStatus: status });
+    };
+
+    const applyStatusChange = async ({ notify, note }) => {
+        const { order, nextStatus } = pendingChange;
+        setSavingStatus(true);
         try {
-            await adminUpdateOrder(id, status);
-            toast.success("Order status updated.");
+            const saved = await adminUpdateOrder(order.id, nextStatus, { notify, note });
+            // email_sent is the outcome, not the request — a mail failure is
+            // swallowed server-side so it cannot block dispatch, and claiming
+            // "notified" when nothing left the building is how a customer ends
+            // up never hearing that their order shipped.
+            if (!notify) {
+                toast.success(`Marked ${nextStatus}. No email sent.`);
+            } else if (saved?.email_sent) {
+                toast.success(`Marked ${nextStatus} — ${order.email} notified.`);
+            } else {
+                toast.warning(`Marked ${nextStatus}, but the email did not send.`);
+            }
             setOrders((prev) =>
-                prev.map((o) => (o.id === id ? { ...o, status } : o)),
+                prev.map((o) => (o.id === order.id ? { ...o, status: nextStatus } : o)),
             );
+            setPendingChange(null);
         } catch (err) {
             toast.error(formatApiError(err));
+        } finally {
+            setSavingStatus(false);
         }
     };
 
@@ -128,6 +157,19 @@ export default function AdminOrders() {
 
     return (
         <div data-testid="admin-orders-page">
+            {pendingChange && (
+                <StatusChangeDialog
+                    /* Keyed per change: without it React reuses the instance,
+                       and a tracking note typed for "shipped" would survive
+                       into a "delivered" email. */
+                    key={`${pendingChange.order.id}:${pendingChange.nextStatus}`}
+                    order={pendingChange.order}
+                    nextStatus={pendingChange.nextStatus}
+                    busy={savingStatus}
+                    onConfirm={applyStatusChange}
+                    onCancel={() => !savingStatus && setPendingChange(null)}
+                />
+            )}
             <div className="overline">Fulfilment</div>
             <h1 className="font-serif text-4xl mt-2 text-[#002B5C]">
                 Orders ({orders.length})
@@ -271,9 +313,7 @@ export default function AdminOrders() {
                                 <td className="px-4 py-3">
                                     <select
                                         value={o.status}
-                                        onChange={(e) =>
-                                            onStatusChange(o.id, e.target.value)
-                                        }
+                                        onChange={(e) => onStatusChange(o, e.target.value)}
                                         data-testid={`order-status-${o.id}`}
                                         className="border border-[#E5E7EB] bg-white px-2 py-1 text-xs outline-none focus:border-[#002B5C]"
                                     >

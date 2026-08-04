@@ -1242,11 +1242,22 @@ _STATUS_COPY = {
 }
 
 
-def render_order_status_update_html(order: dict) -> str:
+def render_order_status_update_html(order: dict, note: str = "") -> str:
+    """Per-status copy, plus whatever the person changing the status wanted to add.
+
+    The note is the point of this email for a dispatch team. "Your books are on
+    their way" without a tracking number is a sentence, not information.
+    """
     who = (order.get("full_name") or "reader").split(" ")[0]
     status = (order.get("status") or "").lower()
     headline, message = _STATUS_COPY.get(status, ("Order update", f"Your order status is now: {status or 'updated'}."))
     num = order.get("order_number", "")
+    note_block = (
+        f'<tr><td style="padding:4px 36px 0;"><div style="padding:14px 16px;background:#F5F7FA;'
+        f'border:1px solid #E5E7EB;font-size:14px;line-height:1.6;color:{BRAND_NAVY};">'
+        f'{_html.escape(str(note)).replace(chr(10), "<br>")}</div></td></tr>'
+        if str(note or "").strip() else ""
+    )
     return f"""\
 <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"></head>
 <body style="margin:0;padding:0;background-color:#F5F7FA;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:{BRAND_NAVY};">
@@ -1261,6 +1272,7 @@ def render_order_status_update_html(order: dict) -> str:
         <h1 style="margin:0;font-family:Georgia,serif;font-weight:normal;font-size:24px;color:{BRAND_NAVY};">{headline}</h1>
         <p style="margin:14px 0 0;font-size:15px;line-height:1.6;color:{BRAND_GREY};">Hi {who}, {message}</p>
       </td></tr>
+      {note_block}
       <tr><td style="padding:20px 36px 36px;">
         <p style="margin:0;font-size:12px;color:{BRAND_GREY};">Order reference: <strong style="color:{BRAND_NAVY};">{num}</strong>. Questions? <a href="mailto:info@oakbridge.in" style="color:{BRAND_NAVY};">info@oakbridge.in</a></p>
       </td></tr>
@@ -1271,7 +1283,7 @@ def render_order_status_update_html(order: dict) -> str:
 """
 
 
-async def send_order_status_update(order: dict) -> bool:
+async def send_order_status_update(order: dict, note: str = "") -> bool:
     """Email the customer when their order status changes. Best-effort."""
     to = order.get("email")
     if not to:
@@ -1279,7 +1291,7 @@ async def send_order_status_update(order: dict) -> bool:
     num = order.get("order_number", "")
     status = (order.get("status") or "updated").lower()
     subject = f"Your Oakbridge order {num} — {status}"
-    return await send_email(to=to, subject=subject, html=render_order_status_update_html(order))
+    return await send_email(to=to, subject=subject, html=render_order_status_update_html(order, note))
 
 
 # ====== Password reset ======
@@ -1364,7 +1376,7 @@ def render_order_cancelled_html(order: dict, reason: str = "") -> str:
     who = (order.get("full_name") or "reader").split(" ")[0]
     num = order.get("order_number", "")
     reason_line = (
-        f"<p style=\"margin:14px 0 0;font-size:14px;line-height:1.6;color:{BRAND_GREY};\">Reason: <strong style=\"color:{BRAND_NAVY};\">{reason}</strong></p>"
+        f"<p style=\"margin:14px 0 0;font-size:14px;line-height:1.6;color:{BRAND_GREY};\">Reason: <strong style=\"color:{BRAND_NAVY};\">{_html.escape(str(reason)).replace(chr(10), '<br>')}</strong></p>"
         if reason else ""
     )
     return f"""\
