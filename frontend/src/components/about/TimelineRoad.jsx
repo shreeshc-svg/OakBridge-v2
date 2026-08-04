@@ -249,50 +249,87 @@ export default function TimelineRoad({ items }) {
         };
 
         // ---- Pack ----------------------------------------------------------
+        //
+        // Greedy placement is order-dependent and no single order is right.
+        // Tallest-first gives the big cards the room they need, but leaves the
+        // one-line years until last, by which point the ground beside their own
+        // marker is taken — 2020 ended up in the opposite corner of the frame
+        // with a leader line most of the way across the mountain. Road order
+        // fixes that year and starves the tall ones instead.
+        //
+        // So four orders are tried and the best arrangement wins. "Best" is the
+        // WORST leader line in each: one card stranded across the frame is what
+        // a reader notices, and the total is only the tie-break.
+        //
+        // Re-placing one card at a time cannot get there. 2020 can only improve
+        // if 2021 moves first, and neither improves alone — a single-card repair
+        // pass measured exactly zero change on the real timeline.
+        const gap2 = (r, d) => {
+            const dx = Math.max(r.x - d.x, 0, d.x - (r.x + r.w));
+            const dy = Math.max(r.y - d.y, 0, d.y - (r.y + r.h));
+            return dx * dx + dy * dy;
+        };
+
+        const greedy = (order) => {
+            const out = [];
+            for (const card of order) {
+                const d = dots[card.i];
+                let best = null;
+                let bestGap = Infinity;
+                for (let y = MARGIN; y + card.h <= VH - MARGIN; y += GRID) {
+                    for (let x = MARGIN; x + card.w <= VW - MARGIN; x += GRID) {
+                        if (hits(x, y, card.w, card.h)) continue;
+                        const rect = { x, y, w: card.w, h: card.h };
+                        if (out.some((q) => overlaps(rect, q, CLEAR_CARD))) continue;
+                        const g = gap2(rect, d);
+                        if (g < bestGap) {
+                            bestGap = g;
+                            best = rect;
+                        }
+                    }
+                }
+                if (!best) return null;
+                out.push({ ...card, ...best });
+            }
+            return out;
+        };
+
         for (const w of CARD_WIDTHS) {
             const cards = items.map((m, i) => {
                 const points = splitPoints(m.text);
                 return { i, points, w, ...measure(points, w) };
             });
-            // Tallest first: a big card has the fewest places it can go, so it
-            // must choose before the small ones fill the open ground.
-            const order = [...cards].sort((a, b) => b.h - a.h);
-            const placed = [];
-            let ok = true;
 
-            for (const card of order) {
-                const d = dots[card.i];
-                let best = null;
-                let bestDist = Infinity;
-                for (let y = MARGIN; y + card.h <= VH - MARGIN; y += GRID) {
-                    for (let x = MARGIN; x + card.w <= VW - MARGIN; x += GRID) {
-                        if (hits(x, y, card.w, card.h)) continue;
-                        const rect = { x, y, w: card.w, h: card.h };
-                        if (placed.some((q) => overlaps(rect, q, CLEAR_CARD))) continue;
-                        // Nearest clear spot to its own marker, so cards settle
-                        // beside the year they describe and the leader lines
-                        // stay short.
-                        const dx = Math.max(x - d.x, 0, d.x - (x + card.w));
-                        const dy = Math.max(y - d.y, 0, d.y - (y + card.h));
-                        const dist = dx * dx + dy * dy;
-                        if (dist < bestDist) {
-                            bestDist = dist;
-                            best = rect;
-                        }
-                    }
+            const orderings = [
+                [...cards].sort((a, b) => b.h - a.h), // tallest first
+                [...cards].sort((a, b) => a.i - b.i), // along the road
+                [...cards].sort((a, b) => b.i - a.i), // against the road
+                [...cards].sort((a, b) => a.h - b.h), // smallest first
+            ];
+
+            let winner = null;
+            let winnerScore = null;
+            for (const order of orderings) {
+                const placed = greedy(order);
+                if (!placed) continue;
+                const gaps = placed.map((c) => gap2(c, dots[c.i]));
+                const score = [Math.max(...gaps), gaps.reduce((n, g) => n + g, 0)];
+                if (
+                    !winnerScore ||
+                    score[0] < winnerScore[0] ||
+                    (score[0] === winnerScore[0] && score[1] < winnerScore[1])
+                ) {
+                    winner = placed;
+                    winnerScore = score;
                 }
-                if (!best) {
-                    ok = false;
-                    break;
-                }
-                placed.push({ ...card, ...best });
             }
 
-            if (ok) {
-                setLayout({ dots, cards: placed.sort((a, b) => a.i - b.i) });
+            if (winner) {
+                setLayout({ dots, cards: winner.sort((a, b) => a.i - b.i) });
                 return;
             }
         }
+
         setLayout({ failed: true });
     }, [items, count]);
 
