@@ -425,6 +425,47 @@ async def send_admin_paid_order(order: dict) -> bool:
     return await send_email(to=ADMIN_NOTIFY_EMAIL, subject=subject, html=html)
 
 
+async def send_admin_webhook_alert(reason: str, detail: str = "") -> bool:
+    """Tell the internal inbox when a Razorpay webhook is being rejected.
+
+    A rejected webhook is silent by nature: Razorpay sees a non-2xx, the customer
+    sees nothing, and the order simply never confirms. That is exactly how this
+    went unnoticed before — the code wrote a warning to a log nobody reads and
+    carried on processing unsigned events for months.
+
+    Two things bring us here, and both need a person the same day. Either
+    RAZORPAY_WEBHOOK_SECRET is missing, in which case confirmations have stopped;
+    or a signature did not match, which is a mismatched secret if it is every
+    event, and someone forging payments if it is not.
+    """
+    if not ADMIN_NOTIFY_EMAIL:
+        return False
+    site = SITE_URL or "https://www.oakbridge.in"
+    html = f"""\
+<!DOCTYPE html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:24px;background-color:#FFFFFF;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:{BRAND_NAVY};">
+<table cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:600px;border:1px solid #E5E7EB;">
+  <tr><td style="background-color:{BRAND_NAVY};color:#FFFFFF;padding:18px 24px;">
+    <div style="font-family:monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:{BRAND_AMBER};">Payments need attention</div>
+    <div style="font-family:Georgia,serif;font-size:20px;margin-top:6px;">Razorpay webhook rejected</div>
+  </td></tr>
+  <tr><td style="padding:24px;font-size:14px;line-height:1.6;">
+    <p style="margin:0 0 12px;color:{BRAND_RED};font-weight:600;">{_html.escape(reason)}</p>
+    {f'<p style="margin:0 0 12px;">{_html.escape(detail)}</p>' if detail else ''}
+    <p style="margin:0 0 12px;">While this is happening, payments confirmed by Razorpay after the
+    customer closes the checkout window will not be recorded. Orders may sit unpaid on the site
+    even though the money was taken.</p>
+    <p style="margin:0;">Check that the Secret on the webhook in the Razorpay dashboard matches
+    <code>RAZORPAY_WEBHOOK_SECRET</code> on the API service exactly, then look at
+    Razorpay &rarr; Developers &rarr; Webhook Logs for deliveries returning 200.</p>
+    <div style="margin-top:18px;font-size:12px;color:{BRAND_GREY};">{_html.escape(site)}</div>
+  </td></tr>
+</table>
+</body></html>
+"""
+    return await send_email(to=ADMIN_NOTIFY_EMAIL, subject="⚠️ Oakbridge: Razorpay webhook rejected", html=html)
+
+
 async def send_admin_inventory_alert(summary: dict, error: str = "") -> bool:
     """Tell the internal inbox when a scheduled stock sync needs a human.
 

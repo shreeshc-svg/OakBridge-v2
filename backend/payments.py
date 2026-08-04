@@ -14,6 +14,7 @@ import hashlib
 import hmac
 import logging
 import os
+import time
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
@@ -100,6 +101,52 @@ async def _log_payment_event(**fields) -> None:
         logger.exception("Could not record payment event %s", fields.get("event"))
 
 
+# Razorpay retries a refused webhook, and a misconfiguration refuses every event
+# from every customer. Without a throttle the first bad hour would send hundreds
+# of identical emails, which is its own kind of silence.
+#
+# Keyed BY REASON, because otherwise anyone posting one bad-signature request an
+# hour would permanently hold the only alert slot and a genuine missing-secret
+# outage would stay quiet.
+#
+# time.monotonic(), and None rather than 0.0 for "never sent": the monotonic
+# clock counts from boot on every platform we run on, so 0.0 is a real timestamp
+# an hour after the host started. Any machine that came up in the last hour
+# WITHOUT the secret set — precisely when this alert earns its keep — would have
+# had its first and only alert swallowed.
+#
+# The read and the write have no await between them, and render.yaml runs a
+# single uvicorn worker, so this needs no lock. Adding --workers would make it
+# one email per worker per hour.
+# Razorpay's own payloads are a couple of KB.
+MAX_WEBHOOK_BODY = 64 * 1024
+
+_WEBHOOK_ALERT_INTERVAL = 3600.0
+_last_webhook_alert: dict = {}
+
+
+async def _alert_webhook_problem(reason_key: str, reason: str, detail: str = "") -> bool:
+    """Email that webhooks are being refused, at most once an hour per cause.
+
+    Returns whether it actually sent, so the caller can throttle its audit row
+    on the same gate — the refusal log is an unauthenticated insert, and an
+    unthrottled one is a way to grow the collection without bound.
+    """
+    global _last_webhook_alert
+    now = time.monotonic()
+    last = _last_webhook_alert.get(reason_key)
+    if last is not None and now - last < _WEBHOOK_ALERT_INTERVAL:
+        return False
+    _last_webhook_alert[reason_key] = now
+    try:
+        from emailer import send_admin_webhook_alert  # late import avoids a cycle
+
+        await send_admin_webhook_alert(reason, detail)
+    except Exception:  # noqa: BLE001
+        logger.exception("Could not send webhook alert email")
+    return True
+
+
 def _expected_paise(order: dict) -> int:
     """What this order should cost, in the units Razorpay speaks."""
     return int(round(float(order.get("total") or 0) * 100))
@@ -117,7 +164,11 @@ async def _fetch_payment(payment_id: str) -> Optional[dict]:
     if not _client or not payment_id:
         return None
     try:
-        return await asyncio.to_thread(_client.payment.fetch, payment_id)
+        # The SDK sets no default timeout and does not retry, so without this a
+        # stalled connection holds the customer on 'verifying payment' after the
+        # money has left, and the except below never fires — a hang is not an
+        # exception. Ten seconds, then fall back to confirming without a figure.
+        return await asyncio.to_thread(_client.payment.fetch, payment_id, timeout=10)
     except Exception:  # noqa: BLE001
         logger.exception("Could not fetch Razorpay payment %s", payment_id)
         return None
@@ -139,22 +190,38 @@ async def _settle_capture(
     expected = _expected_paise(order)
     mismatch = amount_paise is not None and amount_paise != expected
 
-    update = {
+    # Money: always written. A capture reaching us twice (browser and webhook
+    # both fire) is not a conflict — the second carries the same facts, and
+    # losing the amount would lose what revenue is summed from.
+    money = {
         "payment_status": "paid",
-        "status": "confirmed",
-        "paid_at": datetime.now(timezone.utc).isoformat(),
         "payment_provider": "razorpay",
         "payment_source": source,
     }
     if payment_id:
-        update["rzp_payment_id"] = payment_id
+        money["rzp_payment_id"] = payment_id
     if amount_paise is not None:
-        update["amount_captured_paise"] = int(amount_paise)
-        update["amount_expected_paise"] = expected
+        money["amount_captured_paise"] = int(amount_paise)
+        money["amount_expected_paise"] = expected
         # Flagged, not hidden, and NOT silently counted as the cart's figure.
-        update["amount_mismatch"] = mismatch
+        money["amount_mismatch"] = mismatch
+    await db.orders.update_one({"id": order["id"]}, {"$set": money})
 
-    await db.orders.update_one({"id": order["id"]}, {"$set": update})
+    # Fulfilment and the moment of payment: FIRST capture only.
+    #
+    # `status` is the dispatch field the team drives by hand — confirmed,
+    # processing, shipped, delivered. Writing it unconditionally meant a
+    # redelivered webhook, which Razorpay sends freely, could reset an order the
+    # warehouse had already marked shipped back to confirmed, and move paid_at to
+    # the redelivery. Guarded on the order not already being paid.
+    await db.orders.update_one(
+        {"id": order["id"], "status": {"$in": [None, "pending", "confirmed"]}},
+        {"$set": {"status": "confirmed"}},
+    )
+    await db.orders.update_one(
+        {"id": order["id"], "paid_at": {"$in": [None, ""]}},
+        {"$set": {"paid_at": datetime.now(timezone.utc).isoformat()}},
+    )
 
     if mismatch:
         logger.error(
@@ -335,8 +402,44 @@ async def verify_payment(payload: VerifyPaymentRequest):
         raise HTTPException(status_code=404, detail="Order not found for this Razorpay order id")
 
     # Ask Razorpay what it actually took, rather than assuming the cart total.
+    #
+    # A valid signature proves the order/payment pair is genuine. It says nothing
+    # about capture: an authorised payment is money committed but not collected,
+    # and a refused or refunded one is no money at all. Recording either as a
+    # captured figure would put revenue back to guessing.
     detail = await _fetch_payment(payload.razorpay_payment_id)
+    rzp_state = detail.get("status") if isinstance(detail, dict) else None
     amount_paise = detail.get("amount") if isinstance(detail, dict) else None
+
+    if rzp_state in ("failed", "refunded"):
+        await _log_payment_event(
+            event="verify.not_paid",
+            source="browser",
+            order_id=order["id"],
+            order_number=order.get("order_number"),
+            rzp_order_id=payload.razorpay_order_id,
+            rzp_payment_id=payload.razorpay_payment_id,
+            rzp_status=rzp_state,
+            signature_ok=True,
+            note="signature valid but Razorpay does not hold this as paid",
+        )
+        raise HTTPException(status_code=400, detail="Payment was not completed")
+
+    if rzp_state is not None and rzp_state != "captured":
+        # Authorised, or a slower method still settling. The customer HAS paid,
+        # so the order is confirmed and the receipt goes out — but no captured
+        # amount is recorded, and the flag stays until the webhook or the
+        # reconciliation job sees the capture. Refusing to confirm here instead
+        # would mean a webhook outage silently costs paying customers their
+        # receipt, which is the worse of the two failures.
+        amount_paise = None
+        await db.orders.update_one(
+            {"id": order["id"]}, {"$set": {"capture_unconfirmed": True, "rzp_status": rzp_state}}
+        )
+    elif rzp_state == "captured":
+        await db.orders.update_one(
+            {"id": order["id"]}, {"$set": {"capture_unconfirmed": False, "rzp_status": rzp_state}}
+        )
 
     await db.orders.update_one(
         {"id": order["id"]}, {"$set": {"rzp_signature": payload.razorpay_signature}}
@@ -385,21 +488,67 @@ async def razorpay_webhook(
     x_razorpay_signature: Optional[str] = Header(None),
 ):
     """Async confirmation from Razorpay. Configure the webhook URL in Razorpay Dashboard."""
+    # This URL is public and unauthenticated by nature — the signature IS the
+    # authentication, and it cannot be checked before the body is read, because
+    # the body is what is signed. Bound the read so an anonymous caller cannot
+    # make us buffer an arbitrary payload first.
+    declared = request.headers.get("content-length")
+    if declared and declared.isdigit() and int(declared) > MAX_WEBHOOK_BODY:
+        raise HTTPException(status_code=413, detail="Payload too large")
     body = await request.body()
+    if len(body) > MAX_WEBHOOK_BODY:
+        raise HTTPException(status_code=413, detail="Payload too large")
 
+    # FAIL CLOSED.
+    #
+    # This endpoint used to process events with no signature check whenever the
+    # secret was unset — it logged a warning and carried on. Since the URL is
+    # public and a customer is handed their own Razorpay order id at checkout,
+    # that let anyone mark their own order paid: stock decremented, receipt sent,
+    # book packed, nothing collected. It ran that way for months because a log
+    # line is not a person telling you something is wrong.
+    #
+    # An unverifiable event is now refused, and someone is emailed about it.
     if not RAZORPAY_WEBHOOK_SECRET:
-        # Webhook secret not configured — accept but flag in logs
-        logger.warning("Razorpay webhook received but RAZORPAY_WEBHOOK_SECRET is not set")
-    else:
-        if not x_razorpay_signature:
-            raise HTTPException(status_code=400, detail="Missing webhook signature")
-        expected = hmac.new(
-            RAZORPAY_WEBHOOK_SECRET.encode("utf-8"),
-            body,
-            hashlib.sha256,
-        ).hexdigest()
-        if not hmac.compare_digest(expected, x_razorpay_signature):
-            raise HTTPException(status_code=400, detail="Invalid webhook signature")
+        logger.error("Razorpay webhook refused: RAZORPAY_WEBHOOK_SECRET is not set")
+        # Audit row rides the same hourly gate as the email. Writing one per
+        # refusal would let an anonymous caller grow the collection at will.
+        if await _alert_webhook_problem(
+            "no_secret",
+            "RAZORPAY_WEBHOOK_SECRET is not set on the API service.",
+            "Every webhook is being refused until it is. Nothing can be forged, but nothing "
+            "can be confirmed asynchronously either.",
+        ):
+            await _log_payment_event(
+                event="webhook.refused", source="webhook", reason="no_secret", signature_ok=False
+            )
+        # 503, not 400: this is our misconfiguration, and Razorpay retries on 5xx,
+        # so the events can still land once the secret is in place.
+        raise HTTPException(status_code=503, detail="Webhook not configured")
+
+    if not x_razorpay_signature:
+        if await _alert_webhook_problem(
+            "missing_signature", "A webhook arrived with no signature header at all."
+        ):
+            await _log_payment_event(
+                event="webhook.refused", source="webhook", reason="missing_signature", signature_ok=False
+            )
+        raise HTTPException(status_code=400, detail="Missing webhook signature")
+
+    expected = hmac.new(RAZORPAY_WEBHOOK_SECRET.encode("utf-8"), body, hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected, x_razorpay_signature):
+        logger.error("Razorpay webhook refused: signature mismatch")
+        if await _alert_webhook_problem(
+            "bad_signature",
+            "A Razorpay webhook arrived with a signature we could not verify.",
+            "If every delivery is failing, the Secret on the Razorpay webhook and "
+            "RAZORPAY_WEBHOOK_SECRET do not match. If deliveries are otherwise fine, "
+            "something else is posting to this URL.",
+        ):
+            await _log_payment_event(
+                event="webhook.refused", source="webhook", reason="bad_signature", signature_ok=False
+            )
+        raise HTTPException(status_code=400, detail="Invalid webhook signature")
 
     try:
         event = await request.json()
