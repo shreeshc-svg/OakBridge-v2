@@ -129,6 +129,24 @@ const GRID = 10; // placement resolution
  */
 const CARD_WIDTHS = [250, 222, 196, 174];
 
+/**
+ * Years pinned to a region of the frame, by hand.
+ *
+ * The packer's objective is "nearest clear spot to your own marker", which is
+ * right for legibility and leaves the bottom-right empty — the road never goes
+ * there, so nothing has a reason to. Defensible geometry, visible hole. These
+ * three are drawn toward a place instead of toward their marker.
+ *
+ * Fractions of the frame, not pixels, so they survive a change to VW or VH.
+ * The cost is a longer leader line for these three; that is the trade, made
+ * deliberately.
+ */
+const PINNED = {
+    2019: [0.84, 0.78], // bottom-right, the corner the road never reaches
+    2020: [0.14, 0.60], // the empty band on the left
+    2021: [0.52, 0.40], // up into the middle
+};
+
 /** Beyond this the mountain is the wrong instrument and the list is better. */
 export const ROAD_MAX_YEARS = 20;
 
@@ -270,24 +288,40 @@ export default function TimelineRoad({ items }) {
             return dx * dx + dy * dy;
         };
 
-        const greedy = (order) => {
-            const out = [];
-            for (const card of order) {
-                const d = dots[card.i];
-                let best = null;
-                let bestGap = Infinity;
-                for (let y = MARGIN; y + card.h <= VH - MARGIN; y += GRID) {
-                    for (let x = MARGIN; x + card.w <= VW - MARGIN; x += GRID) {
-                        if (hits(x, y, card.w, card.h)) continue;
-                        const rect = { x, y, w: card.w, h: card.h };
-                        if (out.some((q) => overlaps(rect, q, CLEAR_CARD))) continue;
-                        const g = gap2(rect, d);
-                        if (g < bestGap) {
-                            bestGap = g;
-                            best = rect;
-                        }
+        /**
+         * Nearest clear rectangle to a point, avoiding the world and `avoid`.
+         *
+         * `byCentre` changes what "nearest" means, and it matters. gap2 is
+         * rectangle-to-point, which is ZERO for any card that merely contains
+         * the point — so a pin was satisfied by the first card in scan order
+         * that happened to cover it, landing its centre 160 units up and left
+         * of where it was asked for. A marker wants the card beside it, which
+         * is edge distance; a pin wants the card ON it, which is centre.
+         */
+        const nearestClear = (card, to, avoid, byCentre = false) => {
+            let best = null;
+            let bestGap = Infinity;
+            for (let y = MARGIN; y + card.h <= VH - MARGIN; y += GRID) {
+                for (let x = MARGIN; x + card.w <= VW - MARGIN; x += GRID) {
+                    if (hits(x, y, card.w, card.h)) continue;
+                    const rect = { x, y, w: card.w, h: card.h };
+                    if (avoid.some((q) => overlaps(rect, q, CLEAR_CARD))) continue;
+                    const g = byCentre
+                        ? (x + card.w / 2 - to.x) ** 2 + (y + card.h / 2 - to.y) ** 2
+                        : gap2(rect, to);
+                    if (g < bestGap) {
+                        bestGap = g;
+                        best = rect;
                     }
                 }
+            }
+            return best;
+        };
+
+        const greedy = (order, seeded) => {
+            const out = [...seeded];
+            for (const card of order) {
+                const best = nearestClear(card, dots[card.i], out);
                 if (!best) return null;
                 out.push({ ...card, ...best });
             }
@@ -300,19 +334,43 @@ export default function TimelineRoad({ items }) {
                 return { i, points, w, ...measure(points, w) };
             });
 
+            // Pinned years are placed FIRST, then treated as walls.
+            //
+            // Scoring them alongside the rest did not work: the objective is the
+            // worst distance on the page, so an arrangement that honoured a pin
+            // but left another card slightly further away lost to one that
+            // quietly ignored it. Asking for a specific place is a constraint,
+            // not a preference, so it is satisfied before the packer is allowed
+            // an opinion.
+            const isPinned = (c) => Boolean(PINNED[String(items[c.i].year)]);
+            const pinned = [];
+            let pinFailed = false;
+            for (const card of cards.filter(isPinned)) {
+                const [fx, fy] = PINNED[String(items[card.i].year)];
+                const spot = nearestClear(card, { x: VW * fx, y: VH * fy }, pinned, true);
+                // A pin that cannot be honoured drops the whole attempt rather
+                // than forcing an overlap — nothing outranks that guarantee.
+                if (!spot) { pinFailed = true; break; }
+                pinned.push({ ...card, ...spot });
+            }
+            if (pinFailed) continue;
+
+            const rest = cards.filter((c) => !isPinned(c));
             const orderings = [
-                [...cards].sort((a, b) => b.h - a.h), // tallest first
-                [...cards].sort((a, b) => a.i - b.i), // along the road
-                [...cards].sort((a, b) => b.i - a.i), // against the road
-                [...cards].sort((a, b) => a.h - b.h), // smallest first
+                [...rest].sort((a, b) => b.h - a.h), // tallest first
+                [...rest].sort((a, b) => a.i - b.i), // along the road
+                [...rest].sort((a, b) => b.i - a.i), // against the road
+                [...rest].sort((a, b) => a.h - b.h), // smallest first
             ];
 
             let winner = null;
             let winnerScore = null;
             for (const order of orderings) {
-                const placed = greedy(order);
+                const placed = greedy(order, pinned);
                 if (!placed) continue;
-                const gaps = placed.map((c) => gap2(c, dots[c.i]));
+                // Only the free cards are scored; the pinned ones are identical
+                // in every ordering and would just add a constant.
+                const gaps = placed.filter((c) => !isPinned(c)).map((c) => gap2(c, dots[c.i]));
                 const score = [Math.max(...gaps), gaps.reduce((n, g) => n + g, 0)];
                 if (
                     !winnerScore ||
