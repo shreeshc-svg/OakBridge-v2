@@ -9,10 +9,12 @@ Endpoints:
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import logging
 import os
+import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -68,6 +70,100 @@ else:
 
 payments_router = APIRouter(prefix="/payments", tags=["payments"])
 webhooks_router = APIRouter(prefix="/webhooks", tags=["webhooks"])
+
+
+# ====== Payment record ======
+#
+# WHY AN EVENT LOG
+#
+# payment_status was a single field that every code path overwrote. A capture
+# followed by a late failure event left an order marked failed with the money
+# collected, and nothing anywhere said it had ever been paid. Webhooks are not
+# ordered and not delivered exactly once, so that was a matter of timing rather
+# than bad luck.
+#
+# Every message Razorpay sends is now appended here and never modified. The
+# order keeps a current status for the site to read; this collection keeps the
+# history that says how it got there, which is the only thing that can answer
+# "was this really paid?" after the fact.
+PAYMENT_EVENTS = "payment_events"
+
+
+async def _log_payment_event(**fields) -> None:
+    """Append one immutable line to the payment history. Never raises."""
+    try:
+        await db[PAYMENT_EVENTS].insert_one(
+            {"id": str(uuid.uuid4()), "at": datetime.now(timezone.utc).isoformat(), **fields}
+        )
+    except Exception:  # noqa: BLE001
+        # A lost audit line must never cost a customer their confirmation.
+        logger.exception("Could not record payment event %s", fields.get("event"))
+
+
+def _expected_paise(order: dict) -> int:
+    """What this order should cost, in the units Razorpay speaks."""
+    return int(round(float(order.get("total") or 0) * 100))
+
+
+async def _fetch_payment(payment_id: str) -> Optional[dict]:
+    """Ask Razorpay what it actually captured.
+
+    The browser hands us a signature, not an amount, so without this the site
+    would still be recording revenue from what the cart said rather than from
+    what was collected. Runs off the event loop because the SDK is synchronous.
+    Never raises: a confirmation is worth more than a verified figure, and the
+    reconciliation job backfills anything missed here.
+    """
+    if not _client or not payment_id:
+        return None
+    try:
+        return await asyncio.to_thread(_client.payment.fetch, payment_id)
+    except Exception:  # noqa: BLE001
+        logger.exception("Could not fetch Razorpay payment %s", payment_id)
+        return None
+
+
+async def _settle_capture(
+    order: dict,
+    payment_id: Optional[str],
+    amount_paise: Optional[int],
+    source: str,
+) -> bool:
+    """Record a confirmed capture against an order. Returns True if it mismatched.
+
+    Money arriving always wins, so this writes unconditionally — a capture
+    reaching us twice (browser and webhook both fire) is not a conflict, and the
+    second one carries the same facts. What it must never do is lose the amount:
+    that is what revenue is summed from.
+    """
+    expected = _expected_paise(order)
+    mismatch = amount_paise is not None and amount_paise != expected
+
+    update = {
+        "payment_status": "paid",
+        "status": "confirmed",
+        "paid_at": datetime.now(timezone.utc).isoformat(),
+        "payment_provider": "razorpay",
+        "payment_source": source,
+    }
+    if payment_id:
+        update["rzp_payment_id"] = payment_id
+    if amount_paise is not None:
+        update["amount_captured_paise"] = int(amount_paise)
+        update["amount_expected_paise"] = expected
+        # Flagged, not hidden, and NOT silently counted as the cart's figure.
+        update["amount_mismatch"] = mismatch
+
+    await db.orders.update_one({"id": order["id"]}, {"$set": update})
+
+    if mismatch:
+        logger.error(
+            "Captured amount %s != expected %s for order %s",
+            amount_paise,
+            expected,
+            order.get("order_number") or order["id"],
+        )
+    return mismatch
 
 
 def _require_client() -> razorpay.Client:
@@ -216,10 +312,19 @@ async def verify_payment(payload: VerifyPaymentRequest):
             }
         )
     except razorpay.errors.SignatureVerificationError:
-        # Mark the order so a malicious replay can be detected later
-        await db.orders.update_one(
-            {"rzp_order_id": payload.razorpay_order_id},
-            {"$set": {"payment_status": "failed", "payment_failure_reason": "signature_mismatch"}},
+        # Record it, do NOT act on it.
+        #
+        # This endpoint is unauthenticated, so the previous behaviour — marking
+        # the order failed — let anyone who knew a Razorpay order id flip a
+        # genuinely paid order to failed and delete it from revenue. A bad
+        # signature is evidence about the CALLER, not about the payment.
+        await _log_payment_event(
+            event="verify.signature_mismatch",
+            source="browser",
+            rzp_order_id=payload.razorpay_order_id,
+            rzp_payment_id=payload.razorpay_payment_id,
+            signature_ok=False,
+            note="rejected; order left untouched",
         )
         raise HTTPException(status_code=400, detail="Signature verification failed")
 
@@ -229,17 +334,27 @@ async def verify_payment(payload: VerifyPaymentRequest):
     if not order:
         raise HTTPException(status_code=404, detail="Order not found for this Razorpay order id")
 
+    # Ask Razorpay what it actually took, rather than assuming the cart total.
+    detail = await _fetch_payment(payload.razorpay_payment_id)
+    amount_paise = detail.get("amount") if isinstance(detail, dict) else None
+
     await db.orders.update_one(
-        {"id": order["id"]},
-        {
-            "$set": {
-                "payment_status": "paid",
-                "rzp_payment_id": payload.razorpay_payment_id,
-                "rzp_signature": payload.razorpay_signature,
-                "status": "confirmed",
-                "paid_at": datetime.now(timezone.utc).isoformat(),
-            }
-        },
+        {"id": order["id"]}, {"$set": {"rzp_signature": payload.razorpay_signature}}
+    )
+    mismatch = await _settle_capture(order, payload.razorpay_payment_id, amount_paise, "browser")
+
+    await _log_payment_event(
+        event="verify.captured",
+        source="browser",
+        order_id=order["id"],
+        order_number=order.get("order_number"),
+        rzp_order_id=payload.razorpay_order_id,
+        rzp_payment_id=payload.razorpay_payment_id,
+        amount_paise=amount_paise,
+        expected_paise=_expected_paise(order),
+        amount_mismatch=mismatch,
+        signature_ok=True,
+        rzp_status=(detail or {}).get("status"),
     )
 
     # Decrement inventory once payment is confirmed (idempotent).
@@ -299,61 +414,87 @@ async def razorpay_webhook(
     if not rzp_order_id:
         return {"received": True, "ignored": "no_order_id"}
 
-    update: dict = {"payment_provider": "razorpay"}
+    order_doc = await db.orders.find_one({"rzp_order_id": rzp_order_id}, {"_id": 0})
+
+    await _log_payment_event(
+        event=event_type,
+        source="webhook",
+        order_id=(order_doc or {}).get("id"),
+        order_number=(order_doc or {}).get("order_number"),
+        rzp_order_id=rzp_order_id,
+        rzp_payment_id=rzp_payment_id,
+        amount_paise=payment.get("amount"),
+        rzp_status=payment.get("status"),
+        error_description=payment.get("error_description"),
+        signature_ok=bool(RAZORPAY_WEBHOOK_SECRET),
+    )
+
     if event_type == "payment.captured":
-        update.update(
-            {
-                "payment_status": "paid",
-                "rzp_payment_id": rzp_payment_id,
-                "status": "confirmed",
-                "paid_at": datetime.now(timezone.utc).isoformat(),
-            }
-        )
+        if not order_doc:
+            return {"received": True, "ignored": "unknown_order"}
+        await _settle_capture(order_doc, rzp_payment_id, payment.get("amount"), "webhook")
+        res_matched = 1
+
     elif event_type == "payment.failed":
-        update.update(
+        # A failure must NEVER unseat a capture.
+        #
+        # Webhooks arrive unordered and more than once. A customer whose first
+        # attempt fails and second succeeds generates both events, and the old
+        # code wrote whichever landed last — so a paid order could end up marked
+        # failed with the money collected, quietly removing it from revenue.
+        res = await db.orders.update_one(
+            {"rzp_order_id": rzp_order_id, "payment_status": {"$ne": "paid"}},
             {
-                "payment_status": "failed",
-                "rzp_payment_id": rzp_payment_id,
-                "payment_failure_reason": payment.get("error_description"),
-            }
+                "$set": {
+                    "payment_provider": "razorpay",
+                    "payment_status": "failed",
+                    "rzp_payment_id": rzp_payment_id,
+                    "payment_failure_reason": payment.get("error_description"),
+                }
+            },
         )
+        res_matched = res.matched_count
+        if not res_matched and order_doc:
+            logger.info(
+                "Ignored payment.failed for already-paid order %s",
+                order_doc.get("order_number") or order_doc.get("id"),
+            )
+
     else:
         return {"received": True, "ignored": event_type}
 
-    res = await db.orders.update_one({"rzp_order_id": rzp_order_id}, {"$set": update})
-
     # Send receipt + admin notification only on a captured payment
-    if event_type == "payment.captured" and res.matched_count:
+    if event_type == "payment.captured" and res_matched:
         try:
-            order_doc = await db.orders.find_one({"rzp_order_id": rzp_order_id}, {"_id": 0})
-            if order_doc:
-                await _apply_stock_decrement(order_doc["id"])
-            if order_doc and await _claim_once(order_doc["id"], "paid_emails_sent"):
+            fresh = await db.orders.find_one({"rzp_order_id": rzp_order_id}, {"_id": 0})
+            if fresh:
+                await _apply_stock_decrement(fresh["id"])
+            if fresh and await _claim_once(fresh["id"], "paid_emails_sent"):
                 pdf = None
                 try:  # invoice is best-effort — never let it block the receipt email
                     from invoice import build_order_invoice
 
-                    pdf = await build_order_invoice(db, order_doc)
+                    pdf = await build_order_invoice(db, fresh)
                 except Exception:  # noqa: BLE001
                     logger.exception("Invoice build failed for %s (sending receipt without it)", rzp_order_id)
-                await send_order_receipt(order_doc, invoice_pdf=pdf or None)
-                await send_admin_paid_order(await _with_item_specs(order_doc))
+                await send_order_receipt(fresh, invoice_pdf=pdf or None)
+                await send_admin_paid_order(await _with_item_specs(fresh))
         except Exception:  # noqa: BLE001
             logger.exception("Webhook receipt email failed for rzp_order_id=%s", rzp_order_id)
 
-    # Email the customer a "payment failed" note (only if the order isn't already paid)
-    if event_type == "payment.failed" and res.matched_count:
+    # Email the customer a "payment failed" note.
+    #
+    # res_matched is already the answer to "was this order unpaid?" — the update
+    # above carried that condition. The previous version re-read the order and
+    # tested payment_status != "paid", which could never be false: it read the
+    # document it had just written to "failed".
+    if event_type == "payment.failed" and res_matched and order_doc:
         try:
-            order_doc = await db.orders.find_one({"rzp_order_id": rzp_order_id}, {"_id": 0})
-            if (
-                order_doc
-                and order_doc.get("payment_status") != "paid"
-                and await _claim_once(order_doc["id"], "failed_emails_sent")
-            ):
+            if await _claim_once(order_doc["id"], "failed_emails_sent"):
                 reason = payment.get("error_description") or ""
                 await send_order_failed(order_doc, reason)
                 await send_admin_failed_order(await _with_item_specs(order_doc), reason)
         except Exception:  # noqa: BLE001
             logger.exception("Webhook failure email failed for rzp_order_id=%s", rzp_order_id)
 
-    return {"received": True, "matched": res.matched_count, "event": event_type}
+    return {"received": True, "matched": res_matched, "event": event_type}
