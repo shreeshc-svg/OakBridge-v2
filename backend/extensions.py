@@ -1167,6 +1167,138 @@ async def admin_set_tracking(order_id: str, payload: TrackingUpdate):
     return fresh
 
 
+class SpamPurge(BaseModel):
+    """Explicit ids only.
+
+    Deliberately NOT a filter. "Delete everything matching this rule" is one
+    off-by-one from deleting a real customer, and there is no undo on a Mongo
+    delete. The admin sees the rows, ticks the ones to go, and those exact ids
+    come back here.
+    """
+    collection: str  # users | newsletter | submissions | contact_messages
+    ids: List[str] = Field(min_length=1, max_length=500)
+
+
+_SPAM_COLLECTIONS = {
+    "users": ("users", "email"),
+    "newsletter": ("newsletter", "email"),
+    "submissions": ("submissions", "email"),
+    "contact_messages": ("contact_messages", "email"),
+}
+
+
+@admin_router.get("/spam")
+async def admin_spam_review(days: int = 30, limit: int = 200):
+    """Everything that looks automated, for a person to judge.
+
+    Two different things, kept apart because they mean different things:
+
+    * REFUSED — screening already stopped these, nothing was stored in the real
+      collections. Shown so a false positive is recoverable: if a genuine
+      enquiry is sitting here, the thresholds are wrong and I want to know.
+    * SUSPECTS — these got through, before the screening existed or around it.
+      Flagged on two signals: a name no human would type, and several accounts
+      resolving to one mailbox once Gmail dots and +tags are stripped.
+
+    Nothing is deleted here. This endpoint only reads.
+    """
+    from antispam import SPAM_LOG, looks_machine_generated, normalise_email
+
+    since = (datetime.now(timezone.utc) - timedelta(days=max(1, days))).isoformat()
+
+    refused = await db[SPAM_LOG].find(
+        {"at": {"$gte": since}}, {"_id": 0}
+    ).sort([("at", -1)]).to_list(limit)
+    by_reason: dict = {}
+    for r in refused:
+        by_reason[r.get("reason", "?")] = by_reason.get(r.get("reason", "?"), 0) + 1
+
+    suspects: dict = {}
+    for key, (coll, _) in _SPAM_COLLECTIONS.items():
+        rows = await db[coll].find(
+            {}, {"_id": 0, "id": 1, "email": 1, "name": 1, "full_name": 1,
+                 "created_at": 1, "working_title": 1, "subject": 1, "role": 1}
+        ).sort([("created_at", -1)]).to_list(2000)
+
+        # One mailbox holding several rows is the dot trick, and it is the
+        # signal that does not depend on guessing at somebody's name.
+        seen: dict = {}
+        for r in rows:
+            n = normalise_email(r.get("email") or "")
+            if n:
+                seen.setdefault(n, []).append(r.get("id"))
+        duplicated = {n for n, ids in seen.items() if len(ids) > 1}
+
+        flagged = []
+        for r in rows:
+            # Never flag staff, whatever their name looks like.
+            if r.get("role") and r["role"] != "customer":
+                continue
+            name = r.get("name") or r.get("full_name") or ""
+            norm = normalise_email(r.get("email") or "")
+            reasons = []
+            if looks_machine_generated(name):
+                reasons.append("machine_name")
+            if norm and norm in duplicated:
+                reasons.append("shared_mailbox")
+            if reasons:
+                flagged.append(
+                    {
+                        "id": r.get("id"),
+                        "email": r.get("email"),
+                        "name": name,
+                        "normalised": norm,
+                        "created_at": r.get("created_at"),
+                        "detail": r.get("working_title") or r.get("subject") or "",
+                        "reasons": reasons,
+                    }
+                )
+        suspects[key] = flagged
+
+    return {
+        "days": days,
+        "refused": refused,
+        "refused_by_reason": by_reason,
+        "suspects": suspects,
+        "suspect_counts": {k: len(v) for k, v in suspects.items()},
+    }
+
+
+@admin_router.post("/spam/purge")
+async def admin_spam_purge(payload: SpamPurge):
+    """Delete the rows an admin explicitly selected. Nothing else.
+
+    Takes ids, never a query. Every deletion is recorded first, so there is at
+    least an account of what went even though the rows themselves cannot come
+    back.
+    """
+    entry = _SPAM_COLLECTIONS.get(payload.collection)
+    if not entry:
+        raise HTTPException(status_code=400, detail="Unknown collection")
+    coll, _ = entry
+
+    doomed = await db[coll].find({"id": {"$in": payload.ids}}, {"_id": 0}).to_list(len(payload.ids))
+    # Staff accounts are never removable through this route, whatever is sent.
+    if coll == "users":
+        keep = {d["id"] for d in doomed if (d.get("role") or "customer") != "customer"}
+        if keep:
+            doomed = [d for d in doomed if d["id"] not in keep]
+    ids = [d["id"] for d in doomed]
+    if not ids:
+        return {"deleted": 0, "skipped": len(payload.ids)}
+
+    await db.spam_purges.insert_one(
+        {
+            "at": datetime.now(timezone.utc).isoformat(),
+            "collection": coll,
+            "count": len(ids),
+            "rows": doomed,
+        }
+    )
+    res = await db[coll].delete_many({"id": {"$in": ids}})
+    return {"deleted": res.deleted_count, "skipped": len(payload.ids) - res.deleted_count}
+
+
 @admin_router.get("/desk-copies")
 async def admin_list_desk_copies():
     items = await db.desk_copies.find({}, {"_id": 0}).sort([("created_at", -1)]).to_list(500)

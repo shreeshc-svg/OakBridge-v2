@@ -194,6 +194,9 @@ export const adminSaveLegal = (slug, content) =>
 
 // Admin
 export const adminStats = () => api.get("/admin/stats").then((r) => r.data);
+export const adminSpamReview = () => api.get("/admin/spam").then((r) => r.data);
+export const adminSpamPurge = (payload) =>
+    api.post("/admin/spam/purge", payload).then((r) => r.data);
 export const adminSetTracking = (id, payload) =>
     api.post(`/admin/orders/${id}/tracking`, payload).then((r) => r.data);
 export const adminSendPaymentLink = (id) =>

@@ -4,11 +4,15 @@ Bot screening for the public forms.
 WHY THIS EXISTS
 
 Every public endpoint — register, newsletter, contact, submissions, careers —
-accepted anything posted to it. No captcha, no rate limit, no honeypot, and
-`email_verified` was written False at registration and never resolved by
-anything. The result was dozens of accounts named like `QwcPGkLGeFwKGaJQumOvA`
+accepted anything posted to it. No captcha, no rate limit, no honeypot.
+The result was dozens of accounts named like `QwcPGkLGeFwKGaJQumOvA`
 and mailboxes spelled `so.ha.i.b.n.e.h.a.l@gmail.com`, which Gmail delivers to
 `sohaibnehal@gmail.com` — one real inbox manufacturing unlimited addresses.
+
+(An earlier version of this note claimed email verification did not exist. It
+does: registration issues an OTP, /auth/verify-otp resolves it, and both the
+checkout button and the order endpoint refuse an unverified account. What was
+missing was everything above, not that.)
 
 HOW IT ANSWERS
 
