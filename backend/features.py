@@ -993,6 +993,7 @@ TEMPLATE_COLUMNS = [
     ("stock", "Inventory on hand (default: 100)"),
     ("bestseller", "TRUE / FALSE — flag for the bestseller carousel"),
     ("new_release", "TRUE / FALSE — flag for the new-release carousel"),
+    ("star_title", "TRUE / FALSE — gives the title a gold frame wherever it appears"),
     ("grade", "Optional grade level, e.g. 'Ages 8-12' for children's titles"),
     ("language", "Default: English"),
     ("publisher", "Default: Oakbridge Publishing"),
@@ -1017,6 +1018,7 @@ SAMPLE_ROW = {
     "stock": 50,
     "bestseller": "TRUE",
     "new_release": "FALSE",
+    "star_title": "FALSE",
     "grade": "",
     "language": "English",
     "publisher": "Oakbridge Publishing",
@@ -1070,7 +1072,7 @@ def _build_template_workbook() -> Workbook:
         "1. Fill in one book per row on the 'Books' sheet. The first row is the header — DO NOT change it.",
         "2. Required columns (highlighted in red): title, author, isbn, category, subject, description, price, cover_image.",
         "3. Allowed values for `category`: academic, professional, general, coffee-table, curated-works.",
-        "4. `bestseller` and `new_release` accept TRUE / FALSE (case-insensitive).",
+        "4. `bestseller`, `new_release` and `star_title` accept TRUE / FALSE (case-insensitive).",
         "5. `cover_image` should be a public URL. If you'd rather upload covers from your computer, leave this blank and use the per-book drag-and-drop uploader after import.",
         "6. The italic row 2 is a sample — delete it before uploading or it will be imported as a real book.",
         "7. Save the file as .xlsx (Excel) or .csv (UTF-8) and upload via Admin → Books → Import.",
@@ -1193,6 +1195,7 @@ def _csv_row_to_book_doc(clean: dict) -> dict:
         "publication_year": _csv_int(clean.get("publication_year"), default=datetime.now().year),
         "bestseller": _csv_bool(clean.get("bestseller")),
         "new_release": _csv_bool(clean.get("new_release")),
+        "star_title": _csv_bool(clean.get("star_title")),
         "rating": _csv_float(clean.get("rating")) or 4.5,
         "stock": _csv_int(clean.get("stock"), default=100),
     }
@@ -1229,7 +1232,7 @@ async def admin_bulk_import(file: UploadFile = File(...)):
     Bulk-create books from a CSV or Excel (.xlsx) file.
 
     Required columns: title, author, isbn, category, subject, description, price, cover_image
-    Optional columns: subtitle, grade, pages, original_price, stock, bestseller, new_release,
+    Optional columns: subtitle, grade, pages, original_price, stock, bestseller, new_release, star_title,
                       language, publisher, publication_year, rating
     """
     name = (file.filename or "").lower()

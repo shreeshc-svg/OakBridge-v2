@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
+import { Star } from "lucide-react";
 import { toast } from "sonner";
 import { formatINR, notifyBackInStock, mediaUrl } from "../lib/api";
 import { useCart } from "../context/CartContext";
@@ -19,6 +20,9 @@ export default function BookCard({ book, index = 0, compact = false }) {
 
     const stock = Number.isFinite(book.stock) ? book.stock : (book.stock ?? 0);
     const oos = stock <= 0;
+    // Editor's pick. Ticked per book in Admin → Books; it drives no carousel and
+    // no filter, it only dresses the tile.
+    const starred = !!book.star_title;
     const low = !oos && stock <= LOW_STOCK;
     const discount = book.original_price
         ? Math.round(100 - (book.price / book.original_price) * 100)
@@ -60,9 +64,48 @@ export default function BookCard({ book, index = 0, compact = false }) {
          */
         <div
             data-testid={`book-card-${book.id}`}
-            className="group fade-up flex flex-col h-full"
+            className={`group fade-up flex flex-col h-full ${starred ? "relative z-[1]" : ""}`}
             style={{ animationDelay: `${Math.min(index, 8) * 60}ms` }}
         >
+            {/*
+             * THE FRAME ADDS NO LAYOUT. THAT IS THE WHOLE TRICK.
+             *
+             * Every grid this card lives in sizes its rows by the tallest tile
+             * and lines the covers up across the row. Give a starred tile real
+             * padding or a real border and its cover shrinks by those pixels,
+             * so one gold book knocks its whole row out of alignment — on the
+             * bookstore grid, the homepage, the author pages and the carousel
+             * at once, because they all render this component.
+             *
+             * So the frame is absolutely positioned on negative insets: it
+             * bleeds OUTWARD into the gutter and contributes nothing to the
+             * box. Bleed is budgeted against the tightest grid on the site —
+             * the homepage strip at gap-4 (16px) — which is why the compact
+             * variant pulls in to 4px and shrinks the ribbon. Two starred books
+             * side by side still leave 8px of air between their frames.
+             *
+             * The ribbon straddles the top edge and reaches about 18px above a
+             * full-size tile, 11px above a compact one, against vertical
+             * gutters of 24px and 16px respectively. It fits, with room, in
+             * every grid — but if anyone ever tightens a gap below those, this
+             * is what will collide.
+             */}
+            {starred && (
+                <div
+                    className={`pointer-events-none absolute rounded-[3px] border border-[#C79A3B] shadow-[0_0_0_1px_rgba(199,154,59,0.22),0_12px_34px_-14px_rgba(199,154,59,0.85)] ${compact ? "-inset-1" : "-inset-2"}`}
+                >
+                    {/* Deliberately not aria-hidden: "Star Title" is a fact
+                        about the book, not decoration, and it is the only place
+                        the distinction is stated in text. */}
+                    <span
+                        data-testid={`star-title-badge-${book.id}`}
+                        className={`absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-1 whitespace-nowrap bg-[#002B5C] text-[#E8C36B] font-mono uppercase tracking-widest ${compact ? "text-[8px] px-1.5 py-0.5" : "text-[10px] px-2.5 py-1"}`}
+                    >
+                        <Star size={compact ? 8 : 10} strokeWidth={0} fill="#E8C36B" />
+                        Star Title
+                    </span>
+                </div>
+            )}
             {/* shrink-0 is load-bearing, not tidiness.
              *
              * Making the card a flex column turned this into a flex item, and a

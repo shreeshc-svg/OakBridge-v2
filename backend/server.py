@@ -88,6 +88,15 @@ class Book(BaseModel):
     publication_year: Optional[int] = 2024
     bestseller: bool = False
     new_release: bool = False
+    # Editor's pick. Unlike bestseller/new_release this drives no carousel and
+    # no filter — it only changes how the card is drawn, wherever it appears.
+    #
+    # It has to be declared HERE or it does not exist as far as the site is
+    # concerned: /books, /books/featured, /books/new-releases, /books/bestsellers
+    # and /books/{id} all carry response_model=Book, and Pydantic drops any key
+    # the model does not name. The admin could tick the box, Mongo would store
+    # it, and every page would still receive a book without it.
+    star_title: bool = False
     rating: float = 4.5
     stock: int = 100
     has_ebook: bool = False

@@ -121,6 +121,7 @@ class BookAdminCreate(BaseModel):
     publication_year: int = 2024
     bestseller: bool = False
     new_release: bool = False
+    star_title: bool = False
     rating: float = 4.5
     stock: int = 100
     variants: Optional[list] = None
@@ -145,6 +146,7 @@ class BookAdminUpdate(BaseModel):
     pages: Optional[int] = None
     bestseller: Optional[bool] = None
     new_release: Optional[bool] = None
+    star_title: Optional[bool] = None
     stock: Optional[int] = None
     variants: Optional[list] = None
 

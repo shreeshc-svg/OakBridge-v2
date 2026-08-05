@@ -27,7 +27,16 @@ export default function BestsellerCarousel({ books = [], speed = 40 }) {
 
     return (
         <div
-            className="relative overflow-hidden"
+            /* pt-3 is for the Star Title ribbon, not spacing.
+             *
+             * overflow-hidden is what makes the marquee a marquee, and it clips
+             * vertically as well as horizontally — so a starred book's ribbon,
+             * which straddles the top edge of its tile, was cut clean off in
+             * here and nowhere else. Splitting the axes is not an option: CSS
+             * promotes overflow-y:visible to auto when overflow-x is hidden,
+             * which buys a scrollbar. Padding the top gives the ribbon room
+             * inside the clip instead. */
+            className="relative overflow-hidden pt-3"
             onMouseEnter={() => setPaused(true)}
             onMouseLeave={() => setPaused(false)}
             onTouchStart={() => setPaused(true)}

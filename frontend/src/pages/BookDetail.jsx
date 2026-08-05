@@ -672,7 +672,11 @@ export default function BookDetail() {
                             </div>
                         )}
                     </div>
-                    <div ref={relatedRef} className="flex gap-6 md:gap-8 overflow-x-auto scroll-smooth snap-x pb-2 -mx-1 px-1">
+                    {/* pt-5 leaves room for a Star Title ribbon. overflow-x-auto
+                        forces the other axis to auto too, so without it a
+                        starred book's ribbon is clipped here — same trap as the
+                        bestseller marquee. */}
+                    <div ref={relatedRef} className="flex gap-6 md:gap-8 overflow-x-auto scroll-smooth snap-x pt-5 pb-2 -mx-1 px-1">
                         {related.map((b, i) => (
                             <div key={b.id} className="flex-none w-[46%] sm:w-[30%] md:w-[23%] lg:w-[18.5%] snap-start">
                                 <BookCard book={b} index={i} />

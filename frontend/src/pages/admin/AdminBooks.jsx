@@ -43,6 +43,7 @@ const BLANK = {
     pages: 100,
     bestseller: false,
     new_release: false,
+    star_title: false,
     stock: 100,
     variants: [],
 };
@@ -664,6 +665,24 @@ function BookForm({ initial, categories, onClose, onSaved }) {
                                 data-testid="book-form-new-release"
                             />{" "}
                             New Release
+                        </label>
+                        {/* Unlike the other two this drives no carousel and no
+                            filter. It only changes how the card is drawn — a
+                            gold frame and a label, everywhere the book shows. */}
+                        <label className="flex items-center gap-2">
+                            <input
+                                type="checkbox"
+                                name="star_title"
+                                checked={!!form.star_title}
+                                onChange={onChange}
+                                data-testid="book-form-star-title"
+                            />{" "}
+                            <span className="whitespace-nowrap">
+                                Star Title
+                                <span className="ml-2 font-mono text-[10px] uppercase tracking-widest text-[#4B5563]">
+                                    gold frame
+                                </span>
+                            </span>
                         </label>
                     </div>
                 </div>
