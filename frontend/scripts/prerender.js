@@ -481,6 +481,55 @@ async function main() {
         args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
     });
 
+    /*
+     * ONE THROWAWAY RENDER BEFORE THE POOL STARTS.
+     *
+     * THE EVIDENCE
+     *
+     * A build failed its first EIGHT routes and then rendered the remaining 337
+     * without a single miss, at the same concurrency. The eight were exactly
+     * STATIC_ROUTES[0..7] in list order — no more, no less — which at
+     * CONCURRENCY=4 is precisely the first two rounds, about the first sixty
+     * seconds. Page weight explains none of it: /contact (3 API calls) failed
+     * while /solutions (3) passed; /academy (4) failed while /careers (4)
+     * passed. And the API cannot be blamed, because moments earlier it had
+     * answered /api/books?limit=1000 and /api/authors from this same process.
+     *
+     * So it is not the routes and it is not the backend. It is that everything
+     * downstream of puppeteer.launch() is stone cold, and we throw four
+     * simultaneous page loads at it: no HTTP cache, so four tabs each pull the
+     * whole main.js off the local server at once; no V8 code cache, so each
+     * compiles that bundle from scratch; no warm font or TLS state. The first
+     * arrivals pay the entire warm-up bill and time out together, and because
+     * they time out they pay it again on retry.
+     *
+     * THE FIX
+     *
+     * Render one route alone first and throw the result away. One tab, nothing
+     * competing, no budget pressure. It populates the caches every later tab
+     * reads from, and it opens the API's connection pool under a load of one
+     * instead of sixteen. Then the pool starts against a warm browser and the
+     * cliff has nothing left to knock over.
+     *
+     * It is also the diagnostic. The elapsed time printed below is the true
+     * cost of a cold first render — if that number is ever large, this is where
+     * the build's time is actually going, and nobody has to infer it from a
+     * list of timed-out routes again.
+     *
+     * Its outcome is deliberately ignored. A failure here means the real run is
+     * about to fail too and will say so far better; treating it as fatal would
+     * let a single cold hiccup red a build that would otherwise be fine.
+     */
+    const primeRoute = routes[0] || "/";
+    const primeStart = Date.now();
+    const primeRes = await renderTo(browser, base, primeRoute);
+    const primeSecs = ((Date.now() - primeStart) / 1000).toFixed(1);
+    console.log(
+        primeRes.ok
+            ? `Warmed the browser on ${primeRoute} in ${primeSecs}s (cold first render).`
+            : `Warm-up render of ${primeRoute} did not settle in ${primeSecs}s (${primeRes.error}) — continuing.`,
+    );
+
     const started = Date.now();
     const queue = [...routes];
     const failures = [];
