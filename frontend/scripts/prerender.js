@@ -59,18 +59,31 @@ const PORT = Number(process.env.PRERENDER_PORT || 3000);
 /*
  * How long a route may take to settle.
  *
- * /terms renders from a bundle already in memory. /books/{id} cannot finish
- * until the API has answered, and under six-way concurrency those requests
- * queue behind each other — so the same 15s budget was generous for one and
- * tight for the other. Sixteen routes timed out on a build where the API was
- * merely slow, and every one of them shipped as an empty shell.
+ * ONE BUDGET, FOR EVERY ROUTE.
+ *
+ * The previous version gave /books and /authors 30s and everything else 15s, on
+ * the theory that only those needed the API. That distinction does not exist in
+ * this app. /privacy and /terms fetch their text through fetchLegal; /careers
+ * makes four calls; /digital-solutions four; /solutions three. Practically
+ * every page waits on site content or settings before it can render.
+ *
+ * The evidence was unambiguous: after that change every book route passed and
+ * nine of the routes left at 15s failed — precisely the ones misclassified.
+ * Splitting the budget did not fix the problem, it moved it.
  */
-const BUDGET_STATIC = Number(process.env.PRERENDER_TIMEOUT || 15000);
-const BUDGET_API = BUDGET_STATIC * 2;
-const needsApi = (route) =>
-    /^\/(books|authors)\//.test(route) || route === "/books" || route === "/authors";
-const budgetFor = (route) => (needsApi(route) ? BUDGET_API : BUDGET_STATIC);
-const CONCURRENCY = Math.max(1, Number(process.env.PRERENDER_CONCURRENCY || 6));
+const ROUTE_TIMEOUT = Number(process.env.PRERENDER_TIMEOUT || 30000);
+const budgetFor = () => ROUTE_TIMEOUT;
+/*
+ * Four, not six.
+ *
+ * One route failed with "Protocol error (Target.createTarget): Session with
+ * given id not found" — Chrome refusing to open another tab, which is what
+ * memory exhaustion looks like from the outside rather than a slow page. Six
+ * tabs plus the API waits was over the line on Vercel's builder; the cost of
+ * four is a slower build, and a slower build that finishes beats a fast one
+ * that ships pages without canonicals.
+ */
+const CONCURRENCY = Math.max(1, Number(process.env.PRERENDER_CONCURRENCY || 4));
 const ALLOW_EMPTY = process.env.PRERENDER_ALLOW_EMPTY === "1";
 
 const MIME = {
@@ -259,7 +272,7 @@ async function renderTo(browser, base, route) {
                 const html = document.documentElement.outerHTML;
                 return needles.every((n) => html.includes(n));
             },
-            { timeout: budgetFor(route) },
+            { timeout: budgetFor() },
             expected,
         );
         const html = "<!doctype html>\n" + (await page.evaluate(() => document.documentElement.outerHTML));

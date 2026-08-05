@@ -5,7 +5,7 @@
   "build": {
     "env": {
       "BACKEND_URL": "https://api.oakbridge.in",
-      "PRERENDER_CONCURRENCY": "6"
+      "PRERENDER_CONCURRENCY": "4"
     }
   },
   "redirects": [
