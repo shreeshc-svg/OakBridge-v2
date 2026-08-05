@@ -55,6 +55,21 @@ const BACKEND = (process.env.BACKEND_URL || "").replace(/\/$/, "");
  * to write a data-less page.
  */
 const PORT = Number(process.env.PRERENDER_PORT || 3000);
+
+/*
+ * How long a route may take to settle.
+ *
+ * /terms renders from a bundle already in memory. /books/{id} cannot finish
+ * until the API has answered, and under six-way concurrency those requests
+ * queue behind each other — so the same 15s budget was generous for one and
+ * tight for the other. Sixteen routes timed out on a build where the API was
+ * merely slow, and every one of them shipped as an empty shell.
+ */
+const BUDGET_STATIC = Number(process.env.PRERENDER_TIMEOUT || 15000);
+const BUDGET_API = BUDGET_STATIC * 2;
+const needsApi = (route) =>
+    /^\/(books|authors)\//.test(route) || route === "/books" || route === "/authors";
+const budgetFor = (route) => (needsApi(route) ? BUDGET_API : BUDGET_STATIC);
 const CONCURRENCY = Math.max(1, Number(process.env.PRERENDER_CONCURRENCY || 6));
 const ALLOW_EMPTY = process.env.PRERENDER_ALLOW_EMPTY === "1";
 
@@ -244,7 +259,7 @@ async function renderTo(browser, base, route) {
                 const html = document.documentElement.outerHTML;
                 return needles.every((n) => html.includes(n));
             },
-            { timeout: 15000 },
+            { timeout: budgetFor(route) },
             expected,
         );
         const html = "<!doctype html>\n" + (await page.evaluate(() => document.documentElement.outerHTML));
@@ -316,6 +331,40 @@ async function renderTo(browser, base, route) {
     }
 }
 
+/**
+ * Wait for the API to answer before rendering anything against it.
+ *
+ * Render spins a service down when idle and takes tens of seconds to come back.
+ * Push the backend and the frontend together and Vercel starts three hundred
+ * renders against an API that is still booting — which is exactly the build
+ * that produced sixteen timed-out routes.
+ *
+ * Costs a few seconds on a warm API and saves the build on a cold one. Does not
+ * abort if the API never answers: the routes will fail on their own and say so
+ * more usefully than a warm-up error would.
+ */
+async function warmBackend() {
+    if (!BACKEND) return;
+    const url = `${BACKEND}/api/health`;
+    const deadline = Date.now() + 90000;
+    let attempt = 0;
+    while (Date.now() < deadline) {
+        attempt++;
+        try {
+            const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+            if (res.ok) {
+                console.log(`API awake after ${attempt} attempt(s).`);
+                return;
+            }
+            console.log(`  API answered ${res.status}, waiting…`);
+        } catch (e) {
+            console.log(`  API not answering yet (${e.message}), waiting…`);
+        }
+        await new Promise((r) => setTimeout(r, 3000));
+    }
+    console.warn("API did not become healthy within 90s — rendering anyway.");
+}
+
 async function main() {
     if (!fs.existsSync(path.join(BUILD, "index.html"))) {
         console.error("No build/ folder found. Run `yarn build` first.");
@@ -328,6 +377,8 @@ async function main() {
         console.error("puppeteer is not installed. Run `yarn add -D puppeteer` first.");
         process.exit(1);
     }
+
+    await warmBackend();
 
     const routes = await getRoutes();
 
@@ -439,24 +490,66 @@ async function main() {
     };
     await Promise.all(Array.from({ length: CONCURRENCY }, worker));
 
+    /*
+     * One retry, single file.
+     *
+     * The failures on the build that prompted this were sixteen scattered
+     * routes — some legal pages, some books — which is the shape of an API
+     * that was intermittently slow, not of pages that cannot render. Six
+     * parallel renders all waiting on the same backend make that worse, so the
+     * second attempt runs one at a time against an API that has by then been
+     * warmed by three hundred requests.
+     *
+     * Once only. A route that fails twice, alone, with a doubled budget, has
+     * something actually wrong with it and should be reported rather than
+     * retried until the build times out.
+     */
+    let retried = [];
+    if (failures.length) {
+        console.log(`\nRetrying ${failures.length} failed route(s) one at a time…`);
+        const stillFailing = [];
+        for (const f of failures) {
+            const res = await renderTo(browser, base, f.route);
+            if (res.ok) {
+                retried.push(f.route);
+                console.log(`  RECOVERED ${f.route}`);
+            } else {
+                stillFailing.push(res);
+                console.warn(`  STILL FAILING ${res.route} — ${res.error}`);
+            }
+        }
+        failures.length = 0;
+        failures.push(...stillFailing);
+    }
+
     await browser.close();
     server.close();
 
     const secs = ((Date.now() - started) / 1000).toFixed(0);
-    console.log(`\nPrerendered ${routes.length - failures.length}/${routes.length} routes in ${secs}s.`);
+    const ok = routes.length - failures.length;
+    console.log(
+        `\nPrerendered ${ok}/${routes.length} routes in ${secs}s` +
+            (retried.length ? ` (${retried.length} recovered on retry).` : "."),
+    );
 
     /*
-     * A few failed routes still fall back to the SPA shell and work fine for
-     * real users, so a couple of flaky renders should not block a release. A
-     * large share failing means something systemic — bad API, out of memory,
-     * missing Chromium libraries — and shipping that would quietly degrade
-     * indexing across the whole catalogue.
+     * Tolerance is 2%, not 10%.
+     *
+     * At 10% a build could ship thirty-five unrendered pages and still go
+     * green, which is what happened: sixteen routes fell back to the SPA shell,
+     * and an unrendered page does not merely lose its content — it loses its
+     * canonical, so Google is told the page is a duplicate of whatever the
+     * shell claims. That is worse than a red build, and a red build is
+     * recoverable in one click.
+     *
+     * After a retry pass, anything still failing is a real fault.
      */
     if (failures.length) {
         const pct = (failures.length / routes.length) * 100;
-        console.warn(`${failures.length} route(s) failed (${pct.toFixed(1)}%).`);
-        if (pct > 10) {
-            console.error("More than 10% of routes failed — failing the build.");
+        console.warn(`${failures.length} route(s) failed after retry (${pct.toFixed(1)}%).`);
+        for (const f of failures) console.warn(`  ${f.route} — ${f.error}`);
+        if (pct > 2) {
+            console.error("More than 2% of routes failed — failing the build.");
             process.exit(1);
         }
     }
