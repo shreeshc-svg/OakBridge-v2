@@ -194,6 +194,10 @@ export const adminSaveLegal = (slug, content) =>
 
 // Admin
 export const adminStats = () => api.get("/admin/stats").then((r) => r.data);
+export const adminDeleteUser = (id) =>
+    api.delete(`/admin/users/${id}`).then((r) => r.data);
+export const adminDeleteSubmission = (id) =>
+    api.delete(`/admin/submissions/${id}`).then((r) => r.data);
 export const adminSpamReview = () => api.get("/admin/spam").then((r) => r.data);
 export const adminSpamPurge = (payload) =>
     api.post("/admin/spam/purge", payload).then((r) => r.data);

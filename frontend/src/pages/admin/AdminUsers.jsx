@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { UserPlus } from "lucide-react";
+import { UserPlus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
     adminListUsers,
+    adminDeleteUser,
     adminCreateUser,
     adminSetUserRole,
     adminSetUserSections,
@@ -72,6 +73,29 @@ function SectionPicker({ value, onChange, disabled }) {
 export default function AdminUsers() {
     const { user: me } = useAuth();
     const canManage = isSuperadmin(me?.role);
+
+    // Deleting a customer leaves their ORDERS alone — an order carries its own
+    // snapshot of name, address and what was bought, so the financial record
+    // survives. The confirmation says so, because "delete customer" reads like
+    // it takes the order history with it.
+    const removeUser = async (u) => {
+        const label = `${u.name || u.email}`;
+        if (
+            !window.confirm(
+                `Permanently delete ${label}?\n\nTheir orders are kept — an order holds its own copy of the name and delivery address. Only the account goes.\n\nThis cannot be undone.`,
+            )
+        )
+            return;
+        try {
+            const res = await adminDeleteUser(u.id);
+            toast.success(
+                `${res.email} removed${res.orders_kept ? ` — ${res.orders_kept} order(s) kept` : ""}.`,
+            );
+            setUsers((prev) => prev.filter((x) => x.id !== u.id));
+        } catch (e) {
+            toast.error(formatApiError(e));
+        }
+    };
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [q, setQ] = useState("");
@@ -379,6 +403,17 @@ export default function AdminUsers() {
                                             className="text-xs font-medium border border-[#002B5C] px-3 py-1.5 hover:bg-[#F5F7FA] whitespace-nowrap"
                                         >
                                             {editing?.id === u.id ? "Close" : `Sections (${effectiveSections(u).length})`}
+                                        </button>
+                                    )}
+                                    {canManage && u.role === "customer" && (
+                                        <button
+                                            onClick={() => removeUser(u)}
+                                            data-testid={`delete-user-${u.id}`}
+                                            title="Delete this customer account. Their orders are kept."
+                                            className="ml-2 inline-flex items-center gap-1.5 text-xs font-medium border border-[#CC0033] text-[#CC0033] px-3 py-1.5 hover:bg-[#CC0033]/5 whitespace-nowrap"
+                                        >
+                                            <Trash2 size={12} strokeWidth={1.75} />
+                                            Delete
                                         </button>
                                     )}
                                 </td>

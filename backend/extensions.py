@@ -1392,6 +1392,47 @@ async def admin_create_user(
     return {"ok": True, "id": doc["id"], "email": email, "role": payload.role}
 
 
+@admin_router.delete("/users/{user_id}")
+async def admin_delete_user(user_id: str, actor: dict = Depends(require_superadmin)):
+    """Remove a customer account. Superadmin only.
+
+    ORDERS ARE NOT TOUCHED. An order carries its own snapshot of name, email,
+    phone and address taken at checkout, so the record of what was bought and
+    where it went survives the account being removed. That matters: order
+    history is a financial record, and deleting an account is not a reason to
+    lose one.
+
+    Staff cannot be removed here — role changes go through /users/{id}/role,
+    which already refuses to strip the last superadmin. Nor can you delete
+    yourself, which is the one mistake that cannot be undone from the admin.
+
+    The row is copied into deleted_users first. It does not bring the account
+    back, but it answers "what was that address" afterwards.
+    """
+    doc = await db.users.find_one({"id": user_id}, {"_id": 0, "password_hash": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="User not found")
+    if user_id == actor.get("id"):
+        raise HTTPException(status_code=400, detail="You cannot delete your own account.")
+    if (doc.get("role") or "customer") != "customer":
+        raise HTTPException(
+            status_code=400,
+            detail="This is a staff account. Change the role to customer first, or remove their access instead.",
+        )
+
+    orders = await db.orders.count_documents({"user_id": user_id})
+    await db.deleted_users.insert_one(
+        {
+            "at": datetime.now(timezone.utc).isoformat(),
+            "by": actor.get("email"),
+            "orders_left_intact": orders,
+            "row": doc,
+        }
+    )
+    await db.users.delete_one({"id": user_id})
+    return {"deleted": True, "email": doc.get("email"), "orders_kept": orders}
+
+
 @admin_router.patch("/users/{user_id}/role")
 async def admin_set_user_role(
     user_id: str, payload: AdminUserRole, actor: dict = Depends(require_superadmin)

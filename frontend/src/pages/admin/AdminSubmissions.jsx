@@ -2,10 +2,12 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
     adminListSubmissions,
     adminUpdateSubmission,
+    adminDeleteSubmission,
     formatApiError,
 } from "../../lib/api";
 import { toast } from "sonner";
 import AdminToolbar from "../../components/AdminToolbar";
+import { Trash2 } from "lucide-react";
 
 const STATUSES = ["received", "reviewing", "shortlisted", "declined", "accepted"];
 
@@ -33,6 +35,22 @@ export default function AdminSubmissions() {
     useEffect(() => {
         load();
     }, []);
+
+    const removeSubmission = async (sub) => {
+        if (
+            !window.confirm(
+                `Permanently delete the submission "${sub.working_title}" from ${sub.name}?\n\nThis cannot be undone.`,
+            )
+        )
+            return;
+        try {
+            await adminDeleteSubmission(sub.id);
+            toast.success("Submission removed.");
+            setItems((prev) => prev.filter((x) => x.id !== sub.id));
+        } catch (e) {
+            toast.error(formatApiError(e));
+        }
+    };
 
     const onStatus = async (id, status) => {
         try {
@@ -140,6 +158,19 @@ export default function AdminSubmissions() {
                                     </option>
                                 ))}
                             </select>
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    e.preventDefault();
+                                    removeSubmission(s);
+                                }}
+                                data-testid={`delete-submission-${s.id}`}
+                                title="Delete this submission"
+                                className="ml-2 inline-flex items-center gap-1.5 text-xs font-medium border border-[#CC0033] text-[#CC0033] px-3 py-2 hover:bg-[#CC0033]/5 whitespace-nowrap"
+                            >
+                                <Trash2 size={12} strokeWidth={1.75} />
+                                Delete
+                            </button>
                         </summary>
                         <div className="px-5 pb-5 pt-1 border-t border-[#E5E7EB]">
                             <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3 text-sm">

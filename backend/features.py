@@ -1292,6 +1292,25 @@ async def admin_list_submissions():
     return await cursor.to_list(500)
 
 
+@admin_router.delete("/submissions/{sub_id}")
+async def admin_delete_submission(sub_id: str):
+    """Remove a manuscript submission.
+
+    Copied into deleted_submissions first. A proposal is somebody's work and
+    occasionally their livelihood; if one is removed by mistake, the synopsis
+    and the author's address should still be recoverable even though the row in
+    the list is gone.
+    """
+    doc = await db.submissions.find_one({"id": sub_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    await db.deleted_submissions.insert_one(
+        {"at": datetime.now(timezone.utc).isoformat(), "row": doc}
+    )
+    await db.submissions.delete_one({"id": sub_id})
+    return {"deleted": True, "email": doc.get("email")}
+
+
 @admin_router.patch("/submissions/{sub_id}", response_model=Submission)
 async def admin_update_submission(sub_id: str, payload: StatusUpdate):
     allowed = {"received", "reviewing", "shortlisted", "declined", "accepted"}
