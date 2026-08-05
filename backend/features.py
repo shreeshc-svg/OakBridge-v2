@@ -1292,6 +1292,29 @@ async def admin_list_submissions():
     return await cursor.to_list(500)
 
 
+@admin_router.get("/submissions/export.csv")
+async def admin_export_submissions():
+    """Every manuscript proposal, synopsis included.
+
+    The synopsis is the reason to export this at all — an editorial team reads
+    them side by side in a sheet, not one at a time in a web page.
+    """
+    from csv_export import csv_response
+
+    rows = await db.submissions.find({}, {"_id": 0}).sort([("created_at", -1)]).to_list(20000)
+    return csv_response(
+        "oakbridge-submissions",
+        ["received", "status", "name", "email", "phone", "affiliation",
+         "working_title", "category", "word_count", "synopsis", "bio"],
+        [
+            [r.get("created_at"), r.get("status"), r.get("name"), r.get("email"),
+             r.get("phone"), r.get("affiliation"), r.get("working_title"),
+             r.get("category"), r.get("word_count"), r.get("synopsis"), r.get("bio")]
+            for r in rows
+        ],
+    )
+
+
 @admin_router.delete("/submissions/{sub_id}")
 async def admin_delete_submission(sub_id: str):
     """Remove a manuscript submission.

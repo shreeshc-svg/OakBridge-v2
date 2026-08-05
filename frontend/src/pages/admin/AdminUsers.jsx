@@ -20,6 +20,7 @@ import {
     effectiveSections,
     isSuperadmin,
 } from "../../lib/rbac";
+import ExportButton from "../../components/admin/ExportButton";
 
 const ASSIGNABLE = ["superadmin", "manager", "editor", "fulfilment", "customer"];
 const BLANK = {
@@ -188,6 +189,8 @@ export default function AdminUsers() {
                 <h1 className="font-serif text-4xl mt-2 text-[#002B5C]">
                     Users ({users.length})
                 </h1>
+                <div className="flex items-center gap-3 mt-2">
+                <ExportButton path="/admin/users/export.csv" count={users.length} />
                 {canManage && (
                     <button
                         onClick={() => setShowNew((s) => !s)}
@@ -198,6 +201,7 @@ export default function AdminUsers() {
                         {showNew ? "Cancel" : "New staff account"}
                     </button>
                 )}
+                </div>
             </div>
 
             {created && (

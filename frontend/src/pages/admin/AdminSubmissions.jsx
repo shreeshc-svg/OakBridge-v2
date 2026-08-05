@@ -8,6 +8,7 @@ import {
 import { toast } from "sonner";
 import AdminToolbar from "../../components/AdminToolbar";
 import { Trash2 } from "lucide-react";
+import ExportButton from "../../components/admin/ExportButton";
 
 const STATUSES = ["received", "reviewing", "shortlisted", "declined", "accepted"];
 
@@ -88,6 +89,7 @@ export default function AdminSubmissions() {
                         Manuscript Submissions ({items.length})
                     </h1>
                 </div>
+                <ExportButton path="/admin/submissions/export.csv" count={items.length} />
             </div>
             <AdminToolbar
                 query={q}

@@ -15,6 +15,7 @@ import {
 } from "../../lib/api";
 import { toast } from "sonner";
 import AdminToolbar from "../../components/AdminToolbar";
+import ExportButton from "../../components/admin/ExportButton";
 
 // Fulfilment states only. "pending" lives on payment_status and the backend
 // rejects it here, so offering it just built a dialog that 400s on confirm.
@@ -210,9 +211,12 @@ export default function AdminOrders() {
                 />
             )}
             <div className="overline">Fulfilment</div>
-            <h1 className="font-serif text-4xl mt-2 text-[#002B5C]">
-                Orders ({orders.length})
-            </h1>
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+                <h1 className="font-serif text-4xl mt-2 text-[#002B5C]">
+                    Orders ({orders.length})
+                </h1>
+                <ExportButton path="/admin/orders/export.csv" count={orders.length} className="mt-3" />
+            </div>
             <AdminToolbar
                 query={q}
                 onQuery={setQ}

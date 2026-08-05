@@ -20,6 +20,7 @@ from typing import List, Optional
 import bcrypt
 import jwt
 import rbac
+from csv_export import csv_response, flatten_items
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security.utils import get_authorization_scheme_param
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -1538,30 +1539,103 @@ async def admin_list_waitlists(source: Optional[str] = None):
     return {"summary": summary, "entries": entries}
 
 
+# ============== CSV exports ==============
+#
+# Server-side rather than built in the browser, so an export is the whole
+# collection rather than whatever the current page happened to have loaded, and
+# so the escaping rules live in one place. See csv_export.py for why cells are
+# guarded against formula injection and why the files carry a BOM.
+
+@admin_router.get("/users/export.csv")
+async def admin_export_users():
+    rows = await db.users.find({}, {"_id": 0, "password_hash": 0, "otp_hash": 0}).sort(
+        [("created_at", -1)]
+    ).to_list(20000)
+    return csv_response(
+        "oakbridge-users",
+        ["name", "email", "phone", "role", "email_verified", "created_at"],
+        [
+            [u.get("name"), u.get("email"), u.get("phone"), u.get("role"),
+             u.get("email_verified"), u.get("created_at")]
+            for u in rows
+        ],
+    )
+
+
+@admin_router.get("/orders/export.csv")
+async def admin_export_orders():
+    rows = await db.orders.find({}, {"_id": 0}).sort([("created_at", -1)]).to_list(20000)
+    return csv_response(
+        "oakbridge-orders",
+        [
+            "order_number", "placed", "status", "payment_status", "total",
+            "captured", "customer", "email", "phone",
+            "address_1", "address_2", "city", "state", "pincode",
+            "courier", "tracking_id", "items",
+        ],
+        [
+            [
+                o.get("order_number"), o.get("created_at"), o.get("status"),
+                o.get("payment_status"), o.get("total"),
+                # What Razorpay actually took, where we recorded it. Blank on the
+                # older orders, and blank is the honest answer for those.
+                (o.get("amount_captured_paise") / 100) if o.get("amount_captured_paise") is not None else "",
+                o.get("full_name"), o.get("email"), o.get("phone"),
+                o.get("address_line1"), o.get("address_line2"), o.get("city"),
+                o.get("state"), o.get("pincode"),
+                o.get("courier"), o.get("tracking_id"),
+                flatten_items(o.get("items")),
+            ]
+            for o in rows
+        ],
+    )
+
+
+@admin_router.get("/inventory/export.csv")
+async def admin_export_inventory():
+    rows = await db.books.find({}, {"_id": 0}).sort([("title", 1)]).to_list(20000)
+    return csv_response(
+        "oakbridge-inventory",
+        ["isbn", "title", "author", "category", "subject", "edition",
+         "binding", "price", "original_price", "stock", "pages", "publication_year"],
+        [
+            [b.get("isbn"), b.get("title"), b.get("author"), b.get("category"),
+             b.get("subject"), b.get("edition"), b.get("binding"), b.get("price"),
+             b.get("original_price"), b.get("stock"), b.get("pages"),
+             b.get("publication_year")]
+            for b in rows
+        ],
+    )
+
+
+@admin_router.get("/messages/export.csv")
+async def admin_export_messages():
+    rows = await db.contact_messages.find({}, {"_id": 0}).sort(
+        [("created_at", -1)]
+    ).to_list(20000)
+    return csv_response(
+        "oakbridge-messages",
+        ["received", "name", "email", "subject", "message"],
+        [
+            [m.get("created_at"), m.get("name"), m.get("email"),
+             m.get("subject"), m.get("message")]
+            for m in rows
+        ],
+    )
+
+
 @admin_router.get("/waitlists/export.csv")
 async def admin_export_waitlists(source: Optional[str] = None):
-    from fastapi.responses import StreamingResponse  # local import (kept light)
-    import csv  # noqa
-    import io as _io  # noqa
-
     query = {"source": source} if source else {}
     entries = (
         await db.newsletter.find(query, {"_id": 0})
         .sort([("created_at", -1)])
-        .to_list(10000)
+        .to_list(20000)
     )
-
-    buf = _io.StringIO()
-    writer = csv.writer(buf)
-    writer.writerow(["email", "source", "created_at"])
-    for e in entries:
-        writer.writerow([e.get("email", ""), e.get("source", ""), e.get("created_at", "")])
-    buf.seek(0)
-    filename = f"oakbridge-waitlist-{source or 'all'}.csv"
-    return StreamingResponse(
-        iter([buf.getvalue()]),
-        media_type="text/csv",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    return csv_response(
+        f"oakbridge-waitlist-{source or 'all'}",
+        ["email", "source", "created_at"],
+        [[e.get("email"), e.get("source"), e.get("created_at")] for e in entries],
     )
 
 

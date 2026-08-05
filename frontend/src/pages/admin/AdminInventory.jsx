@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { AlertTriangle, PackageX, Package, Search } from "lucide-react";
 import { adminLowStock, fetchBooks, adminUpdateBook, formatINR, mediaUrl, syncInventoryFromSheet } from "../../lib/api";
 import { toast } from "sonner";
+import ExportButton from "../../components/admin/ExportButton";
 
 export default function AdminInventory() {
     const [data, setData] = useState({ low_stock: [], out_of_stock: [], threshold: 10 });
@@ -86,6 +87,7 @@ export default function AdminInventory() {
                     </h1>
                 </div>
                 <div className="flex items-center gap-4">
+                    <ExportButton path="/admin/inventory/export.csv" />
                     <button
                         type="button"
                         onClick={doSync}

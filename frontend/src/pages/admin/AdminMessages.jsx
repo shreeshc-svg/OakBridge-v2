@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { Trash2, CornerUpLeft } from "lucide-react";
 import { adminListMessages, adminDeleteMessage, formatApiError } from "../../lib/api";
 import AdminToolbar from "../../components/AdminToolbar";
+import ExportButton from "../../components/admin/ExportButton";
 
 export default function AdminMessages() {
     const [msgs, setMsgs] = useState([]);
@@ -56,9 +57,12 @@ export default function AdminMessages() {
     return (
         <div data-testid="admin-messages-page">
             <div className="overline">Inbox</div>
-            <h1 className="font-serif text-4xl md:text-5xl mt-2 text-[#002B5C]">
-                Messages ({msgs.length})
-            </h1>
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+                <h1 className="font-serif text-4xl md:text-5xl mt-2 text-[#002B5C]">
+                    Messages ({msgs.length})
+                </h1>
+                <ExportButton path="/admin/messages/export.csv" count={msgs.length} className="mt-3" />
+            </div>
             <p className="text-sm text-[#4B5563] mt-3 max-w-2xl">
                 Enquiries submitted through the Contact form. You also get an email alert for each
                 (reply-to is the sender), so you can respond straight from your inbox.
