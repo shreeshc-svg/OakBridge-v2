@@ -497,7 +497,19 @@ async function main() {
                 }
             } else {
                 failures.push(res);
-                console.warn(`  FAILED ${res.route} — ${res.error}`);
+                /*
+                 * NOT "FAILED".
+                 *
+                 * Every route that misses here gets a second, unhurried attempt
+                 * below, and almost all of them pass it — the first pass runs
+                 * four-wide against an API that is still warming, so a miss
+                 * means "slow", not "broken". Printing FAILED for something the
+                 * script is about to fix is a lie that reads like an outage,
+                 * and it sent someone hunting a live-site problem that did not
+                 * exist. The only line allowed to say FAILED is the one after
+                 * the retry, where it is true.
+                 */
+                console.log(`  slow, queued for retry: ${res.route} (${res.error})`);
             }
         }
     };
@@ -519,16 +531,16 @@ async function main() {
      */
     let retried = [];
     if (failures.length) {
-        console.log(`\nRetrying ${failures.length} failed route(s) one at a time…`);
+        console.log(`\nRetrying ${failures.length} slow route(s) one at a time…`);
         const stillFailing = [];
         for (const f of failures) {
             const res = await renderTo(browser, base, f.route);
             if (res.ok) {
                 retried.push(f.route);
-                console.log(`  RECOVERED ${f.route}`);
+                console.log(`  OK ${f.route}`);
             } else {
                 stillFailing.push(res);
-                console.warn(`  STILL FAILING ${res.route} — ${res.error}`);
+                console.error(`  FAILED ${res.route} — ${res.error}`);
             }
         }
         failures.length = 0;
@@ -540,10 +552,21 @@ async function main() {
 
     const secs = ((Date.now() - started) / 1000).toFixed(0);
     const ok = routes.length - failures.length;
+    /*
+     * The verdict, in one line, in plain words.
+     *
+     * Whoever reads this is scrolling a thousand lines of Vercel output looking
+     * for whether the site is all right. That answer should not have to be
+     * assembled from arithmetic across three earlier sections.
+     */
     console.log(
-        `\nPrerendered ${ok}/${routes.length} routes in ${secs}s` +
-            (retried.length ? ` (${retried.length} recovered on retry).` : "."),
+        `\n${failures.length === 0 ? "ALL PAGES OK" : "SOME PAGES DID NOT RENDER"} — ` +
+            `${ok}/${routes.length} prerendered in ${secs}s` +
+            (retried.length ? `, ${retried.length} of them on the second attempt.` : "."),
     );
+    if (failures.length === 0 && retried.length) {
+        console.log("Nothing to do: every route that was slow rendered correctly on retry.");
+    }
 
     /*
      * Tolerance is 2%, not 10%.
