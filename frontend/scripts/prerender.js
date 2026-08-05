@@ -73,6 +73,36 @@ const PORT = Number(process.env.PRERENDER_PORT || 3000);
  */
 const ROUTE_TIMEOUT = Number(process.env.PRERENDER_TIMEOUT || 30000);
 const budgetFor = () => ROUTE_TIMEOUT;
+
+/*
+ * The warm-up render gets four times the budget, and the retry twice.
+ *
+ * MEASURED, NOT GUESSED
+ *
+ * The warm-up was first shipped on the standard 30s and reported:
+ *
+ *   Warm-up render of / did not settle in 32.4s (Waiting failed: 30000ms)
+ *
+ * That is one tab, alone, on an idle browser, with nothing to contend with —
+ * and `goto` had returned in about 2.4s, so the page had loaded and the
+ * remaining thirty seconds went entirely on the app coming to life. The same
+ * homepage renders fine once the browser is warm, and is serving fully
+ * prerendered on the live site. So the cold first render on a two-core builder
+ * simply costs more than a whole route budget.
+ *
+ * That single number explains every failure list we chased. The first routes
+ * are not slow pages and they are not a slow API: they are whichever routes
+ * happen to be holding the bag when the one-off warm-up cost lands, which is
+ * why the failing set was once exactly STATIC_ROUTES[0..7] and had no relation
+ * to how many API calls a page made.
+ *
+ * A warm-up capped at the budget it exists to protect others from is not a
+ * warm-up. It gets a generous one because it runs once, alone, and its output
+ * is discarded — the only thing it can waste is a little time, and only on a
+ * build that was going to lose far more to timeouts anyway.
+ */
+const PRIME_TIMEOUT = Number(process.env.PRERENDER_PRIME_TIMEOUT || ROUTE_TIMEOUT * 4);
+const RETRY_TIMEOUT = ROUTE_TIMEOUT * 2;
 /*
  * Four, not six.
  *
@@ -234,7 +264,15 @@ async function getRoutes() {
     return [...STATIC_ROUTES, ...dynamic];
 }
 
-async function renderTo(browser, base, route) {
+/*
+ * `budget` overrides the per-route wait. Two callers need that.
+ *
+ * The warm-up needs far longer than a normal route, because its whole job is
+ * to absorb a cold cost nobody has measured. The retry needs longer because
+ * the first attempt already proved the standard budget was not enough — giving
+ * it the same 30s again is not a retry, it is the same experiment twice.
+ */
+async function renderTo(browser, base, route, budget = budgetFor()) {
     // newPage() and close() are INSIDE the try/finally on purpose. Both reject
     // occasionally under concurrency ("Target closed"), and when they did so
     // outside it the rejection escaped the worker, rejected Promise.all, and
@@ -250,7 +288,7 @@ async function renderTo(browser, base, route) {
          * networkidle2 tolerates a couple of long-lived connections; the
          * explicit wait below is what actually proves React has rendered.
          */
-        await page.goto(base + route, { waitUntil: "networkidle2", timeout: 30000 });
+        await page.goto(base + route, { waitUntil: "networkidle2", timeout: budget });
         /*
          * The required substring is part of the WAIT, not a check afterwards.
          *
@@ -272,7 +310,7 @@ async function renderTo(browser, base, route) {
                 const html = document.documentElement.outerHTML;
                 return needles.every((n) => html.includes(n));
             },
-            { timeout: budgetFor() },
+            { timeout: budget },
             expected,
         );
         const html = "<!doctype html>\n" + (await page.evaluate(() => document.documentElement.outerHTML));
@@ -522,12 +560,12 @@ async function main() {
      */
     const primeRoute = routes[0] || "/";
     const primeStart = Date.now();
-    const primeRes = await renderTo(browser, base, primeRoute);
+    const primeRes = await renderTo(browser, base, primeRoute, PRIME_TIMEOUT);
     const primeSecs = ((Date.now() - primeStart) / 1000).toFixed(1);
     console.log(
         primeRes.ok
             ? `Warmed the browser on ${primeRoute} in ${primeSecs}s (cold first render).`
-            : `Warm-up render of ${primeRoute} did not settle in ${primeSecs}s (${primeRes.error}) — continuing.`,
+            : `Warm-up render of ${primeRoute} gave up after ${primeSecs}s (${primeRes.error}) — continuing.`,
     );
 
     const started = Date.now();
@@ -583,7 +621,7 @@ async function main() {
         console.log(`\nRetrying ${failures.length} slow route(s) one at a time…`);
         const stillFailing = [];
         for (const f of failures) {
-            const res = await renderTo(browser, base, f.route);
+            const res = await renderTo(browser, base, f.route, RETRY_TIMEOUT);
             if (res.ok) {
                 retried.push(f.route);
                 console.log(`  OK ${f.route}`);
