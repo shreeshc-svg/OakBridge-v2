@@ -47,6 +47,7 @@ SECTIONS: tuple[str, ...] = (
     "desk-copies",
     "submissions",
     "waitlists",
+    "spam",
     "users",
     "legal",
     "settings",
@@ -71,6 +72,7 @@ SECTION_LABELS: dict[str, str] = {
     "desk-copies": "Desk Copies",
     "submissions": "Submissions",
     "waitlists": "Waitlists",
+    "spam": "Spam",
     "users": "Users",
     "legal": "Legal",
     "settings": "Settings",
@@ -94,6 +96,12 @@ SECTION_PATHS: dict[str, set[str]] = {
     "desk-copies": {"desk-copies"},
     "submissions": {"submissions"},
     "waitlists": {"waitlists"},
+    # Sits with the other enquiry inboxes because it holds the same records —
+    # the contact messages and manuscript submissions that were screened out.
+    # Without this entry sections_for_path("/api/admin/spam") is empty, which
+    # fails closed for everyone but a superadmin, and the section could never be
+    # granted to anybody.
+    "spam": {"spam"},
     "careers": {"job-applications", "collections"},
     "media": {"media", "uploads"},
     "media-gallery": {"collections", "media", "uploads"},

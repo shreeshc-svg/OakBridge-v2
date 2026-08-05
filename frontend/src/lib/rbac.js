@@ -26,6 +26,7 @@ export const SECTIONS = [
     "desk-copies",
     "submissions",
     "waitlists",
+    "spam",
     "users",
     "legal",
     "settings",
@@ -50,6 +51,7 @@ export const SECTION_LABELS = {
     "desk-copies": "Desk Copies",
     submissions: "Submissions",
     waitlists: "Waitlists",
+    spam: "Spam",
     users: "Users",
     legal: "Legal",
     settings: "Settings",
@@ -63,7 +65,7 @@ export const SECTION_GROUPS = [
         sections: ["pages", "navigation", "media", "media-gallery", "careers", "page-bookstore", "page-book", "ebooks"],
     },
     { label: "Fulfilment", sections: ["orders", "coupons"] },
-    { label: "Enquiries", sections: ["messages", "desk-copies", "submissions", "waitlists"] },
+    { label: "Enquiries", sections: ["messages", "desk-copies", "submissions", "waitlists", "spam"] },
     { label: "Governance", sections: ["users", "legal", "settings"] },
 ];
 
@@ -123,5 +125,22 @@ export const effectiveSections = (user) => {
     return ROLE_PRESETS[user.role] || [];
 };
 
-export const canPath = (user, path) =>
-    effectiveSections(user).includes(sectionForPath(path));
+/*
+ * The superadmin short-circuit mirrors backend can_path, and its absence is
+ * what actually hid the Spam page.
+ *
+ * "spam" was missing from SECTIONS in both files. On the backend that was
+ * invisible, because can_path answers True for a superadmin before it ever
+ * looks a section up. Here the same user fell through to a membership test
+ * against a list that did not contain the key — so the link was filtered out
+ * of the sidebar for everyone, including the account that owns the site, while
+ * the reorder screen (which applies no permissions) went on listing it.
+ *
+ * Matching the backend means an unmapped section can no longer make a page
+ * vanish for the person able to fix it. The sanity gate catches the mapping
+ * itself.
+ */
+export const canPath = (user, path) => {
+    if (isSuperadmin(user?.role)) return true;
+    return effectiveSections(user).includes(sectionForPath(path));
+};
