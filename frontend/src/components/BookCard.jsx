@@ -84,11 +84,13 @@ export default function BookCard({ book, index = 0, compact = false }) {
              * variant pulls in to 4px and shrinks the ribbon. Two starred books
              * side by side still leave 8px of air between their frames.
              *
-             * The ribbon straddles the top edge and reaches about 18px above a
-             * full-size tile, 11px above a compact one, against vertical
-             * gutters of 24px and 16px respectively. It fits, with room, in
-             * every grid — but if anyone ever tightens a gap below those, this
-             * is what will collide.
+             * The ribbon sits above the top edge and reaches 21px above a
+             * full-size tile, 13.8px above a compact one, against vertical
+             * gutters of 24px and 16px respectively — and against the pt- on
+             * the bestseller marquee and the related-titles rail, both of which
+             * clip and are padded to match. It fits everywhere, with a couple
+             * of pixels to spare; if anyone tightens one of those five numbers,
+             * this is what will collide.
              */}
             {starred && (
                 /*
@@ -118,7 +120,16 @@ export default function BookCard({ book, index = 0, compact = false }) {
                         the distinction is stated in text. */}
                     <span
                         data-testid={`star-title-badge-${book.id}`}
-                        className={`absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-1.5 whitespace-nowrap bg-[#002B5C] text-[#E8C36B] font-mono uppercase ${compact ? "text-[8px] px-2 py-[3px] tracking-[0.14em]" : "text-[10px] px-3 py-1 tracking-[0.18em]"}`}
+                        /* -72%, not -50%: it rides mostly clear of the tile and
+                           only tucks its last few pixels behind the frame line,
+                           which reads as a nameplate rather than a sticker
+                           dropped on the cover. That is 21px above a full-size
+                           tile and 13.8px above a compact one — the numbers the
+                           gutters and the two pt- values below are sized
+                           against. Raising it further, or fattening its
+                           padding, spends headroom that is already accounted
+                           for. */
+                        className={`absolute top-0 left-1/2 -translate-x-1/2 -translate-y-[72%] flex items-center gap-1.5 whitespace-nowrap bg-[#002B5C] text-[#E8C36B] font-mono uppercase ${compact ? "text-[8px] px-2 py-[2px] tracking-[0.14em]" : "text-[10px] px-3 py-[3px] tracking-[0.18em]"}`}
                     >
                         <Star size={compact ? 8 : 10} strokeWidth={0} fill="#E8C36B" />
                         Star Title

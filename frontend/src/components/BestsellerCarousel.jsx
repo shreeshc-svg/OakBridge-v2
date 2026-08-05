@@ -35,8 +35,8 @@ export default function BestsellerCarousel({ books = [], speed = 40 }) {
              * here and nowhere else. Splitting the axes is not an option: CSS
              * promotes overflow-y:visible to auto when overflow-x is hidden,
              * which buys a scrollbar. Padding the top gives the ribbon room
-             * inside the clip instead. */
-            className="relative overflow-hidden pt-3"
+             * inside the clip instead. 16px against a ribbon reaching 13.8px. */
+            className="relative overflow-hidden pt-4"
             onMouseEnter={() => setPaused(true)}
             onMouseLeave={() => setPaused(false)}
             onTouchStart={() => setPaused(true)}
