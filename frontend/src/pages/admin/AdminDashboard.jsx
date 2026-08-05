@@ -1,9 +1,89 @@
+                        {/* Three lists, not one.
+                            A term that found nothing INSIDE A CATEGORY is a
+                            filter problem; one that never matched anywhere is a
+                            catalogue gap; an ISBN is somebody asking for a title
+                            we publish but do not list. Adding them together made
+                            the biggest group — the filter one — look like lost
+                            sales, and buried the ISBNs, which are the only rows
+                            here worth acting on directly. */}
+                        <div className="space-y-6">
+                            <SearchList
+                                title="Found nothing at all"
+                                tone="danger"
+                                empty="Every search matched something. Good sign."
+                                rows={searchInsight.never_found || []}
+                                hint="No title matched, on any attempt. This is the catalogue gap."
+                            />
+                            <SearchList
+                                title="Asked for by ISBN"
+                                tone="amber"
+                                empty="No ISBN searches went unanswered."
+                                rows={searchInsight.isbn_requests || []}
+                                hint="Someone typed an ISBN we don't list. You publish 251 titles and sell 194 online."
+                            />
+                            <SearchList
+                                title="Blocked by a filter"
+                                tone="muted"
+                                empty="Nothing was hidden by a category filter."
+                                rows={searchInsight.filtered_out || []}
+                                hint="These DO exist — the visitor was inside a category that excluded them."
+                                showCategories
+                            />
+                        </div>
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { BookOpen, ShoppingBag, Users, Mail, TrendingUp, FileText, Inbox, AlertTriangle, Sparkles, Search as SearchIcon } from "lucide-react";
 import { adminStats, adminRunCartReminders, formatINR, adminSearchLogs } from "../../lib/api";
 import PaymentBadge from "../../components/admin/PaymentBadge";
 import { toast } from "sonner";
+
+/**
+ * One bucket of the search report.
+ *
+ * Kept as a component because the three lists differ only in what they mean,
+ * and the meaning is the whole point — the previous single list mixed causes
+ * that call for opposite responses.
+ */
+function SearchList({ title, rows, empty, hint, tone, showCategories }) {
+    const border =
+        tone === "danger" ? "border-[#CC0033]/30" : tone === "amber" ? "border-[#F59E0B]/40" : "border-[#E5E7EB]";
+    const head =
+        tone === "danger" ? "!text-[#CC0033]" : tone === "amber" ? "!text-[#854F0B]" : "";
+    return (
+        <div className={`bg-white border ${border}`}>
+            <div className={`px-5 py-3 border-b border-[#E5E7EB] overline !text-[10px] ${head}`}>
+                {title} {rows.length > 0 && `(${rows.length})`}
+            </div>
+            {rows.length === 0 ? (
+                <p className="p-5 text-sm text-[#4B5563]">{empty}</p>
+            ) : (
+                <>
+                    <p className="px-5 pt-3 text-xs text-[#4B5563] leading-relaxed">{hint}</p>
+                    <div className="mt-2">
+                        {rows.map((r) => (
+                            <div
+                                key={r.q}
+                                className="flex items-center justify-between gap-4 px-5 py-2.5 border-t border-[#E5E7EB]"
+                            >
+                                <span className="min-w-0">
+                                    <span className="text-sm text-[#002B5C] break-all">{r.q}</span>
+                                    {showCategories && r.categories?.length > 0 && (
+                                        <span className="block font-mono text-[10px] uppercase tracking-widest text-[#4B5563] mt-0.5">
+                                            in {r.categories.join(", ")}
+                                        </span>
+                                    )}
+                                </span>
+                                <span className="font-mono text-xs text-[#4B5563] flex-shrink-0">
+                                    {r.count}×
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+                </>
+            )}
+        </div>
+    );
+}
 
 function Stat({ label, value, icon: Icon, accent, hint }) {
     return (
@@ -246,7 +326,7 @@ export default function AdminDashboard() {
                         <div className="font-mono text-xs text-[#4B5563]">
                             {searchInsight.total_searches} searches ·{" "}
                             <span className={searchInsight.zero_result_searches > 0 ? "text-[#CC0033]" : ""}>
-                                {searchInsight.zero_result_searches} with no results
+                                {searchInsight.zero_result_searches} found nothing
                             </span>
                         </div>
                     )}

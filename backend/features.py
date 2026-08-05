@@ -12,6 +12,7 @@ import csv
 import io
 import json
 import os
+import re
 import uuid
 import logging
 import calendar
@@ -640,31 +641,113 @@ async def suggest_index():
     }
 
 
+# The sitelinks-searchbox target in public/index.html is a TEMPLATE:
+#   /books?search={search_term_string}
+# Crawlers and validators fetch it literally instead of substituting a term, so
+# the placeholder lands in the log as a search that found nothing. It is not a
+# person, it will recur forever, and left in the report it is the loudest line.
+_CRAWLER_QUERIES = {"{search_term_string}", "search_term_string"}
+
+# A query that is all digits and 10 or 13 long is an ISBN, not a phrase. When one
+# finds nothing it means something quite specific and commercially useful:
+# somebody wanted a book we publish but do not list. The sheet tracks 251 titles
+# and the site sells 194 on purpose, so this is the gap made visible.
+_ISBN_RE = re.compile(r"^(?:97[89])?\d{9}[\dxX]$")
+
+
+def _is_isbn(q: str) -> bool:
+    digits = re.sub(r"[^0-9Xx]", "", q or "")
+    return bool(_ISBN_RE.match(digits)) and len(digits) in (10, 13)
+
+
 @admin_router.get("/search-logs")
 async def admin_search_logs(days: int = 30, limit: int = 20):
-    """Aggregated search insight: what people look for, and what they don't find."""
-    since = datetime.now(timezone.utc) - timedelta(days=max(1, days))
-    base = {"at": {"$gte": since}}
+    """What people look for, and what they genuinely do not find.
 
-    async def top(match):
+    The previous version grouped on the term alone and called anything with a
+    zero a failed search. Three different things were being added together:
+
+    * A search that found nothing INSIDE A FILTER. "applied psychology" returns
+      the book, and returns nothing under Professional, because it is an
+      Academic title. That is a filter problem, not a catalogue gap, and it was
+      the bulk of the list.
+    * Our own JSON-LD placeholder, fetched literally by a crawler.
+    * A corrected spelling. Catalog.jsx logs the literal term with a zero on
+      purpose so typo demand stays visible — right for that, misleading here.
+
+    They are separated now, because the actions they imply are opposite: fix the
+    filter, ignore the crawler, stock the book.
+    """
+    since = datetime.now(timezone.utc) - timedelta(days=max(1, days))
+    base = {"at": {"$gte": since}, "q_lower": {"$nin": list(_CRAWLER_QUERIES)}}
+
+    async def top(match, keep_category=False):
+        group = {
+            "_id": "$q_lower",
+            "n": {"$sum": 1},
+            "results": {"$max": "$results"},
+            # $max over the whole term tells us whether it EVER worked, which is
+            # what separates "we do not have it" from "not in that category".
+            "best": {"$max": "$results"},
+            "categories": {"$addToSet": "$category"},
+        }
         cur = db.search_logs.aggregate(
-            [
-                {"$match": match},
-                {"$group": {"_id": "$q_lower", "n": {"$sum": 1}, "results": {"$max": "$results"}}},
-                {"$sort": {"n": -1}},
-                {"$limit": limit},
-            ]
+            [{"$match": match}, {"$group": group}, {"$sort": {"n": -1}}, {"$limit": limit}]
         )
-        return [{"q": r["_id"], "count": r["n"], "results": r.get("results", 0)} async for r in cur]
+        out = []
+        async for r in cur:
+            cats = [c for c in (r.get("categories") or []) if c]
+            out.append(
+                {
+                    "q": r["_id"],
+                    "count": r["n"],
+                    "results": r.get("results", 0),
+                    "categories": cats if keep_category else [],
+                    "is_isbn": _is_isbn(r["_id"]),
+                }
+            )
+        return out
 
     total = await db.search_logs.count_documents(base)
     zero = await db.search_logs.count_documents({**base, "results": 0})
+
+    # Terms that returned nothing at least once, with how they did at their best.
+    zero_rows = await top({**base, "results": 0}, keep_category=True)
+
+    # A term that matched something on some other occasion is not a catalogue
+    # gap — it was filtered, or corrected. Judged per term across the window.
+    ever_worked = set()
+    if zero_rows:
+        cur = db.search_logs.aggregate(
+            [
+                {"$match": {**base, "q_lower": {"$in": [r["q"] for r in zero_rows]}, "results": {"$gt": 0}}},
+                {"$group": {"_id": "$q_lower"}},
+            ]
+        )
+        ever_worked = {r["_id"] async for r in cur}
+
+    never_found, filtered_out, isbn_requests = [], [], []
+    for row in zero_rows:
+        if row["is_isbn"]:
+            isbn_requests.append(row)
+        elif row["q"] in ever_worked:
+            filtered_out.append(row)
+        else:
+            never_found.append(row)
+
     return {
         "days": days,
         "total_searches": total,
         "zero_result_searches": zero,
-        "top_queries": await top(base),
-        "zero_result_queries": await top({**base, "results": 0}),
+        "top_queries": await top(base, keep_category=True),
+        # Nothing in the catalogue matched, on any attempt. The real gap list.
+        "never_found": never_found,
+        # Worked elsewhere — the visitor was inside a category that excluded it.
+        "filtered_out": filtered_out,
+        # Somebody asked for a title by ISBN that the site does not list.
+        "isbn_requests": isbn_requests,
+        # Kept so nothing that reads the old shape breaks.
+        "zero_result_queries": zero_rows,
     }
 
 
