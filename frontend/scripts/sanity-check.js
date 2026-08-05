@@ -892,12 +892,104 @@ function checkTopLevelJsx() {
     else pass("top-level-jsx", `no stray JSX outside a component in ${files.length} files`);
 }
 
+/* ------------------------------------------------- 15. Admin section wiring
+ *
+ * THE BUG THIS EXISTS FOR
+ *
+ * The Spam page was invisible in the admin sidebar — to everyone, including
+ * the superadmin — while the reorder screen listed it as item 22.
+ *
+ * Adding a page takes four edits in three files: a route, an ADMIN_NAV entry,
+ * a key in SECTIONS on BOTH sides of the wire, and a SECTION_PATHS mapping.
+ * Spam got the first two. Nothing failed. The backend hid it because can_path
+ * answers True for a superadmin before looking anything up, so the API worked
+ * perfectly; the frontend had no such short-circuit and quietly filtered the
+ * link away. A feature that exists, is deployed, is reachable by URL, and
+ * cannot be found.
+ *
+ * Both files carry a comment telling the next person to keep them in sync.
+ * That comment had been there the whole time. This is the same instruction,
+ * enforced.
+ */
+function checkAdminSections() {
+    const navPath = path.join(FRONTEND, "src", "lib", "adminNav.js");
+    const fePath = path.join(FRONTEND, "src", "lib", "rbac.js");
+    const bePath = path.join(BACKEND, "rbac.py");
+    for (const p of [navPath, fePath, bePath]) {
+        if (!fs.existsSync(p)) {
+            warn("admin-sections", `${path.relative(REPO, p)} not found — skipped`);
+            return;
+        }
+    }
+
+    // The list literal, then every quoted string inside it.
+    const listOf = (src, re) => {
+        const m = src.match(re);
+        return m ? [...m[1].matchAll(/["']([\w-]+)["']/g)].map((x) => x[1]) : null;
+    };
+
+    const fe = listOf(read(fePath), /export const SECTIONS\s*=\s*\[([\s\S]*?)\]/);
+    const be = listOf(read(bePath), /^SECTIONS[^=]*=\s*\(([\s\S]*?)\)/m);
+    if (!fe || !be) {
+        warn("admin-sections", "could not parse a SECTIONS list — skipped");
+        return;
+    }
+
+    const problems = [];
+    const missingOnBe = fe.filter((s) => !be.includes(s));
+    const missingOnFe = be.filter((s) => !fe.includes(s));
+    if (missingOnBe.length)
+        problems.push(`in frontend SECTIONS but not backend: ${missingOnBe.join(", ")}`);
+    if (missingOnFe.length)
+        problems.push(`in backend SECTIONS but not frontend: ${missingOnFe.join(", ")}`);
+
+    // Every sidebar link must resolve to a real section, or it renders for
+    // nobody. "/admin" is the dashboard; the rest is the first path segment.
+    const navSrc = read(navPath);
+    const tos = [...navSrc.matchAll(/\{\s*to:\s*"([^"]+)"/g)].map((m) => m[1]);
+    if (!tos.length) {
+        warn("admin-sections", "could not parse ADMIN_NAV — skipped");
+        return;
+    }
+    for (const to of tos) {
+        const section =
+            to === "/admin" || to === "/admin/"
+                ? "dashboard"
+                : to.replace(/^\/admin\//, "").split("/")[0];
+        if (!fe.includes(section)) {
+            problems.push(
+                `ADMIN_NAV "${to}" needs section "${section}", which is not in SECTIONS — ` +
+                    `the link is filtered out of the sidebar for every user`,
+            );
+        }
+    }
+
+    // A section nobody can be granted is a section that fails closed for
+    // everyone below superadmin.
+    const paths = read(bePath).match(/SECTION_PATHS[^=]*=\s*\{([\s\S]*?)\n\}/);
+    if (paths) {
+        const mapped = [...paths[1].matchAll(/^\s*"([\w-]+)":/gm)].map((m) => m[1]);
+        const unmapped = be.filter((s) => s !== "dashboard" && !mapped.includes(s));
+        if (unmapped.length)
+            problems.push(
+                `no SECTION_PATHS entry for: ${unmapped.join(", ")} — grantable to nobody`,
+            );
+    }
+
+    if (problems.length) problems.forEach((p) => fail("admin-sections", p));
+    else
+        pass(
+            "admin-sections",
+            `${tos.length} sidebar links resolve, ${fe.length} sections match front to back`,
+        );
+}
+
 /* --------------------------------------------------------------- reporting */
 const CHECKS = [
     checkJsSyntax, checkNodeScripts, checkPython, checkJson,
     checkUnusedImports, checkRouteTitles, checkRouteParity,
     checkVercelFallback, checkJsxDefined, checkJsDefined, checkImgAlt,
-    checkNoStaticSitemap, checkSecrets, checkTopLevelJsx,
+    checkNoStaticSitemap, checkSecrets, checkTopLevelJsx, checkAdminSections,
 ];
 
 for (const c of CHECKS) {
