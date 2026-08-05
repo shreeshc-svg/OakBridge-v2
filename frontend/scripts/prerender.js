@@ -279,8 +279,32 @@ async function renderTo(browser, base, route, budget = budgetFor()) {
     // failed the entire build — bypassing the 10%-tolerance policy below and
     // leaving Chrome and the http server running.
     let page = null;
+    /*
+     * WHY THE PAGE FAILED, NOT JUST THAT IT DID.
+     *
+     * "Waiting failed: 30000ms exceeded" names the timer that fired and nothing
+     * else, and four builds were spent guessing behind it — slow pages, a slow
+     * API, cold caches. The backend log finally ruled the API out: it served
+     * /api/books?limit=1000 (194 titles) in about 100ms during the very build
+     * whose warm-up then sat for thirty seconds. So the answer is inside the
+     * browser, and the browser was never asked.
+     *
+     * A page that throws while rendering leaves #root empty and waits out the
+     * full budget in silence, which is indistinguishable from a slow one from
+     * out here. Collect what the page says about itself and report the state it
+     * was actually in when the timer went off.
+     */
+    const pageErrors = [];
     try {
         page = await browser.newPage();
+        page.on("pageerror", (e) => pageErrors.push(`uncaught: ${e.message}`));
+        page.on("requestfailed", (r) => {
+            const f = r.failure();
+            pageErrors.push(`request failed: ${r.url().slice(0, 120)} (${f && f.errorText})`);
+        });
+        page.on("console", (m) => {
+            if (m.type() === "error") pageErrors.push(`console: ${m.text().slice(0, 200)}`);
+        });
         /*
          * networkidle0 waits for EVERY connection to go quiet. A single poller,
          * websocket or analytics beacon that never settles turns each page into
@@ -376,7 +400,32 @@ async function renderTo(browser, base, route, budget = budgetFor()) {
         fs.writeFileSync(path.join(outDir, "index.html"), html);
         return { route, ok: true };
     } catch (e) {
-        return { route, ok: false, error: e.message };
+        /*
+         * Best effort, and deliberately swallowed on failure: the page may
+         * already be gone, and a diagnostic that can itself throw would replace
+         * the real error with its own.
+         */
+        let state = "";
+        try {
+            const s = await page.evaluate(() => {
+                const root = document.getElementById("root");
+                return {
+                    ready: document.readyState,
+                    rootChildren: root ? root.children.length : -1,
+                    title: document.title || "(none)",
+                    text: (document.body.innerText || "").trim().slice(0, 120),
+                };
+            });
+            state =
+                ` [readyState=${s.ready}, #root children=${s.rootChildren}, ` +
+                `title=${JSON.stringify(s.title)}, body="${s.text}"]`;
+        } catch {
+            /* page already closed — the primary error is what matters */
+        }
+        // Deduplicated: one broken image repeated forty times is one fact.
+        const seen = [...new Set(pageErrors)].slice(0, 5);
+        const noise = seen.length ? ` errors: ${seen.join(" | ")}` : "";
+        return { route, ok: false, error: e.message + state + noise };
     } finally {
         if (page) await page.close().catch(() => {});
     }
