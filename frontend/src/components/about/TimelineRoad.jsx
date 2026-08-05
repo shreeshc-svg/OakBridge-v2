@@ -162,6 +162,36 @@ function wrap(text, maxChars) {
     return lines.length ? lines : [""];
 }
 
+/**
+ * A smooth path through every point given, as cubic segments.
+ *
+ * Used for the turn. Catmull-Rom rather than hand-placed handles because the
+ * curve is required to PASS THROUGH its points — the shape is described by
+ * where the road goes, not by control points that only influence it, so the
+ * bulge and waist stay where they are put when the drop between passes
+ * changes with the content.
+ */
+function catmullRom(pts, tension = 0.5) {
+    const f = (v) => v.toFixed(1);
+    let d = `M ${f(pts[0][0])},${f(pts[0][1])}`;
+    for (let i = 0; i < pts.length - 1; i++) {
+        const p0 = pts[i > 0 ? i - 1 : 0];
+        const p1 = pts[i];
+        const p2 = pts[i + 1];
+        const p3 = pts[i + 2 < pts.length ? i + 2 : pts.length - 1];
+        const c1 = [
+            p1[0] + ((p2[0] - p0[0]) * tension) / 3,
+            p1[1] + ((p2[1] - p0[1]) * tension) / 3,
+        ];
+        const c2 = [
+            p2[0] - ((p3[0] - p1[0]) * tension) / 3,
+            p2[1] - ((p3[1] - p1[1]) * tension) / 3,
+        ];
+        d += ` C ${f(c1[0])},${f(c1[1])} ${f(c2[0])},${f(c2[1])} ${f(p2[0])},${f(p2[1])}`;
+    }
+    return d;
+}
+
 /* ---------------------------------------------------------------- layout */
 
 /**
@@ -195,6 +225,27 @@ export function buildLayout(items) {
     const labelW = Math.min(2 * s - 28, LABEL_MAX_W);
     const chars = Math.max(18, Math.floor(labelW / CHAR_W));
 
+    /*
+     * How far a label sits from its pin — measured against the ROAD, not the pin.
+     *
+     * Clearing the pin is not enough. A label is nearly two stops wide, and the
+     * wave keeps descending across that width: by the time you reach the outer
+     * corner of a label the tarmac has dropped most of an amplitude, and at
+     * five stops per pass it arrived 0.6px inside the text block. Invisible in
+     * the sample I looked at, a line of type sitting on the road in the one
+     * that mattered.
+     *
+     * So take the road's height at the label's own edge and clear that. It
+     * tightens automatically when the wave is shallow and backs off when the
+     * stops crowd together.
+     */
+    const roadAtLabelEdge =
+        -AMP * Math.cos((Math.PI * Math.min(labelW / 2, s)) / s);
+    const labelOffset = Math.max(
+        PIN_R + LEADER,
+        roadAtLabelEdge + ROAD_W / 2 + 8,
+    );
+
     const prepared = items.map((it) => {
         const blocks = splitPoints(it.text).map((p) => wrap(p, chars));
         const h =
@@ -203,15 +254,57 @@ export function buildLayout(items) {
         return { item: it, blocks, h };
     });
 
-    const labelH = Math.max(...prepared.map((p) => p.h));
-    // Half a pass, measured from its centreline to the far edge of a label.
-    // Always exceeds the road's own reach (AMP + ROAD_W / 2), so the labels
-    // define the frame and the tarmac can never be clipped by it.
-    const half = PIN_R + LEADER + labelH;
+    // j even -> crest, the road is above the pin, so the label goes below.
+    const isAbove = (j) => j % 2 === 1;
 
-    const centreUpper = TOP_PAD + half;
-    const centreLower = twoPass ? centreUpper + 2 * half + PASS_GAP : centreUpper;
-    const height = (twoPass ? centreLower : centreUpper) + half + BOTTOM_PAD;
+    // Which stop lands where, worked out before any vertical position is known,
+    // because the zone heights below depend on it.
+    const lowerMembers = twoPass
+        ? groups[0].map((_, k) => ({ gi: k, j: groups[0].length - 1 - k }))
+        : null;
+    const upperMembers = twoPass
+        ? groups[1].map((_, k) => ({ gi: groups[0].length + k, j: k }))
+        : items.map((_, k) => ({ gi: k, j: k }));
+
+    /*
+     * Clearance is measured per pass AND per side. Four numbers, not one.
+     *
+     * It used to be a single number — the tallest label anywhere on the
+     * timeline — applied to all four zones. So one six-line year reserved six
+     * lines of room above and below both passes, including on the side where
+     * the only label reads "Moved into general books under the CURSIVE
+     * imprint." The two roads sat 374px apart with a band of nothing between
+     * them, and the graphic was 106px taller than it had any reason to be.
+     *
+     * Each zone now answers for the labels that actually land in it.
+     */
+    const reach = (members, above) => {
+        const hs = members
+            .filter((mem) => isAbove(mem.j) === above)
+            .map((mem) => prepared[mem.gi].h);
+        return labelOffset + (hs.length ? Math.max(...hs) : 0);
+    };
+
+    const upperAbove = reach(upperMembers, true);
+    const upperBelow = reach(upperMembers, false);
+    const centreUpper = TOP_PAD + upperAbove;
+
+    let centreLower = centreUpper;
+    let lowerBelow = upperBelow;
+    if (twoPass) {
+        lowerBelow = reach(lowerMembers, false);
+        // The floor matters when both facing zones are short: labels would let
+        // the passes come close enough for the two road bands to crowd, and the
+        // wave reaches AMP + ROAD_W / 2 beyond each centreline whatever the
+        // text says.
+        centreLower =
+            centreUpper +
+            Math.max(
+                upperBelow + PASS_GAP + reach(lowerMembers, true),
+                2 * (AMP + ROAD_W / 2) + 16,
+            );
+    }
+    const height = centreLower + lowerBelow + BOTTOM_PAD;
 
     const road = (c, xEnd) => {
         const pts = [];
@@ -229,8 +322,7 @@ export function buildLayout(items) {
             d: road(centre, xEnd),
             stops: members.map(({ gi, j }) => {
                 const x = stopX(j);
-                // j even -> crest, road above the pin, so the label goes below.
-                const above = j % 2 === 1;
+                const above = isAbove(j);
                 return {
                     gi,
                     x,
@@ -247,26 +339,44 @@ export function buildLayout(items) {
     };
 
     if (twoPass) {
-        const lower = groups[0];
-        // Reversed along x: the earliest milestone sits at the right-hand end,
-        // where the road begins, and the reader travels leftward into the bend.
-        push(centreLower, lower.map((_, k) => ({ gi: k, j: lower.length - 1 - k })));
-        push(centreUpper, groups[1].map((_, k) => ({ gi: lower.length + k, j: k })));
-    } else {
-        push(centreUpper, items.map((_, k) => ({ gi: k, j: k })));
+        // The lower pass is reversed along x: the earliest milestone sits at the
+        // right-hand end, where the road begins, and the reader travels leftward
+        // into the bend.
+        push(centreLower, lowerMembers);
     }
+    push(centreUpper, upperMembers);
 
     const [lowerPass, upperPass] = twoPass ? passes : [null, passes[0]];
 
+    /*
+     * The turn, through six points rather than two.
+     *
+     * A single cubic with both handles pulled straight left gave a U with
+     * parallel sides — and the further apart the passes were, the more it read
+     * as a bracket than a bend. Tracing it through a waist that tucks back in
+     * gives the flowing, slightly wandering line a real switchback has.
+     *
+     * TURN_X is a wave extreme, so the tangent there is horizontal; the first
+     * and last points repeat that direction, which is what lets the turn meet
+     * both straights without a kink. The bulge is capped against the frame so
+     * the outer edge of a 14px stroke stays on the canvas.
+     */
     let hairpin = null;
     if (twoPass) {
         const yL = yAt(centreLower, TURN_X);
         const yU = yAt(centreUpper, TURN_X);
-        // Both ends leave horizontally because TURN_X is a wave extreme, so the
-        // U meets the passes without a kink. The bulge is capped so the outer
-        // edge of the stroke stays inside the frame.
-        const k = Math.min(0.55 * (yL - yU), (TURN_X - ROAD_W / 2 - 6) / 0.75);
-        hairpin = `M ${TURN_X},${yL.toFixed(1)} C ${(TURN_X - k).toFixed(1)},${yL.toFixed(1)} ${(TURN_X - k).toFixed(1)},${yU.toFixed(1)} ${TURN_X},${yU.toFixed(1)}`;
+        const drop = yL - yU;
+        const bulge = Math.min(0.46 * drop, TURN_X - 20);
+        const waist = bulge * 0.8;
+        hairpin = catmullRom([
+            [TURN_X, yL],
+            [TURN_X - bulge * 0.58, yL - drop * 0.05],
+            [TURN_X - bulge, yL - drop * 0.28],
+            [TURN_X - waist, (yL + yU) / 2],
+            [TURN_X - bulge, yU + drop * 0.28],
+            [TURN_X - bulge * 0.58, yU + drop * 0.05],
+            [TURN_X, yU],
+        ]);
     }
 
     const endY = yAt(upperPass.centre, upperPass.xEnd);
@@ -274,6 +384,7 @@ export function buildLayout(items) {
         width: VW,
         height,
         labelW,
+        labelOffset,
         passes,
         hairpin,
         onward: {
@@ -299,8 +410,18 @@ export default function TimelineRoad({ items }) {
     // Too many years, or too little room per year, to read as a road.
     if (!layout) return <MilestoneList items={items} />;
 
-    const { width, height, labelW, passes, hairpin, onward, start, prepared, lastIndex } =
-        layout;
+    const {
+        width,
+        height,
+        labelW,
+        labelOffset,
+        passes,
+        hairpin,
+        onward,
+        start,
+        prepared,
+        lastIndex,
+    } = layout;
 
     return (
         <div className="relative">
@@ -390,8 +511,8 @@ export default function TimelineRoad({ items }) {
                             blocks.reduce((acc, b) => acc + b.length * LINE_H, 0) +
                             Math.max(0, blocks.length - 1) * POINT_GAP;
                         const top = stop.above
-                            ? stop.y - PIN_R - LEADER - blockH
-                            : stop.y + PIN_R + LEADER;
+                            ? stop.y - labelOffset - blockH
+                            : stop.y + labelOffset;
 
                         let cursor = top + 12;
                         const lines = [];
@@ -408,8 +529,8 @@ export default function TimelineRoad({ items }) {
                                 <line
                                     x1={stop.x}
                                     x2={stop.x}
-                                    y1={stop.above ? stop.y - PIN_R - LEADER + 2 : stop.y + PIN_R + 4}
-                                    y2={stop.above ? stop.y - PIN_R - 4 : stop.y + PIN_R + LEADER - 2}
+                                    y1={stop.above ? stop.y - labelOffset + 4 : stop.y + PIN_R + 4}
+                                    y2={stop.above ? stop.y - PIN_R - 4 : stop.y + labelOffset - 4}
                                     stroke={NAVY}
                                     strokeWidth="1"
                                     strokeDasharray="2 4"
