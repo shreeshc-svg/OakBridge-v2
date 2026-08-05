@@ -91,15 +91,34 @@ export default function BookCard({ book, index = 0, compact = false }) {
              * is what will collide.
              */}
             {starred && (
+                /*
+                 * -z-10 IS REQUIRED, not a tidy-up.
+                 *
+                 * Painting order is not DOM order. A positioned element paints
+                 * in step 8 of the CSS algorithm, after non-positioned
+                 * block-level content in step 4 — so this panel, absolutely
+                 * positioned and declared first, still lands ON TOP of the
+                 * title, author and price, which are static. The cover survives
+                 * only because its own wrapper is relative. Filling the panel
+                 * white without this would paint over half the card.
+                 *
+                 * A negative z-index moves it to step 3: above the card's own
+                 * background, below everything in it. The root's `relative
+                 * z-[1]` is what keeps that from escaping behind the section.
+                 *
+                 * Square corners, deliberately. Nothing else on this page is
+                 * rounded — not the badges, not the cover, not the buttons — so
+                 * a radius here read as a stray box rather than a frame.
+                 */
                 <div
-                    className={`pointer-events-none absolute rounded-[3px] border border-[#C79A3B] shadow-[0_0_0_1px_rgba(199,154,59,0.22),0_12px_34px_-14px_rgba(199,154,59,0.85)] ${compact ? "-inset-1" : "-inset-2"}`}
+                    className={`pointer-events-none absolute z-[-1] bg-white border-[1.5px] border-[#C79A3B] shadow-[0_0_0_1px_rgba(199,154,59,0.16),0_16px_38px_-18px_rgba(199,154,59,0.9)] ${compact ? "-inset-1" : "-inset-2"}`}
                 >
                     {/* Deliberately not aria-hidden: "Star Title" is a fact
                         about the book, not decoration, and it is the only place
                         the distinction is stated in text. */}
                     <span
                         data-testid={`star-title-badge-${book.id}`}
-                        className={`absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-1 whitespace-nowrap bg-[#002B5C] text-[#E8C36B] font-mono uppercase tracking-widest ${compact ? "text-[8px] px-1.5 py-0.5" : "text-[10px] px-2.5 py-1"}`}
+                        className={`absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-1.5 whitespace-nowrap bg-[#002B5C] text-[#E8C36B] font-mono uppercase ${compact ? "text-[8px] px-2 py-[3px] tracking-[0.14em]" : "text-[10px] px-3 py-1 tracking-[0.18em]"}`}
                     >
                         <Star size={compact ? 8 : 10} strokeWidth={0} fill="#E8C36B" />
                         Star Title
