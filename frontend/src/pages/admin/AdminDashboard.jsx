@@ -1,35 +1,3 @@
-                        {/* Three lists, not one.
-                            A term that found nothing INSIDE A CATEGORY is a
-                            filter problem; one that never matched anywhere is a
-                            catalogue gap; an ISBN is somebody asking for a title
-                            we publish but do not list. Adding them together made
-                            the biggest group — the filter one — look like lost
-                            sales, and buried the ISBNs, which are the only rows
-                            here worth acting on directly. */}
-                        <div className="space-y-6">
-                            <SearchList
-                                title="Found nothing at all"
-                                tone="danger"
-                                empty="Every search matched something. Good sign."
-                                rows={searchInsight.never_found || []}
-                                hint="No title matched, on any attempt. This is the catalogue gap."
-                            />
-                            <SearchList
-                                title="Asked for by ISBN"
-                                tone="amber"
-                                empty="No ISBN searches went unanswered."
-                                rows={searchInsight.isbn_requests || []}
-                                hint="Someone typed an ISBN we don't list. You publish 251 titles and sell 194 online."
-                            />
-                            <SearchList
-                                title="Blocked by a filter"
-                                tone="muted"
-                                empty="Nothing was hidden by a category filter."
-                                rows={searchInsight.filtered_out || []}
-                                hint="These DO exist — the visitor was inside a category that excluded them."
-                                showCategories
-                            />
-                        </div>
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { BookOpen, ShoppingBag, Users, Mail, TrendingUp, FileText, Inbox, AlertTriangle, Sparkles, Search as SearchIcon } from "lucide-react";
@@ -358,22 +326,37 @@ export default function AdminDashboard() {
                             )}
                         </div>
 
-                        <div className="bg-white border border-[#CC0033]/30">
-                            <div className="px-5 py-3 border-b border-[#E5E7EB] overline !text-[10px] !text-[#CC0033]">
-                                Found nothing — demand you aren't meeting
-                            </div>
-                            {searchInsight.zero_result_queries.length === 0 ? (
-                                <p className="p-5 text-sm text-[#4B5563]">
-                                    Every search returned results. Good sign.
-                                </p>
-                            ) : (
-                                searchInsight.zero_result_queries.map((r) => (
-                                    <div key={r.q} className="flex items-center justify-between gap-4 px-5 py-2.5 border-b border-[#E5E7EB] last:border-b-0">
-                                        <span className="text-sm text-[#002B5C] truncate">{r.q}</span>
-                                        <span className="font-mono text-xs text-[#CC0033] flex-shrink-0">{r.count}×</span>
-                                    </div>
-                                ))
-                            )}
+                        {/* Three lists, not one.
+                            A term that found nothing INSIDE A CATEGORY is a
+                            filter problem; one that never matched anywhere is a
+                            catalogue gap; an ISBN is somebody asking for a title
+                            we publish but do not list. Adding them together made
+                            the biggest group — the filter one — look like lost
+                            sales, and buried the ISBNs, which are the only rows
+                            here worth acting on directly. */}
+                        <div className="space-y-6">
+                            <SearchList
+                                title="Found nothing at all"
+                                tone="danger"
+                                empty="Every search matched something. Good sign."
+                                rows={searchInsight.never_found || []}
+                                hint="No title matched, on any attempt. This is the catalogue gap."
+                            />
+                            <SearchList
+                                title="Asked for by ISBN"
+                                tone="amber"
+                                empty="No ISBN searches went unanswered."
+                                rows={searchInsight.isbn_requests || []}
+                                hint="Someone typed an ISBN we don't list. You publish 251 titles and sell 194 online."
+                            />
+                            <SearchList
+                                title="Blocked by a filter"
+                                tone="muted"
+                                empty="Nothing was hidden by a category filter."
+                                rows={searchInsight.filtered_out || []}
+                                hint="These DO exist — the visitor was inside a category that excluded them."
+                                showCategories
+                            />
                         </div>
                     </div>
                 )}

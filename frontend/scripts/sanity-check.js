@@ -833,12 +833,71 @@ function checkSecrets() {
     else pass("secrets", `${files.length} files clean`);
 }
 
+/* ------------------------------------------------- 14. Top-level stray JSX
+ *
+ * THE BUG THIS EXISTS FOR — it took the whole site down and nothing caught it.
+ *
+ * An edit left a block of JSX stranded at the top of AdminDashboard.jsx, ABOVE
+ * its own import statements. It referenced `searchInsight`, a piece of
+ * component state, from module scope where no such binding exists.
+ *
+ * Every gate waved it through. It is valid syntax, so js-syntax passed. Babel
+ * compiled it and CRA said "Compiled successfully". js-defined passed because
+ * it is scope-blind by design and `searchInsight` IS declared in the file, just
+ * in a scope this expression cannot see.
+ *
+ * What it does at runtime is the worst case available: JSX at module level is
+ * an expression that RUNS when the module is imported. App.js imports
+ * AdminDashboard eagerly, so loading any page at all evaluated it and threw
+ * ReferenceError before React mounted. Not the admin dashboard — every route,
+ * including the homepage of a live shop. It cost four builds and a lot of the
+ * owner's patience, chased through timeouts that were only ever a symptom.
+ *
+ * The rule is narrow on purpose, and therefore has no false positives: a
+ * module's top level may contain declarations, imports and exports. A bare JSX
+ * expression sitting there is never intentional — it is the fingerprint of an
+ * edit that landed in the wrong place.
+ */
+function checkTopLevelJsx() {
+    try {
+        require("@babel/parser");
+    } catch {
+        warn("top-level-jsx", "@babel/parser unavailable — skipped");
+        return;
+    }
+    const files = walk(path.join(FRONTEND, "src"), (n) => /\.(js|jsx)$/.test(n));
+    const offenders = [];
+    for (const f of files) {
+        let ast;
+        try {
+            ast = parseFile(f);
+        } catch {
+            continue; // js-syntax owns parse errors
+        }
+        for (const node of ast.program.body) {
+            if (
+                node.type === "ExpressionStatement" &&
+                (node.expression.type === "JSXElement" ||
+                    node.expression.type === "JSXFragment")
+            ) {
+                offenders.push(
+                    `${path.relative(REPO, f)}:${node.loc.start.line} — JSX at module top level. ` +
+                        `It runs on import and cannot see component state; ` +
+                        `it almost certainly belongs inside a component's return.`,
+                );
+            }
+        }
+    }
+    if (offenders.length) offenders.forEach((o) => fail("top-level-jsx", o));
+    else pass("top-level-jsx", `no stray JSX outside a component in ${files.length} files`);
+}
+
 /* --------------------------------------------------------------- reporting */
 const CHECKS = [
     checkJsSyntax, checkNodeScripts, checkPython, checkJson,
     checkUnusedImports, checkRouteTitles, checkRouteParity,
     checkVercelFallback, checkJsxDefined, checkJsDefined, checkImgAlt,
-    checkNoStaticSitemap, checkSecrets,
+    checkNoStaticSitemap, checkSecrets, checkTopLevelJsx,
 ];
 
 for (const c of CHECKS) {
