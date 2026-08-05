@@ -295,10 +295,27 @@ async function renderTo(browser, base, route, budget = budgetFor()) {
      * was actually in when the timer went off.
      */
     const pageErrors = [];
+    /*
+     * IN-FLIGHT REQUESTS, TRACKED SEPARATELY.
+     *
+     * A thrown render and a hung fetch look identical from outside — both end
+     * as an empty #root and a timer running out — but they need opposite fixes,
+     * and 'requestfailed' only fires for requests that FAIL. One that simply
+     * never comes back stays pending and silent, which is precisely the case
+     * that would otherwise go unexplained again.
+     *
+     * So keep the open ones and name them at timeout. If the list is empty the
+     * page was not waiting on the network and the fault is in the app; if it
+     * names a host, that host is the answer.
+     */
+    const pending = new Map();
     try {
         page = await browser.newPage();
+        page.on("request", (r) => pending.set(r, Date.now()));
+        page.on("requestfinished", (r) => pending.delete(r));
         page.on("pageerror", (e) => pageErrors.push(`uncaught: ${e.message}`));
         page.on("requestfailed", (r) => {
+            pending.delete(r);
             const f = r.failure();
             pageErrors.push(`request failed: ${r.url().slice(0, 120)} (${f && f.errorText})`);
         });
@@ -425,7 +442,30 @@ async function renderTo(browser, base, route, budget = budgetFor()) {
         // Deduplicated: one broken image repeated forty times is one fact.
         const seen = [...new Set(pageErrors)].slice(0, 5);
         const noise = seen.length ? ` errors: ${seen.join(" | ")}` : "";
-        return { route, ok: false, error: e.message + state + noise };
+
+        /*
+         * Reported by host and by how long each has been open. The host is what
+         * identifies the culprit — our own API, S3, a font CDN, an image host —
+         * and the age separates "started a moment ago" from "has been hanging
+         * since the beginning", which is the one that matters.
+         */
+        const now = Date.now();
+        const open = [...pending.entries()]
+            .map(([r, t]) => {
+                let host;
+                try {
+                    host = new URL(r.url()).host;
+                } catch {
+                    host = "?";
+                }
+                return `${host} (${((now - t) / 1000).toFixed(0)}s)`;
+            })
+            .sort();
+        const stuck = open.length
+            ? ` still waiting on ${open.length}: ${[...new Set(open)].slice(0, 6).join(", ")}`
+            : " nothing in flight (so it was not the network)";
+
+        return { route, ok: false, error: e.message + state + noise + stuck };
     } finally {
         if (page) await page.close().catch(() => {});
     }
