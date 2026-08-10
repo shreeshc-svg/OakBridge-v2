@@ -378,6 +378,29 @@ export default function Catalog() {
         else next.set(key, value);
         // Switching category clears any active sub-category (subject) filter.
         if (key === "category") next.delete("subject");
+        /*
+         * SEARCHING CLEARS THE CATEGORY. It is not a convenience, it is a bug fix.
+         *
+         * Landing on /books quietly sets category=professional (see the effect
+         * near the top of this component). Nobody chooses it — it exists so
+         * /books and /books?category=professional are one page for canonical
+         * purposes. But it stays on while you type, so a visitor searching for a
+         * book we sell can be told it does not exist.
+         *
+         * The search log proved it: five terms, thirteen attempts, every one an
+         * academic or exam-prep title hunted from inside Professional. Someone
+         * typed the whole of "master guide to nta ugc net | set | jrf | phd
+         * paper 1 (teaching and research aptitude),7/e" four times over and got
+         * an empty shelf each time, for a title on the homepage.
+         *
+         * Typing a query is an explicit statement of intent and outranks a
+         * default the visitor never asked for. Subject goes too, since it only
+         * narrows further inside a category that is no longer applied.
+         */
+        if (key === "search" && value) {
+            next.delete("category");
+            next.delete("subject");
+        }
         setSp(next, { replace: true });
     };
 
