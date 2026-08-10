@@ -157,6 +157,52 @@ def render_order_receipt_html(order: dict) -> str:
     address = "<br>".join(p for p in addr_parts if p)
     rzp_id = order.get("rzp_payment_id", "—")
 
+    """
+    "What happens next" — the note that answers the question before it is asked.
+
+    Most of the "where is my order?" mail arrives in the gap between paying and
+    the parcel moving, from people who have no way of knowing that gap is
+    normal. Saying plainly that the tracking number is coming, to this address,
+    and that nothing is required from them, closes that gap for the majority
+    who would otherwise write in.
+
+    IT SUPPRESSES ITSELF ONCE THE ORDER HAS MOVED. The receipt can be re-sent
+    by hand from Admin -> Orders at any point in an order's life, including
+    after it has shipped, and telling someone their books are "being packed
+    now" when they are already tracking the parcel would undo the trust the
+    note exists to build. Anything with a tracking number, or a status past
+    processing, gets the plain receipt.
+
+    Built as a table with a 3px cell rather than a div with a border-left:
+    Outlook renders HTML mail through Word, which drops one and honours the
+    other.
+    """
+    shipped_states = {"shipped", "dispatched", "delivered", "completed", "cancelled"}
+    already_moving = bool(order.get("tracking_id")) or str(
+        order.get("status") or ""
+    ).strip().lower() in shipped_states
+
+    next_note = (
+        ""
+        if already_moving
+        else f"""
+      <tr><td style="padding:24px 36px 0;">
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#FFFBF2;">
+          <tr>
+            <td width="3" style="width:3px;background-color:{BRAND_AMBER};font-size:0;line-height:0;">&nbsp;</td>
+            <td style="padding:18px 20px;">
+              <div style="font-family:monospace;text-transform:uppercase;letter-spacing:1.5px;font-size:10px;color:#8A6A12;">What happens next</div>
+              <p style="margin:9px 0 0;font-size:15px;line-height:1.65;color:{BRAND_GREY};">
+                Your books are being packed now. Once our courier partner collects the parcel, your
+                <strong style="color:{BRAND_NAVY};">tracking number (AWB)</strong> will arrive at this
+                same email address &mdash; nothing is needed from you in the meantime.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td></tr>"""
+    )
+
     return f"""\
 <!DOCTYPE html>
 <html lang="en">
@@ -180,9 +226,10 @@ def render_order_receipt_html(order: dict) -> str:
           Thank you, {order.get('full_name', 'reader')}.
         </h1>
         <p style="margin:16px 0 0;font-size:15px;line-height:1.6;color:{BRAND_GREY};">
-          Your payment has been received and your order is confirmed. We'll send another note the moment it ships.
+          Your payment has been received and your order is confirmed.
         </p>
       </td></tr>
+{next_note}
 
       <!-- Order meta -->
       <tr><td style="padding:0 36px;">
