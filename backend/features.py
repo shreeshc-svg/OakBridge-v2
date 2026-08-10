@@ -2365,6 +2365,11 @@ async def _chat_system_prompt(orders_ctx: str = "", books_ctx: str = "") -> str:
             "CUSTOMER ORDERS data below. Use ONLY that data; never reveal, guess or discuss anyone "
             "else's orders. For refunds in progress or details not shown below, direct them to "
             "info@oakbridge.in.\n"
+            "- TRACKING: if a line below carries a TRACKING value, you may give that customer the "
+            "AWB number and courier. If they ask where their parcel is and no TRACKING value is "
+            "shown, ask them to reply with their order number (it looks like OAK-260804-9F3A21 and "
+            "is in their receipt email) — do not guess a number, and never state one that is not "
+            "written below.\n"
         )
         order_block = (
             "\n\nCUSTOMER ORDERS (the signed-in user's own orders only — never share with anyone else):\n"
@@ -2426,8 +2431,43 @@ async def _chat_system_prompt(orders_ctx: str = "", books_ctx: str = "") -> str:
     )
 
 
-async def _user_orders_context(user: dict) -> str:
-    """Compact summary of the signed-in user's own recent orders for the assistant."""
+"""Order numbers look like OAK-260804-9F3A21. Matched loosely — people retype
+them from an email with spaces, lowercase, or the hyphens dropped."""
+_ORDER_NO_RE = re.compile(r"OAK[\s\-_]*\d{6}[\s\-_]*[0-9A-Z]{6}", re.I)
+
+
+def _norm_order_no(s: str) -> str:
+    """Strip to letters and digits so OAK-260804-9F3A21, 'oak 260804 9f3a21' and
+    OAK2608049F3A21 all compare equal."""
+    return re.sub(r"[^A-Z0-9]", "", (s or "").upper())
+
+
+def _order_numbers_in(text: str) -> set:
+    return {_norm_order_no(m.group(0)) for m in _ORDER_NO_RE.finditer(text or "")}
+
+
+async def _user_orders_context(user: dict, message: str = "") -> str:
+    """Compact summary of the signed-in user's own recent orders for the assistant.
+
+    THE TRACKING NUMBER IS WITHHELD AT THIS LAYER, NOT IN THE PROMPT.
+
+    An AWB lets anyone holding it see where a parcel is and, with some couriers,
+    redirect it. Three things must be true before one is written into the
+    assistant's context:
+
+      1. the customer is signed in   (the query is scoped to their user_id, so
+                                      another person's order is never fetched);
+      2. their email is verified     (an unverified address may not be theirs —
+                                      it is the same bar checkout already sets);
+      3. they quoted the order number themselves.
+
+    The third is what makes this robust rather than hopeful. Telling the model
+    "only reveal tracking when asked with a matching order number" would leave
+    the rule to the model's discretion, and a determined user talks models out
+    of their instructions for sport. Withholding the value means there is
+    nothing in the context to talk it out of. You cannot leak what was never
+    put in front of you.
+    """
     try:
         orders = await db.orders.find(
             {"user_id": user["id"]}, {"_id": 0}
@@ -2436,6 +2476,11 @@ async def _user_orders_context(user: dict) -> str:
         return ""
     if not orders:
         return "This customer has no orders yet."
+
+    verified = bool(user.get("email_verified"))
+    asked = _order_numbers_in(message)
+    quoted_but_unverified = False
+
     lines = []
     for o in orders[:6]:
         num = o.get("order_number", "-")
@@ -2447,9 +2492,28 @@ async def _user_orders_context(user: dict) -> str:
         titles = "; ".join(
             f"{it.get('title', '?')} x{it.get('quantity', 1)}" for it in items[:5]
         ) or "-"
-        lines.append(
+        line = (
             f"- Order {num} placed {created}: order-status={status}, payment={pay}, "
             f"total=Rs {total}. Items: {titles}"
+        )
+        if _norm_order_no(num) in asked:
+            awb = (o.get("tracking_id") or "").strip()
+            courier = (o.get("courier") or "").strip()
+            if awb and verified:
+                line += f" TRACKING: AWB {awb}"
+                if courier:
+                    line += f" with {courier}"
+                line += " (emailed to this customer when the parcel was collected)."
+            elif awb and not verified:
+                quoted_but_unverified = True
+        lines.append(line)
+
+    if quoted_but_unverified:
+        lines.append(
+            "- NOTE: this customer asked about an order that has a tracking number, but their "
+            "email address is not verified yet. Do NOT state or hint at the tracking number. "
+            "Ask them to verify their email from their account page first, or to email "
+            "info@oakbridge.in."
         )
     return "\n".join(lines)
 
@@ -2458,7 +2522,9 @@ async def _user_orders_context(user: dict) -> str:
 async def chat_endpoint(payload: ChatRequest, user: Optional[dict] = Depends(get_current_user_optional)):
     from llm import chat as llm_chat, LLMError
 
-    orders_ctx = await _user_orders_context(user) if user else ""
+    # The message is passed in because tracking numbers are only added for an
+    # order the customer has quoted the number of — see _user_orders_context.
+    orders_ctx = await _user_orders_context(user, payload.message) if user else ""
     books_ctx = await _relevant_books(payload.message)
     system = await _chat_system_prompt(orders_ctx, books_ctx)
     history = [{"role": t.role, "content": t.content} for t in payload.history][-6:]
