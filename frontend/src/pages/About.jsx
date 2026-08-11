@@ -144,7 +144,7 @@ export default function About() {
             <Breadcrumbs items={[{ label: "About" }]} />
             <Seo
                 title="About"
-                description="Oakbridge Publishing is an independent scholarly press founded in 2017 by two veteran publishing professionals, producing authoritative law, tax, business and academic titles."
+                description="An independent scholarly press founded in 2017 by two publishing veterans, producing authoritative law, tax, business and academic titles."
                 path="/about"
             />
             <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 pt-20 pb-24 border-b border-[#E5E7EB]">

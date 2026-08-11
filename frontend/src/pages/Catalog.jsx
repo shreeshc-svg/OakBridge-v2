@@ -881,6 +881,28 @@ export default function Catalog() {
                         </div>
                     )}
 
+                    {/*
+                     * A heading the grid can belong to.
+                     *
+                     * BookCard titles each book as an <h3>, so this page went
+                     * straight from its <h1> to twenty-five <h3>s with nothing
+                     * between them. Skipping a level is a small SEO smell and a
+                     * real accessibility fault (WCAG 1.3.1): a screen-reader
+                     * user skims by heading, and got a flat run of book titles
+                     * with nothing above them saying what the list was.
+                     *
+                     * sr-only rather than visible, because the page already
+                     * states what you are looking at through the hero and the
+                     * filter bar — this is the same fact, said in the document
+                     * structure, where assistive technology can reach it.
+                     */}
+                    <h2 className="sr-only">
+                        {search
+                            ? `Search results for "${search}"`
+                            : activeCat
+                              ? `${activeCat.name} titles`
+                              : "All titles"}
+                    </h2>
                     <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6 md:gap-10">
                         {books.map((b, i) => (
                             <BookCard key={b.id} book={b} index={i} />

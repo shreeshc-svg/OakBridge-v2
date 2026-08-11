@@ -169,6 +169,9 @@ export default function Solutions() {
                 </h1>
             </section>
             <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20">
+                {/* Same reason as the bookstore grid: each solution is an <h3>,
+                    so without this the page jumped <h1> straight to <h3>. */}
+                <h2 className="sr-only">Our solutions</h2>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-0 border border-[#E5E7EB] bg-white">
                     {items.map((s, idx) => (
                         <Link

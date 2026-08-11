@@ -219,8 +219,18 @@ export default function Home() {
     return (
         <div data-testid="home-page" className="flex flex-col">
             <Seo
-                title="Law Books & Academic Publishing House"
-                description="Oakbridge Publishing is a leading law and academic publishing house — authoritative law books, tax, business and reference titles, plus events, training and AI-powered digital solutions for students, professionals and institutions."
+                /* Kept inside Google's limits on purpose.
+                 *
+                 * Seo appends " · Oakbridge Publishing" (22 chars), and Google
+                 * cuts the title around 60 and the description around 155. The
+                 * previous title measured exactly 60 and showed as "… ·
+                 * Oakbridge …"; the description ran to 231, so the whole of
+                 * "AI-powered digital solutions for students, professionals and
+                 * institutions" — the newest part of the business — never
+                 * reached a single search result. Anything added here should be
+                 * measured, not eyeballed. */
+                title="Law, Tax & Academic Books"
+                description="Independent Indian publisher of authoritative law, tax, business and academic titles — with events, training and AI-powered research tools."
                 path="/"
             />
             {/* ============== HERO ============== */}
