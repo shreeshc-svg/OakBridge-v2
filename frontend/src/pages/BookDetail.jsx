@@ -5,7 +5,7 @@ import Seo, { SITE } from "../components/Seo";
 import NoIndex from "../components/NoIndex";
 import EbookCta from "../components/EbookCta";
 import { Link, useParams, useNavigate } from "react-router-dom";
-import { Minus, Plus, ShoppingBag, ArrowLeft, Star, GraduationCap, ChevronLeft, ChevronRight, BookOpen } from "lucide-react";
+import { Minus, Plus, ShoppingBag, ArrowLeft, Star, GraduationCap, ChevronLeft, ChevronRight, BookOpen, Truck, PackageCheck, RotateCcw, ShieldCheck, BadgeCheck } from "lucide-react";
 import BookCard from "../components/BookCard";
 import DeskCopyDialog from "../components/DeskCopyDialog";
 import ReviewsSection from "../components/ReviewsSection";
@@ -25,6 +25,31 @@ const DEFAULT_PDP_BADGES = [
     { label: "Free Shipping", value: "On all orders", enabled: true },
     { label: "Delivery", value: "3–7 business days", enabled: true },
 ];
+
+/**
+ * An icon for a badge, chosen from its label.
+ *
+ * These badges are admin-managed: the label is free text, so the icon has to
+ * be inferred rather than configured. Matching on keywords keeps "Delivery",
+ * "Delivery time" and "Fast delivery" all pointing at the same mark.
+ *
+ * A LABEL THAT MATCHES NOTHING GETS NO ICON, deliberately. A generic fallback
+ * — a dot, an info circle — would put a meaningless glyph beside copy nobody
+ * here has read, and a wrong icon is worse than none: it tells the customer
+ * something the words do not say. The badge simply renders as it does today.
+ *
+ * Truck is delivery, not shipping cost, so it matches the line under every
+ * book card. Free shipping is a price promise and gets its own mark.
+ */
+const BADGE_ICONS = [
+    [/return|refund|exchange/i, RotateCcw],
+    [/secure|payment|safe|encrypt/i, ShieldCheck],
+    [/authentic|genuine|original|publisher/i, BadgeCheck],
+    [/ship/i, PackageCheck],
+    [/deliver|dispatch|days/i, Truck],
+];
+const badgeIcon = (label) =>
+    (BADGE_ICONS.find(([re]) => re.test(label || "")) || [])[1] || null;
 
 export default function BookDetail() {
     const [preview, setPreview] = useState({ pages: [], page_count: 0 });
@@ -557,12 +582,25 @@ export default function BookDetail() {
                             data-testid="pdp-badges"
                             className="mt-10 flex flex-wrap gap-x-12 gap-y-4 text-xs font-mono text-[#4B5563]"
                         >
-                            {pdpBadges.map((b, i) => (
-                                <div key={i}>
-                                    <div className="overline !text-[10px]">{b.label}</div>
-                                    <div className="mt-1 text-[#002B5C]">{b.value}</div>
-                                </div>
-                            ))}
+                            {pdpBadges.map((b, i) => {
+                                const Icon = badgeIcon(b.label);
+                                return (
+                                    <div key={i}>
+                                        <div className="overline !text-[10px]">{b.label}</div>
+                                        <div className="mt-1 flex items-center gap-2 text-[#002B5C]">
+                                            {Icon && (
+                                                <Icon
+                                                    size={15}
+                                                    strokeWidth={1.5}
+                                                    className="flex-shrink-0 text-[#4B5563]"
+                                                    aria-hidden="true"
+                                                />
+                                            )}
+                                            <span>{b.value}</span>
+                                        </div>
+                                    </div>
+                                );
+                            })}
                         </div>
                     )}
 
