@@ -9,6 +9,7 @@ import React, {
 } from "react";
 import { useAuth } from "./AuthContext";
 import { saveCart, loadCart, fetchSettings } from "../lib/api";
+import { track } from "../lib/analytics";
 
 const CartContext = createContext(null);
 const STORAGE_KEY = "oakbridge_cart_v1";
@@ -97,6 +98,23 @@ export function CartProvider({ children }) {
                     size,
                 },
             ];
+        });
+        /*
+         * Fired here, not in BookCard, because this is the one place every
+         * route into the cart converges: the card's "Add +", the product page,
+         * the quick-add on a carousel. Instrumenting the buttons instead would
+         * mean finding all of them, and missing the next one somebody adds.
+         *
+         * Sent after the stock guard above, so a click on an out-of-stock title
+         * is not counted as an add that never happened.
+         */
+        track("add_to_cart", {
+            book_id: book.id,
+            title: book.title,
+            price,
+            quantity: qty,
+            binding,
+            size,
         });
         setIsOpen(true);
     }, []);

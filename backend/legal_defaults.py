@@ -156,10 +156,14 @@ Fiduciary, collects, uses, shares and protects your personal data when you use
   messages, and messages you send to our AI assistant.
 
 **Information collected automatically:**
-- We do **not** currently use analytics or tracking/advertising cookies. We use
-  your browser's local storage only to keep you signed in and to remember your
-  cart (see our [Cookie Policy](/cookie-policy)). Our servers may keep standard
-  security logs (e.g. IP address) to operate and protect the Site.
+- We use your browser's local storage to keep you signed in and to remember your
+  cart. This is strictly necessary and always on.
+- **Only if you accept our cookie banner**, we use **PostHog** for analytics —
+  pages viewed, titles browsed, and where people get stuck while buying. Decline
+  and the analytics script is never loaded. We do **not** use advertising cookies
+  and we do not record your screen. See our [Cookie Policy](/cookie-policy).
+- Our servers may keep standard security logs (e.g. IP address) to operate and
+  protect the Site.
 
 **Payments:** card, UPI and bank details are collected and processed directly by
 our payment partner, **Razorpay**. We do not receive or store your full payment
@@ -335,30 +339,40 @@ _Last updated: {_UPDATED}_
 This Cookie Policy explains how {_SITE}, operated by **{_ENTITY}**, uses cookies
 and similar browser storage technologies.
 
-## 1. What we use
-Our website is built to keep tracking to a minimum. We currently use **only
-strictly necessary, functional browser storage** — specifically your browser's
-**local storage** — for two purposes:
+## 1. Strictly necessary storage
+These are always on, because the Site cannot work without them. We use your
+browser's **local storage** for two purposes:
 - to keep you **signed in** to your account, and
 - to remember the items in your **shopping cart**.
 
-We do **not** use analytics, advertising or tracking cookies, and we do not build
-advertising profiles or sell your data.
+We do **not** use advertising cookies, we do not build advertising profiles, and
+we do not sell your data.
 
-## 2. Third-party cookies
+## 2. Analytics — only with your consent
+With your permission we use **PostHog** to understand how the Site is used: which
+pages are visited, which titles are viewed, and where people run into trouble
+while buying. This helps us fix what is broken and improve what is not.
+
+Nothing analytics-related loads until you choose **Accept** on the cookie banner.
+If you choose **Decline**, the analytics script is never downloaded at all — it is
+not loaded and then ignored. We do not record your screen, and we do not use
+analytics for advertising.
+
+You can change your mind at any time by clearing this site's storage in your
+browser settings, which will bring the banner back.
+
+## 3. Third-party cookies
 When you make a payment, our payment partner **Razorpay** may set its own cookies
 within its secure checkout to process the transaction. These are governed by
 Razorpay's own cookie and privacy policies.
 
-## 3. Managing storage
-Because we use only strictly necessary storage, no consent banner is required to
-operate the Site. You can clear or block local storage and cookies at any time
-through your browser settings; note that doing so may sign you out and empty your
-cart.
+## 4. Managing storage
+You can clear or block local storage and cookies at any time through your browser
+settings; note that doing so may sign you out and empty your cart.
 
-## 4. Changes
-If we introduce analytics or other non-essential cookies in future, we will update
-this policy and, where required, ask for your consent first.
+## 5. Changes
+If we introduce further non-essential cookies, we will update this policy and,
+where required, ask for your consent first.
 
 ## 5. Contact
 Questions about this policy? Email {_EMAIL}.

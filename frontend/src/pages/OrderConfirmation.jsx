@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { CheckCircle2 } from "lucide-react";
 import { fetchOrder, formatINR, mediaUrl } from "../lib/api";
+import { track } from "../lib/analytics";
 
 export default function OrderConfirmation() {
     const { id } = useParams();
@@ -14,6 +15,39 @@ export default function OrderConfirmation() {
             .catch(() => setOrder(null))
             .finally(() => setLoading(false));
     }, [id]);
+
+    /*
+     * Revenue, counted once per order and only when the money actually arrived.
+     *
+     * Two traps this avoids. First, this page is a plain URL: a customer can
+     * refresh it, bookmark it, or open it from the receipt email a week later,
+     * and each visit would post another purchase. The order id is written to
+     * sessionStorage so a revisit is silent — sessionStorage rather than
+     * localStorage so a genuine second purchase of the same order can never be
+     * suppressed by stale state on a shared machine.
+     *
+     * Second, an order exists before it is paid. Landing here after abandoning
+     * the Razorpay popup would otherwise book revenue that never came in — the
+     * same mistake the admin revenue tile used to make. Only payment_status
+     * "paid" counts.
+     */
+    useEffect(() => {
+        if (!order || order.payment_status !== "paid") return;
+        const seen = `ph_purchase_${order.id}`;
+        try {
+            if (sessionStorage.getItem(seen)) return;
+            sessionStorage.setItem(seen, "1");
+        } catch {
+            /* private mode: risk a duplicate rather than lose the event */
+        }
+        track("purchase", {
+            order_number: order.order_number,
+            value: order.total,
+            currency: "INR",
+            item_count: (order.items || []).reduce((n, i) => n + (i.quantity || 1), 0),
+            coupon: order.coupon_code || null,
+        });
+    }, [order]);
 
     if (loading) {
         return (

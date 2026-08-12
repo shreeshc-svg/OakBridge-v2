@@ -11,6 +11,7 @@ import {
     validateCoupon,
     verifyPayment, verifyOtp, resendOtp, mediaUrl } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
+import { track } from "../lib/analytics";
 import { toast } from "sonner";
 import { loadRazorpay } from "../lib/razorpay";
 
@@ -127,6 +128,19 @@ export default function Checkout() {
             return;
         }
         setSubmitting(true);
+        /*
+         * "Checkout started" means the customer committed, not that they landed
+         * on this page. Firing on page load would count every browse-and-leave
+         * as an intent to buy and flatter the funnel; firing here, after the
+         * form validates and before the order is created, counts the moment
+         * they actually tried to pay.
+         */
+        track("checkout_started", {
+            value: total,
+            currency: "INR",
+            item_count: items.reduce((n, i) => n + (i.quantity || 1), 0),
+            coupon: coupon?.code || null,
+        });
         try {
             // 1. Create the local order in the Oakbridge DB (status=pending)
             const order = await createOrder({
