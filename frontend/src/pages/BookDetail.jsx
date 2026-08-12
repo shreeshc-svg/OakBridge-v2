@@ -25,12 +25,6 @@ const DEFAULT_PDP_BADGES = [
     { label: "Free Shipping", value: "On all orders", enabled: true },
     { label: "Delivery", value: "3–7 business days", enabled: true },
 ];
-const PDP_BADGE_COLS = {
-    1: "sm:grid-cols-2",
-    2: "sm:grid-cols-2",
-    3: "sm:grid-cols-3",
-    4: "sm:grid-cols-4",
-};
 
 export default function BookDetail() {
     const [preview, setPreview] = useState({ pages: [], page_count: 0 });
@@ -545,9 +539,23 @@ export default function BookDetail() {
                     )}
 
                     {pdpBadges.length > 0 && (
+                        /*
+                         * Packed left, not spread across the column.
+                         *
+                         * These were a 2-column grid, so with two badges each
+                         * took half the full width of the buy panel and
+                         * "Delivery" was flung to the far right with a hand's
+                         * width of nothing between them. They read as two
+                         * unrelated facts rather than one shipping summary.
+                         *
+                         * flex-wrap keeps them adjacent and left-aligned at any
+                         * count, and wraps to a second line on narrow screens
+                         * instead of crushing the columns — which is what the
+                         * grid was there to avoid in the first place.
+                         */
                         <div
                             data-testid="pdp-badges"
-                            className={`mt-10 grid grid-cols-2 ${PDP_BADGE_COLS[Math.min(pdpBadges.length, 4)]} gap-4 text-xs font-mono text-[#4B5563]`}
+                            className="mt-10 flex flex-wrap gap-x-12 gap-y-4 text-xs font-mono text-[#4B5563]"
                         >
                             {pdpBadges.map((b, i) => (
                                 <div key={i}>

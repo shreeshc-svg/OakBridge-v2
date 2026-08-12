@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
-import { Star } from "lucide-react";
+import { Star, Truck } from "lucide-react";
 import { toast } from "sonner";
 import { formatINR, notifyBackInStock, mediaUrl } from "../lib/api";
 import { useCart } from "../context/CartContext";
@@ -9,7 +9,20 @@ import { useAuth } from "../context/AuthContext";
 const LOW_STOCK = 5;
 
 export default function BookCard({ book, index = 0, compact = false }) {
-    const { addItem } = useCart();
+    const { addItem, settings } = useCart();
+    /*
+     * Read from the same admin setting the product page uses, not hardcoded.
+     *
+     * CartContext already fetches /settings once for tax and shipping, so this
+     * costs no extra request — and it means changing the promise in Admin
+     * changes it in both places. A second copy of "3-7 days" typed in here
+     * would drift the day someone edited only one of them.
+     *
+     * Trimmed to "3-7 days": the PDP has room for "3-7 business days", a
+     * 150px tile does not.
+     */
+    const deliveryFull = settings?.pdp_delivery || "3–7 business days";
+    const deliveryShort = deliveryFull.replace(/\s*business\s*/i, " ").trim();
     const { user } = useAuth();
     const [notifyOpen, setNotifyOpen] = useState(false);
     const [notifyEmail, setNotifyEmail] = useState("");
@@ -276,6 +289,28 @@ export default function BookCard({ book, index = 0, compact = false }) {
                     </button>
                 )}
             </div>
+
+                {/*
+                 * Delivery line — rendered on EVERY card, in stock or not.
+                 *
+                 * That is the alignment rule, not a detail. This sits inside the
+                 * mt-auto cluster that pins the price row, so it is now the
+                 * bottom-most element. Omit it on some cards and their price
+                 * rides higher than their neighbours' — the exact misalignment
+                 * the mt-auto block above exists to prevent.
+                 *
+                 * So an out-of-stock card keeps the space and hides the words.
+                 * Promising delivery in 3-7 days on something we cannot ship
+                 * would be worse than a gap, and `invisible` holds the height
+                 * while aria-hidden keeps it out of the screen reader.
+                 */}
+                <div
+                    aria-hidden={oos}
+                    className={`flex items-center gap-1.5 text-[#4B5563] ${oos ? "invisible" : ""} ${compact ? "pt-1.5 text-[10px]" : "pt-2 text-[11px]"}`}
+                >
+                    <Truck size={compact ? 11 : 12} strokeWidth={1.5} className="flex-shrink-0" />
+                    <span>{deliveryShort}</span>
+                </div>
 
                 {oos && notifyOpen && !notified && (
                 <form onSubmit={submitNotify} className="mt-2 flex gap-2">
