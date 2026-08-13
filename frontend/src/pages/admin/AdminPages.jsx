@@ -386,7 +386,7 @@ export default function AdminPages() {
                             onSave={(v) => saveSite("authors_works_overline", v)}
                         />
                         <TextSlotRow
-                            label="Headline — use {surname} or {name}"
+                            label="Headline — use {name} or {surname}"
                             value={site.authors_works_title}
                             defaultValue={CONTENT_DEFAULTS.authors_works_title}
                             onSave={(v) => saveSite("authors_works_title", v)}
@@ -396,11 +396,13 @@ export default function AdminPages() {
                         Sits above the book grid on each author's own page. One heading serves
                         all of them, so write it with a placeholder:{" "}
                         <span className="font-mono text-[11px] text-[#002B5C]">
-                            Books by {"{surname}"}
+                            Books by {"{name}"}
                         </span>{" "}
-                        becomes “Books by Joshi”, and{" "}
-                        <span className="font-mono text-[11px] text-[#002B5C]">{"{name}"}</span>{" "}
-                        gives the full name. Plain text with no placeholder works too.
+                        becomes “Books by Dr Justice Shalini Phansalkar Joshi”, and{" "}
+                        <span className="font-mono text-[11px] text-[#002B5C]">
+                            {"{surname}"}
+                        </span>{" "}
+                        gives just “Joshi”. Plain text with no placeholder works too.
                     </p>
                     <p className="text-xs text-[#4B5563] mt-4">
                         The author tiles themselves come from your author records — edit those in{" "}

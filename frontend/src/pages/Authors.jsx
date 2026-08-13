@@ -12,7 +12,9 @@ const AUTHORS_DEFAULTS = {
     overline: "Our Authors",
     title: "The scholars, teachers\nand storytellers\nbehind our list.",
     worksOverline: "Selected Works",
-    worksTitle: "Books by {surname}",
+    // Full name by default. {surname} still works for anyone who prefers the
+    // shorter form — the token handling below is unchanged.
+    worksTitle: "Books by {name}",
 };
 
 /**
