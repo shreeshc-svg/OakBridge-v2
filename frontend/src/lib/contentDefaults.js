@@ -38,6 +38,10 @@ const CONTENT_DEFAULTS = {
     ac_headline: "Practitioner training,\ntaught by the",
     authors_overline: "Our Authors",
     authors_title: "The scholars, teachers\nand storytellers\nbehind our list.",
+    // Shown above the book grid on a single author's page. {surname} and {name}
+    // are substituted per author, so one string serves all 143 of them.
+    authors_works_overline: "Selected Works",
+    authors_works_title: "Books by {surname}",
     careers_body: "We hire editors, salespeople, designers and technologists who believe publishing is a craft of public service. See our open roles, or send us a general application — we're always glad to meet good people.",
     careers_overline: "Careers",
     careers_title: "Build the house that publishes India.",

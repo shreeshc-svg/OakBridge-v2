@@ -11,12 +11,55 @@ import { fold, fuzzySearch, didYouMean } from "../lib/fuzzy";
 const AUTHORS_DEFAULTS = {
     overline: "Our Authors",
     title: "The scholars, teachers\nand storytellers\nbehind our list.",
+    worksOverline: "Selected Works",
+    worksTitle: "Books by {surname}",
 };
+
+/**
+ * Fill {surname} and {name} in an admin-written heading.
+ *
+ * One string has to serve 143 author pages, so the surname is a token rather
+ * than typed. "Dr Justice Shalini Phansalkar Joshi" -> "Joshi", which is what
+ * the hardcoded version produced.
+ *
+ * Taking the last word blindly is not enough, and your own author list proves
+ * it three ways:
+ *
+ *   "Dr K K Khandelwal, IAS (R)"  -> the last word is "R"      (not Khandelwal)
+ *   "Saji Narayanan C K"          -> the last word is "K"      (not Narayanan)
+ *   "Sandhya P.R."                -> the last word is "P.R."   (not Sandhya)
+ *
+ * So trailing tokens are dropped while they are either a post-nominal (IAS,
+ * ICAS, Retd.) or an initial — one or two letters once dots are removed. Never
+ * the last remaining word, so a single-name author like "Daksh" survives.
+ *
+ * A template with no token is returned untouched, so an editor who prefers a
+ * plain heading just writes one.
+ */
+const NAME_SUFFIXES = /^(ias|ips|irs|icas|ifs|retd|advocate|jr|sr|ii|iii|phd|llm)\.?$/i;
+const IS_INITIAL = (w) => /^[a-z]{1,2}$/i.test(w.replace(/\./g, ""));
+export function fillAuthorTokens(template, fullName) {
+    const parts = String(fullName || "")
+        .replace(/[(),]/g, " ")
+        .split(/\s+/)
+        .filter(Boolean);
+    while (
+        parts.length > 1 &&
+        (NAME_SUFFIXES.test(parts[parts.length - 1]) || IS_INITIAL(parts[parts.length - 1]))
+    ) {
+        parts.pop();
+    }
+    const surname = parts.length ? parts[parts.length - 1] : String(fullName || "");
+    return String(template || "")
+        .replace(/\{surname\}/gi, surname)
+        .replace(/\{name\}/gi, String(fullName || ""));
+}
 
 function AuthorDetail({ id }) {
     const [author, setAuthor] = useState(null);
     const [books, setBooks] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [site, setSite] = useState({});
 
     useEffect(() => {
         setLoading(true);
@@ -28,6 +71,20 @@ function AuthorDetail({ id }) {
             .catch(() => setAuthor(null))
             .finally(() => setLoading(false));
     }, [id]);
+
+    /*
+     * Site content is fetched separately, and deliberately NOT awaited with the
+     * author above.
+     *
+     * The headings below fall back to their defaults the instant this component
+     * renders, so a slow or failed settings call costs nothing — the page still
+     * says "Selected Works". Folding it into the Promise.all would make the
+     * whole author page wait on a copy tweak, and a rejection there would take
+     * the author down with it.
+     */
+    useEffect(() => {
+        fetchSiteContent().then(setSite).catch(() => {});
+    }, []);
 
     if (loading) {
         return (
@@ -126,9 +183,17 @@ function AuthorDetail({ id }) {
                     </p>
                     {books.length > 0 && (
                         <div className="mt-14">
-                            <div className="overline">Selected Works</div>
+                            {/* Editable in Admin -> Pages -> Authors. {surname}
+                                and {name} are filled in per author, so one
+                                string covers every author page. */}
+                            <div className="overline">
+                                {site.authors_works_overline || AUTHORS_DEFAULTS.worksOverline}
+                            </div>
                             <h2 className="font-serif text-3xl mt-2 text-[#002B5C]">
-                                Books by {author.name.split(" ").slice(-1)[0]}
+                                {fillAuthorTokens(
+                                    site.authors_works_title || AUTHORS_DEFAULTS.worksTitle,
+                                    author.name,
+                                )}
                             </h2>
                             <div className="mt-8 grid grid-cols-2 md:grid-cols-3 gap-6 md:gap-10">
                                 {books.map((b, i) => (

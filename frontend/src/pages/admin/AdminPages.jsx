@@ -375,6 +375,33 @@ export default function AdminPages() {
                         <TextSlotRow label="Overline" value={site.authors_overline} defaultValue={CONTENT_DEFAULTS.authors_overline} onSave={(v) => saveSite("authors_overline", v)} />
                         <TextSlotRow label="Headline (line breaks allowed)" value={site.authors_title} defaultValue={CONTENT_DEFAULTS.authors_title} onSave={(v) => saveSite("authors_title", v)} multiline />
                     </div>
+                    <div className="overline !text-[10px] mt-6 mb-2">
+                        Individual author page — books section
+                    </div>
+                    <div className="space-y-3">
+                        <TextSlotRow
+                            label="Overline"
+                            value={site.authors_works_overline}
+                            defaultValue={CONTENT_DEFAULTS.authors_works_overline}
+                            onSave={(v) => saveSite("authors_works_overline", v)}
+                        />
+                        <TextSlotRow
+                            label="Headline — use {surname} or {name}"
+                            value={site.authors_works_title}
+                            defaultValue={CONTENT_DEFAULTS.authors_works_title}
+                            onSave={(v) => saveSite("authors_works_title", v)}
+                        />
+                    </div>
+                    <p className="text-xs text-[#4B5563] mt-2">
+                        Sits above the book grid on each author's own page. One heading serves
+                        all of them, so write it with a placeholder:{" "}
+                        <span className="font-mono text-[11px] text-[#002B5C]">
+                            Books by {"{surname}"}
+                        </span>{" "}
+                        becomes “Books by Joshi”, and{" "}
+                        <span className="font-mono text-[11px] text-[#002B5C]">{"{name}"}</span>{" "}
+                        gives the full name. Plain text with no placeholder works too.
+                    </p>
                     <p className="text-xs text-[#4B5563] mt-4">
                         The author tiles themselves come from your author records — edit those in{" "}
                         <Link to="/admin/books" className="text-[#002B5C] border-b border-[#002B5C] hover:text-[#CC0033]">Admin → Books</Link>.
