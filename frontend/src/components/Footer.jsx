@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { subscribeNewsletter, fetchSiteContent, fetchCollection } from "../lib/api";
 import { toast } from "sonner";
 import { useFormShield, HoneypotField } from "../lib/formShield";
+import { socialIcon, socialLabel, visibleSocials } from "../lib/socials";
 
 const DEFAULT_COLUMNS = [
     {
@@ -93,6 +94,10 @@ export default function Footer() {
     const [site, setSite] = useState({});
     const [columns, setColumns] = useState(DEFAULT_COLUMNS);
     const [legal, setLegal] = useState(DEFAULT_LEGAL);
+    // Starts empty rather than with defaults: the defaults carry no URLs, so
+    // seeding them here would render nothing anyway, and an empty array keeps
+    // the "have we loaded yet" question out of the markup below.
+    const [socials, setSocials] = useState([]);
 
     useEffect(() => {
         fetchSiteContent().then(setSite).catch(() => {});
@@ -107,6 +112,9 @@ export default function Footer() {
                 const items = (d?.items || []).filter((l) => l && l.label && l.to);
                 if (items.length) setLegal(items);
             })
+            .catch(() => {});
+        fetchCollection("site_footer_socials")
+            .then((d) => setSocials(visibleSocials(d?.items)))
             .catch(() => {});
     }, []);
 
@@ -180,6 +188,42 @@ export default function Footer() {
                                 {loading ? "…" : c.news_button}
                             </button>
                         </form>
+
+                        {/* Managed in Admin → Navigation → Footer social links.
+                            Renders nothing at all until a real address is saved,
+                            so the block never appears as a row of dead icons. */}
+                        {socials.length > 0 && (
+                            <div className="mt-8" data-testid="footer-socials">
+                                <div className="overline !text-white/50">Follow us</div>
+                                <div className="mt-4 flex items-center gap-3">
+                                    {socials.map((s) => {
+                                        const Icon = socialIcon(s.platform);
+                                        const label = socialLabel(s.platform);
+                                        return (
+                                            <a
+                                                key={s.platform + s.url}
+                                                href={s.url}
+                                                target="_blank"
+                                                /* noopener is the security half: without
+                                                   it the opened page can reach back
+                                                   through window.opener. noreferrer also
+                                                   covers older browsers that ignore it. */
+                                                rel="noopener noreferrer"
+                                                data-testid={`footer-social-${s.platform}`}
+                                                aria-label={`Oakbridge Publishing on ${label}`}
+                                                title={label}
+                                                /* 40px box: comfortably past the 24px WCAG
+                                                   2.2 minimum for a tap target, which a
+                                                   bare 16px icon would fail. */
+                                                className="flex h-10 w-10 items-center justify-center border border-white/20 text-white/80 hover:text-[#002B5C] hover:bg-[#F59E0B] hover:border-[#F59E0B] transition-colors"
+                                            >
+                                                <Icon size={17} strokeWidth={1.5} aria-hidden="true" />
+                                            </a>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     <div className="md:col-span-8 grid grid-cols-2 lg:grid-cols-4 gap-x-8 gap-y-10">

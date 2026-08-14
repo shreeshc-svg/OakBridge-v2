@@ -9,6 +9,7 @@ import {
 } from "../../lib/api";
 import { TextSlotRow, ListEditor } from "../../components/admin/ContentEditors";
 import CONTENT_DEFAULTS from "../../lib/contentDefaults";
+import { SOCIAL_PLATFORMS, socialIcon, DEFAULT_SOCIALS } from "../../lib/socials";
 
 const DEFAULT_NAV = [
     { to: "/what-we-do", label: "What We Do", hidden: false },
@@ -145,6 +146,169 @@ function HeaderNavEditor() {
                     </div>
                 ))}
             </div>
+        </div>
+    );
+}
+
+/* ---------------------------- Footer social links -------------------------- */
+
+function FooterSocialsEditor() {
+    const [rows, setRows] = useState(null);
+    const [saving, setSaving] = useState(false);
+
+    useEffect(() => {
+        fetchCollection("site_footer_socials")
+            .then((d) => setRows(d?.items?.length ? d.items : DEFAULT_SOCIALS))
+            .catch(() => setRows(DEFAULT_SOCIALS));
+    }, []);
+    if (!rows) return null;
+
+    const set = (i, patch) => setRows((a) => a.map((r, x) => (x === i ? { ...r, ...patch } : r)));
+    const add = () => setRows((a) => [...a, { platform: "linkedin", url: "", enabled: true }]);
+    const remove = (i) => setRows((a) => a.filter((_, x) => x !== i));
+    const move = (i, dir) =>
+        setRows((a) => {
+            const j = i + dir;
+            if (j < 0 || j >= a.length) return a;
+            const c = [...a];
+            [c[i], c[j]] = [c[j], c[i]];
+            return c;
+        });
+
+    const save = async () => {
+        setSaving(true);
+        try {
+            /*
+             * Saved with the URL trimmed but NOT dropped when empty.
+             *
+             * A blank row is a platform the admin has set up and not yet found
+             * the address for; discarding it on save would delete their work
+             * and make the editor feel like it was fighting them. The footer
+             * decides what to show — an entry without a URL renders nothing —
+             * so an incomplete row is harmless here and useful to keep.
+             */
+            const payload = rows
+                .map((r) => ({
+                    platform: String(r.platform || "").trim().toLowerCase(),
+                    url: String(r.url || "").trim(),
+                    enabled: r.enabled !== false,
+                }))
+                .filter((r) => r.platform);
+            await adminSaveCollection("site_footer_socials", payload);
+            toast.success("Social links saved — live on the site.");
+        } catch {
+            toast.error("Could not save the social links.");
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    return (
+        <div className="border border-[#E5E7EB] bg-white p-6" data-testid="footer-socials-editor">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+                <div>
+                    <h2 className="font-serif text-xl text-[#002B5C]">Footer social links</h2>
+                    <p className="text-[11px] text-[#4B5563] mt-1">
+                        Shown under the newsletter sign-up. A row with no address stays hidden on
+                        the site, so you can add the platform now and paste the link later.
+                    </p>
+                </div>
+                <button
+                    onClick={save}
+                    disabled={saving}
+                    data-testid="save-footer-socials"
+                    className="text-sm bg-[#002B5C] text-white px-4 py-1.5 hover:bg-[#001F42] disabled:opacity-60"
+                >
+                    {saving ? "Saving…" : "Save changes"}
+                </button>
+            </div>
+
+            <div className="mt-5 space-y-2">
+                {rows.map((r, i) => {
+                    const Icon = socialIcon(r.platform);
+                    const known = SOCIAL_PLATFORMS.find((p) => p.key === r.platform);
+                    return (
+                        <div
+                            key={i}
+                            data-testid={`footer-social-row-${i}`}
+                            className={`flex flex-wrap items-center gap-2 border border-[#E5E7EB] p-2 ${
+                                r.enabled === false ? "bg-[#F5F7FA] opacity-60" : "bg-white"
+                            }`}
+                        >
+                            <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center border border-[#E5E7EB] text-[#002B5C]">
+                                <Icon size={15} strokeWidth={1.5} />
+                            </span>
+                            <select
+                                value={r.platform}
+                                onChange={(e) => set(i, { platform: e.target.value })}
+                                data-testid={`footer-social-platform-${i}`}
+                                className="border border-[#E5E7EB] bg-white px-2 py-1.5 text-sm"
+                            >
+                                {SOCIAL_PLATFORMS.map((p) => (
+                                    <option key={p.key} value={p.key}>
+                                        {p.label}
+                                    </option>
+                                ))}
+                                {/* Keeps a platform we do not know about selectable
+                                    instead of silently rewriting it to LinkedIn. */}
+                                {!known && <option value={r.platform}>{r.platform || "(custom)"}</option>}
+                            </select>
+                            <input
+                                value={r.url || ""}
+                                onChange={(e) => set(i, { url: e.target.value })}
+                                placeholder={known?.hint || "https://…"}
+                                data-testid={`footer-social-url-${i}`}
+                                className="min-w-[200px] flex-1 border border-[#E5E7EB] bg-white px-2 py-1.5 text-sm outline-none focus:border-[#002B5C]"
+                            />
+                            <button
+                                onClick={() => set(i, { enabled: r.enabled === false })}
+                                aria-label={r.enabled === false ? "Show this link" : "Hide this link"}
+                                title={
+                                    r.enabled === false
+                                        ? "Hidden — click to show"
+                                        : "Visible — click to hide"
+                                }
+                                className="border border-[#E5E7EB] p-1.5 text-[#4B5563] hover:text-[#002B5C]"
+                            >
+                                {r.enabled === false ? (
+                                    <EyeOff size={15} strokeWidth={1.5} />
+                                ) : (
+                                    <Eye size={15} strokeWidth={1.5} />
+                                )}
+                            </button>
+                            <button
+                                onClick={() => move(i, -1)}
+                                aria-label="Move up"
+                                className="border border-[#E5E7EB] p-1.5 text-[#4B5563] hover:text-[#002B5C]"
+                            >
+                                <ArrowUp size={15} strokeWidth={1.5} />
+                            </button>
+                            <button
+                                onClick={() => move(i, 1)}
+                                aria-label="Move down"
+                                className="border border-[#E5E7EB] p-1.5 text-[#4B5563] hover:text-[#002B5C]"
+                            >
+                                <ArrowDown size={15} strokeWidth={1.5} />
+                            </button>
+                            <button
+                                onClick={() => remove(i)}
+                                aria-label="Remove this link"
+                                className="border border-[#CC0033] p-1.5 text-[#CC0033] hover:bg-[#CC0033]/5"
+                            >
+                                <X size={15} strokeWidth={1.5} />
+                            </button>
+                        </div>
+                    );
+                })}
+            </div>
+
+            <button
+                onClick={add}
+                data-testid="add-footer-social"
+                className="mt-3 inline-flex items-center gap-1.5 border border-[#002B5C] text-[#002B5C] px-3 py-1.5 text-sm hover:bg-[#F5F7FA]"
+            >
+                <Plus size={14} strokeWidth={1.5} /> Add a platform
+            </button>
         </div>
     );
 }
@@ -286,6 +450,8 @@ export default function AdminNavigation() {
                 <HeaderNavEditor />
 
                 <FooterColumnsEditor />
+
+                <FooterSocialsEditor />
 
                 <div className="border border-[#E5E7EB] bg-white p-6">
                     <h2 className="font-serif text-xl text-[#002B5C]">Footer brand &amp; newsletter</h2>
