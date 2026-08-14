@@ -106,6 +106,79 @@ export default function AdminPages() {
                 </p>
 
                 <PageGroup title="Homepage" path="/">
+                    {/* Promotional overlay — first, because it is the first
+                        thing a visitor sees when it is switched on. */}
+                    <div className="border border-[#E5E7EB] bg-[#F5F7FA] p-4 mb-6">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                                <div className="font-serif text-lg text-[#002B5C]">
+                                    Promotional pop-up
+                                </div>
+                                <p className="text-[11px] text-[#4B5563] mt-0.5 max-w-xl">
+                                    Shown over the homepage a moment after it loads, with a close
+                                    button. Nothing appears until you switch it on and add a
+                                    creative — the image is never cropped, the box fits whatever
+                                    you upload.
+                                </p>
+                            </div>
+                            <div className="flex gap-4">
+                                {[
+                                    { on: "on", label: "On" },
+                                    { on: "off", label: "Off" },
+                                ].map((opt) => (
+                                    <label
+                                        key={opt.on}
+                                        className="flex items-center gap-2 text-sm cursor-pointer"
+                                    >
+                                        <input
+                                            type="radio"
+                                            name="home-popup-enabled"
+                                            checked={
+                                                String(site.home_popup_enabled || "off").toLowerCase() ===
+                                                opt.on
+                                            }
+                                            onChange={() => saveSite("home_popup_enabled", opt.on)}
+                                            data-testid={`home-popup-enabled-${opt.on}`}
+                                        />
+                                        {opt.label}
+                                    </label>
+                                ))}
+                            </div>
+                        </div>
+                        <div className="mt-4">
+                            <SlotRow
+                                label="Creative / banner image"
+                                value={site.home_popup_image}
+                                onSave={(v) => saveSite("home_popup_image", v)}
+                            />
+                        </div>
+                        <div className="mt-3 space-y-3">
+                            <TextSlotRow
+                                label="Link when clicked (optional) — e.g. /books?new_release=true"
+                                value={site.home_popup_link}
+                                defaultValue=""
+                                onSave={(v) => saveSite("home_popup_link", v)}
+                            />
+                            <TextSlotRow
+                                label="Describe the image for screen readers (optional)"
+                                value={site.home_popup_alt}
+                                defaultValue=""
+                                onSave={(v) => saveSite("home_popup_alt", v)}
+                            />
+                            <TextSlotRow
+                                label="How often — session (once per visit), day, or always"
+                                value={site.home_popup_frequency}
+                                defaultValue="session"
+                                onSave={(v) => saveSite("home_popup_frequency", v)}
+                            />
+                        </div>
+                        <p className="text-[11px] text-[#4B5563] mt-3">
+                            Changing the image shows it again to everyone, including people who
+                            already dismissed the previous one — so a new campaign is never
+                            silenced by the last.
+                        </p>
+                    </div>
+
                     <SlotRow label="Hero image" value={site.home_hero} onSave={(v) => saveSite("home_hero", v)} />
                     <div className="overline !text-[10px] mt-6 mb-2">Hero text</div>
                     <div className="space-y-3">

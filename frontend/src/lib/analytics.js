@@ -27,6 +27,8 @@
  * engineering one.
  */
 
+import { isPrerender } from "./runtime";
+
 const KEY = process.env.REACT_APP_POSTHOG_KEY || "";
 const HOST = process.env.REACT_APP_POSTHOG_HOST || "https://us.i.posthog.com";
 export const CONSENT_KEY = "oakbridge_cookie_consent";
@@ -44,21 +46,14 @@ const ASSET_HOST =
 let loading = false;
 let ready = false;
 
-/** True only in a real browser session that is not the prerenderer. */
-function isRealVisitor() {
-    if (typeof window === "undefined") return false;
-    // 1. The prerenderer serves the app from localhost:3000. Nobody else does.
-    const h = window.location.hostname;
-    if (h === "localhost" || h === "127.0.0.1" || h === "[::1]") return false;
-    // 2. Puppeteer sets navigator.webdriver. Belt and braces: if the port check
-    //    is ever changed, this still catches the build.
-    //
-    //    Reached through `window.` rather than as a bare global on purpose —
-    //    the bare form resolves against whatever ambient `navigator` exists,
-    //    which is exactly how this guard passed a test it should have failed.
-    if (window.navigator?.webdriver) return false;
-    return true;
-}
+/**
+ * True only in a real browser session that is not the prerenderer.
+ *
+ * The check itself moved to lib/runtime.js once the marketing popup needed the
+ * same answer — two copies of "are we the build?" is precisely the drift that
+ * has bitten this codebase before.
+ */
+const isRealVisitor = () => !isPrerender();
 
 export function hasConsent() {
     try {

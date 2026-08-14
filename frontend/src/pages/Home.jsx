@@ -16,6 +16,7 @@ import {
 } from "../lib/api";
 import { hiddenSet, resolveSectionOrder } from "../lib/sections";
 import EbookCta from "../components/EbookCta";
+import MarketingPopup from "../components/MarketingPopup";
 
 // Default top-to-bottom order of the reorderable homepage sections. Admin can
 // override via Admin → Pages → Section order & visibility (home_section_order).
@@ -218,6 +219,11 @@ export default function Home() {
 
     return (
         <div data-testid="home-page" className="flex flex-col">
+            {/* Homepage only, by design: an overlay on every route would meet
+                people mid-task — on a product page, or in the middle of
+                checkout. It renders nothing unless an admin has switched it on
+                and saved a creative. */}
+            <MarketingPopup site={site} />
             <Seo
                 /* Kept inside Google's limits on purpose.
                  *
