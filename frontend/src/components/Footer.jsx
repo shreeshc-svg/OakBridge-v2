@@ -164,34 +164,26 @@ export default function Footer() {
                         <p className="mt-6 text-white/70 text-sm max-w-md leading-relaxed whitespace-pre-line">
                             {c.blurb}
                         </p>
-                        <form
-                            onSubmit={handleSubscribe}
-                            data-testid="newsletter-form"
-                            className="mt-8 flex border border-white/20"
-                        >
-                            <HoneypotField value={website} onChange={setWebsite} />
-                            <input
-                                data-testid="newsletter-email-input"
-                                type="email"
-                                required
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                                placeholder={c.news_placeholder}
-                                className="bg-transparent text-sm px-4 py-3 w-full outline-none placeholder:text-white/40"
-                            />
-                            <button
-                                type="submit"
-                                disabled={loading}
-                                data-testid="newsletter-submit-button"
-                                className="px-5 text-sm font-medium bg-[#F59E0B] text-[#002B5C] hover:bg-[#F59E0B] transition-colors disabled:opacity-50"
-                            >
-                                {loading ? "…" : c.news_button}
-                            </button>
-                        </form>
 
-                        {/* Managed in Admin → Navigation → Footer social links.
-                            Renders nothing at all until a real address is saved,
-                            so the block never appears as a row of dead icons. */}
+                        {/*
+                         * ABOVE THE NEWSLETTER, NOT BELOW IT.
+                         *
+                         * These sat under the sign-up form, which put them last
+                         * in the tallest column — and on a phone, where this
+                         * column stacks first, that is a long scroll past a
+                         * form before you reach them. Following on LinkedIn is
+                         * a lower-commitment act than handing over an email
+                         * address, so it belongs in front of it.
+                         *
+                         * They also belong with the identity block rather than
+                         * the sign-up: logo, tagline, what we publish, where to
+                         * find us. That reads as one thought; the newsletter is
+                         * the ask that follows it.
+                         *
+                         * Managed in Admin → Navigation → Footer social links.
+                         * Renders nothing at all until a real address is saved,
+                         * so the block never appears as a row of dead icons.
+                         */}
                         {socials.length > 0 && (
                             <div className="mt-8" data-testid="footer-socials">
                                 <div className="overline !text-white/50">Follow us</div>
@@ -224,6 +216,31 @@ export default function Footer() {
                                 </div>
                             </div>
                         )}
+
+                        <form
+                            onSubmit={handleSubscribe}
+                            data-testid="newsletter-form"
+                            className="mt-8 flex border border-white/20"
+                        >
+                            <HoneypotField value={website} onChange={setWebsite} />
+                            <input
+                                data-testid="newsletter-email-input"
+                                type="email"
+                                required
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                placeholder={c.news_placeholder}
+                                className="bg-transparent text-sm px-4 py-3 w-full outline-none placeholder:text-white/40"
+                            />
+                            <button
+                                type="submit"
+                                disabled={loading}
+                                data-testid="newsletter-submit-button"
+                                className="px-5 text-sm font-medium bg-[#F59E0B] text-[#002B5C] hover:bg-[#F59E0B] transition-colors disabled:opacity-50"
+                            >
+                                {loading ? "…" : c.news_button}
+                            </button>
+                        </form>
                     </div>
 
                     <div className="md:col-span-8 grid grid-cols-2 lg:grid-cols-4 gap-x-8 gap-y-10">
