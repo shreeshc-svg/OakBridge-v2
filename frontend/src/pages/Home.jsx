@@ -622,7 +622,19 @@ export default function Home() {
 
             {/* ============== EDITORIAL CTA (Manifesto) ============== */}
             {!hidden.has("home.manifesto") && (
-            <section style={{ order: homeOrd("manifesto") }} className="relative px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-24 md:py-32 bg-[#002B5C] text-[#FFFFFF] overflow-hidden">
+            /* Bottom padding is deliberately lighter than the top.
+             *
+             * This section is navy and the footer directly beneath it is the
+             * same navy, so nothing marks the join — the two paddings simply
+             * add up into one tall column of empty colour. It was pb-32 here
+             * plus pt-20 on the footer: 208px of nothing on a desktop screen,
+             * reading as a gap in the page rather than as breathing room.
+             *
+             * Not zero, and not asymmetric only when last: the admin can
+             * reorder home sections, so this may sit above a light section
+             * instead, where it needs real space beneath it. 64px works in
+             * both places. */
+            <section style={{ order: homeOrd("manifesto") }} className="relative px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 pt-24 pb-14 md:pt-32 md:pb-16 bg-[#002B5C] text-[#FFFFFF] overflow-hidden">
                 <div className="relative z-10 max-w-3xl">
                     <div className="overline !text-white/50">Manifesto</div>
                     <p className="font-serif text-3xl md:text-5xl mt-6 leading-tight">
