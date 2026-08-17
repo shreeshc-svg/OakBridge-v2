@@ -156,7 +156,21 @@ export default function Cart() {
                                     </dd>
                                 </div>
                                 <div className="flex justify-between">
-                                    <dt className="text-[#4B5563]">Tax (5%)</dt>
+                                    {/* The rate comes from the same tax_percent setting the
+                                        amount beside it is calculated from. It used to be the
+                                        literal "(5%)", so with the rate set to 0 the cart told
+                                        customers they were being charged 5% while charging them
+                                        nothing — and changing the rate in Settings would have
+                                        left the old number on screen.
+
+                                        Number() first: the setting can arrive as the string "0",
+                                        which is truthy, so a bare > 0 test still prints "(0%)". */}
+                                    <dt className="text-[#4B5563]">
+                                        Tax
+                                        {Number(settings?.tax_percent) > 0
+                                            ? ` (${Number(settings.tax_percent)}%)`
+                                            : ""}
+                                    </dt>
                                     <dd className="font-mono text-[#002B5C]">
                                         {formatINR(tax)}
                                     </dd>

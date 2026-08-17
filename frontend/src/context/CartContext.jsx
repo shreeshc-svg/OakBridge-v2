@@ -146,7 +146,7 @@ export function CartProvider({ children }) {
     const clearCoupon = useCallback(() => setCouponState(null), []);
 
     const totals = useMemo(() => {
-        const taxPct = Number(settings?.tax_percent ?? 5);
+        const taxPct = Number(settings?.tax_percent ?? 0);
         const freeThr = Number(settings?.free_ship_threshold ?? 1500);
         const shipFlat = Number(settings?.ship_flat ?? 60);
         const subtotal = items.reduce((sum, i) => sum + i.price * i.quantity, 0);

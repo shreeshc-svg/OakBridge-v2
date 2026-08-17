@@ -1126,7 +1126,7 @@ async def create_order(payload: OrderCreate, user: Optional[dict] = Depends(get_
             coupon_code = cres.code
 
     settings = await _get_settings()
-    tax_pct = float(settings.get("tax_percent", 5) or 0)
+    tax_pct = float(settings.get("tax_percent", 0) or 0)
     free_thr = float(settings.get("free_ship_threshold", 1500) or 0)
     ship_flat = float(settings.get("ship_flat", 60) or 0)
     discounted = max(0.0, subtotal - discount)

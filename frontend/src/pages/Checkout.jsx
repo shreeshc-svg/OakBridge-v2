@@ -38,6 +38,8 @@ export default function Checkout() {
         coupon,
         setCoupon,
         clearCoupon,
+        // For the tax label below — the rate is read, never hardcoded.
+        settings,
     } = useCart();
     const [form, setForm] = useState({
         full_name: "",
@@ -377,7 +379,15 @@ export default function Checkout() {
                                 </dd>
                             </div>
                             <div className="flex justify-between">
-                                <dt className="text-[#4B5563]">Tax (5%)</dt>
+                                {/* Same rule as the cart: the rate is read from
+                                    tax_percent, never typed in, so this line can
+                                    never contradict the amount next to it. */}
+                                <dt className="text-[#4B5563]">
+                                    Tax
+                                    {Number(settings?.tax_percent) > 0
+                                        ? ` (${Number(settings.tax_percent)}%)`
+                                        : ""}
+                                </dt>
                                 <dd className="font-mono text-[#002B5C]">
                                     {formatINR(tax)}
                                 </dd>
