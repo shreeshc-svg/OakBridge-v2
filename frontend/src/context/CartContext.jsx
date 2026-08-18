@@ -8,7 +8,7 @@ import React, {
     useState,
 } from "react";
 import { useAuth } from "./AuthContext";
-import { saveCart, loadCart, fetchSettings } from "../lib/api";
+import { saveCart, loadCart, fetchSettings, fetchSiteContent } from "../lib/api";
 import { track } from "../lib/analytics";
 
 const CartContext = createContext(null);
@@ -29,6 +29,15 @@ export function CartProvider({ children }) {
     const [isOpen, setIsOpen] = useState(false);
     const [coupon, setCouponState] = useState(null);
     const [settings, setSettings] = useState(null);
+    /*
+     * Site content lives here beside settings so a book card can read it.
+     *
+     * BookCard needs the eBook labels and toggles, and it renders dozens of
+     * times per page — fetching per card would be dozens of identical requests,
+     * and threading it down as a prop would mean touching every page that
+     * renders a grid. One fetch, shared by everything under the provider.
+     */
+    const [site, setSite] = useState(null);
 
     useEffect(() => {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
@@ -36,6 +45,7 @@ export function CartProvider({ children }) {
 
     useEffect(() => {
         fetchSettings().then(setSettings).catch(() => {});
+        fetchSiteContent().then(setSite).catch(() => {});
     }, []);
 
     const { isAuthenticated } = useAuth();
@@ -172,10 +182,11 @@ export function CartProvider({ children }) {
             setCoupon,
             clearCoupon,
             settings,
+            site,
             itemKey,
             ...totals,
         }),
-        [items, isOpen, addItem, removeItem, updateQty, clear, coupon, setCoupon, clearCoupon, settings, totals],
+        [items, isOpen, addItem, removeItem, updateQty, clear, coupon, setCoupon, clearCoupon, settings, site, totals],
     );
 
     return <CartContext.Provider value={value}>{children}</CartContext.Provider>;

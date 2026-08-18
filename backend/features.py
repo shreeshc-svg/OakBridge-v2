@@ -994,6 +994,7 @@ TEMPLATE_COLUMNS = [
     ("bestseller", "TRUE / FALSE — flag for the bestseller carousel"),
     ("new_release", "TRUE / FALSE — flag for the new-release carousel"),
     ("star_title", "TRUE / FALSE — gives the title a gold frame wherever it appears"),
+    ("ebook_url", "Link to this title on the eReader — shows the eBook label and CTA. Blank = no eBook"),
     ("grade", "Optional grade level, e.g. 'Ages 8-12' for children's titles"),
     ("language", "Default: English"),
     ("publisher", "Default: Oakbridge Publishing"),
@@ -1019,6 +1020,7 @@ SAMPLE_ROW = {
     "bestseller": "TRUE",
     "new_release": "FALSE",
     "star_title": "FALSE",
+    "ebook_url": "",
     "grade": "",
     "language": "English",
     "publisher": "Oakbridge Publishing",
@@ -1196,6 +1198,10 @@ def _csv_row_to_book_doc(clean: dict) -> dict:
         "bestseller": _csv_bool(clean.get("bestseller")),
         "new_release": _csv_bool(clean.get("new_release")),
         "star_title": _csv_bool(clean.get("star_title")),
+        # Bulk-settable on purpose: 110 Law and Tax titles are going onto the
+        # eReader, and pasting a URL into 110 forms by hand is how a job gets
+        # abandoned half-done.
+        "ebook_url": (clean.get("ebook_url") or "").strip(),
         "rating": _csv_float(clean.get("rating")) or 4.5,
         "stock": _csv_int(clean.get("stock"), default=100),
     }

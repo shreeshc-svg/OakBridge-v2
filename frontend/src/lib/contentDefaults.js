@@ -20,6 +20,15 @@ const CONTENT_DEFAULTS = {
     ebook_cta_label: "Interested in e-books?",
     ebook_cta_action: "Read on Oakbridge eReader",
     ebook_cta_blurb: "Read Oakbridge titles on any device — searchable, annotatable and always with you.",
+    // Per-title eBook edition. These only ever appear on a book that has an
+    // ebook_url of its own, so switching them on shows nothing until titles are
+    // linked — and unlinking a title removes it everywhere at once.
+    ebook_plp_enabled: "on",
+    ebook_plp_label: "eBook",
+    ebook_pdp_enabled: "on",
+    ebook_pdp_title: "Prefer to read it now?",
+    ebook_pdp_body: "This title is available on the Oakbridge eReader.",
+    ebook_pdp_button: "Read",
     about_body1: "Oakbridge Publishing was founded in 2017 by two veteran publishing professionals with leadership experience at some of the world's most respected publishing companies. The premise was simple — India deserves its own scholarly voice, published from within, for the students, educators and practitioners who live here. We publish across five imprints: Academic, Professional, General, Coffee Table and Curated Works. Every manuscript is shepherded by editors with decades of international publishing experience.",
     about_body2: "We remain a privately-held, independent publisher — which means our editorial choices are made by readers and educators, not shareholders.",
     about_overline: "About Oakbridge",

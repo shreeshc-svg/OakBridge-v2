@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
-import { Star, Truck } from "lucide-react";
+import { Star, Truck, BookOpen } from "lucide-react";
 import { toast } from "sonner";
 import { formatINR, notifyBackInStock, mediaUrl } from "../lib/api";
 import { useCart } from "../context/CartContext";
@@ -9,7 +9,7 @@ import { useAuth } from "../context/AuthContext";
 const LOW_STOCK = 5;
 
 export default function BookCard({ book, index = 0, compact = false }) {
-    const { addItem, settings } = useCart();
+    const { addItem, settings, site } = useCart();
     /*
      * Read from the same admin setting the product page uses, not hardcoded.
      *
@@ -23,6 +23,24 @@ export default function BookCard({ book, index = 0, compact = false }) {
      */
     const deliveryFull = settings?.pdp_delivery || "3–7 business days";
     const deliveryShort = deliveryFull.replace(/\s*business\s*/i, " ").trim();
+
+    /*
+     * The eBook mark needs three things to be true, and reads them from three
+     * different places on purpose:
+     *   - the store is on at all          (site content, Admin → E-Books)
+     *   - the listing mark is on          (site content, same screen)
+     *   - THIS title is on the eReader    (the book's own ebook_url)
+     *
+     * The last one is what stops every book in the catalogue sprouting an eBook
+     * link the moment the feature is switched on. 110 titles are going onto the
+     * reader out of 251.
+     */
+    const ebookUrl = (book.ebook_url || "").trim();
+    const ebookOnPlp =
+        Boolean(ebookUrl) &&
+        String(site?.ebook_enabled ?? "on").toLowerCase() !== "off" &&
+        String(site?.ebook_plp_enabled ?? "on").toLowerCase() !== "off";
+    const ebookLabel = site?.ebook_plp_label || "eBook";
     const { user } = useAuth();
     const [notifyOpen, setNotifyOpen] = useState(false);
     const [notifyEmail, setNotifyEmail] = useState("");
@@ -305,11 +323,55 @@ export default function BookCard({ book, index = 0, compact = false }) {
                  * while aria-hidden keeps it out of the screen reader.
                  */}
                 <div
-                    aria-hidden={oos}
-                    className={`flex items-center gap-1.5 text-[#4B5563] ${oos ? "invisible" : ""} ${compact ? "pt-1.5 text-[10px]" : "pt-2 text-[11px]"}`}
+                    className={`flex items-center gap-2 ${compact ? "pt-1.5 text-[10px]" : "pt-2 text-[11px]"}`}
                 >
-                    <Truck size={compact ? 11 : 12} strokeWidth={1.5} className="flex-shrink-0" />
-                    <span>{deliveryShort}</span>
+                    <span
+                        aria-hidden={oos}
+                        className={`flex items-center gap-1.5 text-[#4B5563] ${oos ? "invisible" : ""}`}
+                    >
+                        <Truck size={compact ? 11 : 12} strokeWidth={1.5} className="flex-shrink-0" />
+                        {deliveryShort}
+                    </span>
+
+                    {/*
+                     * The eBook edition shares this row rather than taking one
+                     * of its own — the row is the bottom-most element in the
+                     * mt-auto block, so a second line on only some cards would
+                     * push their price out of line with the rest of the row.
+                     *
+                     * It is a link, not a label: it sits outside the <Link> that
+                     * wraps the cover and title, so there is no anchor inside an
+                     * anchor. stopPropagation is unnecessary for the same
+                     * reason.
+                     *
+                     * Shown only when this title has an ebook_url of its own, so
+                     * turning the feature on reveals nothing until books are
+                     * actually linked.
+                     */}
+                    {ebookOnPlp && (
+                        <>
+                            <span aria-hidden="true" className="text-[#D0D5DD]">
+                                ·
+                            </span>
+                            <a
+                                href={ebookUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                data-testid={`ebook-link-${book.id}`}
+                                aria-label={`Read ${book.title} on the Oakbridge eReader`}
+                                className="flex items-center gap-1.5 text-[#0A7D55] hover:text-[#002B5C] transition-colors"
+                            >
+                                <BookOpen
+                                    size={compact ? 11 : 12}
+                                    strokeWidth={1.5}
+                                    className="flex-shrink-0"
+                                />
+                                <span className="border-b border-[#0A7D55]/40 pb-px">
+                                    {ebookLabel}
+                                </span>
+                            </a>
+                        </>
+                    )}
                 </div>
 
                 {oos && notifyOpen && !notified && (

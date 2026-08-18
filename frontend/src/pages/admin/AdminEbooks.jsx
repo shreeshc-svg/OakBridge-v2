@@ -1,9 +1,40 @@
 import React, { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { ExternalLink } from "lucide-react";
 import { fetchSiteContent, adminSetSiteContent } from "../../lib/api";
 import { TextSlotRow } from "../../components/admin/ContentEditors";
 import CONTENT_DEFAULTS from "../../lib/contentDefaults";
+
+/**
+ * A two-state switch that saves on click.
+ *
+ * Defaults to on when the value has never been set, matching how every other
+ * toggle on this screen reads its own key — an unset switch should behave like
+ * the feature's default, not like "off".
+ */
+function OnOff({ name, value, onChange }) {
+    const on = String(value ?? "on").toLowerCase() !== "off";
+    return (
+        <div className="flex gap-4">
+            {[
+                { v: "on", label: "Shown" },
+                { v: "off", label: "Hidden" },
+            ].map((opt) => (
+                <label key={opt.v} className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input
+                        type="radio"
+                        name={name}
+                        checked={on === (opt.v === "on")}
+                        onChange={() => onChange(opt.v)}
+                        data-testid={`${name}-${opt.v}`}
+                    />
+                    {opt.label}
+                </label>
+            ))}
+        </div>
+    );
+}
 
 /**
  * E-books — one screen for the platform link and every button that points at it.
@@ -117,6 +148,87 @@ export default function AdminEbooks() {
                             defaultValue={CONTENT_DEFAULTS.ebook_url}
                             onSave={(v) => saveSite("ebook_url", v)}
                         />
+                    </section>
+
+                    {/* Per-title eBook edition — separate from the generic
+                        platform CTA above, because it appears only on books
+                        that carry their own ebook_url. */}
+                    <section className="border border-[#0A7D55]/30 bg-[#0A7D55]/[0.04] p-5">
+                        <h2 className="font-serif text-xl text-[#002B5C]">
+                            Per-title eBook edition
+                        </h2>
+                        <p className="text-[11px] text-[#4B5563] mt-1 mb-4 max-w-2xl">
+                            The eBook mark on individual books. It appears only on titles that have
+                            a link saved in{" "}
+                            <Link
+                                to="/admin/books"
+                                className="text-[#002B5C] border-b border-[#002B5C] hover:text-[#CC0033]"
+                            >
+                                Admin → Books
+                            </Link>
+                            , so switching these on shows nothing until titles are linked. Turning a
+                            switch off here hides the mark on every book at once, without touching
+                            any of the links.
+                        </p>
+
+                        <div className="space-y-5">
+                            <div>
+                                <div className="flex flex-wrap items-center justify-between gap-3">
+                                    <div className="overline !text-[10px]">
+                                        Bookstore listings
+                                    </div>
+                                    <OnOff
+                                        name="ebook-plp"
+                                        value={site.ebook_plp_enabled}
+                                        onChange={(v) => saveSite("ebook_plp_enabled", v)}
+                                    />
+                                </div>
+                                <p className="text-[11px] text-[#4B5563] mt-1 mb-2">
+                                    A small link beside the delivery estimate on each book card.
+                                </p>
+                                <TextSlotRow
+                                    label="Label"
+                                    value={site.ebook_plp_label}
+                                    defaultValue={CONTENT_DEFAULTS.ebook_plp_label}
+                                    onSave={(v) => saveSite("ebook_plp_label", v)}
+                                />
+                            </div>
+
+                            <div className="border-t border-[#0A7D55]/20 pt-5">
+                                <div className="flex flex-wrap items-center justify-between gap-3">
+                                    <div className="overline !text-[10px]">Product page</div>
+                                    <OnOff
+                                        name="ebook-pdp"
+                                        value={site.ebook_pdp_enabled}
+                                        onChange={(v) => saveSite("ebook_pdp_enabled", v)}
+                                    />
+                                </div>
+                                <p className="text-[11px] text-[#4B5563] mt-1 mb-2">
+                                    The panel under Buy Now. Leave the body blank to show only the
+                                    heading.
+                                </p>
+                                <div className="space-y-3">
+                                    <TextSlotRow
+                                        label="Heading"
+                                        value={site.ebook_pdp_title}
+                                        defaultValue={CONTENT_DEFAULTS.ebook_pdp_title}
+                                        onSave={(v) => saveSite("ebook_pdp_title", v)}
+                                    />
+                                    <TextSlotRow
+                                        label="Body (optional)"
+                                        value={site.ebook_pdp_body}
+                                        defaultValue={CONTENT_DEFAULTS.ebook_pdp_body}
+                                        onSave={(v) => saveSite("ebook_pdp_body", v)}
+                                    />
+                                    <TextSlotRow
+                                        label="Button text"
+                                        value={site.ebook_pdp_button}
+                                        defaultValue={CONTENT_DEFAULTS.ebook_pdp_button}
+                                        onSave={(v) => saveSite("ebook_pdp_button", v)}
+                                    />
+                                </div>
+                            </div>
+                        </div>
                     </section>
 
                     <section>

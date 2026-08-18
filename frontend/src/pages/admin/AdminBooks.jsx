@@ -44,6 +44,7 @@ const BLANK = {
     bestseller: false,
     new_release: false,
     star_title: false,
+    ebook_url: "",
     stock: 100,
     variants: [],
 };
@@ -684,6 +685,30 @@ function BookForm({ initial, categories, onClose, onSaved }) {
                                 </span>
                             </span>
                         </label>
+                    </div>
+
+                    {/* Per title, because only some titles are on the reader.
+                        Everything else about the eBook mark — the wording, the
+                        button, whether it shows on listings or product pages at
+                        all — is in Admin → E-Books. This is just the address. */}
+                    <div className="col-span-2">
+                        <label className="block text-sm text-[#4B5563]">
+                            eBook edition — link on the Oakbridge eReader
+                            <input
+                                name="ebook_url"
+                                value={form.ebook_url || ""}
+                                onChange={onChange}
+                                placeholder="https://ebooks.oakbridge.in/… — leave blank if this title isn't on the reader"
+                                data-testid="book-form-ebook-url"
+                                className="mt-1 w-full border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none focus:border-[#002B5C]"
+                            />
+                        </label>
+                        <p className="text-[11px] text-[#4B5563] mt-1">
+                            Add an address and this book shows an eBook link in the bookstore and a
+                            Read button on its page. Clear it and both disappear. Bulk-settable via
+                            the <span className="font-mono">ebook_url</span> column in the CSV
+                            importer.
+                        </p>
                     </div>
                 </div>
 

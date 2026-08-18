@@ -66,7 +66,9 @@ export default function BookDetail() {
     const [loading, setLoading] = useState(true);
     const [tab, setTab] = useState("description");
     const [deskCopyOpen, setDeskCopyOpen] = useState(false);
-    const { addItem, setIsOpen } = useCart();
+    // `site` for the eBook copy and toggles below — CartContext already fetches
+    // site content once for the whole app, so this costs no extra request.
+    const { addItem, setIsOpen, site } = useCart();
     const { user, isAuthenticated } = useAuth();
     const nav = useNavigate();
     const [notifyEmail, setNotifyEmail] = useState("");
@@ -157,6 +159,18 @@ export default function BookDetail() {
 
     const variants = Array.isArray(book.variants) ? book.variants : [];
     const hasVariants = variants.length > 0;
+
+    /* eBook edition — three conditions, read from two places. The store and the
+       PDP mark are site-wide switches; ebook_url belongs to this title alone,
+       and is what keeps the CTA off the 141 books that are not on the reader. */
+    const ebookHref = (book?.ebook_url || "").trim();
+    const ebookOnPdp =
+        Boolean(ebookHref) &&
+        String(site?.ebook_enabled ?? "on").toLowerCase() !== "off" &&
+        String(site?.ebook_pdp_enabled ?? "on").toLowerCase() !== "off";
+    const ebookTitle = site?.ebook_pdp_title || "Prefer to read it now?";
+    const ebookBody = site?.ebook_pdp_body ?? "This title is available on the Oakbridge eReader.";
+    const ebookButton = site?.ebook_pdp_button || "Read";
 
     // Admin-managed trust badges; drop any hidden or empty ones.
     const pdpBadges = (Array.isArray(settings?.pdp_badges) ? settings.pdp_badges : DEFAULT_PDP_BADGES)
@@ -561,6 +575,45 @@ export default function BookDetail() {
                             Request →
                         </span>
                     </button>
+                    )}
+
+                    {/*
+                     * The eBook edition, for titles that have one.
+                     *
+                     * Sits below Buy Now and above the trust badges: with the
+                     * things a customer can DO, not the things they are told.
+                     *
+                     * Green, deliberately. Navy is the primary buy action and
+                     * red means discount on every other surface — a third
+                     * meaning needs a third colour or it competes with Add to
+                     * Cart, which is the sale we would rather have.
+                     *
+                     * Every string is admin-owned (Admin → E-Books) and the
+                     * whole block needs the store on, the PDP mark on, AND this
+                     * title to carry its own ebook_url. Switching the feature on
+                     * shows nothing until books are actually linked.
+                     */}
+                    {ebookOnPdp && (
+                        <a
+                            href={ebookHref}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            data-testid="pdp-ebook-cta"
+                            className="mt-6 group flex items-center gap-4 border border-[#0A7D55] bg-[#0A7D55]/[0.06] p-4 hover:bg-[#0A7D55]/[0.12] transition-colors"
+                        >
+                            <BookOpen size={22} strokeWidth={1.5} className="flex-shrink-0 text-[#0A7D55]" />
+                            <div className="flex-1">
+                                <div className="font-serif text-base text-[#002B5C]">
+                                    {ebookTitle}
+                                </div>
+                                {ebookBody && (
+                                    <div className="text-xs text-[#4B5563] mt-0.5">{ebookBody}</div>
+                                )}
+                            </div>
+                            <span className="font-mono text-xs uppercase tracking-widest text-[#0A7D55] border-b border-[#0A7D55] pb-0.5 whitespace-nowrap group-hover:text-[#002B5C] group-hover:border-[#002B5C]">
+                                {ebookButton} ↗
+                            </span>
+                        </a>
                     )}
 
                     {pdpBadges.length > 0 && (

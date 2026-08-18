@@ -100,6 +100,18 @@ class Book(BaseModel):
     rating: float = 4.5
     stock: int = 100
     has_ebook: bool = False
+    # Link to this title on the Oakbridge eReader (ebooks.oakbridge.in), which
+    # is a separate application with its own catalogue. A non-empty value is
+    # what makes the eBook label and CTA appear on the listing and product page
+    # — there is no second flag to keep in step with it.
+    #
+    # NOT the same thing as has_ebook above, which means "a PDF is attached to
+    # this record here" and drives the gated download. One is a link out, the
+    # other is a file we hold.
+    #
+    # Declared HERE or it does not exist: every books endpoint carries
+    # response_model=Book and Pydantic drops what the model does not name.
+    ebook_url: Optional[str] = None
     variants: list = Field(default_factory=list)  # [{binding,size,price,mrp?,stock?}]
 
 
