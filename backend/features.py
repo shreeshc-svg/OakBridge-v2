@@ -2290,12 +2290,18 @@ async def set_legal_page(slug: str, payload: LegalSet):
 # ===================== FAQ / website assistant (chatbot) =====================
 class ChatTurn(BaseModel):
     role: str
-    content: str
+    # Capped, like `message` below. This was an unbounded str while the live
+    # message was limited to 1000 characters — so the cheapest way to run up an
+    # LLM bill was not to send a long message but a long *history*, which the
+    # client supplies in full and which nothing here was measuring.
+    content: str = Field(max_length=2000)
 
 
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=1000)
-    history: list[ChatTurn] = Field(default_factory=list)
+    # Six turns are used; anything beyond that is refused at the door rather
+    # than parsed and discarded.
+    history: list[ChatTurn] = Field(default_factory=list, max_length=20)
 
 
 async def _relevant_books(message: str, limit: int = 5) -> str:
@@ -2518,9 +2524,85 @@ async def _user_orders_context(user: dict, message: str = "") -> str:
     return "\n".join(lines)
 
 
+"""The reply given to anything that is not a question about Oakbridge.
+
+Identical wording whether the refusal came from the pattern check below or from
+the model itself, so a probe cannot tell which one answered — and so a false
+positive reads as an ordinary limitation rather than an accusation.
+"""
+CHAT_REFUSAL = (
+    "I'm the Oakbridge website assistant — I can only help with our books, "
+    "orders and using this site."
+)
+
+"""Phrases that are only ever used to talk a model out of its instructions.
+
+DETERMINISTIC, BECAUSE THE PROMPT RULE IS NOT.
+
+The system prompt already tells Oaky to refuse these, but that is the model's
+discretion and people defeat that for sport. Matching here settles it before a
+request is made: no model involved, no persuasion possible, and no LLM call
+billed for an attack.
+
+Kept narrow on purpose. Every phrase below is meaningless in a conversation
+about law books, so a customer cannot trip it by accident — "ignore the
+shipping cost" does not match "ignore previous instructions". A refusal is a
+lost customer, so the cost of a false positive is far higher than the cost of
+letting a determined prober through to a bot with no tools.
+"""
+_INJECTION_PATTERNS = [
+    r"ignore\s+(all\s+|any\s+)?(previous|prior|above|earlier|the\s+above)\s+(instruction|prompt|rule|direction)",
+    r"disregard\s+(all\s+|any\s+|your\s+)?(previous|prior|above|earlier)?\s*(instruction|prompt|rule)",
+    # "your prompt" or "the system prompt", never a bare "the prompt" — otherwise
+    # "show me the prompt books section" is refused, and a refused customer is a
+    # lost one.
+    r"(reveal|show|print|repeat|output|display)\s+(me\s+)?(your\s+(system\s+)?|the\s+system\s+)(prompt|instruction)",
+    # "system" is required here too: "what are your instructions for bulk
+    # orders?" is a real question somebody will ask.
+    r"what\s+(is|are)\s+your\s+system\s+(prompt|instruction)",
+    r"repeat\s+(everything|all)\s+(above|before)",
+    r"you\s+are\s+now\s+(a|an|no longer)",
+    r"pretend\s+(to\s+be|you\s+are|that\s+you)",
+    r"(roleplay|role-play)\s+as\b",
+    r"\bjailbreak\b",
+    r"\bDAN\s+mode\b",
+    r"developer\s+mode\s+(on|enabled)",
+]
+_INJECTION_RE = re.compile("|".join(_INJECTION_PATTERNS), re.I)
+
+"""Distinctive strings from the system prompt. If one comes back in a reply the
+model has quoted its instructions, whatever it was asked, and the reply is
+replaced rather than shown."""
+_PROMPT_LEAK_MARKERS = ("ANTI-MISUSE", "CUSTOMER ORDERS (", "RELEVANT BOOKS (", 'You are "Oaky"')
+
+
 @public_router.post("/chat")
-async def chat_endpoint(payload: ChatRequest, user: Optional[dict] = Depends(get_current_user_optional)):
+async def chat_endpoint(
+    payload: ChatRequest,
+    request: Request,
+    user: Optional[dict] = Depends(get_current_user_optional),
+):
     from llm import chat as llm_chat, LLMError
+    import antispam
+
+    """Two gates before a single token is bought.
+
+    The rate limit is Mongo-backed via antispam so it survives a deploy and is
+    shared across workers — an in-process counter forgets everything on restart,
+    which is exactly when a flood is least welcome. 20 messages per 10 minutes
+    is far above any real conversation and far below anything worth scripting.
+    """
+    ip = antispam.client_ip(request)
+    if await antispam._too_many(ip, "chat", limit=20, window_seconds=600):
+        raise HTTPException(
+            status_code=429,
+            detail="You've sent a lot of messages just now — please wait a minute and try again.",
+        )
+
+    if _INJECTION_RE.search(payload.message or ""):
+        # Logged, not stored: worth seeing in the logs, not worth a collection.
+        log.info("chat: refused a prompt-injection attempt from %s", ip or "unknown")
+        return {"reply": CHAT_REFUSAL}
 
     # The message is passed in because tracking numbers are only added for an
     # order the customer has quoted the number of — see _user_orders_context.
@@ -2537,4 +2619,19 @@ async def chat_endpoint(payload: ChatRequest, user: Optional[dict] = Depends(get
             status_code=503,
             detail="The assistant is unavailable right now — please email info@oakbridge.in.",
         )
+
+    """The last gate: check what came back, not just what went in.
+
+    The pattern list above catches the phrasings we thought of. This catches the
+    ones we did not, by looking for the instructions themselves in the answer —
+    a reply carrying "ANTI-MISUSE" or the CUSTOMER ORDERS header is quoting the
+    system prompt regardless of how it was asked to.
+
+    Cheap and total: no cleverness about which part leaked, the whole reply is
+    replaced. A leaked prompt is worth losing one answer over.
+    """
+    if any(m in reply for m in _PROMPT_LEAK_MARKERS):
+        log.warning("chat: reply contained system-prompt text, replaced. ip=%s", ip or "unknown")
+        return {"reply": CHAT_REFUSAL}
+
     return {"reply": reply}
