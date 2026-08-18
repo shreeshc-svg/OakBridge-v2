@@ -6,6 +6,28 @@ import { fetchSettings, adminSetSetting } from "../../lib/api";
 import { ADMIN_NAV, applyNavOrder } from "../../lib/adminNav";
 
 
+/**
+ * A labelled text input.
+ *
+ * Declared at module scope, not inside AdminSettings. A component defined in
+ * the render body is a new type on every keystroke, so React unmounts the old
+ * input and mounts a fresh one — the field loses focus after every character
+ * typed. Same JSX, but it stays the same component.
+ */
+const Field = ({ label, k, type = "text", hint, s, set }) => (
+    <div>
+        <label className="overline !text-[10px] block mb-1">{label}</label>
+        <input
+            type={type}
+            value={s[k] ?? ""}
+            onChange={(e) => set(k, e.target.value)}
+            data-testid={`setting-${k}`}
+            className="w-full border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none focus:border-[#002B5C]"
+        />
+        {hint && <div className="text-[11px] text-[#4B5563] mt-1">{hint}</div>}
+    </div>
+);
+
 export default function AdminSettings() {
     const [s, setS] = useState(null);
     const [saving, setSaving] = useState(false);
@@ -54,6 +76,12 @@ export default function AdminSettings() {
             await adminSetSetting("tax_percent", Number(s.tax_percent) || 0);
             await adminSetSetting("free_ship_threshold", Number(s.free_ship_threshold) || 0);
             await adminSetSetting("ship_flat", Number(s.ship_flat) || 0);
+            // Trimmed, and never saved empty — a blank promise would fall back
+            // to the built-in default on the storefront while the field here
+            // showed nothing, which reads as a broken save.
+            const delivery = (s.pdp_delivery ?? "").trim();
+            if (delivery) await adminSetSetting("pdp_delivery", delivery);
+            await adminSetSetting("plp_delivery_enabled", s.plp_delivery_enabled !== false);
             await adminSetSetting("authors_per_row", Number(s.authors_per_row) || 4);
             await adminSetSetting(
                 "authors_grid_rows",
@@ -81,20 +109,6 @@ export default function AdminSettings() {
         }
     };
 
-    const Field = ({ label, k, type = "text", hint }) => (
-        <div>
-            <label className="overline !text-[10px] block mb-1">{label}</label>
-            <input
-                type={type}
-                value={s[k] ?? ""}
-                onChange={(e) => set(k, e.target.value)}
-                data-testid={`setting-${k}`}
-                className="w-full border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none focus:border-[#002B5C]"
-            />
-            {hint && <div className="text-[11px] text-[#4B5563] mt-1">{hint}</div>}
-        </div>
-    );
-
     return (
         <div data-testid="admin-settings-page">
             <div className="overline">Store</div>
@@ -104,13 +118,48 @@ export default function AdminSettings() {
                 <div className="border border-[#E5E7EB] bg-white p-6">
                     <h2 className="font-serif text-xl text-[#002B5C]">Pricing &amp; shipping</h2>
                     <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        <Field label="Tax %" k="tax_percent" type="number" />
-                        <Field label="Free-ship over (₹)" k="free_ship_threshold" type="number" />
-                        <Field label="Flat shipping (₹)" k="ship_flat" type="number" />
+                        <Field label="Tax %" k="tax_percent" type="number" s={s} set={set} />
+                        <Field label="Free-ship over (₹)" k="free_ship_threshold" type="number" s={s} set={set} />
+                        <Field label="Flat shipping (₹)" k="ship_flat" type="number" s={s} set={set} />
                     </div>
                     <p className="text-[11px] text-[#4B5563] mt-3">
                         Tax and shipping are recomputed on the server at checkout using these values.
                     </p>
+
+                    <div className="mt-6 border-t border-[#E5E7EB] pt-5" data-testid="delivery-promise">
+                        <Field
+                            label="Delivery promise"
+                            k="pdp_delivery"
+                            s={s}
+                            set={set}
+                            hint="Shown under every book tile on the Bookstore and homepage, and used by the chat assistant when a customer asks how long delivery takes. Tiles drop the word “business” to fit — “3–7 business days” shows there as “3–7 days”."
+                        />
+                        <label className="mt-3 flex items-start gap-2.5 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={s.plp_delivery_enabled !== false}
+                                onChange={(e) => set("plp_delivery_enabled", e.target.checked)}
+                                data-testid="setting-plp_delivery_enabled"
+                                className="accent-[#002B5C] w-4 h-4 mt-0.5"
+                            />
+                            <span>
+                                <span className="block text-sm text-[#002B5C]">
+                                    Show it under book tiles
+                                </span>
+                                <span className="block text-[11px] text-[#4B5563]">
+                                    Untick to hide the line on the Bookstore and homepage tiles. The
+                                    book page keeps its Delivery badge — that one is edited in{" "}
+                                    <Link
+                                        to="/admin/pdp"
+                                        className="text-[#002B5C] border-b border-[#002B5C] hover:text-[#CC0033]"
+                                    >
+                                        Book page (PDP)
+                                    </Link>
+                                    .
+                                </span>
+                            </span>
+                        </label>
+                    </div>
                 </div>
 
                 <div className="border border-[#E5E7EB] bg-white p-6" data-testid="admin-nav-order">
@@ -159,10 +208,12 @@ export default function AdminSettings() {
                             k="authors_grid_rows"
                             type="number"
                             hint="0 puts every author in the grid and hides the carousel."
+                            s={s}
+                            set={set}
                         />
                     </div>
                     <div className="mt-4">
-                        <Field label="Carousel heading" k="authors_carousel_title" />
+                        <Field label="Carousel heading" k="authors_carousel_title" s={s} set={set} />
                     </div>
                     <p className="text-[11px] text-[#4B5563] mt-3">
                         With 4 across and 2 rows, the first 8 authors show as a grid and the rest

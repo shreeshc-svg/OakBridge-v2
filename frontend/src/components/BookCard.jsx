@@ -23,6 +23,13 @@ export default function BookCard({ book, index = 0, compact = false }) {
      */
     const deliveryFull = settings?.pdp_delivery || "3–7 business days";
     const deliveryShort = deliveryFull.replace(/\s*business\s*/i, " ").trim();
+    /*
+     * Admin → Settings can switch the tile line off without touching the
+     * product page or the promise itself. Compared against false so an unset
+     * key — and a failed /settings fetch — both leave it showing, which is how
+     * every tile behaved before this switch existed.
+     */
+    const showDelivery = settings?.plp_delivery_enabled !== false;
 
     /*
      * The eBook mark needs three things to be true, and reads them from three
@@ -321,17 +328,29 @@ export default function BookCard({ book, index = 0, compact = false }) {
                  * Promising delivery in 3-7 days on something we cannot ship
                  * would be worse than a gap, and `invisible` holds the height
                  * while aria-hidden keeps it out of the screen reader.
+                 *
+                 * The admin switch is different: it is global, so every card
+                 * loses the words together and the line can genuinely go. But
+                 * the eBook link below shares this row and only some titles
+                 * carry one — so on the cards without one the row still has to
+                 * exist, empty, or their price sits lower than their
+                 * neighbours'. Hence the non-breaking space: one blank line,
+                 * no reserved width, and nothing for a screen reader to read.
                  */}
                 <div
                     className={`flex items-center gap-2 ${compact ? "pt-1.5 text-[10px]" : "pt-2 text-[11px]"}`}
                 >
-                    <span
-                        aria-hidden={oos}
-                        className={`flex items-center gap-1.5 text-[#4B5563] ${oos ? "invisible" : ""}`}
-                    >
-                        <Truck size={compact ? 11 : 12} strokeWidth={1.5} className="flex-shrink-0" />
-                        {deliveryShort}
-                    </span>
+                    {showDelivery ? (
+                        <span
+                            aria-hidden={oos}
+                            className={`flex items-center gap-1.5 text-[#4B5563] ${oos ? "invisible" : ""}`}
+                        >
+                            <Truck size={compact ? 11 : 12} strokeWidth={1.5} className="flex-shrink-0" />
+                            {deliveryShort}
+                        </span>
+                    ) : (
+                        !ebookOnPlp && <span aria-hidden="true">&nbsp;</span>
+                    )}
 
                     {/*
                      * The eBook edition shares this row rather than taking one
@@ -350,9 +369,15 @@ export default function BookCard({ book, index = 0, compact = false }) {
                      */}
                     {ebookOnPlp && (
                         <>
-                            <span aria-hidden="true" className="text-[#D0D5DD]">
-                                ·
-                            </span>
+                            {/* Separator only when there is something on the
+                                left to separate from — with the delivery line
+                                switched off it would dangle in front of the
+                                link. */}
+                            {showDelivery && (
+                                <span aria-hidden="true" className="text-[#D0D5DD]">
+                                    ·
+                                </span>
+                            )}
                             <a
                                 href={ebookUrl}
                                 target="_blank"

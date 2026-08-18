@@ -2087,6 +2087,11 @@ SETTINGS_DEFAULTS = {
     "pdp_shipping": "Free shipping on all orders",
     "pdp_delivery": "3\u20137 business days",
     "pdp_returns": "14-day returns",
+    # The delivery line under each book tile on the Bookstore and the homepage
+    # carousels. The promise itself is `pdp_delivery` above \u2014 this only decides
+    # whether the tiles repeat it. Default True: it was always shown before this
+    # key existed, and an unset key must not silently change the storefront.
+    "plp_delivery_enabled": True,
     "binding_options": ["Hardcover", "Softcover"],
     "size_options": ["Demi", "Royal", "Crown"],
     # Storefront listing (PLP) — admin-editable sort menu + filter toggles.
