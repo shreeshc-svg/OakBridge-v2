@@ -112,6 +112,16 @@ class Book(BaseModel):
     # Declared HERE or it does not exist: every books endpoint carries
     # response_model=Book and Pydantic drops what the model does not name.
     ebook_url: Optional[str] = None
+    # What the eReader charges for this title, BEFORE GST.
+    #
+    # Stored ex-GST and grossed up at display time from a single admin-set rate,
+    # because the rate is a law that changes for every title at once while these
+    # prices change one at a time. Storing the gross figure would mean re-uploading
+    # 110 rows the day the rate moves — and, worse, leaving the ones nobody
+    # remembered to re-upload quietly wrong.
+    #
+    # Same rule as ebook_url: declared here or response_model=Book drops it.
+    ebook_price: Optional[float] = None
     variants: list = Field(default_factory=list)  # [{binding,size,price,mrp?,stock?}]
 
 

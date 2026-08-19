@@ -45,6 +45,7 @@ const BLANK = {
     new_release: false,
     star_title: false,
     ebook_url: "",
+    ebook_price: "",
     stock: 100,
     variants: [],
 };
@@ -499,6 +500,12 @@ function BookForm({ initial, categories, onClose, onSaved }) {
                 ...form,
                 price: Number(form.price),
                 original_price: form.original_price === "" ? null : Number(form.original_price),
+                // null, not 0 — an empty field means "this title has no eBook
+                // price", and 0 would read as a free eBook.
+                ebook_price:
+                    form.ebook_price === "" || form.ebook_price == null
+                        ? null
+                        : Number(form.ebook_price),
                 pages: Number(form.pages),
                 stock: Number(form.stock),
                 variants: (form.variants || []).map((v) => ({
@@ -708,6 +715,28 @@ function BookForm({ initial, categories, onClose, onSaved }) {
                             Read button on its page. Clear it and both disappear. Bulk-settable via
                             the <span className="font-mono">ebook_url</span> column in the CSV
                             importer.
+                        </p>
+                    </div>
+
+                    <div className="col-span-2">
+                        <label className="block text-sm text-[#4B5563]">
+                            eBook price — before GST
+                            <input
+                                name="ebook_price"
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={form.ebook_price ?? ""}
+                                onChange={onChange}
+                                placeholder="e.g. 466 — the site adds GST and shows ₹489"
+                                data-testid="book-form-ebook-price"
+                                className="mt-1 w-full border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none focus:border-[#002B5C]"
+                            />
+                        </label>
+                        <p className="text-[11px] text-[#4B5563] mt-1">
+                            Shown beside the print price, but only once the price display is
+                            switched on in Admin → E-Books and this title has a link above. For many
+                            titles at once, upload a price list there instead of typing them here.
                         </p>
                     </div>
                 </div>

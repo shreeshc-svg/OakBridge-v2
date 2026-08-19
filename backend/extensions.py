@@ -123,6 +123,7 @@ class BookAdminCreate(BaseModel):
     new_release: bool = False
     star_title: bool = False
     ebook_url: Optional[str] = None
+    ebook_price: Optional[float] = None  # ex-GST; grossed up for display
     rating: float = 4.5
     stock: int = 100
     variants: Optional[list] = None
@@ -149,6 +150,7 @@ class BookAdminUpdate(BaseModel):
     new_release: Optional[bool] = None
     star_title: Optional[bool] = None
     ebook_url: Optional[str] = None
+    ebook_price: Optional[float] = None  # ex-GST; grossed up for display
     stock: Optional[int] = None
     variants: Optional[list] = None
 

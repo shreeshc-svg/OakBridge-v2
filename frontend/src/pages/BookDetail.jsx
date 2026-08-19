@@ -5,7 +5,7 @@ import Seo, { SITE } from "../components/Seo";
 import NoIndex from "../components/NoIndex";
 import EbookCta from "../components/EbookCta";
 import { Link, useParams, useNavigate } from "react-router-dom";
-import { Minus, Plus, ShoppingBag, ArrowLeft, Star, GraduationCap, ChevronLeft, ChevronRight, BookOpen, Truck, PackageCheck, RotateCcw, ShieldCheck, BadgeCheck } from "lucide-react";
+import { Minus, Plus, ShoppingBag, ArrowLeft, Star, GraduationCap, ChevronLeft, ChevronRight, BookOpen, Truck, PackageCheck, RotateCcw, ShieldCheck, BadgeCheck, ExternalLink } from "lucide-react";
 import BookCard from "../components/BookCard";
 import DeskCopyDialog from "../components/DeskCopyDialog";
 import ReviewsSection from "../components/ReviewsSection";
@@ -17,6 +17,7 @@ import { useAuth } from "../context/AuthContext";
 import { toast } from "sonner";
 import VerifyNotice from "../components/VerifyNotice";
 import { hiddenSet } from "../lib/sections";
+import { ebookEdition } from "../lib/ebook";
 
 // Trust badges under the price. Admin-managed via Settings key `pdp_badges`;
 // this is only the fallback when nothing is saved yet. Spelled-out column
@@ -171,6 +172,12 @@ export default function BookDetail() {
     const ebookTitle = site?.ebook_pdp_title || "Prefer to read it now?";
     const ebookBody = site?.ebook_pdp_body ?? "This title is available on the Oakbridge eReader.";
     const ebookButton = site?.ebook_pdp_button || "Read";
+    /* The price pair. Null unless the price switch is on for this placement AND
+       the title is linked — a price the customer cannot act on is worse than no
+       price at all. Same helper the tiles use, so the two cannot disagree. */
+    const ebookPrice = ebookEdition(book, site, "pdp").price;
+    const printLabel = site?.ebook_price_print_label || "Book";
+    const ebookPriceLabel = site?.ebook_price_ebook_label || "eBook";
 
     // Admin-managed trust badges; drop any hidden or empty ones.
     const pdpBadges = (Array.isArray(settings?.pdp_badges) ? settings.pdp_badges : DEFAULT_PDP_BADGES)
@@ -400,22 +407,52 @@ export default function BookDetail() {
                         <EbookCta variant="inline" />
                     </div>
 
-                    <div className="mt-8 flex items-baseline gap-4 pb-8 border-b border-[#E5E7EB]">
-                        <span
-                            data-testid="book-price"
-                            className="font-serif text-5xl text-[#002B5C]"
-                        >
-                            {formatINR(activePrice)}
-                        </span>
-                        {book.original_price && (
-                            <>
-                                <span className="text-[#4B5563] line-through">
-                                    {formatINR(book.original_price)}
+                    {/*
+                     * No reserved blank row here, unlike the tiles: a product
+                     * page has one price block and nothing beside it to line up
+                     * with, so the eBook line simply appears or doesn't.
+                     */}
+                    <div className="mt-8 pb-8 border-b border-[#E5E7EB]">
+                        <div className="flex items-baseline gap-4">
+                            {ebookPrice !== null && (
+                                <span className="text-xs text-[#4B5563] w-11 flex-shrink-0">
+                                    {printLabel}
                                 </span>
-                                <span className="bg-[#CC0033] text-white text-xs font-mono px-2 py-1">
-                                    Save {discount}%
+                            )}
+                            <span
+                                data-testid="book-price"
+                                className="font-serif text-5xl text-[#002B5C]"
+                            >
+                                {formatINR(activePrice)}
+                            </span>
+                            {book.original_price && (
+                                <>
+                                    <span className="text-[#4B5563] line-through">
+                                        {formatINR(book.original_price)}
+                                    </span>
+                                    <span className="bg-[#CC0033] text-white text-xs font-mono px-2 py-1">
+                                        Save {discount}%
+                                    </span>
+                                </>
+                            )}
+                        </div>
+                        {ebookPrice !== null && (
+                            <div className="mt-3 flex items-baseline gap-4">
+                                <span className="text-xs text-[#4B5563] w-11 flex-shrink-0">
+                                    {ebookPriceLabel}
                                 </span>
-                            </>
+                                <a
+                                    href={ebookHref}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    data-testid="pdp-ebook-price"
+                                    aria-label={`Read this title on the Oakbridge eReader — ${formatINR(ebookPrice)}`}
+                                    className="font-serif text-2xl text-[#0A7D55] border-b border-[#0A7D55]/40 hover:text-[#002B5C] hover:border-[#002B5C] transition-colors inline-flex items-center gap-2"
+                                >
+                                    {formatINR(ebookPrice)}
+                                    <ExternalLink size={14} strokeWidth={1.5} aria-hidden="true" />
+                                </a>
+                            </div>
                         )}
                     </div>
 

@@ -206,6 +206,20 @@ export const adminSetTracking = (id, payload) =>
 export const adminSendPaymentLink = (id) =>
     api.post(`/admin/orders/${id}/payment-link`).then((r) => r.data);
 
+/**
+ * Upload an eBook price list keyed on ISBN.
+ *
+ * `dryRun` reports what would change without writing, so 110 live titles are
+ * never moved on the strength of a column heading nobody checked.
+ */
+export const adminUploadEbookPriceList = (file, dryRun = false) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return api
+        .post(`/admin/ebooks/price-list?dry_run=${dryRun ? "true" : "false"}`, fd)
+        .then((r) => r.data);
+};
+
 // Asks Razorpay what it actually holds for an unpaid order. Can only move an
 // order forward to paid — there is no path in it that marks anything failed.
 export const adminReconcilePayment = (id) =>

@@ -29,6 +29,19 @@ const CONTENT_DEFAULTS = {
     ebook_pdp_title: "Prefer to read it now?",
     ebook_pdp_body: "This title is available on the Oakbridge eReader.",
     ebook_pdp_button: "Read",
+    // The eBook price shown beside the print price.
+    //
+    // Off by default. Switching it on adds a second line to the price block of
+    // every tile — including the ones with no eBook, which reserve the space
+    // blank so prices stay level across a grid row. That is a deliberate cost
+    // and should be paid only once there are prices to show.
+    ebook_price_plp_enabled: "off",
+    ebook_price_pdp_enabled: "off",
+    // Book prices are ex-GST on the eReader; the site grosses them up here so
+    // one rate change covers every title at once.
+    ebook_gst_percent: "5",
+    ebook_price_print_label: "Book",
+    ebook_price_ebook_label: "eBook",
     about_body1: "Oakbridge Publishing was founded in 2017 by two veteran publishing professionals with leadership experience at some of the world's most respected publishing companies. The premise was simple — India deserves its own scholarly voice, published from within, for the students, educators and practitioners who live here. We publish across five imprints: Academic, Professional, General, Coffee Table and Curated Works. Every manuscript is shepherded by editors with decades of international publishing experience.",
     about_body2: "We remain a privately-held, independent publisher — which means our editorial choices are made by readers and educators, not shareholders.",
     about_overline: "About Oakbridge",

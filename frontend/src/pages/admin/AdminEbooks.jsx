@@ -1,8 +1,13 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { ExternalLink } from "lucide-react";
-import { fetchSiteContent, adminSetSiteContent } from "../../lib/api";
+import { ExternalLink, Upload } from "lucide-react";
+import {
+    fetchSiteContent,
+    adminSetSiteContent,
+    adminUploadEbookPriceList,
+    formatApiError,
+} from "../../lib/api";
 import { TextSlotRow } from "../../components/admin/ContentEditors";
 import CONTENT_DEFAULTS from "../../lib/contentDefaults";
 
@@ -33,6 +38,175 @@ function OnOff({ name, value, onChange }) {
                 </label>
             ))}
         </div>
+    );
+}
+
+/**
+ * Bulk price list, keyed on ISBN.
+ *
+ * Always checked before it is applied. The eReader prices 110 titles; a column
+ * named something unexpected, or ISBNs formatted differently at the two ends,
+ * is the difference between 110 updates and 0 — and that is a number to read on
+ * screen, not to discover afterwards on the storefront.
+ *
+ * Deliberately updates only: a price for a title we do not sell is a row to
+ * report, never a book to create.
+ */
+function PriceListUpload() {
+    const [file, setFile] = useState(null);
+    const [preview, setPreview] = useState(null);
+    const [busy, setBusy] = useState(false);
+
+    const pick = (f) => {
+        setFile(f || null);
+        setPreview(null); // a new file invalidates the old numbers
+    };
+
+    const run = async (dryRun) => {
+        if (!file) return;
+        setBusy(true);
+        try {
+            const res = await adminUploadEbookPriceList(file, dryRun);
+            setPreview(res);
+            if (!dryRun) {
+                toast.success(`${res.updated} title${res.updated === 1 ? "" : "s"} updated.`);
+                setFile(null);
+            }
+        } catch (err) {
+            toast.error(formatApiError(err));
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const Stat = ({ label, value, tone = "" }) => (
+        <div className="border border-[#E5E7EB] bg-white px-3 py-2">
+            <div className="overline !text-[9px]">{label}</div>
+            <div className={`font-serif text-2xl ${tone || "text-[#002B5C]"}`}>{value}</div>
+        </div>
+    );
+
+    return (
+        <section className="border border-[#E5E7EB] bg-white p-5" data-testid="ebook-price-list">
+            <h2 className="font-serif text-xl text-[#002B5C]">Upload a price list</h2>
+            <p className="text-[11px] text-[#4B5563] mt-1 mb-4 max-w-2xl">
+                A .csv or .xlsx with an <code className="font-mono">isbn</code> column, plus{" "}
+                <code className="font-mono">ebook_price</code>,{" "}
+                <code className="font-mono">ebook_url</code>, or both. ISBNs match with or without
+                hyphens. Prices go in <strong>before GST</strong> — the rate above is added when
+                they are shown. A blank cell leaves that title's existing value alone; put{" "}
+                <code className="font-mono">-</code> in it to clear one. Existing titles are updated
+                and none are created.
+            </p>
+
+            <div className="flex flex-wrap items-center gap-3">
+                <input
+                    type="file"
+                    accept=".csv,.xlsx"
+                    onChange={(e) => pick(e.target.files?.[0])}
+                    data-testid="price-list-file"
+                    className="text-sm"
+                />
+                <button
+                    type="button"
+                    onClick={() => run(true)}
+                    disabled={!file || busy}
+                    data-testid="price-list-check"
+                    className="inline-flex items-center gap-1.5 border border-[#002B5C] text-[#002B5C] px-4 py-2 text-sm hover:bg-[#F5F7FA] disabled:opacity-40"
+                >
+                    <Upload size={14} strokeWidth={1.5} />
+                    {busy ? "Working…" : "Check file"}
+                </button>
+                {preview?.dry_run && preview.updated > 0 && (
+                    <button
+                        type="button"
+                        onClick={() => run(false)}
+                        disabled={busy}
+                        data-testid="price-list-apply"
+                        className="bg-[#0A7D55] text-white px-4 py-2 text-sm hover:bg-[#086544] disabled:opacity-40"
+                    >
+                        Apply to {preview.updated} title{preview.updated === 1 ? "" : "s"}
+                    </button>
+                )}
+            </div>
+
+            {preview && (
+                <div className="mt-5">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        <Stat label="Rows read" value={preview.rows_read} />
+                        <Stat
+                            label={preview.dry_run ? "Would update" : "Updated"}
+                            value={preview.updated}
+                            tone="text-[#0A7D55]"
+                        />
+                        <Stat
+                            label="No such ISBN"
+                            value={preview.unmatched}
+                            tone={preview.unmatched ? "text-[#854F0B]" : ""}
+                        />
+                        <Stat
+                            label="Bad rows"
+                            value={preview.invalid}
+                            tone={preview.invalid ? "text-[#CC0033]" : ""}
+                        />
+                    </div>
+
+                    <p className="text-[11px] text-[#4B5563] mt-3">
+                        Read columns — ISBN: <code className="font-mono">{preview.columns.isbn}</code>
+                        {preview.columns.price && (
+                            <>
+                                , price: <code className="font-mono">{preview.columns.price}</code>
+                            </>
+                        )}
+                        {preview.columns.url && (
+                            <>
+                                , link: <code className="font-mono">{preview.columns.url}</code>
+                            </>
+                        )}
+                        .
+                    </p>
+
+                    {preview.unmatched > 0 && (
+                        <p className="text-[11px] text-[#854F0B] mt-2">
+                            Not in the catalogue: {preview.unmatched_isbns.join(", ")}
+                            {preview.unmatched > preview.unmatched_isbns.length && " …"}
+                        </p>
+                    )}
+                    {preview.invalid > 0 && (
+                        <ul className="text-[11px] text-[#CC0033] mt-2 space-y-0.5">
+                            {preview.invalid_rows.map((r, i) => (
+                                <li key={i}>
+                                    Row {r.row} ({r.isbn}): {r.error}
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+
+                    {preview.sample?.length > 0 && (
+                        <div className="mt-3 border border-[#E5E7EB]">
+                            <table className="w-full text-[11px]">
+                                <tbody>
+                                    {preview.sample.map((r, i) => (
+                                        <tr key={i} className="border-b border-[#E5E7EB] last:border-0">
+                                            <td className="px-2 py-1.5 font-mono text-[#4B5563]">{r.isbn}</td>
+                                            <td className="px-2 py-1.5 text-[#002B5C]">{r.title}</td>
+                                            <td className="px-2 py-1.5 text-right whitespace-nowrap">
+                                                {r.ebook_price === "—" ? "—" : `₹${r.ebook_price}`}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                            {preview.updated > preview.sample.length && (
+                                <div className="px-2 py-1.5 text-[11px] text-[#4B5563]">
+                                    …and {preview.updated - preview.sample.length} more
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )}
+        </section>
     );
 }
 
@@ -195,6 +369,59 @@ export default function AdminEbooks() {
                             </div>
 
                             <div className="border-t border-[#0A7D55]/20 pt-5">
+                                <div className="overline !text-[10px]">Price beside the print price</div>
+                                <p className="text-[11px] text-[#4B5563] mt-1 mb-3">
+                                    Shows <strong>Book ₹716 / eBook ₹489</strong> instead of one price.
+                                    On listings this reserves a second line on{" "}
+                                    <em>every</em> tile, blank on the ones without an eBook, so prices
+                                    stay level across a row — worth switching on once the price list is
+                                    uploaded, not before. A title with a price but no link shows
+                                    nothing.
+                                </p>
+                                <div className="space-y-3">
+                                    <div className="flex flex-wrap items-center justify-between gap-3">
+                                        <span className="text-sm text-[#002B5C]">On book tiles</span>
+                                        <OnOff
+                                            name="ebook-price-plp"
+                                            value={site.ebook_price_plp_enabled ?? "off"}
+                                            onChange={(v) => saveSite("ebook_price_plp_enabled", v)}
+                                        />
+                                    </div>
+                                    <div className="flex flex-wrap items-center justify-between gap-3">
+                                        <span className="text-sm text-[#002B5C]">On the product page</span>
+                                        <OnOff
+                                            name="ebook-price-pdp"
+                                            value={site.ebook_price_pdp_enabled ?? "off"}
+                                            onChange={(v) => saveSite("ebook_price_pdp_enabled", v)}
+                                        />
+                                    </div>
+                                    <TextSlotRow
+                                        label="GST added to eBook prices (%)"
+                                        value={site.ebook_gst_percent}
+                                        defaultValue={CONTENT_DEFAULTS.ebook_gst_percent}
+                                        onSave={(v) => saveSite("ebook_gst_percent", v)}
+                                    />
+                                    <p className="text-[11px] text-[#4B5563]">
+                                        Prices are stored <strong>before</strong> GST and grossed up
+                                        here, so a rate change covers every title at once. Set 0 to
+                                        show the uploaded figures unchanged.
+                                    </p>
+                                    <TextSlotRow
+                                        label="Label for the print price"
+                                        value={site.ebook_price_print_label}
+                                        defaultValue={CONTENT_DEFAULTS.ebook_price_print_label}
+                                        onSave={(v) => saveSite("ebook_price_print_label", v)}
+                                    />
+                                    <TextSlotRow
+                                        label="Label for the eBook price"
+                                        value={site.ebook_price_ebook_label}
+                                        defaultValue={CONTENT_DEFAULTS.ebook_price_ebook_label}
+                                        onSave={(v) => saveSite("ebook_price_ebook_label", v)}
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="border-t border-[#0A7D55]/20 pt-5">
                                 <div className="flex flex-wrap items-center justify-between gap-3">
                                     <div className="overline !text-[10px]">Product page</div>
                                     <OnOff
@@ -230,6 +457,8 @@ export default function AdminEbooks() {
                             </div>
                         </div>
                     </section>
+
+                    <PriceListUpload />
 
                     <section>
                         <h2 className="font-serif text-xl text-[#002B5C]">Wording — all pages</h2>

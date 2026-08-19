@@ -1,10 +1,11 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
-import { Star, Truck, BookOpen } from "lucide-react";
+import { Star, Truck, BookOpen, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { formatINR, notifyBackInStock, mediaUrl } from "../lib/api";
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
+import { ebookEdition } from "../lib/ebook";
 
 const LOW_STOCK = 5;
 
@@ -42,12 +43,19 @@ export default function BookCard({ book, index = 0, compact = false }) {
      * link the moment the feature is switched on. 110 titles are going onto the
      * reader out of 251.
      */
-    const ebookUrl = (book.ebook_url || "").trim();
-    const ebookOnPlp =
-        Boolean(ebookUrl) &&
-        String(site?.ebook_enabled ?? "on").toLowerCase() !== "off" &&
-        String(site?.ebook_plp_enabled ?? "on").toLowerCase() !== "off";
+    const ebook = ebookEdition(book, site, "plp");
+    const ebookUrl = ebook.url;
+    const ebookOnPlp = ebook.linked;
     const ebookLabel = site?.ebook_plp_label || "eBook";
+    /*
+     * With a price to show, the price line IS the link — so the chip in the
+     * delivery row would be a second link to the same place on a 150px tile.
+     * One mention each, whichever is switched on.
+     */
+    const showEbookPrice = ebook.price !== null;
+    const showEbookChip = ebookOnPlp && !showEbookPrice;
+    const printLabel = site?.ebook_price_print_label || "Book";
+    const ebookPriceLabel = site?.ebook_price_ebook_label || "eBook";
     const { user } = useAuth();
     const [notifyOpen, setNotifyOpen] = useState(false);
     const [notifyEmail, setNotifyEmail] = useState("");
@@ -282,14 +290,76 @@ export default function BookCard({ book, index = 0, compact = false }) {
                 )}
 
                 <div className={`flex items-end justify-between ${compact ? "pt-2" : "pt-3"}`}>
-                <div className="flex items-baseline gap-2">
-                    <span className={`font-serif text-[#002B5C] ${compact ? "text-base" : "text-xl"}`}>
-                        {formatINR(book.price)}
-                    </span>
-                    {book.original_price && (
-                        <span className={`text-[#4B5563] line-through ${compact ? "text-[10px]" : "text-xs"}`}>
-                            {formatINR(book.original_price)}
+                <div>
+                    <div className="flex items-baseline gap-2">
+                        {/*
+                         * The "Book" label appears only alongside an eBook price.
+                         * On its own it labels the only price on the card, which
+                         * tells the reader nothing and costs 30px of a 150px tile.
+                         */}
+                        {ebook.pricingOn && (
+                            <span
+                                aria-hidden={!showEbookPrice}
+                                className={`text-[#4B5563] w-[34px] flex-shrink-0 ${compact ? "text-[9px]" : "text-[10px]"} ${showEbookPrice ? "" : "invisible"}`}
+                            >
+                                {printLabel}
+                            </span>
+                        )}
+                        <span className={`font-serif text-[#002B5C] ${compact ? "text-base" : "text-xl"}`}>
+                            {formatINR(book.price)}
                         </span>
+                        {book.original_price && (
+                            <span className={`text-[#4B5563] line-through ${compact ? "text-[10px]" : "text-xs"}`}>
+                                {formatINR(book.original_price)}
+                            </span>
+                        )}
+                    </div>
+
+                    {/*
+                     * eBook price — the row is reserved on EVERY card once the
+                     * feature is on, filled or not.
+                     *
+                     * This sits inside the mt-auto cluster, so a second line on
+                     * only some cards would lift their print price above their
+                     * neighbours' across the whole grid row. A blank line costs
+                     * ~16px on the cards without an eBook; a missing one costs
+                     * the alignment on every card in the row.
+                     *
+                     * A link, not a label, and outside the <Link> that wraps the
+                     * cover and title so there is no anchor inside an anchor.
+                     */}
+                    {ebook.pricingOn && (
+                        <div className={`flex items-baseline gap-2 ${compact ? "pt-0.5" : "pt-1"}`}>
+                            {showEbookPrice ? (
+                                <>
+                                    <span
+                                        className={`text-[#4B5563] w-[34px] flex-shrink-0 ${compact ? "text-[9px]" : "text-[10px]"}`}
+                                    >
+                                        {ebookPriceLabel}
+                                    </span>
+                                    <a
+                                        href={ebookUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        data-testid={`ebook-price-${book.id}`}
+                                        aria-label={`Read ${book.title} on the Oakbridge eReader — ${formatINR(ebook.price)}`}
+                                        className={`font-serif text-[#0A7D55] border-b border-[#0A7D55]/40 hover:text-[#002B5C] hover:border-[#002B5C] transition-colors ${compact ? "text-xs" : "text-base"}`}
+                                    >
+                                        {formatINR(ebook.price)}
+                                    </a>
+                                    <ExternalLink
+                                        size={compact ? 9 : 10}
+                                        strokeWidth={1.5}
+                                        aria-hidden="true"
+                                        className="text-[#0A7D55] flex-shrink-0"
+                                    />
+                                </>
+                            ) : (
+                                <span aria-hidden="true" className={compact ? "text-xs" : "text-base"}>
+                                    &nbsp;
+                                </span>
+                            )}
+                        </div>
                     )}
                 </div>
                 {oos ? (
@@ -367,7 +437,7 @@ export default function BookCard({ book, index = 0, compact = false }) {
                      * turning the feature on reveals nothing until books are
                      * actually linked.
                      */}
-                    {ebookOnPlp && (
+                    {showEbookChip && (
                         <>
                             {/* Separator only when there is something on the
                                 left to separate from — with the delivery line

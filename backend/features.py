@@ -995,6 +995,7 @@ TEMPLATE_COLUMNS = [
     ("new_release", "TRUE / FALSE — flag for the new-release carousel"),
     ("star_title", "TRUE / FALSE — gives the title a gold frame wherever it appears"),
     ("ebook_url", "Link to this title on the eReader — shows the eBook label and CTA. Blank = no eBook"),
+    ("ebook_price", "eBook price BEFORE GST — the site adds the GST rate set in Admin → E-Books"),
     ("grade", "Optional grade level, e.g. 'Ages 8-12' for children's titles"),
     ("language", "Default: English"),
     ("publisher", "Default: Oakbridge Publishing"),
@@ -1021,6 +1022,7 @@ SAMPLE_ROW = {
     "new_release": "FALSE",
     "star_title": "FALSE",
     "ebook_url": "",
+    "ebook_price": "",
     "grade": "",
     "language": "English",
     "publisher": "Oakbridge Publishing",
@@ -1202,6 +1204,9 @@ def _csv_row_to_book_doc(clean: dict) -> dict:
         # eReader, and pasting a URL into 110 forms by hand is how a job gets
         # abandoned half-done.
         "ebook_url": (clean.get("ebook_url") or "").strip(),
+        # None, not 0.0 — "no eBook price" and "free" must not collapse into the
+        # same value, and _csv_float returns 0.0 for a blank cell.
+        "ebook_price": _csv_float(clean.get("ebook_price")) or None,
         "rating": _csv_float(clean.get("rating")) or 4.5,
         "stock": _csv_int(clean.get("stock"), default=100),
     }
@@ -1263,6 +1268,178 @@ async def admin_bulk_import(file: UploadFile = File(...)):
             errors.append({"row": i, "error": str(e)})
     return {"created": len(created), "errors": errors, "books": created[:25]}
 
+
+# ====== eBook price list ======
+#
+# The eReader prices 110 titles and the storefront has to show those prices
+# beside its own. Typing them into 110 forms is how a job gets abandoned
+# half-done, so they arrive as a sheet keyed on ISBN — the one identifier both
+# systems already share, and the same key the eReader's own bulk upload uses.
+#
+# It updates existing books and never creates one. A price for a title we do not
+# sell is a row to report, not a book to invent.
+
+_PRICE_LIST_ISBN_HEADERS = ("isbn13", "isbn_13", "isbn-13", "isbn")
+_PRICE_LIST_PRICE_HEADERS = ("ebook_price", "ebook price", "price", "ebookprice", "amount")
+_PRICE_LIST_URL_HEADERS = ("ebook_url", "ebook url", "url", "link", "ebook_link")
+# A blank cell leaves the value alone; these say "remove what is there". Without
+# a way to say that, a price could be added but never taken back off the site
+# except by editing the title by hand.
+_PRICE_LIST_CLEAR = {"-", "0", "none", "remove", "na", "n/a"}
+
+
+def _norm_isbn_key(v: str) -> str:
+    """Strip hyphens and spaces so 978-93-... matches 97893...."""
+    return re.sub(r"[^0-9Xx]", "", str(v or "")).upper()
+
+
+def _pick_price_col(headers: List[str], wanted: tuple) -> Optional[str]:
+    lowered = {str(h).strip().lower(): h for h in headers if h}
+    for w in wanted:
+        if w in lowered:
+            return lowered[w]
+    return None
+
+
+@admin_router.post("/ebooks/price-list")
+async def admin_upload_ebook_price_list(file: UploadFile = File(...), dry_run: bool = False):
+    """Set eBook prices (and optionally links) for many titles from one sheet.
+
+    `dry_run` reports exactly what would change without writing anything, so the
+    count can be checked before 110 live titles move. The UI runs it first every
+    time; a mismatched column or an ISBN format nobody expected shows up as a
+    number on screen rather than as wrong prices on the storefront.
+
+    Prices in the sheet are BEFORE GST — the rate is applied when the price is
+    displayed, from one setting, so it can be changed in one place.
+    """
+    name = (file.filename or "").lower()
+    file_bytes = await file.read()
+    if name.endswith(".xlsx"):
+        try:
+            wb = load_workbook(io.BytesIO(file_bytes), data_only=True, read_only=True)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=400, detail=f"Could not read Excel file: {e}")
+        ws = wb.worksheets[0]
+        it = ws.iter_rows(values_only=True)
+        try:
+            header = [str(h).strip() if h is not None else "" for h in next(it)]
+        except StopIteration:
+            raise HTTPException(status_code=400, detail="That file is empty")
+        rows = []
+        for v_row in it:
+            if v_row is None or all(c is None or str(c).strip() == "" for c in v_row):
+                continue
+            rows.append(
+                {
+                    header[i]: ("" if i >= len(v_row) or v_row[i] is None else str(v_row[i]))
+                    for i in range(len(header))
+                    if header[i]
+                }
+            )
+        headers = [h for h in header if h]
+    elif name.endswith(".csv"):
+        raw = file_bytes.decode("utf-8-sig", errors="replace")
+        reader = csv.DictReader(io.StringIO(raw))
+        headers = [h.strip() for h in (reader.fieldnames or []) if h]
+        rows = list(reader)
+    else:
+        raise HTTPException(status_code=400, detail="Upload a .csv or .xlsx file")
+
+    isbn_col = _pick_price_col(headers, _PRICE_LIST_ISBN_HEADERS)
+    price_col = _pick_price_col(headers, _PRICE_LIST_PRICE_HEADERS)
+    url_col = _pick_price_col(headers, _PRICE_LIST_URL_HEADERS)
+    if not isbn_col:
+        raise HTTPException(
+            status_code=400,
+            detail="No ISBN column found. Name one column 'isbn' (or isbn13).",
+        )
+    if not price_col and not url_col:
+        raise HTTPException(
+            status_code=400,
+            detail="Nothing to set. Add an 'ebook_price' column, an 'ebook_url' column, or both.",
+        )
+
+    # One read of the catalogue rather than a query per row: 110 rows against
+    # ~200 books is a dictionary, not 110 round trips.
+    books = await db.books.find({}, {"_id": 0, "id": 1, "isbn": 1, "title": 1}).to_list(5000)
+    by_isbn = {}
+    for b in books:
+        key = _norm_isbn_key(b.get("isbn"))
+        if key:
+            by_isbn.setdefault(key, b)
+
+    updated: List[dict] = []
+    unmatched: List[str] = []
+    invalid: List[dict] = []
+    seen: set = set()
+
+    for i, row in enumerate(rows, start=2):  # start=2 matches spreadsheet row numbers
+        clean = {str(k).strip(): (str(v) if v is not None else "").strip() for k, v in row.items() if k}
+        key = _norm_isbn_key(clean.get(isbn_col, ""))
+        if not key:
+            continue  # a blank ISBN is a blank row, not an error worth reporting
+        if key in seen:
+            invalid.append({"row": i, "isbn": key, "error": "Duplicate ISBN in the file"})
+            continue
+        seen.add(key)
+
+        book = by_isbn.get(key)
+        if not book:
+            unmatched.append(key)
+            continue
+
+        changes: dict = {}
+
+        if price_col:
+            raw_price = (clean.get(price_col) or "").strip()
+            if raw_price:
+                if raw_price.lower() in _PRICE_LIST_CLEAR:
+                    changes["ebook_price"] = None
+                else:
+                    try:
+                        # Tolerate "₹1,299.00" — a price list exported from a
+                        # spreadsheet routinely carries the currency formatting.
+                        value = float(re.sub(r"[^0-9.\-]", "", raw_price))
+                    except ValueError:
+                        invalid.append({"row": i, "isbn": key, "error": f"Price '{raw_price}' is not a number"})
+                        continue
+                    if value < 0:
+                        invalid.append({"row": i, "isbn": key, "error": "Price cannot be negative"})
+                        continue
+                    changes["ebook_price"] = value
+
+        if url_col:
+            raw_url = (clean.get(url_col) or "").strip()
+            if raw_url:
+                changes["ebook_url"] = "" if raw_url.lower() in _PRICE_LIST_CLEAR else raw_url
+
+        if not changes:
+            continue  # every cell blank: the row says nothing, so leave the title alone
+
+        if not dry_run:
+            await db.books.update_one({"id": book["id"]}, {"$set": changes})
+        updated.append(
+            {
+                "isbn": key,
+                "title": book.get("title"),
+                "ebook_price": changes.get("ebook_price", "—"),
+                "ebook_url": changes.get("ebook_url", "—"),
+            }
+        )
+
+    return {
+        "dry_run": dry_run,
+        "rows_read": len(rows),
+        "columns": {"isbn": isbn_col, "price": price_col, "url": url_col},
+        "updated": len(updated),
+        "unmatched": len(unmatched),
+        "invalid": len(invalid),
+        # Capped: a 5,000-row mistake must not return a 5,000-row response.
+        "unmatched_isbns": unmatched[:50],
+        "invalid_rows": invalid[:50],
+        "sample": updated[:15],
+    }
 
 
 @admin_router.get("/inventory")
