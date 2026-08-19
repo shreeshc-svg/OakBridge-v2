@@ -53,6 +53,23 @@ const COPY = {
         line: "Your order has been delivered. We hope you enjoy your reading.",
         hint: "",
     },
+    /*
+     * Bounced sends the payment-link email, not a status announcement.
+     *
+     * "Your order is now bounced" is a fact about our records; what the
+     * customer needs is a way back to the checkout they left. So this preview
+     * is taken from send_payment_link, and `noNote` hides the note box —
+     * that template has nowhere to put one, and showing a field whose contents
+     * are silently discarded is worse than not offering it.
+     */
+    bounced: {
+        title: "Your order is waiting",
+        line: "you started this order with us but the payment was not completed, so we have not processed it.",
+        after:
+            "The email lists the books and the total, and carries a button that reopens this exact order for payment. The link works for 7 days. It also says that ignoring it is fine, that nothing has been charged, and that no stock is reserved.",
+        hint: "",
+        noNote: true,
+    },
     // Cancellation is the one status with its own template rather than the
     // shared one, so this copy is taken from render_order_cancelled_html —
     // including that it labels the note "Reason:" and adds a refund paragraph.
@@ -149,9 +166,11 @@ export default function StatusChangeDialog({ order, nextStatus, busy, onConfirm,
                                 Email the customer
                             </span>
                             <span className="block text-xs text-[#4B5563] mt-0.5">
-                                {notify
-                                    ? `${order.email} will be told this order is ${nextStatus}.`
-                                    : "The status changes quietly. Nobody is told."}
+                                {!notify
+                                    ? "The status changes quietly. Nobody is told."
+                                    : nextStatus === "bounced"
+                                      ? `${order.email} gets a reminder with a link to finish paying.`
+                                      : `${order.email} will be told this order is ${nextStatus}.`}
                             </span>
                         </span>
                     </label>
@@ -217,7 +236,7 @@ export default function StatusChangeDialog({ order, nextStatus, busy, onConfirm,
                                 </p>
                             )}
 
-                            <label className="block mt-4">
+                            <label className={`block mt-4 ${copy.noNote ? "hidden" : ""}`}>
                                 <span className="overline !text-[10px]">
                                     Add to the email {copy.hint ? "" : "(optional)"}
                                 </span>

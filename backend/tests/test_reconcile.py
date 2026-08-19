@@ -412,6 +412,18 @@ def test_settle_does_not_reset_an_order_already_shipped():
     assert stored()["payment_status"] == "paid"
 
 
+def test_paying_from_the_chaser_email_clears_the_bounced_label():
+    # Someone marked the order bounced, the customer paid from the reminder.
+    # The order must not stay labelled as abandoned now that it is paid.
+    order = fresh(status="bounced")
+    with_attempts([CAPTURED])
+
+    run(payments.reconcile_order(order, "test"))
+
+    assert stored()["status"] == "confirmed"
+    assert stored()["payment_status"] == "paid"
+
+
 def test_sweep_only_touches_unpaid_orders_in_window():
     fresh()
     payments.db.orders.docs.append(

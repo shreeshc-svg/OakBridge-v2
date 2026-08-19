@@ -214,8 +214,11 @@ async def _settle_capture(
     # redelivered webhook, which Razorpay sends freely, could reset an order the
     # warehouse had already marked shipped back to confirmed, and move paid_at to
     # the redelivery. Guarded on the order not already being paid.
+    # "bounced" belongs in this list: it means somebody marked the order as
+    # abandoned and chased it, and the customer then paid from that very email.
+    # Leaving it out would strand a paid order showing "bounced" for ever.
     await db.orders.update_one(
-        {"id": order["id"], "status": {"$in": [None, "pending", "confirmed"]}},
+        {"id": order["id"], "status": {"$in": [None, "pending", "confirmed", "bounced"]}},
         {"$set": {"status": "confirmed"}},
     )
     await db.orders.update_one(

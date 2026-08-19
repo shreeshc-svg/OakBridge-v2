@@ -6,6 +6,18 @@ import { useAuth } from "../context/AuthContext";
 import { fetchMyOrders, formatINR, verifyOtp, resendOtp, formatApiError } from "../lib/api";
 import { toast } from "sonner";
 
+/**
+ * Fulfilment states are written for the warehouse, and one of them should never
+ * reach the customer in those words.
+ *
+ * "Bounced" is our word for a checkout somebody left — accurate internally,
+ * and something between jargon and an accusation on the customer's own account
+ * page. What they need to read is what is true for them: nothing was paid, and
+ * the order is still there if they want it.
+ */
+const CUSTOMER_STATUS = { bounced: "Awaiting payment" };
+const customerStatus = (s) => CUSTOMER_STATUS[String(s || "").toLowerCase()] || s;
+
 export default function Account() {
     const { user, logout, refresh } = useAuth();
     const nav = useNavigate();
@@ -208,7 +220,7 @@ export default function Account() {
                                         </div>
                                         <div className="flex items-center gap-4">
                                             <span className="text-xs font-mono uppercase tracking-widest bg-[#F5F7FA] px-3 py-1 text-[#002B5C]">
-                                                {o.status}
+                                                {customerStatus(o.status)}
                                             </span>
                                             <span className="font-serif text-2xl text-[#002B5C]">
                                                 {formatINR(o.total)}

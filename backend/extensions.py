@@ -1085,11 +1085,34 @@ async def admin_list_orders():
 
 @admin_router.patch("/orders/{order_id}")
 async def admin_update_order(order_id: str, payload: OrderStatusUpdate):
-    allowed = {"confirmed", "processing", "shipped", "delivered", "cancelled"}
+    # "bounced" is the checkout that was started and left at the payment page.
+    # It is a fulfilment state like the rest — payment_status still says pending,
+    # and only Razorpay can change that — but it lets the team mark the ones
+    # they have chased apart from the ones they have not.
+    allowed = {"confirmed", "processing", "shipped", "delivered", "cancelled", "bounced"}
     if payload.status not in allowed:
         raise HTTPException(status_code=400, detail=f"Invalid status. Use one of {sorted(allowed)}")
     note = (payload.note if payload.note is not None else payload.reason) or ""
     note = note.strip()
+
+    # Read before writing, for the one status that depends on what is already
+    # there: chasing payment for an order that is paid would be a mistake the
+    # customer sees, and it is cheaper to refuse it than to apologise for it.
+    if payload.status == "bounced":
+        existing = await db.orders.find_one({"id": order_id}, {"_id": 0, "payment_status": 1, "email": 1})
+        if not existing:
+            raise HTTPException(status_code=404, detail="Order not found")
+        if existing.get("payment_status") == "paid":
+            raise HTTPException(
+                status_code=400,
+                detail="This order is already paid — it cannot be marked bounced.",
+            )
+        if payload.notify and not existing.get("email"):
+            raise HTTPException(
+                status_code=400,
+                detail="This order has no email address, so no reminder can be sent. "
+                "Untick 'Email the customer' to mark it bounced anyway.",
+            )
 
     updates = {"status": payload.status}
     if payload.status == "cancelled" and note:
@@ -1107,7 +1130,32 @@ async def admin_update_order(order_id: str, payload: OrderStatusUpdate):
     sent = False
     if payload.notify:
         try:
-            if payload.status == "cancelled":
+            if payload.status == "bounced":
+                # Not a status announcement — a way back in.
+                #
+                # "Your order is now bounced" tells the customer nothing they can
+                # act on. What they need is the order, the total and a link that
+                # reopens it, which is exactly the email the Payment link button
+                # already sends. Same mail, same 7-day token, so the two ways of
+                # chasing an order cannot drift apart.
+                from payments import make_payment_token
+                from emailer import send_payment_link
+
+                site_url = (os.environ.get("SITE_URL") or "https://www.oakbridge.in").rstrip("/")
+                sent = await send_payment_link(
+                    order, f"{site_url}/pay/{order_id}?t={make_payment_token(order_id)}"
+                )
+                if sent:
+                    # Counted alongside the manual sends, so "how many times has
+                    # this customer been chased?" has one answer rather than two.
+                    await db.orders.update_one(
+                        {"id": order_id},
+                        {
+                            "$set": {"payment_link_sent_at": datetime.now(timezone.utc).isoformat()},
+                            "$inc": {"payment_link_count": 1},
+                        },
+                    )
+            elif payload.status == "cancelled":
                 from emailer import send_order_cancelled
                 sent = await send_order_cancelled(order, note)
             elif payload.status == "shipped" and order.get("tracking_id"):

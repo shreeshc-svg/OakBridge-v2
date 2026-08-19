@@ -20,7 +20,19 @@ import ExportButton from "../../components/admin/ExportButton";
 
 // Fulfilment states only. "pending" lives on payment_status and the backend
 // rejects it here, so offering it just built a dialog that 400s on confirm.
-const STATUSES = ["confirmed", "processing", "shipped", "delivered", "cancelled"];
+const STATUSES = ["confirmed", "processing", "shipped", "delivered", "cancelled", "bounced"];
+
+/*
+ * "Bounced" is for an order left at the payment page, so it is offered only on
+ * one that was never paid — the backend refuses it on a paid order, and a menu
+ * item whose only outcome is an error message is worse than one that isn't
+ * there. It stays visible on an order already marked bounced so the label in
+ * the dropdown matches the order's actual state.
+ */
+const statusesFor = (order) =>
+    order.payment_status === "paid" && order.status !== "bounced"
+        ? STATUSES.filter((s) => s !== "bounced")
+        : STATUSES;
 
 export default function AdminOrders() {
     const [orders, setOrders] = useState([]);
@@ -399,7 +411,7 @@ export default function AdminOrders() {
                                         data-testid={`order-status-${o.id}`}
                                         className="border border-[#E5E7EB] bg-white px-2 py-1 text-xs outline-none focus:border-[#002B5C]"
                                     >
-                                        {STATUSES.map((s) => (
+                                        {statusesFor(o).map((s) => (
                                             <option key={s} value={s}>
                                                 {s}
                                             </option>
