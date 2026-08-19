@@ -48,12 +48,22 @@ export default function CartSheet() {
                 data-testid="cart-sheet"
                 className="bg-[#FFFFFF] border-l border-[#E5E7EB] w-full sm:max-w-md p-0 flex flex-col"
             >
-                <SheetHeader className="px-6 py-5 border-b border-[#E5E7EB]">
-                    <div className="flex items-center justify-between">
+                {/*
+                 * pr-12 reserves the corner the close button already occupies.
+                 *
+                 * That button is positioned absolutely by the shared Sheet
+                 * primitive (right-4 top-4), so it is outside this header's
+                 * layout and the item count was being placed straight under it —
+                 * "1 item" and the × drawn on top of each other, and the × the
+                 * harder of the two to hit. 56px clears the button's 8px offset,
+                 * its 40px box and the focus ring.
+                 */}
+                <SheetHeader className="px-6 pr-14 py-5 border-b border-[#E5E7EB]">
+                    <div className="flex items-center justify-between gap-3">
                         <SheetTitle className="font-serif text-2xl text-[#002B5C]">
                             Your Cart
                         </SheetTitle>
-                        <span className="font-mono text-xs text-[#4B5563]">
+                        <span className="font-mono text-xs text-[#4B5563] whitespace-nowrap">
                             {count} {count === 1 ? "item" : "items"}
                         </span>
                     </div>
