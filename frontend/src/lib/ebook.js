@@ -67,8 +67,6 @@ export const ebookEdition = (book, site, placement = "plp") => {
         url,
         /** The eBook mark/CTA may be shown for this title. */
         linked,
-        /** The price pair is switched on for this placement — reserve the row. */
-        pricingOn: featureOn && priceOn,
         /** The price to print, or null if there is nothing showable. */
         price: featureOn && priceOn && linked ? gross : null,
     };

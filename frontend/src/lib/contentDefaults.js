@@ -29,12 +29,12 @@ const CONTENT_DEFAULTS = {
     ebook_pdp_title: "Prefer to read it now?",
     ebook_pdp_body: "This title is available on the Oakbridge eReader.",
     ebook_pdp_button: "Read",
-    // The eBook price shown beside the print price.
+    // The eBook price.
     //
-    // Off by default. Switching it on adds a second line to the price block of
-    // every tile — including the ones with no eBook, which reserve the space
-    // blank so prices stay level across a grid row. That is a deliberate cost
-    // and should be paid only once there are prices to show.
+    // Off by default — there is nothing to show until a price list is uploaded,
+    // and a switch that does nothing when flipped is worse than one that is
+    // plainly off. On tiles the price rides inside the existing eBook link, so
+    // turning it on changes no layout; on the product page it adds a line.
     ebook_price_plp_enabled: "off",
     ebook_price_pdp_enabled: "off",
     // Book prices are ex-GST on the eReader; the site grosses them up here so

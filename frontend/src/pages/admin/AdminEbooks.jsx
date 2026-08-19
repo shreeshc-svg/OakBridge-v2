@@ -369,14 +369,13 @@ export default function AdminEbooks() {
                             </div>
 
                             <div className="border-t border-[#0A7D55]/20 pt-5">
-                                <div className="overline !text-[10px]">Price beside the print price</div>
+                                <div className="overline !text-[10px]">Show the eBook price</div>
                                 <p className="text-[11px] text-[#4B5563] mt-1 mb-3">
-                                    Shows <strong>Book ₹716 / eBook ₹489</strong> instead of one price.
-                                    On listings this reserves a second line on{" "}
-                                    <em>every</em> tile, blank on the ones without an eBook, so prices
-                                    stay level across a row — worth switching on once the price list is
-                                    uploaded, not before. A title with a price but no link shows
-                                    nothing.
+                                    On listings the price rides inside the eBook link beside the
+                                    delivery estimate — <strong>3–7 days · eBook ₹489</strong> — so
+                                    nothing on the tile moves. On the product page it sits under the
+                                    print price as <strong>Book ₹716 / eBook ₹489</strong>. A title
+                                    with a price but no link shows nothing either way.
                                 </p>
                                 <div className="space-y-3">
                                     <div className="flex flex-wrap items-center justify-between gap-3">

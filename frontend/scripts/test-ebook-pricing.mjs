@@ -57,13 +57,11 @@ eq('pdp off while plp on', pdp(linked, on), null);
 eq('pdp on', pdp(linked, {ebook_price_pdp_enabled:'on', ebook_gst_percent:'5'}), 489);
 eq('pdp mark hidden -> price hidden', pdp(linked, {ebook_price_pdp_enabled:'on', ebook_pdp_enabled:'off'}), null);
 
-console.log('\n-- the reserved row --');
-const res = (site) => ebookEdition(linked, site, 'plp').pricingOn;
-eq('reserved when switched on', res(on), true);
-eq('not reserved by default', res({}), false);
-eq('not reserved when ebooks are hidden entirely', res({...on, ebook_enabled:'off'}), false);
-const unpriced = ebookEdition({}, on, 'plp');
-eq('unpriced tile still reserves the row', [unpriced.pricingOn, unpriced.price], [true, null]);
+console.log('\n-- the link survives without a price --');
+const unpriced = ebookEdition({ ebook_url: 'https://ebooks.oakbridge.in/x' }, on, 'plp');
+eq('linked but unpriced still gets its link', [unpriced.linked, unpriced.price], [true, null]);
+eq('unlinked gets neither', (() => { const e = ebookEdition({ebook_price:466}, on, 'plp'); return [e.linked, e.price]; })(), [false, null]);
+eq('hiding all ebook buttons kills the link too', ebookEdition(linked, {...on, ebook_enabled:'off'}, 'plp').linked, false);
 
 console.log(fail ? `\n${fail} FAILED` : '\nall assertions passed');
 process.exit(fail ? 1 : 0);
