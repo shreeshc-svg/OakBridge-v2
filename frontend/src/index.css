@@ -58,6 +58,36 @@ body {
     font-family: "JetBrains Mono", ui-monospace, monospace;
 }
 
+/* ===== iOS: no form field may be smaller than 16px on a phone =====
+ *
+ * Every browser on iOS is WebKit, and WebKit zooms the viewport when a field
+ * under 16px takes focus — then does not zoom back. The visitor is left at
+ * ~1.3x with the rest of the page off-screen and no obvious way out. Tapping
+ * the chat box did exactly this.
+ *
+ * This is a rule rather than a class on each field on purpose. Auditing 105
+ * inputs by hand fixes today and nothing else: the next input somebody adds
+ * with text-sm brings the bug straight back, and it is invisible on every
+ * desktop browser they will test in. Stated once here, it cannot be
+ * forgotten.
+ *
+ * !important is deliberate. A Tailwind utility is a single class and would
+ * otherwise win; this has to beat anything, because losing means a broken
+ * page on the platform we cannot test locally.
+ *
+ * max(16px, 1em) rather than a flat 16px so a field deliberately set larger
+ * keeps its size. Buttons and checkboxes are excluded — their text size is
+ * not what triggers the zoom.
+ *
+ * Scoped below md so nothing on desktop changes. */
+@media (max-width: 767px) {
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="submit"]):not([type="button"]),
+    select,
+    textarea {
+        font-size: max(16px, 1em) !important;
+    }
+}
+
 .overline {
     font-size: 0.72rem;
     letter-spacing: 0.12em;

@@ -287,7 +287,7 @@ export default function ChatWidget() {
                             }}
                             placeholder="Ask a question…"
                             data-testid="chat-input"
-                            className="flex-1 border border-[#E5E7EB] px-3 py-2 text-sm outline-none focus:border-[#F59E0B]"
+                            className="flex-1 border border-[#E5E7EB] px-3 py-2 text-base md:text-sm outline-none focus:border-[#F59E0B]"
                         />
                         <button
                             onClick={() => send()}

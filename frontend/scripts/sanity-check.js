@@ -1042,13 +1042,35 @@ function checkNestedInteractive() {
     else pass("nested-interactive", `${anchors} links contain no nested interactive element`);
 }
 
+/* ------------------------------------------- 17. The iOS zoom guard is intact
+ * One CSS rule stands between every form on the site and a broken layout on
+ * iPhones: WebKit zooms the viewport when a field under 16px takes focus, and
+ * never zooms back. It is a single block in index.css, it looks like a style
+ * choice rather than a bug fix, and there are 100+ fields relying on it —
+ * so if somebody tidies it away, that should stop the build rather than
+ * surface as a support email.
+ */
+function checkIosZoomGuard() {
+    const css = read(path.join(FRONTEND, "src", "index.css")) || "";
+    const hasQuery = /@media\s*\(max-width:\s*767px\)/.test(css);
+    const hasRule = /font-size:\s*max\(\s*16px/.test(css);
+    if (hasQuery && hasRule) {
+        pass("ios-zoom-guard", "form fields are held at 16px on phones");
+    } else {
+        fail(
+            "ios-zoom-guard",
+            "the 16px minimum for form fields is missing from index.css — every input on iOS will zoom the page on focus and not zoom back",
+        );
+    }
+}
+
 /* --------------------------------------------------------------- reporting */
 const CHECKS = [
     checkJsSyntax, checkNodeScripts, checkPython, checkJson,
     checkUnusedImports, checkRouteTitles, checkRouteParity,
     checkVercelFallback, checkJsxDefined, checkJsDefined, checkImgAlt,
     checkNoStaticSitemap, checkSecrets, checkTopLevelJsx, checkAdminSections,
-    checkNestedInteractive,
+    checkNestedInteractive, checkIosZoomGuard,
 ];
 
 for (const c of CHECKS) {
