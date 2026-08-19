@@ -2,8 +2,8 @@ import React, { useEffect, useRef, useState } from "react";
 import Seo from "../components/Seo";
 import { Link } from "react-router-dom";
 import { ArrowUpRight, BookOpen, GraduationCap, Building2, Calendar, Cpu, Briefcase, Users, ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
-import BookCard from "../components/BookCard";
 import BestsellerCarousel from "../components/BestsellerCarousel";
+import BookRail from "../components/BookRail";
 import {
     fetchBooks,
     fetchFeatured,
@@ -22,6 +22,10 @@ import MarketingPopup from "../components/MarketingPopup";
 // Default top-to-bottom order of the reorderable homepage sections. Admin can
 // override via Admin → Pages → Section order & visibility (home_section_order).
 const HOME_DEFAULT_ORDER = ["businesses", "imprints", "hot_off_press", "solutions", "bestsellers", "testimonials", "manifesto"];
+
+// How many titles the "Hot Off the Press" rail will hold. The API is asked for
+// the same number, so raising one without the other quietly does nothing.
+const HOT_OFF_PRESS_MAX = 24;
 
 // The five homepage "Imprint" tiles. Each is fully editable in Admin → Pages
 // (name + image + link). Defaults below mirror what was live so nothing changes
@@ -192,7 +196,7 @@ export default function Home() {
     useEffect(() => {
         fetchSiteContent().then(setSite).catch(() => {});
         fetchFeatured().then(setFeatured).catch(() => {});
-        fetchNewReleases().then(setNewRel).catch(() => {});
+        fetchNewReleases(HOT_OFF_PRESS_MAX).then(setNewRel).catch(() => {});
         fetchBestsellers(12).then(setBestsellers).catch(() => {});
         fetchSettings().then(setSettings).catch(() => {});
         fetchCollection("home_testimonials").then((d) => setTestimonials((d?.items || []).filter((t) => t && t.enabled !== false && t.quote))).catch(() => {});
@@ -225,7 +229,11 @@ export default function Home() {
     // almost no book carrying the `bestseller` flag, that row silently swallowed
     // the 5 newest titles and the carousel began at rank 6. No dedup, no
     // backfill: the row now shows exactly what the catalogue says is newest.
-    const newReleasesRow = (newRel.length ? newRel : fallback).slice(0, 7);
+    // Was capped at 7 — exactly one desktop row of the old grid. Now that the
+    // row scrolls, the cap is only there to stop a very large catalogue putting
+    // hundreds of cards and their covers into the DOM for a section nobody
+    // scrolls to the end of.
+    const newReleasesRow = (newRel.length ? newRel : fallback).slice(0, HOT_OFF_PRESS_MAX);
 
     return (
         <div data-testid="home-page" className="flex flex-col">
@@ -595,11 +603,7 @@ export default function Home() {
                         View all new titles <ArrowUpRight size={14} strokeWidth={1.5} />
                     </Link>
                 </div>
-                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-7 gap-4 md:gap-5">
-                    {newReleasesRow.map((b, i) => (
-                        <BookCard key={b.id} book={b} index={i} compact />
-                    ))}
-                </div>
+                <BookRail books={newReleasesRow} label="New this season" />
             </section>
             )}
 
