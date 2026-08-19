@@ -2137,10 +2137,10 @@ async def apply_release_order(dry_run: bool = True):
     by_isbn = {_clean(e.get("isbn")): e for e in order if e.get("isbn")}
 
     books = await db.books.find(
-        {}, {"_id": 0, "id": 1, "isbn": 1, "title": 1, "release_rank": 1}
+        {}, {"_id": 0, "id": 1, "isbn": 1, "title": 1, "release_rank": 1, "publication_year": 1}
     ).to_list(None)
 
-    matched, unmatched, newly_ranked = [], [], 0
+    matched, unmatched, unmatched_books, newly_ranked = [], [], [], 0
     for b in books:
         e = by_isbn.get(_clean(b.get("isbn")))
         if e:
@@ -2148,6 +2148,7 @@ async def apply_release_order(dry_run: bool = True):
             if b.get("release_rank") is None:
                 newly_ranked += 1
         else:
+            unmatched_books.append(b)
             unmatched.append({"isbn": b.get("isbn"), "title": b.get("title")})
 
     preview = [
@@ -2180,6 +2181,25 @@ async def apply_release_order(dry_run: bool = True):
         res = await db.books.update_one({"id": b["id"]}, {"$set": fields})
         updated += res.modified_count
 
+    # Titles the master has never heard of still need somewhere to sit.
+    #
+    # They are not errors — a book added through Admin → Books after this file
+    # was generated will never match it. Left unranked they sort behind all 251
+    # ranked titles under "Newest", which reads as the book not having saved.
+    # A rank derived from the publication year puts them among their own year,
+    # and is overwritten the moment the master does list them.
+    from extensions import rank_for_year
+
+    fallback_ranked = 0
+    for b in unmatched_books:
+        if b.get("release_rank") is not None:
+            continue
+        res = await db.books.update_one(
+            {"id": b["id"]},
+            {"$set": {"release_rank": rank_for_year(b.get("publication_year"))}},
+        )
+        fallback_ranked += res.modified_count
+
     # Repair any doc a previous run left with a null year/date.
     repaired = await db.books.update_many(
         {"publication_year": None}, {"$set": {"publication_year": 2024}}
@@ -2187,6 +2207,7 @@ async def apply_release_order(dry_run: bool = True):
     await db.books.update_many({"publication_date": None}, {"$unset": {"publication_date": ""}})
 
     result["updated"] = updated
+    result["fallback_ranked"] = fallback_ranked
     result["repaired_null_year"] = repaired.modified_count
     return result
 

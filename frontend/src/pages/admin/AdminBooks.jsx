@@ -41,6 +41,7 @@ const BLANK = {
     original_price: "",
     cover_image: "",
     pages: 100,
+    publication_year: new Date().getFullYear(),
     bestseller: false,
     new_release: false,
     star_title: false,
@@ -507,6 +508,8 @@ function BookForm({ initial, categories, onClose, onSaved }) {
                         ? null
                         : Number(form.ebook_price),
                 pages: Number(form.pages),
+                publication_year:
+                    Number(form.publication_year) || new Date().getFullYear(),
                 stock: Number(form.stock),
                 variants: (form.variants || []).map((v) => ({
                     binding: v.binding || "",
@@ -567,6 +570,11 @@ function BookForm({ initial, categories, onClose, onSaved }) {
                         ["price", "Price (INR)", "number", 1, true],
                         ["original_price", "Original Price (optional)", "number", 1, false],
                         ["pages", "Pages", "number", 1, false],
+                        // Shown on the book page under Specifications, and it
+                        // decides where an unranked title lands under "Newest"
+                        // — so it is worth getting right rather than leaving on
+                        // the default.
+                        ["publication_year", "Publication year", "number", 1, false],
                         ["stock", "Stock", "number", 1, false],
                     ].map(([name, label, type, col, req]) => (
                         <div key={name} className={col === 2 ? "col-span-2" : "col-span-2 sm:col-span-1"}>

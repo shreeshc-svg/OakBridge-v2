@@ -146,6 +146,10 @@ class BookAdminUpdate(BaseModel):
     original_price: Optional[float] = None
     cover_image: Optional[str] = None
     pages: Optional[int] = None
+    # Was missing, so the year typed into the edit form was silently discarded
+    # — the field is on create and in the CSV importer, but every edit dropped
+    # it on the floor.
+    publication_year: Optional[int] = None
     bestseller: Optional[bool] = None
     new_release: Optional[bool] = None
     star_title: Optional[bool] = None
@@ -1000,9 +1004,77 @@ async def admin_stats():
     }
 
 
+# ============== RELEASE ORDER ==============
+#
+# `release_rank` is the manual publication order of the catalogue — rank 1 is
+# the most recent title — and it is what the "Newest" and "New Arrivals" sorts
+# actually run on. It is stamped onto books from release_order.json, matched by
+# ISBN, by Admin → "Apply release order".
+#
+# The gap that file leaves: it is a snapshot. Every title added afterwards
+# matches nothing in it and carries no rank, and an unranked book sorts to the
+# very end of "Newest" — the one place someone would look for a book they had
+# just added.
+#
+# So an unranked book gets a rank derived from its publication year, placed
+# among the titles published in that year. Fractional on purpose: it slots
+# between two existing ranks without renumbering anything, so applying the real
+# order later still overwrites it cleanly and no other book moves.
+
+_release_order_cache: Optional[List[dict]] = None
+
+
+def _release_order() -> List[dict]:
+    """release_order.json, read once. Returns [] if it is missing or unreadable."""
+    global _release_order_cache
+    if _release_order_cache is None:
+        import json as _json
+
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "release_order.json")
+        try:
+            with open(path, encoding="utf-8") as fh:
+                _release_order_cache = _json.load(fh)
+        except Exception:  # noqa: BLE001
+            logging.getLogger(__name__).exception("Could not read release_order.json")
+            _release_order_cache = []
+    return _release_order_cache
+
+
+def rank_for_year(year: Optional[int]) -> float:
+    """Where a book published in `year` belongs in the release order.
+
+    Ranks ascend as publication dates get older, so this finds the first rank
+    whose year is already at or below the book's, and sits half a step in front
+    of it — making the book the newest of its own year rather than the oldest.
+
+    With no year, or no order file, it goes to the front. A book somebody just
+    added is far more likely to be new than to be the oldest thing we sell, and
+    the person who added it is about to go looking for it.
+    """
+    entries = [e for e in _release_order() if e.get("year") and e.get("rank")]
+    if not entries:
+        return 0.5
+    if not year:
+        return 0.5
+
+    older_or_same = [e for e in entries if int(e["year"]) <= int(year)]
+    if not older_or_same:
+        # Newer than everything in the catalogue.
+        return 0.5
+    return float(min(e["rank"] for e in older_or_same)) - 0.5
+
+
 @admin_router.post("/books")
 async def admin_create_book(payload: BookAdminCreate):
     doc = {"id": str(uuid.uuid4()), **payload.model_dump()}
+    # Without this a book added here can never appear under "Newest".
+    #
+    # That sort runs on release_rank, which is stamped from release_order.json
+    # by ISBN. A title added after that file was generated matches nothing, so
+    # it keeps no rank at all, and the sort pushes unranked books to the very
+    # end — behind all 251 that do have one. It looked like the book had not
+    # saved.
+    doc.setdefault("release_rank", rank_for_year(doc.get("publication_year")))
     await db.books.insert_one({**doc})
     return doc
 
@@ -1029,9 +1101,19 @@ async def admin_update_book(book_id: str, payload: BookAdminUpdate):
     updates = {k: v for k, v in payload.model_dump().items() if v is not None}
     if not updates:
         raise HTTPException(status_code=400, detail="No updates provided")
-    prev = await db.books.find_one({"id": book_id}, {"_id": 0, "stock": 1})
+    prev = await db.books.find_one({"id": book_id}, {"_id": 0, "stock": 1, "release_rank": 1})
     if prev is None:
         raise HTTPException(status_code=404, detail="Book not found")
+
+    # Correcting the year re-slots the book under "Newest" — but only if its
+    # rank was one we derived. A whole-number rank came from the release master,
+    # which is the authority on where a title sits; a fractional one is our
+    # guess from the year, and a corrected year makes it a better guess.
+    if "publication_year" in updates:
+        rank = prev.get("release_rank")
+        if rank is None or float(rank) != int(float(rank)):
+            updates["release_rank"] = rank_for_year(updates["publication_year"])
+
     await db.books.update_one({"id": book_id}, {"$set": updates})
     book = await db.books.find_one({"id": book_id}, {"_id": 0})
     # Back-in-stock: if stock crossed from 0 -> positive, notify everyone waiting.
