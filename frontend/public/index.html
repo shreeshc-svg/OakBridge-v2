@@ -57,10 +57,43 @@
           here too — otherwise the browser will synthesise it, which looks
           subtly wrong rather than obviously broken.
         -->
+        <!--
+          Loaded without blocking the first paint.
+
+          The page is prerendered, so its text is already in this HTML — the
+          only thing standing between the visitor and seeing it is CSS. A
+          plain stylesheet link holds paint until it arrives, which on a
+          throttled mobile connection is most of a second of blank screen for
+          a page whose content is right here.
+
+          media="print" makes it non-blocking (the browser fetches it but does
+          not need it to paint the screen), and onload flips it back to all.
+          display=swap already meant text appeared in the fallback face first
+          and swapped when the webfont landed, so what the visitor sees is
+          unchanged — it just starts sooner.
+        -->
         <link
+            rel="preload"
+            as="style"
             href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
-            rel="stylesheet"
         />
+        <link
+            rel="stylesheet"
+            href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+            media="print"
+            onload="this.media='all'; this.onload=null;"
+        />
+        <noscript>
+            <link
+                rel="stylesheet"
+                href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+            />
+        </noscript>
+
+        <!-- The homepage LCP image comes from here. Without this the browser
+             pays DNS + TLS to a third origin before it can even start the
+             largest download on the page. -->
+        <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
 
         <!-- Structured data: Organization -->
         <script type="application/ld+json">

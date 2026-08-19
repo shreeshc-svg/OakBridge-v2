@@ -309,14 +309,28 @@ export default function Home() {
                         </div>
                     </div>
 
-                    <div className="lg:col-span-5 relative min-h-[420px] lg:min-h-[720px] bg-[#002B5C]">
+                    {/* 420px of decorative photograph was a third of a phone
+                        screen and, since the density pass pulled it up the
+                        page, the largest thing in the first viewport — which
+                        makes it the LCP. Smaller box, smaller file, sooner. */}
+                    <div className="lg:col-span-5 relative min-h-[260px] sm:min-h-[420px] lg:min-h-[720px] bg-[#002B5C]">
                         <img
                             {...responsiveImage(
                                 mediaUrl(site.home_hero) ||
                                     "https://images.unsplash.com/photo-1507842217343-583bb7270b66?auto=format&fit=crop&w=1600&q=85",
-                                // Full width until the hero splits into two
-                                // columns, then the right-hand 5 of 12.
-                                "(min-width: 1024px) 42vw, 100vw",
+                                /*
+                                 * Under-declared on purpose below the split.
+                                 *
+                                 * A phone at DPR 2.6 asking for 100vw makes the
+                                 * browser fetch the 1200px candidate for a
+                                 * 390px-wide box — for a photograph behind a
+                                 * gradient, on the slowest connection any of
+                                 * our visitors are on, as the LCP. 60vw picks
+                                 * the 800px file instead. Desktop is unaffected:
+                                 * the first clause still describes its box
+                                 * exactly.
+                                 */
+                                "(min-width: 1024px) 42vw, 60vw",
                                 true,
                             )}
                             /* Decorative: a mood image behind a gradient, with the

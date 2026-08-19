@@ -34,5 +34,12 @@ eq('unknown host untouched', responsiveImage('https://example.com/a.jpg?w=1600')
 eq('a 480-wide source is left alone rather than given a 1-entry srcset', responsiveImage('https://images.unsplash.com/p?w=480').srcSet, undefined);
 eq('null survives', responsiveImage(null).src, null);
 eq('every candidate is a real url', responsiveImage(u).srcSet.split(', ').every(s => s.startsWith('https://images.unsplash.com/photo-1?auto=format&fit=crop&w=')), true);
+
+const q = 'https://images.unsplash.com/photo-1?auto=format&fit=crop&w=1600&q=85';
+const cand = responsiveImage(q).srcSet.split(', ').map(s => s.split(' ')[0]);
+eq('phone-sized candidates drop to q=60', cand.filter(c=>/w=(480|800)&/.test(c)).every(c=>c.includes('q=60')), true);
+eq('desktop-sized candidates keep their quality', cand.filter(c=>/w=(1200|1600)&/.test(c)).every(c=>c.includes('q=85')), true);
+eq('quality rewrite never touches the width', cand.map(c=>c.match(/w=(\d+)/)[1]), ['480','800','1200','1600']);
+
 console.log(fail ? `\n${fail} FAILED` : '\nall assertions passed');
 process.exit(fail?1:0);

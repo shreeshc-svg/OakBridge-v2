@@ -44,7 +44,20 @@ export const responsiveImage = (url, sizes = "100vw", priority = false) => {
     const widths = WIDTHS.filter((w) => w <= asked);
     if (widths.length < 2) return { src: url, ...loading };
 
-    const at = (w) => url.replace(/([?&]w=)\d+/, `$1${w}`);
+    /*
+     * Small candidates are also served at lower quality.
+     *
+     * These are decorative photographs sitting under a navy gradient that runs
+     * from 95% to 35% opacity — detail in them is not what anyone is looking
+     * at, and JPEG quality is the cheapest axis there is: q=85 to q=60 is
+     * roughly half the bytes for a difference nobody can see through a
+     * gradient. Applied only to the phone-sized candidates, so the desktop
+     * image is exactly what it was.
+     */
+    const at = (w) => {
+        const sized = url.replace(/([?&]w=)\d+/, `$1${w}`);
+        return w <= 800 ? sized.replace(/([?&]q=)\d+/, "$160") : sized;
+    };
     return {
         src: url,
         srcSet: widths.map((w) => `${at(w)} ${w}w`).join(", "),
