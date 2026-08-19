@@ -147,8 +147,8 @@ export default function About() {
                 description="An independent scholarly press founded in 2017 by two publishing veterans, producing authoritative law, tax, business and academic titles."
                 path="/about"
             />
-            <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 pt-20 pb-24 border-b border-[#E5E7EB]">
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+            <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 pt-12 pb-14 md:pt-20 md:pb-24 border-b border-[#E5E7EB]">
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-10">
                     <div className="lg:col-span-7">
                         <div className="overline">{c.overline}</div>
                         <h1 className="font-serif text-5xl md:text-7xl mt-6 text-[#002B5C] leading-[0.95] whitespace-pre-line">
@@ -168,16 +168,16 @@ export default function About() {
                 same hidden_sections setting every other page already uses.
                 About was simply never listed in SECTION_REGISTRY. */}
             {!hidden.has("about.timeline") && (
-            <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-24 bg-[#F5F7FA] border-b border-[#E5E7EB]">
+            <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-14 md:py-24 bg-[#F5F7FA] border-b border-[#E5E7EB]">
                 {/* The heading sits ABOVE the grid rather than in the left
                     column. It has to: the spine can only line up with the years
                     if it starts level with the first row, and a heading in that
                     column pushed it 270px down — which is why the dots matched
                     nothing. Moving it out also gives it the full width it wants
                     at 5xl. */}
-                <div className="max-w-2xl mb-14">
+                <div className="max-w-2xl mb-8 md:mb-14">
                     <div className="overline">{c.timeline_overline}</div>
-                    <h2 className="font-serif text-4xl md:text-5xl mt-3 text-[#002B5C] leading-tight whitespace-pre-line">
+                    <h2 className="font-serif text-3xl md:text-5xl mt-2 md:mt-3 text-[#002B5C] leading-tight whitespace-pre-line">
                         {renderRich(c.timeline_title)}
                     </h2>
                 </div>
@@ -201,11 +201,11 @@ export default function About() {
                 <section
                     id="team"
                     data-testid="about-management-team"
-                    className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-24 border-b border-[#E5E7EB]"
+                    className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-14 md:py-24 border-b border-[#E5E7EB]"
                 >
-                    <div className="max-w-3xl mb-16">
+                    <div className="max-w-3xl mb-8 md:mb-16">
                         <div className="overline">{site.about_team_overline || "Our Management Team"}</div>
-                        <h2 className="font-serif text-4xl md:text-5xl mt-4 text-[#002B5C] leading-[1.05] whitespace-pre-line">
+                        <h2 className="font-serif text-3xl md:text-5xl mt-3 md:mt-4 text-[#002B5C] leading-[1.05] whitespace-pre-line">
                             {renderRich(site.about_team_title || "The people behind\nthe imprint.")}
                         </h2>
                     </div>
@@ -214,7 +214,7 @@ export default function About() {
                             <div
                                 key={p.id || i}
                                 data-testid={`team-member-${p.id || i}`}
-                                className={`grid grid-cols-1 lg:grid-cols-12 gap-10 items-start ${i % 2 === 1 ? "lg:[&>div:first-child]:order-2" : ""}`}
+                                className={`grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-10 items-start ${i % 2 === 1 ? "lg:[&>div:first-child]:order-2" : ""}`}
                             >
                                 <div className="lg:col-span-4">
                                     <div className="aspect-square overflow-hidden bg-[#F5F7FA] border border-[#E5E7EB] max-w-[280px] sm:max-w-[340px] lg:max-w-none mx-auto lg:mx-0">
@@ -243,7 +243,7 @@ export default function About() {
                 </section>
             )}
 
-            <section id="careers" className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-24">
+            <section id="careers" className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-14 md:py-24">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 lg:gap-12 max-w-4xl">
                     {cols.map((col, i) => (
                         <div key={col.id || i} id={col.id || undefined}>

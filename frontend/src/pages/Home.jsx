@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import Seo from "../components/Seo";
 import { Link } from "react-router-dom";
-import { ArrowUpRight, BookOpen, GraduationCap, Building2, Calendar, Cpu, Briefcase, Users, ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowUpRight, BookOpen, GraduationCap, Building2, Calendar, Cpu, Briefcase, Users, ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
 import BookCard from "../components/BookCard";
 import BestsellerCarousel from "../components/BestsellerCarousel";
 import {
@@ -130,11 +130,11 @@ function TestimonialsCarousel({ items, overline, title }) {
     }, [items.length]);
 
     return (
-        <section data-testid="testimonials" className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 md:py-28 bg-[#F5F7FA] border-y border-[#E5E7EB]">
-            <div className="flex items-end justify-between gap-4 mb-10">
+        <section data-testid="testimonials" className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-12 md:py-28 bg-[#F5F7FA] border-y border-[#E5E7EB]">
+            <div className="flex items-end justify-between gap-4 mb-6 md:mb-10">
                 <div className="max-w-2xl">
                     <div className="overline">{overline || "Testimonials"}</div>
-                    <h2 className="font-serif text-4xl md:text-5xl mt-3 text-[#002B5C] leading-tight whitespace-pre-line">
+                    <h2 className="font-serif text-3xl md:text-5xl mt-2 md:mt-3 text-[#002B5C] leading-tight whitespace-pre-line">
                         {renderRich(title || "Trusted by the people we publish for.")}
                     </h2>
                 </div>
@@ -178,6 +178,15 @@ export default function Home() {
     const [site, setSite] = useState({});
     const [settings, setSettings] = useState(null);
     const [testimonials, setTestimonials] = useState([]);
+    /*
+     * Which business descriptions are expanded, on mobile only.
+     *
+     * Per card rather than one-at-a-time: these are four parallel things a
+     * visitor may want to compare, and closing one to read another turns a
+     * comparison into a memory test. Nothing here is persisted — an expander
+     * is a reading position, not a preference.
+     */
+    const [openBiz, setOpenBiz] = useState({});
 
     useEffect(() => {
         fetchSiteContent().then(setSite).catch(() => {});
@@ -242,18 +251,18 @@ export default function Home() {
             {/* ============== HERO ============== */}
             <section style={{ order: -1 }} className="relative overflow-hidden border-b border-[#002B5C]/10">
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-0">
-                    <div className="lg:col-span-7 px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 pt-20 pb-20 lg:pt-32 lg:pb-36 relative">
+                    <div className="lg:col-span-7 px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 pt-12 pb-12 lg:pt-32 lg:pb-36 relative">
                         <div className="overline fade-up">
                             {site.home_hero_overline || "Est. 2017 · A Scholarly Press"}
                         </div>
-                        <h1 className="font-serif text-5xl sm:text-6xl lg:text-7xl leading-[0.95] mt-6 text-[#002B5C] whitespace-pre-line fade-up" style={{ animationDelay: "100ms" }}>
+                        <h1 className="font-serif text-[2.6rem] sm:text-6xl lg:text-7xl leading-[0.98] sm:leading-[0.95] mt-4 sm:mt-6 text-[#002B5C] whitespace-pre-line fade-up" style={{ animationDelay: "100ms" }}>
                             {renderRich(site.home_hero_title || "A library for\nthe *intellectually*\nrestless.")}
                         </h1>
-                        <p className="mt-8 max-w-lg text-base text-[#4B5563] leading-relaxed whitespace-pre-line fade-up" style={{ animationDelay: "200ms" }}>
+                        <p className="mt-5 sm:mt-8 max-w-lg text-base text-[#4B5563] leading-relaxed whitespace-pre-line fade-up" style={{ animationDelay: "200ms" }}>
                             {site.home_hero_body ||
                                 "Oakbridge produces authoritative, reliable and opinion-influencing reference titles, legal commentaries, thematic books across various genres, and thought-leadership curated works for students, professionals and curious minds across the globe."}
                         </p>
-                        <div className="mt-10 flex flex-wrap gap-4 fade-up" style={{ animationDelay: "300ms" }}>
+                        <div className="mt-6 sm:mt-10 flex flex-wrap gap-3 sm:gap-4 fade-up" style={{ animationDelay: "300ms" }}>
                             <Link
                                 to="/books"
                                 data-testid="hero-browse-books-link"
@@ -340,12 +349,12 @@ export default function Home() {
             <section
                 data-testid="home-verticals"
                 style={{ order: homeOrd("businesses") }}
-                className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 md:py-24 border-b border-[#E5E7EB]"
+                className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-12 md:py-24 border-b border-[#E5E7EB]"
             >
-                <div className="flex flex-wrap items-end justify-between gap-4 mb-12">
+                <div className="flex flex-wrap items-end justify-between gap-3 md:gap-4 mb-7 md:mb-12">
                     <div>
                         <div className="overline">{site.home_biz_overline || "Our Businesses"}</div>
-                        <h2 className="font-serif text-4xl md:text-5xl mt-3 text-[#002B5C] max-w-2xl leading-tight whitespace-pre-line">
+                        <h2 className="font-serif text-3xl md:text-5xl mt-2 md:mt-3 text-[#002B5C] max-w-2xl leading-tight whitespace-pre-line">
                             {renderRich(site.home_biz_title || "Four complementary lines of business.")}
                         </h2>
                     </div>
@@ -358,19 +367,19 @@ export default function Home() {
                     </Link>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-5">
                     {VERTICALS.map((v, i) => {
                         const n = i + 1;
                         const tagline = site[`home_biz${n}_tagline`] || v.tagline;
                         const title = site[`home_biz${n}_title`] || v.title;
                         const lede = site[`home_biz${n}_lede`] || v.lede;
                         const cta = site[`home_biz${n}_cta`] || v.cta;
+                        const open = !!openBiz[v.id];
                         return (
-                        <Link
+                        <article
                             key={v.id}
-                            to={v.to}
                             data-testid={`home-vertical-${v.id}`}
-                            className="group relative bg-white border border-[#E5E7EB] p-8 pt-9 flex flex-col overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:border-[#002B5C] hover:shadow-[0_24px_48px_-20px_rgba(0,43,92,0.25)] fade-up"
+                            className="group relative bg-white border border-[#E5E7EB] p-4 pt-5 md:p-8 md:pt-9 flex flex-col overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:border-[#002B5C] hover:shadow-[0_24px_48px_-20px_rgba(0,43,92,0.25)] focus-within:border-[#002B5C] fade-up"
                             style={{ animationDelay: `${i * 80}ms` }}
                         >
                             {/* Top accent bar — red, scales on hover */}
@@ -379,42 +388,95 @@ export default function Home() {
                                 className="absolute top-0 left-0 h-[3px] w-12 bg-[#CC0033] transition-all duration-500 ease-out group-hover:w-full"
                             />
 
-                            {/* Watermark numeral */}
+                            {/* Watermark numeral. Scaled down on mobile: at 64px
+                                it was two thirds the width of a half-screen card. */}
                             <span
                                 aria-hidden="true"
-                                className="absolute top-3 right-5 font-mono text-[64px] leading-none font-semibold text-[#002B5C]/[0.04] group-hover:text-[#002B5C]/[0.07] transition-colors select-none"
+                                className="absolute top-2 right-3 md:top-3 md:right-5 font-mono text-[40px] md:text-[64px] leading-none font-semibold text-[#002B5C]/[0.04] group-hover:text-[#002B5C]/[0.07] transition-colors select-none"
                             >
                                 {v.num}
                             </span>
 
-                            <div className="relative flex items-start gap-4">
-                                <div className="w-11 h-11 bg-[#002B5C] text-white flex items-center justify-center transition-colors duration-300 group-hover:bg-[#CC0033]">
+                            {/* Stacked on mobile, side by side from md.
+                                Two columns leave ~130px of content width, and a
+                                30-character tagline set beside a 44px icon in
+                                that space wraps to four lines. */}
+                            <div className="relative flex flex-col gap-2 md:flex-row md:items-start md:gap-4">
+                                <div className="w-9 h-9 md:w-11 md:h-11 bg-[#002B5C] text-white flex items-center justify-center flex-shrink-0 transition-colors duration-300 group-hover:bg-[#CC0033]">
                                     <v.icon size={20} strokeWidth={1.75} />
                                 </div>
-                                <div className="overline !text-[10px] !text-[#CC0033] mt-1">
+                                <div className="overline !text-[10px] !text-[#CC0033] md:mt-1">
                                     {tagline}
                                 </div>
                             </div>
 
-                            <h3 className="relative font-sans font-bold text-2xl text-[#002B5C] mt-7 tracking-tight leading-tight">
-                                {title}
+                            {/*
+                             * The link is on the heading, and its ::after covers
+                             * the whole card — so the entire tile is still one
+                             * click target, from one anchor, with one thing for
+                             * a screen reader to announce.
+                             *
+                             * It has to be built this way now the card holds a
+                             * button: a <button> inside an <a> is invalid HTML,
+                             * and browsers recover from it by dropping one of
+                             * the two — usually the one you needed.
+                             */}
+                            <h3 className="relative font-sans font-bold text-lg md:text-2xl text-[#002B5C] mt-4 md:mt-7 tracking-tight leading-tight">
+                                <Link
+                                    to={v.to}
+                                    className="after:absolute after:inset-0 after:content-[''] hover:text-[#CC0033] transition-colors"
+                                >
+                                    {title}
+                                </Link>
                             </h3>
 
                             {v.comingSoon && (
                                 <span
                                     data-testid={`home-vertical-coming-soon-${v.id}`}
-                                    className="relative mt-3 inline-flex items-center gap-1.5 bg-[#F59E0B] text-[#002B5C] font-mono uppercase tracking-widest text-[10px] px-2 py-1 self-start"
+                                    className="relative mt-2 md:mt-3 inline-flex items-center gap-1.5 bg-[#F59E0B] text-[#002B5C] font-mono uppercase tracking-widest text-[10px] px-2 py-1 self-start"
                                 >
                                     <span className="w-1.5 h-1.5 bg-[#002B5C] rounded-full animate-pulse" />
                                     Coming Soon
                                 </span>
                             )}
 
-                            <p className="relative text-sm text-[#4B5563] mt-3 leading-relaxed flex-1">
+                            {/*
+                             * The description is collapsed on mobile, never cut.
+                             *
+                             * Four of these paragraphs are what made this one
+                             * section two screens tall. Truncating them would
+                             * have hidden the same words with no way to read
+                             * them; behind a control, the whole sentence is one
+                             * tap away and the default view stays short.
+                             *
+                             * z-10 lifts the button above the heading's overlay,
+                             * or the card's own link would swallow the tap.
+                             */}
+                            <button
+                                type="button"
+                                onClick={() => setOpenBiz((o) => ({ ...o, [v.id]: !o[v.id] }))}
+                                aria-expanded={open}
+                                aria-controls={`biz-lede-${v.id}`}
+                                data-testid={`home-vertical-toggle-${v.id}`}
+                                className="md:hidden relative z-10 mt-3 -ml-1 self-start inline-flex items-center gap-1 px-1 py-1.5 text-[11px] font-mono uppercase tracking-widest text-[#4B5563] hover:text-[#002B5C]"
+                            >
+                                {open ? "Less" : "What this is"}
+                                <ChevronDown
+                                    size={13}
+                                    strokeWidth={1.75}
+                                    aria-hidden="true"
+                                    className={`transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+                                />
+                            </button>
+
+                            <p
+                                id={`biz-lede-${v.id}`}
+                                className={`relative text-sm text-[#4B5563] mt-2 md:mt-3 leading-relaxed flex-1 ${open ? "" : "hidden"} md:block`}
+                            >
                                 {lede}
                             </p>
 
-                            <span className="relative mt-7 inline-flex items-center gap-1 text-xs font-mono uppercase tracking-[0.18em] text-[#002B5C] group-hover:text-[#CC0033] transition-colors self-start">
+                            <span className="relative mt-4 md:mt-7 inline-flex items-center gap-1 text-[10px] md:text-xs font-mono uppercase tracking-[0.18em] text-[#002B5C] group-hover:text-[#CC0033] transition-colors self-start">
                                 {cta}
                                 <ArrowUpRight
                                     size={14}
@@ -422,7 +484,7 @@ export default function Home() {
                                     className="transition-transform duration-300 group-hover:translate-x-1 group-hover:-translate-y-1"
                                 />
                             </span>
-                        </Link>
+                        </article>
                         );
                     })}
                 </div>
@@ -431,11 +493,11 @@ export default function Home() {
 
             {/* ============== CATEGORIES BENTO (Imprints) ============== */}
             {!hidden.has("home.imprints") && (
-            <section style={{ order: homeOrd("imprints") }} className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-24 md:py-32">
-                <div className="flex items-end justify-between mb-12">
+            <section style={{ order: homeOrd("imprints") }} className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-14 md:py-32">
+                <div className="flex items-end justify-between mb-7 md:mb-12">
                     <div>
                         <div className="overline">{site.home_imprints_overline || "The Catalogue"}</div>
-                        <h2 className="font-serif text-4xl md:text-5xl mt-3 text-[#002B5C] max-w-2xl leading-tight whitespace-pre-line">
+                        <h2 className="font-serif text-3xl md:text-5xl mt-2 md:mt-3 text-[#002B5C] max-w-2xl leading-tight whitespace-pre-line">
                             {renderRich(site.home_imprints_title || "Five imprints.\nOne scholarly standard.")}
                         </h2>
                     </div>
@@ -495,11 +557,11 @@ export default function Home() {
 
             {/* ============== HOT OFF PRESS (new releases) ============== */}
             {!hidden.has("home.hot_off_press") && newReleasesRow.length > 0 && (
-            <section style={{ order: homeOrd("hot_off_press") }} className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 md:py-28 bg-[#F5F7FA] border-y border-[#E5E7EB]">
-                <div className="flex items-end justify-between mb-12">
+            <section style={{ order: homeOrd("hot_off_press") }} className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-12 md:py-28 bg-[#F5F7FA] border-y border-[#E5E7EB]">
+                <div className="flex items-end justify-between mb-7 md:mb-12">
                     <div>
                         <div className="overline">{site.home_hot_overline || "Hot Off the Press"}</div>
-                        <h2 className="font-serif text-4xl md:text-5xl mt-3 text-[#002B5C] leading-tight whitespace-pre-line">
+                        <h2 className="font-serif text-3xl md:text-5xl mt-2 md:mt-3 text-[#002B5C] leading-tight whitespace-pre-line">
                             {renderRich(site.home_hot_title || "New this season.")}
                         </h2>
                     </div>
@@ -521,11 +583,11 @@ export default function Home() {
 
             {/* ============== SOLUTIONS ============== */}
             {!hidden.has("home.solutions") && (
-            <section style={{ order: homeOrd("solutions") }} className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-24 md:py-32">
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+            <section style={{ order: homeOrd("solutions") }} className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-14 md:py-32">
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-10">
                     <div className="lg:col-span-4">
                         <div className="overline">{site.home_solutions_overline || "Solutions"}</div>
-                        <h2 className="font-serif text-4xl md:text-5xl mt-3 text-[#002B5C] leading-tight whitespace-pre-line">
+                        <h2 className="font-serif text-3xl md:text-5xl mt-2 md:mt-3 text-[#002B5C] leading-tight whitespace-pre-line">
                             {renderRich(site.home_solutions_title || "We work with the institutions shaping tomorrow.")}
                         </h2>
                         <p className="mt-6 text-[#4B5563] text-sm leading-relaxed whitespace-pre-line">
@@ -595,11 +657,11 @@ export default function Home() {
 
             {/* ============== BESTSELLERS ============== */}
             {!hidden.has("home.bestsellers") && bestsellersEnabled && carouselBooks.length > 0 && (
-                <section style={{ order: homeOrd("bestsellers") }} className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-20 md:py-28 border-t border-[#E5E7EB]">
-                    <div className="flex items-end justify-between mb-12">
+                <section style={{ order: homeOrd("bestsellers") }} className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-12 md:py-28 border-t border-[#E5E7EB]">
+                    <div className="flex items-end justify-between mb-7 md:mb-12">
                         <div>
                             <div className="overline">{site.home_bestsellers_overline || "Bestsellers"}</div>
-                            <h2 className="font-serif text-4xl md:text-5xl mt-3 text-[#002B5C] leading-tight whitespace-pre-line">
+                            <h2 className="font-serif text-3xl md:text-5xl mt-2 md:mt-3 text-[#002B5C] leading-tight whitespace-pre-line">
                                 {renderRich(site.home_bestsellers_title || "What leaders are reading.")}
                             </h2>
                         </div>
@@ -640,16 +702,16 @@ export default function Home() {
              * reorder home sections, so this may sit above a light section
              * instead, where it needs real space beneath it. 64px works in
              * both places. */
-            <section style={{ order: homeOrd("manifesto") }} className="relative px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 pt-24 pb-14 md:pt-32 md:pb-16 bg-[#002B5C] text-[#FFFFFF] overflow-hidden">
+            <section style={{ order: homeOrd("manifesto") }} className="relative px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 pt-14 pb-10 md:pt-32 md:pb-16 bg-[#002B5C] text-[#FFFFFF] overflow-hidden">
                 <div className="relative z-10 max-w-3xl">
                     <div className="overline !text-white/50">Manifesto</div>
-                    <p className="font-serif text-3xl md:text-5xl mt-6 leading-tight">
+                    <p className="font-serif text-2xl md:text-5xl mt-4 md:mt-6 leading-tight">
                         "We believe a{" "}
                         <span className="text-[#F59E0B]">book</span> is a
                         conversation, not a monument. It should change with its
                         readers — and the country they are inheriting."
                     </p>
-                    <div className="mt-8 font-mono text-sm text-white/60">
+                    <div className="mt-5 md:mt-8 font-mono text-sm text-white/60">
                         — The Oakbridge Editorial Charter, 2017
                     </div>
                 </div>

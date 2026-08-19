@@ -984,12 +984,71 @@ function checkAdminSections() {
         );
 }
 
+/* ---------------------------------------- 16. No interactive inside an anchor
+ * A <button> or a second link nested inside an <a>/<Link> is invalid HTML, and
+ * the failure is not cosmetic: browsers recover by dropping one of the two,
+ * unpredictably, so a control either stops working or steals the navigation
+ * from the link around it. Keyboard users get one stop where there should be
+ * two, and a screen reader announces something that matches neither.
+ *
+ * It is easy to introduce by accident — a card that is one big link, and then
+ * somebody needs a toggle inside it. That is exactly how the homepage business
+ * cards got a disclosure button, and the fix (a stretched heading link, with
+ * the button above it) is invisible unless something is watching for the
+ * mistake it replaced.
+ */
+function checkNestedInteractive() {
+    try {
+        require("@babel/parser");
+    } catch {
+        warn("nested-interactive", "@babel/parser unavailable — skipped");
+        return;
+    }
+    const isAnchor = (n) =>
+        n.type === "JSXElement" &&
+        n.openingElement.name &&
+        (n.openingElement.name.name === "a" || n.openingElement.name.name === "Link");
+    const isInteractive = (n) =>
+        n.type === "JSXElement" &&
+        n.openingElement.name &&
+        ["button", "a", "Link", "select", "textarea", "input"].includes(n.openingElement.name.name);
+
+    const files = walk(path.join(FRONTEND, "src"), (n) => /\.jsx$/.test(n));
+    const offenders = [];
+    let anchors = 0;
+    for (const f of files) {
+        let ast;
+        try {
+            ast = parseFile(f);
+        } catch {
+            continue;
+        }
+        walkAst(ast.program.body, (node) => {
+            if (!isAnchor(node)) return true;
+            anchors++;
+            // Descend the subtree looking for another interactive element.
+            walkAst(node.children || [], (inner) => {
+                if (isInteractive(inner)) {
+                    offenders.push(
+                        `${path.relative(REPO, f)}:${inner.loc ? inner.loc.start.line : "?"} — <${inner.openingElement.name.name}> inside <${node.openingElement.name.name}>`,
+                    );
+                }
+                return true;
+            });
+            return true;
+        });
+    }
+    if (offenders.length) offenders.forEach((o) => fail("nested-interactive", o));
+    else pass("nested-interactive", `${anchors} links contain no nested interactive element`);
+}
+
 /* --------------------------------------------------------------- reporting */
 const CHECKS = [
     checkJsSyntax, checkNodeScripts, checkPython, checkJson,
     checkUnusedImports, checkRouteTitles, checkRouteParity,
     checkVercelFallback, checkJsxDefined, checkJsDefined, checkImgAlt,
     checkNoStaticSitemap, checkSecrets, checkTopLevelJsx, checkAdminSections,
+    checkNestedInteractive,
 ];
 
 for (const c of CHECKS) {
