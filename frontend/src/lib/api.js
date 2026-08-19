@@ -205,6 +205,11 @@ export const adminSetTracking = (id, payload) =>
     api.post(`/admin/orders/${id}/tracking`, payload).then((r) => r.data);
 export const adminSendPaymentLink = (id) =>
     api.post(`/admin/orders/${id}/payment-link`).then((r) => r.data);
+
+// Asks Razorpay what it actually holds for an unpaid order. Can only move an
+// order forward to paid — there is no path in it that marks anything failed.
+export const adminReconcilePayment = (id) =>
+    api.post(`/admin/orders/${id}/reconcile-payment`).then((r) => r.data);
 export const adminListOrders = () =>
     api.get("/admin/orders").then((r) => r.data);
 export const adminUpdateOrder = (id, status, opts = {}) =>

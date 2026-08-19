@@ -100,6 +100,27 @@ The endpoint is token-protected (403 without the correct `X-Task-Token`). You ca
 
 ---
 
+## 5b-ii. Payment reconciliation (Render Cron Job) — **required**
+An order is marked paid by whichever confirmation lands first: the browser calling `/api/payments/verify`, or the `payment.captured` webhook. If neither arrives — customer closed the tab *and* the webhook was refused, undelivered or never configured — the money sits with Razorpay while the order reads **pending**: missing from revenue, stock not decremented, no receipt sent.
+
+This job asks Razorpay what it actually holds and settles anything captured.
+
+1. Render → **New → Cron Job**.
+2. **Schedule:** `30 * * * *` (hourly, offset from the cart-reminder job so they don't run together).
+3. **Command:**
+   ```
+   curl -fsS -X POST -H "X-Task-Token: $TASK_TOKEN" "$API_URL/api/tasks/payment-reconcile"
+   ```
+4. Same env as above: `TASK_TOKEN` and `API_URL`.
+
+Defaults to the last 72 hours, 40 orders per run (`RECONCILE_LOOKBACK_HOURS`, `RECONCILE_MAX_ORDERS`). It only ever moves an order **forward** to paid — it has no path that marks anything failed — so a spurious run is harmless. Settled orders send the customer their receipt and the team the usual paid-order alert; a clean run is silent.
+
+A single order can also be checked by hand: **Admin → Orders → "Check with Razorpay"**, shown on any order that isn't paid.
+
+> Also confirm the webhook itself: Razorpay Dashboard → Webhooks → the URL must be `https://<api-host>/api/webhooks/razorpay`, subscribed to `payment.captured` and `payment.failed`, with its Secret matching `RAZORPAY_WEBHOOK_SECRET`. The endpoint fails closed — an unverifiable event is refused and an alert goes to `ADMIN_NOTIFY_EMAIL` once an hour. Reconciliation is the safety net, not a substitute.
+
+---
+
 ## 5c. File storage (local disk)
 Uploaded book covers, eBooks and media are stored on the backend's own filesystem under `STORAGE_DIR` and served at `/api/files/{path}`. No S3 or external service needed.
 
@@ -134,5 +155,6 @@ This feature is optional; if the LLM is unreachable, only bio-drafting returns a
 - [ ] Persistent disk attached + `STORAGE_DIR` set (else uploads vanish on redeploy).
 - [ ] AI: `LLM_BASE_URL`/`LLM_API_KEY`/`LLM_MODEL` set to Groq (or similar); draft-bio works.
 - [ ] Cart-reminders cron job created (`TASK_TOKEN` set on both web + cron).
+- [ ] Payment-reconciliation cron job created (same `TASK_TOKEN`), and the Razorpay webhook verified as delivering.
 - [ ] Legal pages reviewed (Terms/Privacy/Refund/Shipping) — bracketed items filled in.
 - [ ] `main` updated from `Oak-v2-UAT`, release tagged.

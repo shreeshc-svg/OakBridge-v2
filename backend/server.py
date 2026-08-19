@@ -1195,9 +1195,11 @@ app.include_router(extras_router)
 app.include_router(admin_router)
 app.include_router(features_public_router)
 app.include_router(features_customer_router)
-from payments import payments_router, webhooks_router  # noqa: E402
+from payments import payments_router, webhooks_router, payment_tasks_router  # noqa: E402
 app.include_router(payments_router, prefix="/api")
 app.include_router(webhooks_router, prefix="/api")
+# POST /api/tasks/payment-reconcile — hourly cron target, x-task-token protected.
+app.include_router(payment_tasks_router, prefix="/api")
 app.include_router(features_admin_router)
 app.include_router(features_tasks_router)
 from inventory_sync import inventory_router  # noqa: E402

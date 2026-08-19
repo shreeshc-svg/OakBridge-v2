@@ -879,6 +879,29 @@ async def admin_send_payment_link(order_id: str):
     return {"ok": bool(ok), "to": order.get("email")}
 
 
+@admin_router.post("/orders/{order_id}/reconcile-payment")
+async def admin_reconcile_payment(order_id: str):
+    """Ask Razorpay what it actually holds for this order, and settle it if paid.
+
+    For the case the order list cannot distinguish on its own: "pending" means no
+    confirmation reached us, which looks identical whether the customer walked
+    away or whether they paid and the confirmation went missing. Only Razorpay
+    knows which, so this asks.
+
+    Read-then-settle, never the reverse — it can mark an order paid but has no
+    path to marking one failed, so pressing it on the wrong order does nothing.
+    """
+    order = await db.orders.find_one({"id": order_id}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    # Late import: payments imports extensions for `db`, so a module-level
+    # import here would close the loop.
+    from payments import reconcile_order
+
+    return await reconcile_order(order, source="admin")
+
+
 @admin_router.get("/stats")
 async def admin_stats():
     books = await db.books.count_documents({})

@@ -16,7 +16,7 @@ import logging
 import os
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import razorpay
@@ -231,6 +231,39 @@ async def _settle_capture(
             order.get("order_number") or order["id"],
         )
     return mismatch
+
+
+async def _deliver_paid_order(order_id: str) -> None:
+    """The once-only consequences of a capture: stock, receipt, invoice, admin alert.
+
+    Three paths settle a payment — the browser returning from Checkout, the
+    webhook, and reconciliation below — and each must do exactly this afterwards.
+    It already existed twice, copied; a third copy is how copies start to differ.
+
+    Never raises. By the time this runs the money is recorded, so nothing in here
+    is allowed to turn a collected payment into an error the caller sees.
+    """
+    try:
+        await _apply_stock_decrement(order_id)
+    except Exception:  # noqa: BLE001
+        logger.exception("Stock decrement failed for order %s", order_id)
+
+    try:
+        fresh = await db.orders.find_one({"id": order_id}, {"_id": 0})
+        if fresh and await _claim_once(order_id, "paid_emails_sent"):
+            pdf = None
+            try:  # invoice is best-effort — never let it block the receipt email
+                from invoice import build_order_invoice
+
+                pdf = await build_order_invoice(db, fresh)
+            except Exception:  # noqa: BLE001
+                logger.exception(
+                    "Invoice build failed for %s (sending receipt without it)", order_id
+                )
+            await send_order_receipt(fresh, invoice_pdf=pdf or None)
+            await send_admin_paid_order(await _with_item_specs(fresh))
+    except Exception:  # noqa: BLE001
+        logger.exception("Paid-order email failed for order %s", order_id)
 
 
 def _require_client() -> razorpay.Client:
@@ -460,24 +493,9 @@ async def verify_payment(payload: VerifyPaymentRequest):
         rzp_status=(detail or {}).get("status"),
     )
 
-    # Decrement inventory once payment is confirmed (idempotent).
-    await _apply_stock_decrement(order["id"])
-
-    # Fire-and-forget order receipt + admin notification (best-effort; never block the response)
-    try:
-        refreshed = await db.orders.find_one({"id": order["id"]}, {"_id": 0})
-        if refreshed and await _claim_once(order["id"], "paid_emails_sent"):
-            pdf = None
-            try:  # invoice is best-effort — never let it block the receipt email
-                from invoice import build_order_invoice
-
-                pdf = await build_order_invoice(db, refreshed)
-            except Exception:  # noqa: BLE001
-                logger.exception("Invoice build failed for order %s (sending receipt without it)", order["id"])
-            await send_order_receipt(refreshed, invoice_pdf=pdf or None)
-            await send_admin_paid_order(await _with_item_specs(refreshed))
-    except Exception:  # noqa: BLE001
-        logger.exception("Order receipt email failed for order %s", order["id"])
+    # Stock, receipt, invoice and the admin alert — idempotent, and shared with
+    # the webhook and the reconciler so all three deliver the same things.
+    await _deliver_paid_order(order["id"])
 
     return {"ok": True, "order_id": order["id"]}
 
@@ -613,23 +631,8 @@ async def razorpay_webhook(
         return {"received": True, "ignored": event_type}
 
     # Send receipt + admin notification only on a captured payment
-    if event_type == "payment.captured" and res_matched:
-        try:
-            fresh = await db.orders.find_one({"rzp_order_id": rzp_order_id}, {"_id": 0})
-            if fresh:
-                await _apply_stock_decrement(fresh["id"])
-            if fresh and await _claim_once(fresh["id"], "paid_emails_sent"):
-                pdf = None
-                try:  # invoice is best-effort — never let it block the receipt email
-                    from invoice import build_order_invoice
-
-                    pdf = await build_order_invoice(db, fresh)
-                except Exception:  # noqa: BLE001
-                    logger.exception("Invoice build failed for %s (sending receipt without it)", rzp_order_id)
-                await send_order_receipt(fresh, invoice_pdf=pdf or None)
-                await send_admin_paid_order(await _with_item_specs(fresh))
-        except Exception:  # noqa: BLE001
-            logger.exception("Webhook receipt email failed for rzp_order_id=%s", rzp_order_id)
+    if event_type == "payment.captured" and res_matched and order_doc:
+        await _deliver_paid_order(order_doc["id"])
 
     # Email the customer a "payment failed" note.
     #
@@ -725,3 +728,248 @@ async def resume_order(order_id: str, t: str = ""):
             for i in (order.get("items") or [])
         ],
     }
+
+
+# ====== Reconciliation ======
+#
+# An order row is written before the customer reaches Razorpay, and marked paid
+# by whichever confirmation arrives first: the browser calling /payments/verify
+# when Checkout closes, or the payment.captured webhook. When NEITHER arrives —
+# the tab was closed at the wrong moment and the webhook was refused, never
+# delivered, or never configured — the money is sitting with Razorpay while the
+# order reads "pending" for ever. It is absent from revenue, its stock is never
+# decremented, and the customer never gets a receipt or an invoice.
+#
+# Two comments in this file promised that "the reconciliation job backfills
+# anything missed". There was no such job. This is it: Razorpay is asked what it
+# actually holds, and its answer wins.
+#
+# It only ever moves an order forward. Nothing here marks a payment failed, and
+# nothing marks paid without a capture — so the worst a wrong run can do is
+# nothing at all.
+
+# Window and batch size for the scheduled sweep. Three days covers a weekend
+# webhook outage without asking Razorpay about orders nobody is waiting on, and
+# the cap keeps one run to a bounded number of API calls whatever has piled up.
+RECONCILE_LOOKBACK_HOURS = int(os.environ.get("RECONCILE_LOOKBACK_HOURS") or 72)
+RECONCILE_MAX_ORDERS = int(os.environ.get("RECONCILE_MAX_ORDERS") or 40)
+
+payment_tasks_router = APIRouter(prefix="/tasks", tags=["tasks"])
+
+
+async def _fetch_order_payments(rzp_order_id: str) -> Optional[list]:
+    """Every attempt Razorpay holds against one order id.
+
+    Returns None — not [] — when we could not ask. An empty list means Razorpay
+    answered and there were no attempts, which is a real finding about the
+    order; None means we learned nothing, and the caller must not act on it.
+    """
+    if not _client or not rzp_order_id:
+        return None
+    try:
+        # Same 10s reasoning as _fetch_payment: the SDK sets no default timeout,
+        # and the sweep runs unattended, so a stalled socket would otherwise hold
+        # a worker open indefinitely.
+        res = await asyncio.to_thread(_client.order.payments, rzp_order_id, timeout=10)
+    except Exception:  # noqa: BLE001
+        logger.exception("Could not list Razorpay payments for %s", rzp_order_id)
+        return None
+    items = (res or {}).get("items")
+    return items if isinstance(items, list) else []
+
+
+async def reconcile_order(order: dict, source: str = "reconcile") -> dict:
+    """Ask Razorpay what it holds for one order and settle a capture if there is one.
+
+    Idempotent: everything it writes is guarded, so running it twice on the same
+    order settles once, emails once and decrements stock once.
+    """
+    order_id = order.get("id")
+    order_no = order.get("order_number") or order_id
+    base = {"order_id": order_id, "order_number": order_no}
+
+    if order.get("payment_status") == "paid":
+        return {**base, "outcome": "already_paid", "message": "Already recorded as paid."}
+
+    rzp_order_id = order.get("rzp_order_id")
+    if not rzp_order_id:
+        return {
+            **base,
+            "outcome": "never_started",
+            "message": "This order never reached the payment gateway, so there is nothing "
+            "for Razorpay to have. Send the customer a payment link.",
+        }
+
+    attempts = await _fetch_order_payments(rzp_order_id)
+    if attempts is None:
+        return {
+            **base,
+            "outcome": "unavailable",
+            "message": "Could not reach Razorpay just now. Nothing was changed — try again.",
+        }
+
+    captured = next((p for p in attempts if p.get("status") == "captured"), None)
+    if captured:
+        mismatch = await _settle_capture(
+            order, captured.get("id"), captured.get("amount"), source
+        )
+        await db.orders.update_one(
+            {"id": order_id},
+            {"$set": {"capture_unconfirmed": False, "rzp_status": "captured"}},
+        )
+        await _log_payment_event(
+            event="reconcile.captured",
+            source=source,
+            order_id=order_id,
+            order_number=order_no,
+            rzp_order_id=rzp_order_id,
+            rzp_payment_id=captured.get("id"),
+            amount_paise=captured.get("amount"),
+            expected_paise=_expected_paise(order),
+            amount_mismatch=mismatch,
+            rzp_status="captured",
+            note="settled from Razorpay; no browser or webhook confirmation had arrived",
+        )
+        await _deliver_paid_order(order_id)
+        logger.warning(
+            "Reconciled a capture Razorpay held but we had not recorded: order %s", order_no
+        )
+        return {
+            **base,
+            "outcome": "settled",
+            "rzp_payment_id": captured.get("id"),
+            "amount_paise": captured.get("amount"),
+            "amount_mismatch": mismatch,
+            "message": "Razorpay had a captured payment for this order. Marked paid, stock "
+            "adjusted, and the receipt sent."
+            + (" The captured amount does not match the order total — check it." if mismatch else ""),
+        }
+
+    authorized = next((p for p in attempts if p.get("status") == "authorized"), None)
+    if authorized:
+        # Committed, not collected — and NOT marked paid.
+        #
+        # An authorised payment is a hold on the customer's money that expires
+        # if nobody captures it. Recording it as revenue would book income that
+        # may never arrive; recording nothing would leave it invisible. So the
+        # order is flagged for a human, who can capture it in the dashboard —
+        # after which a later run of this same job will settle it properly.
+        await db.orders.update_one(
+            {"id": order_id},
+            {
+                "$set": {
+                    "capture_unconfirmed": True,
+                    "rzp_status": "authorized",
+                    "needs_attention": True,
+                }
+            },
+        )
+        await _log_payment_event(
+            event="reconcile.authorized",
+            source=source,
+            order_id=order_id,
+            order_number=order_no,
+            rzp_order_id=rzp_order_id,
+            rzp_payment_id=authorized.get("id"),
+            amount_paise=authorized.get("amount"),
+            rzp_status="authorized",
+            note="authorised but not captured; left unpaid deliberately",
+        )
+        return {
+            **base,
+            "outcome": "authorized",
+            "rzp_payment_id": authorized.get("id"),
+            "message": "Razorpay has this payment as authorised but not captured — the money is "
+            "held, not collected. Capture it in the Razorpay dashboard, then run this again.",
+        }
+
+    if attempts:
+        latest = max(attempts, key=lambda p: p.get("created_at") or 0)
+        return {
+            **base,
+            "outcome": "no_capture",
+            "rzp_status": latest.get("status"),
+            "reason": latest.get("error_description"),
+            "message": "The customer tried to pay but Razorpay holds no capture — the attempt "
+            f"ended as '{latest.get('status')}'. No money was collected.",
+        }
+
+    return {
+        **base,
+        "outcome": "no_attempt",
+        "message": "Razorpay has no payment attempt at all against this order — the customer "
+        "left before paying. Send them a payment link.",
+    }
+
+
+async def reconcile_pending_orders(
+    hours: Optional[int] = None, limit: Optional[int] = None
+) -> dict:
+    """Sweep recent unpaid orders and settle any Razorpay says were captured."""
+    hours = int(hours or RECONCILE_LOOKBACK_HOURS)
+    limit = max(1, int(limit or RECONCILE_MAX_ORDERS))
+    since = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+
+    # `$ne: "paid"` rather than `== "pending"`: it also catches orders written
+    # before the field existed, and ones a webhook marked failed on an earlier
+    # attempt that the customer then retried successfully.
+    candidates = (
+        await db.orders.find(
+            {
+                "payment_status": {"$ne": "paid"},
+                "rzp_order_id": {"$nin": [None, ""]},
+                "created_at": {"$gte": since},
+            },
+            {"_id": 0},
+        )
+        .sort("created_at", -1)
+        .limit(limit)
+        .to_list(limit)
+    )
+
+    counts: dict = {}
+    settled: list = []
+    for order in candidates:
+        try:
+            res = await reconcile_order(order, source="reconcile-job")
+        except Exception:  # noqa: BLE001
+            # One bad order must not end the sweep for the rest.
+            logger.exception("Reconcile failed for order %s", order.get("order_number"))
+            counts["error"] = counts.get("error", 0) + 1
+            continue
+        counts[res["outcome"]] = counts.get(res["outcome"], 0) + 1
+        if res["outcome"] == "settled":
+            settled.append(res.get("order_number"))
+
+    summary = {
+        "checked": len(candidates),
+        "window_hours": hours,
+        "outcomes": counts,
+        "settled_orders": settled,
+    }
+    # Loud only when it found money. A clean sweep is the normal case and must
+    # not train anyone to skim these lines.
+    if settled:
+        logger.warning("Payment reconciliation settled %s order(s): %s", len(settled), settled)
+    else:
+        logger.info("Payment reconciliation: %s", summary)
+    return summary
+
+
+@payment_tasks_router.post("/payment-reconcile")
+async def task_payment_reconcile(
+    x_task_token: Optional[str] = Header(None),
+    hours: Optional[int] = None,
+    limit: Optional[int] = None,
+):
+    """Scheduled cron target. Protected by the shared TASK_TOKEN secret.
+
+    No email on a clean run. Anything it settles already sends the customer
+    their receipt and the team the usual paid-order alert, so a settlement is
+    announced by the same mail as any other sale — which is the point: the order
+    stops being special the moment it is reconciled.
+    """
+    token = os.environ.get("TASK_TOKEN")
+    if not token or x_task_token != token:
+        raise HTTPException(status_code=401, detail="Invalid task token")
+    return await reconcile_pending_orders(hours=hours, limit=limit)

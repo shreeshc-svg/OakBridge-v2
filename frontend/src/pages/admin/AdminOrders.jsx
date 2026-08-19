@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { MailCheck, FileDown, Send, Truck } from "lucide-react";
+import { MailCheck, FileDown, Send, Truck, SearchCheck } from "lucide-react";
 import PaymentBadge from "../../components/admin/PaymentBadge";
 import StatusChangeDialog from "../../components/admin/StatusChangeDialog";
 import TrackingDialog from "../../components/admin/TrackingDialog";
 import {
     adminListOrders,
     adminResendReceipt,
+    adminReconcilePayment,
     adminSendPaymentLink,
     adminSetTracking,
     adminDownloadInvoice,
@@ -26,6 +27,7 @@ export default function AdminOrders() {
     const [loading, setLoading] = useState(true);
     const [resending, setResending] = useState(null);
     const [linking, setLinking] = useState(null);
+    const [reconciling, setReconciling] = useState(null);
     // { order, nextStatus } while the confirmation is open.
     const [pendingChange, setPendingChange] = useState(null);
     const [savingStatus, setSavingStatus] = useState(false);
@@ -123,6 +125,37 @@ export default function AdminOrders() {
             toast.error(formatApiError(err));
         } finally {
             setLinking(null);
+        }
+    };
+
+    /*
+     * "Pending" cannot tell you whether the customer walked away or whether they
+     * paid and the confirmation never reached us — both look identical here.
+     * Razorpay knows, so this asks it and settles the order if there is a
+     * capture, which also sends the receipt and adjusts stock.
+     *
+     * Reloads only on a settle: that path rewrites payment_status, status,
+     * paid_at and the captured amount, and patching four fields by hand here is
+     * how a list drifts from the database. Every other outcome changed nothing
+     * worth re-reading.
+     */
+    const onReconcile = async (id) => {
+        setReconciling(id);
+        try {
+            const res = await adminReconcilePayment(id);
+            const msg = res.message || res.outcome;
+            if (res.outcome === "settled") {
+                toast.success(msg, { duration: 8000 });
+                load();
+            } else if (res.outcome === "authorized" || res.outcome === "unavailable") {
+                toast.warning(msg, { duration: 8000 });
+            } else {
+                toast.info(msg, { duration: 8000 });
+            }
+        } catch (err) {
+            toast.error(formatApiError(err));
+        } finally {
+            setReconciling(null);
         }
     };
 
@@ -388,6 +421,22 @@ export default function AdminOrders() {
                                             >
                                                 <Truck size={12} strokeWidth={1.5} />
                                                 {o.tracking_id ? "Tracking" : "Add tracking"}
+                                            </button>
+                                        )}
+                                        {/* Unpaid only. On a paid order there is
+                                            nothing to ask Razorpay about, and a
+                                            button that always says "already
+                                            paid" is a button nobody reads. */}
+                                        {o.payment_status !== "paid" && (
+                                            <button
+                                                onClick={() => onReconcile(o.id)}
+                                                disabled={reconciling === o.id}
+                                                data-testid={`order-reconcile-${o.id}`}
+                                                title="Ask Razorpay whether this order was actually paid, and record it if so"
+                                                className="inline-flex items-center gap-1.5 border border-[#E5E7EB] hover:border-[#002B5C] text-[#002B5C] px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50"
+                                            >
+                                                <SearchCheck size={12} strokeWidth={1.5} />
+                                                {reconciling === o.id ? "Checking…" : "Check with Razorpay"}
                                             </button>
                                         )}
                                         {o.payment_status !== "paid" && (
