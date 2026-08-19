@@ -118,7 +118,7 @@ export default function Contact() {
                                     value={form.name}
                                     onChange={onChange}
                                     data-testid="contact-name"
-                                    className="w-full border border-[#E5E7EB] bg-white px-4 py-3 text-sm outline-none focus:border-[#002B5C]"
+                                    className="w-full border border-[#E5E7EB] bg-white px-4 py-3 text-base md:text-sm outline-none focus:border-[#002B5C]"
                                 />
                             </div>
                             <div>
@@ -132,7 +132,7 @@ export default function Contact() {
                                     value={form.email}
                                     onChange={onChange}
                                     data-testid="contact-email"
-                                    className="w-full border border-[#E5E7EB] bg-white px-4 py-3 text-sm outline-none focus:border-[#002B5C]"
+                                    className="w-full border border-[#E5E7EB] bg-white px-4 py-3 text-base md:text-sm outline-none focus:border-[#002B5C]"
                                 />
                             </div>
                         </div>
@@ -145,7 +145,7 @@ export default function Contact() {
                                 value={form.subject}
                                 onChange={onChange}
                                 data-testid="contact-subject"
-                                className="w-full border border-[#E5E7EB] bg-white px-4 py-3 text-sm outline-none focus:border-[#002B5C]"
+                                className="w-full border border-[#E5E7EB] bg-white px-4 py-3 text-base md:text-sm outline-none focus:border-[#002B5C]"
                             >
                                 <option>General Inquiry</option>
                                 <option>School / Institutional Sales</option>
@@ -165,7 +165,7 @@ export default function Contact() {
                                 value={form.message}
                                 onChange={onChange}
                                 data-testid="contact-message"
-                                className="w-full border border-[#E5E7EB] bg-white px-4 py-3 text-sm outline-none focus:border-[#002B5C] resize-none"
+                                className="w-full border border-[#E5E7EB] bg-white px-4 py-3 text-base md:text-sm outline-none focus:border-[#002B5C] resize-none"
                             />
                         </div>
                         <button

@@ -43,7 +43,7 @@ export default function Login() {
     return (
         <div
             data-testid="login-page"
-            className="min-h-[calc(100vh-4rem)] grid grid-cols-1 md:grid-cols-2"
+            className="min-h-page grid grid-cols-1 md:grid-cols-2"
         >
             <div className="hidden md:block relative bg-[#002B5C] overflow-hidden">
                 <img

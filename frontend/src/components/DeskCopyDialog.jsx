@@ -121,7 +121,7 @@ export default function DeskCopyDialog({ book, open, onClose }) {
                                     value={form.name}
                                     onChange={onChange}
                                     data-testid="desk-copy-name"
-                                    className="w-full border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none focus:border-[#002B5C]"
+                                    className="w-full border border-[#E5E7EB] bg-white px-3 py-2 text-base md:text-sm outline-none focus:border-[#002B5C]"
                                 />
                             </div>
                             <div>
@@ -135,7 +135,7 @@ export default function DeskCopyDialog({ book, open, onClose }) {
                                     value={form.email}
                                     onChange={onChange}
                                     data-testid="desk-copy-email"
-                                    className="w-full border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none focus:border-[#002B5C]"
+                                    className="w-full border border-[#E5E7EB] bg-white px-3 py-2 text-base md:text-sm outline-none focus:border-[#002B5C]"
                                 />
                             </div>
                         </div>
@@ -150,7 +150,7 @@ export default function DeskCopyDialog({ book, open, onClose }) {
                                 value={form.institution}
                                 onChange={onChange}
                                 data-testid="desk-copy-institution"
-                                className="w-full border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none focus:border-[#002B5C]"
+                                className="w-full border border-[#E5E7EB] bg-white px-3 py-2 text-base md:text-sm outline-none focus:border-[#002B5C]"
                             />
                         </div>
                         <div className="grid grid-cols-2 gap-4">
@@ -163,7 +163,7 @@ export default function DeskCopyDialog({ book, open, onClose }) {
                                     value={form.role}
                                     onChange={onChange}
                                     data-testid="desk-copy-role"
-                                    className="w-full border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none focus:border-[#002B5C]"
+                                    className="w-full border border-[#E5E7EB] bg-white px-3 py-2 text-base md:text-sm outline-none focus:border-[#002B5C]"
                                 >
                                     {ROLES.map((r) => (
                                         <option key={r.v} value={r.v}>
@@ -183,7 +183,7 @@ export default function DeskCopyDialog({ book, open, onClose }) {
                                     value={form.enrolment}
                                     onChange={onChange}
                                     data-testid="desk-copy-enrolment"
-                                    className="w-full border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none focus:border-[#002B5C]"
+                                    className="w-full border border-[#E5E7EB] bg-white px-3 py-2 text-base md:text-sm outline-none focus:border-[#002B5C]"
                                 />
                             </div>
                         </div>
@@ -197,7 +197,7 @@ export default function DeskCopyDialog({ book, open, onClose }) {
                                 value={form.course}
                                 onChange={onChange}
                                 data-testid="desk-copy-course"
-                                className="w-full border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none focus:border-[#002B5C]"
+                                className="w-full border border-[#E5E7EB] bg-white px-3 py-2 text-base md:text-sm outline-none focus:border-[#002B5C]"
                             />
                         </div>
                         <div>
@@ -210,7 +210,7 @@ export default function DeskCopyDialog({ book, open, onClose }) {
                                 value={form.message}
                                 onChange={onChange}
                                 data-testid="desk-copy-message"
-                                className="w-full border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none focus:border-[#002B5C] resize-none"
+                                className="w-full border border-[#E5E7EB] bg-white px-3 py-2 text-base md:text-sm outline-none focus:border-[#002B5C] resize-none"
                             />
                         </div>
                         <button

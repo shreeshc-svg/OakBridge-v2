@@ -316,12 +316,23 @@ export default function BookCard({ book, index = 0, compact = false }) {
                         </button>
                     )
                 ) : (
+                    /*
+                     * Padding out, margin back in: the button is ~14px of text
+                     * on a grid of book covers, and it is the primary action on
+                     * the page. The padding makes it a ~40px target for a thumb
+                     * while the negative margin keeps it drawn exactly where it
+                     * was, so nothing in the price row shifts.
+                     *
+                     * The underline is on the inner span rather than the button,
+                     * or it would stretch across the padding and read as a much
+                     * wider control than it looks.
+                     */
                     <button
                         onClick={() => addItem(book)}
                         data-testid={`add-to-cart-${book.id}`}
-                        className={`font-medium text-[#002B5C] border-b border-[#002B5C] hover:text-[#CC0033] hover:border-[#CC0033] transition-colors pb-0.5 ${compact ? "text-[10px]" : "text-xs"}`}
+                        className={`group/add -m-2.5 p-2.5 font-medium text-[#002B5C] hover:text-[#CC0033] transition-colors ${compact ? "text-[10px]" : "text-xs"}`}
                     >
-                        Add +
+                        <span className="border-b border-current pb-0.5">Add +</span>
                     </button>
                 )}
             </div>

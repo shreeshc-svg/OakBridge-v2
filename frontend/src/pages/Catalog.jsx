@@ -8,6 +8,7 @@ import { fetchBooks, fetchBooksWithMeta, fetchCategories, fetchSiteContent, fetc
 import EbookCta from "../components/EbookCta";
 import { loadIndex, suggestFrom, readRecent, pushRecent } from "../components/SearchBox";
 import { fuzzySearch, didYouMean as didYouMeanTerm } from "../lib/fuzzy";
+import { responsiveImage } from "../lib/img";
 
 // Renders admin copy where *text* becomes the accent colour and \n a line break.
 function renderRich(text, color = "#CC0033") {
@@ -512,7 +513,12 @@ export default function Catalog() {
             >
                 <div className="relative min-h-[320px] md:min-h-[400px]">
                     <img
-                        src={mediaUrl(site.plp_banner) || "https://images.unsplash.com/photo-1507842217343-583bb7270b66?auto=format&fit=crop&w=2000&q=85"}
+                        {...responsiveImage(
+                            mediaUrl(site.plp_banner) ||
+                                "https://images.unsplash.com/photo-1507842217343-583bb7270b66?auto=format&fit=crop&w=2000&q=85",
+                            "100vw",
+                            true,
+                        )}
                         /* Decorative — see the note on the homepage hero. The
                            heading over it carries the meaning, and the banner
                            itself is admin-replaceable. */

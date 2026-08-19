@@ -168,7 +168,7 @@ export default function Submissions() {
                                         value={form.name}
                                         onChange={onChange}
                                         data-testid="sub-name"
-                                        className="w-full border border-[#E5E7EB] bg-white px-4 py-3 text-sm outline-none focus:border-[#002B5C]"
+                                        className="w-full border border-[#E5E7EB] bg-white px-4 py-3 text-base md:text-sm outline-none focus:border-[#002B5C]"
                                     />
                                 </div>
                                 <div className="col-span-2 sm:col-span-1">
@@ -180,7 +180,7 @@ export default function Submissions() {
                                         value={form.email}
                                         onChange={onChange}
                                         data-testid="sub-email"
-                                        className="w-full border border-[#E5E7EB] bg-white px-4 py-3 text-sm outline-none focus:border-[#002B5C]"
+                                        className="w-full border border-[#E5E7EB] bg-white px-4 py-3 text-base md:text-sm outline-none focus:border-[#002B5C]"
                                     />
                                 </div>
                                 <div className="col-span-2 sm:col-span-1">
@@ -191,7 +191,7 @@ export default function Submissions() {
                                         value={form.phone}
                                         onChange={onChange}
                                         data-testid="sub-phone"
-                                        className="w-full border border-[#E5E7EB] bg-white px-4 py-3 text-sm outline-none focus:border-[#002B5C]"
+                                        className="w-full border border-[#E5E7EB] bg-white px-4 py-3 text-base md:text-sm outline-none focus:border-[#002B5C]"
                                     />
                                 </div>
                                 <div className="col-span-2 sm:col-span-1">
@@ -203,7 +203,7 @@ export default function Submissions() {
                                         onChange={onChange}
                                         data-testid="sub-affiliation"
                                         placeholder="University, firm or independent"
-                                        className="w-full border border-[#E5E7EB] bg-white px-4 py-3 text-sm outline-none focus:border-[#002B5C]"
+                                        className="w-full border border-[#E5E7EB] bg-white px-4 py-3 text-base md:text-sm outline-none focus:border-[#002B5C]"
                                     />
                                 </div>
                             </div>
@@ -217,7 +217,7 @@ export default function Submissions() {
                                     value={form.working_title}
                                     onChange={onChange}
                                     data-testid="sub-title"
-                                    className="w-full border border-[#E5E7EB] bg-white px-4 py-3 text-sm outline-none focus:border-[#002B5C]"
+                                    className="w-full border border-[#E5E7EB] bg-white px-4 py-3 text-base md:text-sm outline-none focus:border-[#002B5C]"
                                 />
                             </div>
 
@@ -229,7 +229,7 @@ export default function Submissions() {
                                         value={form.category}
                                         onChange={onChange}
                                         data-testid="sub-category"
-                                        className="w-full border border-[#E5E7EB] bg-white px-4 py-3 text-sm outline-none focus:border-[#002B5C]"
+                                        className="w-full border border-[#E5E7EB] bg-white px-4 py-3 text-base md:text-sm outline-none focus:border-[#002B5C]"
                                     >
                                         {CATEGORIES.map((c) => (
                                             <option key={c.v} value={c.v}>
@@ -248,7 +248,7 @@ export default function Submissions() {
                                         onChange={onChange}
                                         data-testid="sub-wordcount"
                                         placeholder="e.g. 80000"
-                                        className="w-full border border-[#E5E7EB] bg-white px-4 py-3 text-sm outline-none focus:border-[#002B5C]"
+                                        className="w-full border border-[#E5E7EB] bg-white px-4 py-3 text-base md:text-sm outline-none focus:border-[#002B5C]"
                                     />
                                 </div>
                             </div>
@@ -267,7 +267,7 @@ export default function Submissions() {
                                     onChange={onChange}
                                     data-testid="sub-synopsis"
                                     placeholder="Describe your book — audience, structure, what makes it distinctive…"
-                                    className="w-full border border-[#E5E7EB] bg-white px-4 py-3 text-sm outline-none focus:border-[#002B5C] resize-none"
+                                    className="w-full border border-[#E5E7EB] bg-white px-4 py-3 text-base md:text-sm outline-none focus:border-[#002B5C] resize-none"
                                 />
                             </div>
 
@@ -279,7 +279,7 @@ export default function Submissions() {
                                     value={form.bio}
                                     onChange={onChange}
                                     data-testid="sub-bio"
-                                    className="w-full border border-[#E5E7EB] bg-white px-4 py-3 text-sm outline-none focus:border-[#002B5C] resize-none"
+                                    className="w-full border border-[#E5E7EB] bg-white px-4 py-3 text-base md:text-sm outline-none focus:border-[#002B5C] resize-none"
                                 />
                             </div>
 

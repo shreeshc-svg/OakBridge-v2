@@ -271,7 +271,7 @@ export default function Checkout() {
                                         value={form[f.name]}
                                         onChange={onChange}
                                         data-testid={`checkout-${f.name.replace(/_/g, "-")}`}
-                                        className="w-full border border-[#E5E7EB] bg-white px-4 py-3 text-sm outline-none focus:border-[#002B5C]"
+                                        className="w-full border border-[#E5E7EB] bg-white px-4 py-3 text-base md:text-sm outline-none focus:border-[#002B5C]"
                                     />
                                 </div>
                             ))}
@@ -287,7 +287,7 @@ export default function Checkout() {
                             data-testid="checkout-notes"
                             rows={3}
                             placeholder="Any special instructions…"
-                            className="mt-6 w-full border border-[#E5E7EB] bg-white px-4 py-3 text-sm outline-none focus:border-[#002B5C] resize-none"
+                            className="mt-6 w-full border border-[#E5E7EB] bg-white px-4 py-3 text-base md:text-sm outline-none focus:border-[#002B5C] resize-none"
                         />
                     </section>
 

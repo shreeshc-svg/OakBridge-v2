@@ -2,3 +2,28 @@
     min-height: 100vh;
     background-color: #ffffff;
 }
+
+/* Mobile Safari counts 100vh as the viewport with its URL bar hidden — a height
+   the page does not actually have until you scroll — so a 100vh box overflows
+   by the bar's height and leaves a strip of blank page under the fold. 100dvh
+   is the real, current height.
+   Behind @supports because the vh line above has to survive as the fallback:
+   an unsupported unit invalidates the whole declaration, leaving no min-height
+   at all. */
+@supports (height: 100dvh) {
+    .App {
+        min-height: 100dvh;
+    }
+}
+
+/* Full height minus the fixed header, for pages that centre their content in
+   whatever is left. Same reasoning as above. */
+.min-h-page {
+    min-height: calc(100vh - 4rem);
+}
+
+@supports (height: 100dvh) {
+    .min-h-page {
+        min-height: calc(100dvh - 4rem);
+    }
+}

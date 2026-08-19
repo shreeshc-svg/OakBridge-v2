@@ -158,21 +158,21 @@ export default function Careers() {
                             <div className="mt-6 space-y-4">
                                 <div>
                                     <label className="overline !text-[10px] block mb-1.5">Full name *</label>
-                                    <input name="name" required value={form.name} onChange={onChange} className="w-full border border-[#E5E7EB] px-4 py-3 text-sm outline-none focus:border-[#002B5C]" />
+                                    <input name="name" required value={form.name} onChange={onChange} className="w-full border border-[#E5E7EB] px-4 py-3 text-base md:text-sm outline-none focus:border-[#002B5C]" />
                                 </div>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div>
                                         <label className="overline !text-[10px] block mb-1.5">Phone *</label>
-                                        <input name="phone" required value={form.phone} onChange={onChange} className="w-full border border-[#E5E7EB] px-4 py-3 text-sm outline-none focus:border-[#002B5C]" />
+                                        <input name="phone" required value={form.phone} onChange={onChange} className="w-full border border-[#E5E7EB] px-4 py-3 text-base md:text-sm outline-none focus:border-[#002B5C]" />
                                     </div>
                                     <div>
                                         <label className="overline !text-[10px] block mb-1.5">Email *</label>
-                                        <input name="email" type="email" required value={form.email} onChange={onChange} className="w-full border border-[#E5E7EB] px-4 py-3 text-sm outline-none focus:border-[#002B5C]" />
+                                        <input name="email" type="email" required value={form.email} onChange={onChange} className="w-full border border-[#E5E7EB] px-4 py-3 text-base md:text-sm outline-none focus:border-[#002B5C]" />
                                     </div>
                                 </div>
                                 <div>
                                     <label className="overline !text-[10px] block mb-1.5">Role</label>
-                                    <select name="role" value={form.role} onChange={onChange} className="w-full border border-[#E5E7EB] px-4 py-3 text-sm outline-none focus:border-[#002B5C] bg-white">
+                                    <select name="role" value={form.role} onChange={onChange} className="w-full border border-[#E5E7EB] px-4 py-3 text-base md:text-sm outline-none focus:border-[#002B5C] bg-white">
                                         <option value="">General application</option>
                                         {jobs.map((j) => (
                                             <option key={j.id || j.title} value={j.title}>{j.title}</option>

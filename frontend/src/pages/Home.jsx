@@ -14,6 +14,7 @@ import {
     fetchCollection,
     mediaUrl,
 } from "../lib/api";
+import { responsiveImage } from "../lib/img";
 import { hiddenSet, resolveSectionOrder } from "../lib/sections";
 import EbookCta from "../components/EbookCta";
 import MarketingPopup from "../components/MarketingPopup";
@@ -310,7 +311,14 @@ export default function Home() {
 
                     <div className="lg:col-span-5 relative min-h-[420px] lg:min-h-[720px] bg-[#002B5C]">
                         <img
-                            src={mediaUrl(site.home_hero) || "https://images.unsplash.com/photo-1507842217343-583bb7270b66?auto=format&fit=crop&w=1600&q=85"}
+                            {...responsiveImage(
+                                mediaUrl(site.home_hero) ||
+                                    "https://images.unsplash.com/photo-1507842217343-583bb7270b66?auto=format&fit=crop&w=1600&q=85",
+                                // Full width until the hero splits into two
+                                // columns, then the right-hand 5 of 12.
+                                "(min-width: 1024px) 42vw, 100vw",
+                                true,
+                            )}
                             /* Decorative: a mood image behind a gradient, with the
                                headline beside it carrying the actual meaning. An
                                empty alt is the correct answer — a screen reader

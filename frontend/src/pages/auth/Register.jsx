@@ -34,7 +34,7 @@ export default function Register() {
     return (
         <div
             data-testid="register-page"
-            className="min-h-[calc(100vh-4rem)] grid grid-cols-1 md:grid-cols-2"
+            className="min-h-page grid grid-cols-1 md:grid-cols-2"
         >
             <div className="flex items-center justify-center px-6 md:px-16 py-16 md:order-1 order-2">
                 <div className="w-full max-w-sm">

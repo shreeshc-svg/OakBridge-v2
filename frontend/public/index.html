@@ -43,7 +43,24 @@
 
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@600&display=swap" rel="stylesheet" />
+        <!--
+          Every font the site actually uses, and nothing else.
+
+          Public Sans carries body text, .font-serif headings (700) and
+          .overline (600); the code uses 400, 500, 600 and 700 and no others,
+          so 300 and 800 were two files downloaded to style nothing. Source
+          Serif 4 was three more for .font-display, which no element uses. And
+          this line used to load Inter 600, referenced nowhere in the app at
+          all. Twelve weight files to six.
+
+          If you add font-light or font-extrabold anywhere, add the weight
+          here too — otherwise the browser will synthesise it, which looks
+          subtly wrong rather than obviously broken.
+        -->
+        <link
+            href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+            rel="stylesheet"
+        />
 
         <!-- Structured data: Organization -->
         <script type="application/ld+json">

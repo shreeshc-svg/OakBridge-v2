@@ -1,4 +1,11 @@
-@import url("https://fonts.googleapis.com/css2?family=Public+Sans:wght@300;400;500;600;700;800&family=Source+Serif+4:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap");
+/* Fonts are loaded from a <link> in public/index.html, not an @import here.
+ *
+ * An @import inside the stylesheet serialises the whole chain: the browser has
+ * to fetch this file, parse it, discover the import, fetch Google's CSS, parse
+ * that, and only then start on the font files — four round trips before a
+ * single glyph is requested, all of it blocking first paint. A <link> in the
+ * head is discovered by the preload scanner while the HTML is still streaming.
+ */
 
 @tailwind base;
 @tailwind components;
@@ -35,8 +42,14 @@ body {
     font-weight: 700;
 }
 
+/* Kept as a class, but no longer worth a webfont.
+ *
+ * Nothing in the app uses it — Source Serif 4 was downloading three weight
+ * files on every visit to style zero elements. The rule stays so that anything
+ * reaching for it still gets a deliberate serif rather than the browser
+ * default; it just comes from the system now. */
 .font-display {
-    font-family: "Source Serif 4", ui-serif, Georgia, serif;
+    font-family: ui-serif, Georgia, "Times New Roman", serif;
     font-weight: 600;
     letter-spacing: -0.01em;
 }
