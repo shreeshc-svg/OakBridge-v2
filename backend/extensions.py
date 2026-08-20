@@ -91,6 +91,18 @@ class UserPublic(BaseModel):
     role: str = "customer"
     created_at: str
     email_verified: bool = False
+    # Per-user section overrides, and they must be DECLARED here to survive.
+    #
+    # extra="ignore" means this model is a filter: anything it does not name is
+    # dropped from the response. So granting somebody an extra section wrote to
+    # Mongo, was honoured by the API — can_path reads the database — and then
+    # got stripped out of /auth/me on the way to their browser. The backend let
+    # them in; the sidebar never offered the door.
+    #
+    # None, not [], because the frontend distinguishes them: an array is an
+    # explicit override, and no array means "use the preset for their role".
+    # An empty list would read as "this person may see nothing".
+    sections: Optional[List[str]] = None
 
 
 class AuthResponse(BaseModel):
