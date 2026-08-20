@@ -3,10 +3,11 @@ import { fetchSettings, mediaUrl,
     adminUploadBookPreview,
     adminRemoveBookPreview,
 } from "../../lib/api";
-import { Plus, Pencil, Trash2, X, FileUp, FileCheck2, Upload, ImagePlus, Trash, Sparkles } from "lucide-react";
+import { Plus, Pencil, Trash2, X, FileUp, FileCheck2, Upload, ImagePlus, Trash, Sparkles, ArrowDownWideNarrow } from "lucide-react";
 import {
     adminBulkDeleteBooks,
     adminBulkDraftAuthorBios,
+    adminApplyReleaseOrder,
     adminBulkImportBooks,
     adminCreateBook,
     adminDeleteAllBooks,
@@ -130,6 +131,151 @@ function CoverUploader({ value, onChange, label = "Cover Image", testIdPrefix = 
                 data-testid={`${testIdPrefix}-url-input`}
                 className="mt-3 w-full border border-[#E5E7EB] bg-white px-3 py-2 text-xs outline-none focus:border-[#002B5C]"
             />
+        </div>
+    );
+}
+
+/**
+ * Release order — what the "Newest" sort actually runs on.
+ *
+ * Ranks live in release_order.json, matched to books by ISBN, and that file is
+ * a snapshot: every title added after it was generated matches nothing and
+ * carries no rank, which sorts it behind all 251 that do. The book looks like
+ * it never saved.
+ *
+ * Checked before it writes, always. This touches the order of the entire
+ * catalogue, and "251 matched, 3 will be placed by year" is a sentence someone
+ * can sanity-check in two seconds. Running it blind is not.
+ */
+function ReleaseOrderDialog({ onClose, onDone }) {
+    const [preview, setPreview] = useState(null);
+    const [busy, setBusy] = useState(false);
+
+    const run = async (dryRun) => {
+        setBusy(true);
+        try {
+            const res = await adminApplyReleaseOrder(dryRun);
+            setPreview(res);
+            if (!dryRun) {
+                toast.success(
+                    `${res.updated} ranked from the master, ${res.fallback_ranked} placed by year.`,
+                );
+                onDone?.();
+            }
+        } catch (err) {
+            toast.error(formatApiError(err));
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    useEffect(() => {
+        run(true); // the check runs on open — there is nothing to configure first
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    const Stat = ({ label, value, hint }) => (
+        <div className="border border-[#E5E7EB] bg-white px-3 py-2">
+            <div className="overline !text-[9px]">{label}</div>
+            <div className="font-serif text-2xl text-[#002B5C]">{value}</div>
+            {hint && <div className="text-[10px] text-[#4B5563] mt-0.5 leading-snug">{hint}</div>}
+        </div>
+    );
+
+    return (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-start justify-center p-4 overflow-y-auto">
+            <div
+                data-testid="release-order-dialog"
+                className="bg-white border border-[#002B5C] w-full max-w-2xl p-8 my-10"
+            >
+                <div className="overline">Catalogue order</div>
+                <h2 className="font-serif text-3xl mt-1 text-[#002B5C]">Release order</h2>
+                <p className="text-sm text-[#4B5563] mt-3">
+                    Sets which books count as new. The <strong>Newest</strong> sort and the
+                    homepage <strong>Hot Off the Press</strong> row both run on this, and a title
+                    without a place in it sorts behind every title that has one — however recently
+                    it was published.
+                </p>
+
+                {!preview ? (
+                    <p className="mt-6 font-mono text-xs text-[#4B5563]">Checking…</p>
+                ) : (
+                    <>
+                        <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-2">
+                            <Stat label="Books" value={preview.catalogue} />
+                            <Stat
+                                label="In the master"
+                                value={preview.matched}
+                                hint="Ranked by ISBN"
+                            />
+                            <Stat
+                                label="Not in it"
+                                value={preview.unmatched}
+                                hint="Added since it was made"
+                            />
+                            <Stat
+                                label="Placed by year"
+                                value={
+                                    preview.dry_run
+                                        ? preview.would_fallback_rank
+                                        : preview.fallback_ranked
+                                }
+                                hint="Slotted into their own year"
+                            />
+                        </div>
+
+                        {preview.unmatched > 0 && (
+                            <p className="text-[11px] text-[#4B5563] mt-3">
+                                Not in the master:{" "}
+                                {preview.unmatched_titles.map((t) => t.title).join(", ")}
+                                {preview.unmatched > preview.unmatched_titles.length && " …"}
+                            </p>
+                        )}
+
+                        {preview.top_new_arrivals_preview?.length > 0 && (
+                            <div className="mt-5">
+                                <div className="overline !text-[10px] mb-2">
+                                    Newest first, after this runs
+                                </div>
+                                <ol className="border border-[#E5E7EB]">
+                                    {preview.top_new_arrivals_preview.map((r) => (
+                                        <li
+                                            key={r.rank}
+                                            className="flex gap-3 px-3 py-1.5 text-[12px] border-b border-[#E5E7EB] last:border-0"
+                                        >
+                                            <span className="font-mono text-[#4B5563] w-6">
+                                                {r.rank}
+                                            </span>
+                                            <span className="font-mono text-[#4B5563] w-20">
+                                                {r.date}
+                                            </span>
+                                            <span className="text-[#002B5C] flex-1">{r.title}</span>
+                                        </li>
+                                    ))}
+                                </ol>
+                            </div>
+                        )}
+                    </>
+                )}
+
+                <div className="mt-7 flex items-center justify-end gap-3">
+                    <button
+                        onClick={onClose}
+                        disabled={busy}
+                        className="px-4 py-2 text-sm text-[#4B5563] hover:text-[#002B5C]"
+                    >
+                        Close
+                    </button>
+                    <button
+                        onClick={() => run(false)}
+                        disabled={busy || !preview}
+                        data-testid="release-order-apply"
+                        className="bg-[#002B5C] text-white px-5 py-2.5 text-sm font-medium hover:bg-[#001F42] disabled:opacity-50"
+                    >
+                        {busy ? "Working…" : "Apply"}
+                    </button>
+                </div>
+            </div>
         </div>
     );
 }
@@ -839,6 +985,7 @@ export default function AdminBooks() {
     const [cats, setCats] = useState([]);
     const [editing, setEditing] = useState(null); // object or "new"
     const [csvOpen, setCsvOpen] = useState(false);
+    const [releaseOrderOpen, setReleaseOrderOpen] = useState(false);
     const [loading, setLoading] = useState(true);
     const [query, setQuery] = useState("");
     const [catFilter, setCatFilter] = useState("all");
@@ -1002,6 +1149,14 @@ export default function AdminBooks() {
                         <Upload size={14} strokeWidth={1.5} /> Import CSV
                     </button>
                     <button
+                        onClick={() => setReleaseOrderOpen(true)}
+                        data-testid="admin-release-order-button"
+                        title="Fix which books count as new — the Newest sort runs on this"
+                        className="inline-flex items-center gap-2 border border-[#002B5C] text-[#002B5C] px-4 py-2 text-sm hover:bg-[#F5F7FA]"
+                    >
+                        <ArrowDownWideNarrow size={14} strokeWidth={1.5} /> Release order
+                    </button>
+                    <button
                         onClick={onBulkDraftBios}
                         disabled={bulkDraftingBios}
                         data-testid="admin-bulk-draft-bios-button"
@@ -1151,6 +1306,12 @@ export default function AdminBooks() {
                     categories={cats}
                     onClose={() => setEditing(null)}
                     onSaved={load}
+                />
+            )}
+            {releaseOrderOpen && (
+                <ReleaseOrderDialog
+                    onClose={() => setReleaseOrderOpen(false)}
+                    onDone={load}
                 />
             )}
             {csvOpen && (

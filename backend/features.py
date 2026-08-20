@@ -2155,6 +2155,10 @@ async def apply_release_order(dry_run: bool = True):
         {"rank": e["rank"], "date": e["publication_date"], "title": b.get("title")}
         for b, e in sorted(matched, key=lambda x: x[1]["rank"])[:10]
     ]
+    # Counted before the dry-run return, or the preview would report everything
+    # the run is about to do EXCEPT the part the operator is running it for.
+    would_fallback = sum(1 for b in unmatched_books if b.get("release_rank") is None)
+
     result = {
         "catalogue": len(books),
         "order_entries": len(order),
@@ -2162,6 +2166,7 @@ async def apply_release_order(dry_run: bool = True):
         "newly_ranked": newly_ranked,
         "unmatched": len(unmatched),
         "unmatched_titles": unmatched[:20],
+        "would_fallback_rank": would_fallback,
         "top_new_arrivals_preview": preview,
         "dry_run": bool(dry_run),
     }

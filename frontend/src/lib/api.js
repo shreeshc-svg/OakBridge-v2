@@ -220,6 +220,16 @@ export const adminUploadEbookPriceList = (file, dryRun = false) => {
         .then((r) => r.data);
 };
 
+/**
+ * Stamp release_rank onto every book from release_order.json.
+ *
+ * This is what the "Newest" and "New Arrivals" sorts run on, so an unranked
+ * title never surfaces as new however recent it is. dryRun reports without
+ * writing.
+ */
+export const adminApplyReleaseOrder = (dryRun = true) =>
+    api.post(`/admin/apply-release-order?dry_run=${dryRun ? "true" : "false"}`).then((r) => r.data);
+
 // Asks Razorpay what it actually holds for an unpaid order. Can only move an
 // order forward to paid — there is no path in it that marks anything failed.
 export const adminReconcilePayment = (id) =>
