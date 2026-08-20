@@ -620,15 +620,47 @@ async def send_admin_failed_order(order: dict, reason: str = "") -> bool:
 
 SITE_URL = os.environ.get("SITE_URL", "").rstrip("/")
 
+# Where uploaded media is actually reachable from outside.
+#
+# Covers are stored as "/api/files/…", which the browser resolves against the
+# site it is already on. An email has no such context: a relative src is not a
+# URL at all to a mail client, and every cover renders as a broken-image icon.
+#
+# It has to be the API host, not SITE_URL. Vercel rewrites everything except
+# /sitemap.xml to the SPA shell, so https://www.oakbridge.in/api/files/x.jpg
+# returns HTML, not a JPEG — which would look identical to this bug and be
+# harder to spot.
+PUBLIC_API_URL = (
+    os.environ.get("PUBLIC_API_URL") or "https://api.oakbridge.in"
+).rstrip("/")
+
+
+def media_url(u: str) -> str:
+    """Absolute URL for an image about to be put in an email.
+
+    Leaves anything already absolute alone — several covers are Unsplash URLs,
+    and the seed data is full of them.
+    """
+    u = (u or "").strip()
+    if not u:
+        return ""
+    if u.startswith("http://") or u.startswith("https://"):
+        return u
+    if u.startswith("/"):
+        return f"{PUBLIC_API_URL}{u}"
+    # A bare filename is not something we can resolve, and a guess would just
+    # be a different broken image.
+    return ""
+
 
 def render_back_in_stock_html(book: dict) -> str:
     title = (book.get("title") or "A title you wanted").replace("<", "&lt;").replace(">", "&gt;")
     author = (book.get("author") or "").replace("<", "&lt;").replace(">", "&gt;")
     price = _money(book.get("price", 0))
-    cover = book.get("cover_image") or ""
+    cover = media_url(book.get("cover_image"))
     book_url = f"{SITE_URL}/books/{book.get('id','')}" if SITE_URL else "#"
     cover_cell = (
-        f'<img src="{cover}" alt="" width="96" style="width:96px;border:1px solid #E5E7EB;display:block;">'
+        f'<img src="{cover}" alt="{title}" width="96" style="width:96px;border:1px solid #E5E7EB;display:block;">'
         if cover else ""
     )
     return f"""\
@@ -846,8 +878,16 @@ def render_cart_reminder_html(name: str, items: list, stage: str) -> str:
     for it in (items or [])[:6]:
         title = (it.get("title") or "A title").replace("<", "&lt;").replace(">", "&gt;")
         qty = it.get("quantity", 1)
-        cover = it.get("cover_image") or ""
-        cell = f'<img src="{cover}" width="60" style="width:60px;border:1px solid #E5E7EB;display:block;">' if cover else ""
+        cover = media_url(it.get("cover_image"))
+        # alt carries the title: images are blocked by default in Outlook and in
+        # Gmail for unknown senders, and "" would leave a nameless grey box
+        # where the book should be.
+        cell = (
+            f'<img src="{cover}" alt="{title}" width="60" '
+            f'style="width:60px;border:1px solid #E5E7EB;display:block;">'
+            if cover
+            else ""
+        )
         rows.append(
             f'<tr>'
             f'<td style="padding:12px 0;width:76px;">{cell}</td>'

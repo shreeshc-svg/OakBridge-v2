@@ -41,6 +41,13 @@ services:
         sync: false
       - key: SITE_URL               # https://oakbridge.in
         sync: false
+      # Public base for images in emails. Book covers are stored as
+      # "/api/files/…" and a mail client cannot resolve a relative src, so
+      # every cover renders broken without this. Must be the API host: Vercel
+      # rewrites everything but /sitemap.xml to the SPA shell, so the same path
+      # under SITE_URL returns HTML rather than a JPEG.
+      - key: PUBLIC_API_URL
+        value: https://api.oakbridge.in
       - key: ADMIN_EMAIL
         sync: false
       - key: ADMIN_PASSWORD         # use the strong value from DEPLOYMENT.md
