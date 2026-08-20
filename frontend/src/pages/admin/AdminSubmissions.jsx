@@ -6,6 +6,8 @@ import {
     formatApiError,
 } from "../../lib/api";
 import { toast } from "sonner";
+import { useAuth } from "../../context/AuthContext";
+import { canDelete } from "../../lib/rbac";
 import AdminToolbar from "../../components/AdminToolbar";
 import { Trash2 } from "lucide-react";
 import ExportButton from "../../components/admin/ExportButton";
@@ -21,6 +23,10 @@ const STATUS_COLORS = {
 };
 
 export default function AdminSubmissions() {
+    // Deleting is admin-only; the server refuses it either way, this just
+    // keeps a button off the screen that would only say no.
+    const { user: me } = useAuth();
+    const mayDelete = canDelete(me);
     const [items, setItems] = useState([]);
     const [filter, setFilter] = useState("all");
     const [q, setQ] = useState("");
@@ -160,19 +166,21 @@ export default function AdminSubmissions() {
                                     </option>
                                 ))}
                             </select>
-                            <button
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    e.preventDefault();
-                                    removeSubmission(s);
-                                }}
-                                data-testid={`delete-submission-${s.id}`}
-                                title="Delete this submission"
-                                className="ml-2 inline-flex items-center gap-1.5 text-xs font-medium border border-[#CC0033] text-[#CC0033] px-3 py-2 hover:bg-[#CC0033]/5 whitespace-nowrap"
-                            >
-                                <Trash2 size={12} strokeWidth={1.75} />
-                                Delete
-                            </button>
+                            {mayDelete && (
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        e.preventDefault();
+                                        removeSubmission(s);
+                                    }}
+                                    data-testid={`delete-submission-${s.id}`}
+                                    title="Delete this submission"
+                                    className="ml-2 inline-flex items-center gap-1.5 text-xs font-medium border border-[#CC0033] text-[#CC0033] px-3 py-2 hover:bg-[#CC0033]/5 whitespace-nowrap"
+                                >
+                                    <Trash2 size={12} strokeWidth={1.75} />
+                                    Delete
+                                </button>
+                            )}
                         </summary>
                         <div className="px-5 pb-5 pt-1 border-t border-[#E5E7EB]">
                             <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3 text-sm">

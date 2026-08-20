@@ -316,6 +316,18 @@ async def require_admin(request: Request, user: dict = Depends(get_current_user)
             status_code=403,
             detail="You don't have access to this section. Ask a superadmin to enable it.",
         )
+    # Deleting is reserved to superadmin and the legacy admin role.
+    #
+    # Checked on the METHOD, here, rather than on each of the nine endpoints
+    # that currently delete something. A per-endpoint decorator protects the
+    # nine that exist; this protects the tenth, written by somebody who has
+    # never read this file. Access to a section still means read and write —
+    # a fulfilment user can edit an order, they simply cannot destroy one.
+    if request.method == "DELETE" and not rbac.is_superadmin(role):
+        raise HTTPException(
+            status_code=403,
+            detail="Only an admin can delete. Ask a superadmin if this needs removing.",
+        )
     return user
 
 

@@ -24,6 +24,8 @@ import {
     formatINR,
 } from "../../lib/api";
 import { toast } from "sonner";
+import { useAuth } from "../../context/AuthContext";
+import { canDelete } from "../../lib/rbac";
 
 const BLANK = {
     title: "",
@@ -417,6 +419,9 @@ function CsvImportDialog({ onClose, onDone }) {
 }
 
 function PreviewManager({ bookId, pageCount, filename, onChange }) {
+    // Removing an attached file is a DELETE; admin-only like the rest.
+    const { user: me } = useAuth();
+    const mayDelete = canDelete(me);
     const [uploading, setUploading] = useState(false);
     const [count, setCount] = useState(pageCount || 0);
     const [currentName, setCurrentName] = useState(filename || "");
@@ -478,13 +483,15 @@ function PreviewManager({ bookId, pageCount, filename, onChange }) {
                         {uploading ? "Rendering…" : "Replace"}
                         <input type="file" accept="application/pdf,.pdf" onChange={onFile} className="hidden" />
                     </label>
-                    <button
-                        type="button"
-                        onClick={onRemove}
-                        className="text-xs border border-[#E5E7EB] px-3 py-2 hover:bg-white text-[#CC0033]"
-                    >
-                        Remove
-                    </button>
+                    {mayDelete && (
+                        <button
+                            type="button"
+                            onClick={onRemove}
+                            className="text-xs border border-[#E5E7EB] px-3 py-2 hover:bg-white text-[#CC0033]"
+                        >
+                            Remove
+                        </button>
+                    )}
                 </div>
             ) : (
                 <div className="mt-3">
@@ -500,6 +507,9 @@ function PreviewManager({ bookId, pageCount, filename, onChange }) {
 }
 
 function EbookManager({ bookId, hasEbook, filename, onChange }) {
+    // Removing an attached file is a DELETE; admin-only like the rest.
+    const { user: me } = useAuth();
+    const mayDelete = canDelete(me);
     const [uploading, setUploading] = useState(false);
     const [currentHas, setCurrentHas] = useState(hasEbook);
     const [currentName, setCurrentName] = useState(filename || "");
@@ -566,14 +576,16 @@ function EbookManager({ bookId, hasEbook, filename, onChange }) {
                             data-testid="ebook-replace-input"
                         />
                     </label>
-                    <button
-                        type="button"
-                        onClick={onRemove}
-                        data-testid="ebook-remove-button"
-                        className="text-xs border border-[#E5E7EB] px-3 py-2 hover:bg-[#F5F7FA] text-[#CC0033]"
-                    >
-                        Remove
-                    </button>
+                    {mayDelete && (
+                        <button
+                            type="button"
+                            onClick={onRemove}
+                            data-testid="ebook-remove-button"
+                            className="text-xs border border-[#E5E7EB] px-3 py-2 hover:bg-[#F5F7FA] text-[#CC0033]"
+                        >
+                            Remove
+                        </button>
+                    )}
                 </div>
             ) : (
                 <div className="mt-3">
@@ -994,6 +1006,11 @@ export default function AdminBooks() {
     const [deleteAllOpen, setDeleteAllOpen] = useState(false);
     const [bulkDraftingBios, setBulkDraftingBios] = useState(false);
 
+    // Deleting is admin-only; the server refuses it either way, this just
+    // keeps a button off the screen that would only say no.
+    const { user: me } = useAuth();
+    const mayDelete = canDelete(me);
+
     const load = () => {
         setLoading(true);
         fetchBooks({ limit: 500 })
@@ -1286,13 +1303,15 @@ export default function AdminBooks() {
                                     >
                                         <Pencil size={12} strokeWidth={1.5} /> Edit
                                     </button>
-                                    <button
-                                        onClick={() => onDelete(b.id, b.title)}
-                                        data-testid={`admin-delete-book-${b.id}`}
-                                        className="inline-flex items-center gap-1 text-xs px-2 py-1 hover:bg-[#F5F7FA] text-[#CC0033]"
-                                    >
-                                        <Trash2 size={12} strokeWidth={1.5} /> Delete
-                                    </button>
+                                    {mayDelete && (
+                                        <button
+                                            onClick={() => onDelete(b.id, b.title)}
+                                            data-testid={`admin-delete-book-${b.id}`}
+                                            className="inline-flex items-center gap-1 text-xs px-2 py-1 hover:bg-[#F5F7FA] text-[#CC0033]"
+                                        >
+                                            <Trash2 size={12} strokeWidth={1.5} /> Delete
+                                        </button>
+                                    )}
                                 </td>
                             </tr>
                         ))}

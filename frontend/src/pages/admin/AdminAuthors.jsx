@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { useAuth } from "../../context/AuthContext";
+import { canDelete } from "../../lib/rbac";
 import { Eye, EyeOff, Trash2, Plus, ArrowUp, ArrowDown, Upload, Save, X } from "lucide-react";
 import {
     adminListAuthors,
@@ -143,20 +145,26 @@ function AuthorRow({ a, index, count, mode, onChange, onSave, onDelete, onMove, 
                 >
                     {a.enabled === false ? <EyeOff size={15} strokeWidth={1.5} /> : <Eye size={15} strokeWidth={1.5} />}
                 </button>
-                <button
-                    type="button"
-                    onClick={onDelete}
-                    aria-label="Delete author"
-                    className="p-1.5 text-[#4B5563] hover:text-[#CC0033]"
-                >
-                    <Trash2 size={15} strokeWidth={1.5} />
-                </button>
+                {onDelete && (
+                    <button
+                        type="button"
+                        onClick={onDelete}
+                        aria-label="Delete author"
+                        className="p-1.5 text-[#4B5563] hover:text-[#CC0033]"
+                    >
+                        <Trash2 size={15} strokeWidth={1.5} />
+                    </button>
+                )}
             </div>
         </div>
     );
 }
 
 export default function AdminAuthors() {
+    // Deleting is admin-only; the server refuses it either way, this just
+    // keeps a button off the screen that would only say no.
+    const { user: me } = useAuth();
+    const mayDelete = canDelete(me);
     const [authors, setAuthors] = useState(null);
     const [mode, setMode] = useState("alpha");
     const [dirty, setDirty] = useState({});   // id -> true when edited but unsaved
@@ -380,7 +388,7 @@ export default function AdminAuthors() {
                         dirty={!!dirty[a.id]}
                         onChange={(k, v) => change(a.id, k, v)}
                         onSave={() => saveOne(a)}
-                        onDelete={() => del(a)}
+                        onDelete={mayDelete ? () => del(a) : null}
                         onMove={(dir) => move(authors.indexOf(a), dir)}
                     />
                 ))}

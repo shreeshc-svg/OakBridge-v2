@@ -1,9 +1,15 @@
 import React, { useEffect, useRef, useState } from "react";
 import { UploadCloud, Trash2, Copy } from "lucide-react";
 import { toast } from "sonner";
+import { useAuth } from "../../context/AuthContext";
+import { canDelete } from "../../lib/rbac";
 import { adminListMedia, adminUploadMedia, adminDeleteMedia, mediaUrl } from "../../lib/api";
 
 export default function AdminMedia() {
+    // Deleting is admin-only; the server refuses it either way, this just
+    // keeps a button off the screen that would only say no.
+    const { user: me } = useAuth();
+    const mayDelete = canDelete(me);
     const [media, setMedia] = useState([]);
     const [uploading, setUploading] = useState(false);
     const [dragOver, setDragOver] = useState(false);
@@ -111,9 +117,11 @@ export default function AdminMedia() {
                                         <button onClick={() => copy(m.url)} className="inline-flex items-center gap-1 text-xs text-[#002B5C] hover:text-[#CC0033]">
                                             <Copy size={12} strokeWidth={1.5} /> Copy URL
                                         </button>
-                                        <button onClick={() => onDelete(m.id)} className="text-[#CC0033] hover:opacity-70 p-1" aria-label="Delete">
-                                            <Trash2 size={14} strokeWidth={1.5} />
-                                        </button>
+                                        {mayDelete && (
+                                            <button onClick={() => onDelete(m.id)} className="text-[#CC0033] hover:opacity-70 p-1" aria-label="Delete">
+                                                <Trash2 size={14} strokeWidth={1.5} />
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
                             </div>

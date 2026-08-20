@@ -9,6 +9,8 @@ import {
     formatINR,
 } from "../../lib/api";
 import { toast } from "sonner";
+import { useAuth } from "../../context/AuthContext";
+import { canDelete } from "../../lib/rbac";
 import AdminToolbar from "../../components/AdminToolbar";
 
 const BLANK = {
@@ -215,6 +217,10 @@ function CouponForm({ initial, onClose, onSaved }) {
 }
 
 export default function AdminCoupons() {
+    // Deleting is admin-only; the server refuses it either way, this just
+    // keeps a button off the screen that would only say no.
+    const { user: me } = useAuth();
+    const mayDelete = canDelete(me);
     const [items, setItems] = useState([]);
     const [editing, setEditing] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -349,13 +355,15 @@ export default function AdminCoupons() {
                             >
                                 <Pencil size={12} strokeWidth={1.5} /> Edit
                             </button>
-                            <button
-                                onClick={() => onDelete(c.id, c.code)}
-                                data-testid={`delete-coupon-${c.code}`}
-                                className="inline-flex items-center gap-1 text-xs px-3 py-2 border border-[#E5E7EB] hover:bg-[#F5F7FA] text-[#CC0033]"
-                            >
-                                <Trash2 size={12} strokeWidth={1.5} /> Delete
-                            </button>
+                            {mayDelete && (
+                                <button
+                                    onClick={() => onDelete(c.id, c.code)}
+                                    data-testid={`delete-coupon-${c.code}`}
+                                    className="inline-flex items-center gap-1 text-xs px-3 py-2 border border-[#E5E7EB] hover:bg-[#F5F7FA] text-[#CC0033]"
+                                >
+                                    <Trash2 size={12} strokeWidth={1.5} /> Delete
+                                </button>
+                            )}
                         </div>
                     </div>
                 ))}

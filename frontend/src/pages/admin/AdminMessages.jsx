@@ -1,11 +1,17 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { useAuth } from "../../context/AuthContext";
+import { canDelete } from "../../lib/rbac";
 import { Trash2, CornerUpLeft } from "lucide-react";
 import { adminListMessages, adminDeleteMessage, formatApiError } from "../../lib/api";
 import AdminToolbar from "../../components/AdminToolbar";
 import ExportButton from "../../components/admin/ExportButton";
 
 export default function AdminMessages() {
+    // Deleting is admin-only; the server refuses it either way, this just
+    // keeps a button off the screen that would only say no.
+    const { user: me } = useAuth();
+    const mayDelete = canDelete(me);
     const [msgs, setMsgs] = useState([]);
     const [loading, setLoading] = useState(true);
     const [busy, setBusy] = useState(null);
@@ -123,14 +129,16 @@ export default function AdminMessages() {
                             >
                                 <CornerUpLeft size={12} strokeWidth={1.5} /> Reply
                             </a>
-                            <button
-                                onClick={() => onDelete(m.id)}
-                                disabled={busy === m.id}
-                                data-testid={`message-delete-${m.id}`}
-                                className="inline-flex items-center gap-1.5 border border-[#E5E7EB] text-[#CC0033] px-3 py-1.5 text-xs font-medium hover:border-[#CC0033] disabled:opacity-50"
-                            >
-                                <Trash2 size={12} strokeWidth={1.5} /> {busy === m.id ? "…" : "Delete"}
-                            </button>
+                            {mayDelete && (
+                                <button
+                                    onClick={() => onDelete(m.id)}
+                                    disabled={busy === m.id}
+                                    data-testid={`message-delete-${m.id}`}
+                                    className="inline-flex items-center gap-1.5 border border-[#E5E7EB] text-[#CC0033] px-3 py-1.5 text-xs font-medium hover:border-[#CC0033] disabled:opacity-50"
+                                >
+                                    <Trash2 size={12} strokeWidth={1.5} /> {busy === m.id ? "…" : "Delete"}
+                                </button>
+                            )}
                         </div>
                     </div>
                 ))}

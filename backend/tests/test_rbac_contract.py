@@ -94,5 +94,34 @@ check(
 )
 print(f"      {len(py_sections)} sections, identical on both sides")
 
+# ---- deletion is admin-only -------------------------------------------------
+# Enforced on the METHOD in require_admin, not per endpoint, so an endpoint
+# added tomorrow is covered without anybody remembering to cover it.
+ext = open(os.path.join(BACKEND, "extensions.py"), encoding="utf-8").read()
+req = re.search(r"async def require_admin\(.*?\n    return user", ext, re.S)
+
+print("\n-- only admin and superadmin may delete --")
+check("require_admin exists", req is not None)
+body = req.group(0) if req else ""
+check(
+    'it refuses DELETE for anyone who is not a superadmin',
+    'request.method == "DELETE"' in body and "is_superadmin" in body,
+)
+check(
+    "the check is inside require_admin, which both admin routers depend on",
+    ext.count("dependencies=[Depends(require_admin)]") >= 1
+    and "dependencies=[Depends(require_admin)]"
+    in open(os.path.join(BACKEND, "features.py"), encoding="utf-8").read(),
+)
+
+rbac_src = open(os.path.join(BACKEND, "rbac.py"), encoding="utf-8").read()
+su = re.search(r"SUPERADMIN_ROLES\s*=\s*frozenset\(\{([^}]*)\}\)", rbac_src)
+roles = set(re.findall(r'"([a-z]+)"', su.group(1) if su else ""))
+check("that tier is exactly superadmin + the legacy admin", roles == {"superadmin", "admin"},
+      f"got {sorted(roles)}")
+
+check("the frontend hides the buttons for the same tier",
+      "export const canDelete" in js and "isSuperadmin(user?.role)" in js)
+
 print("\n" + (f"{fail} FAILED" if fail else "all assertions passed"))
 sys.exit(1 if fail else 0)

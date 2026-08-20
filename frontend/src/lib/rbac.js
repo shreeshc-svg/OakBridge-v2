@@ -118,6 +118,19 @@ export const sectionForPath = (path) => {
 };
 
 /** A user's sections: explicit list if set, else the role preset. */
+/**
+ * May this person delete records?
+ *
+ * Only superadmin and the legacy admin role, whatever sections anybody else
+ * holds. Access to a section means read and write: a fulfilment user edits an
+ * order, an editor rewrites a book — neither destroys one.
+ *
+ * The server enforces the same rule on the request method, so this is only
+ * about not showing somebody a button that would refuse them. It is not the
+ * protection.
+ */
+export const canDelete = (user) => isSuperadmin(user?.role);
+
 export const effectiveSections = (user) => {
     if (!user) return [];
     if (isSuperadmin(user.role)) return SECTIONS;
