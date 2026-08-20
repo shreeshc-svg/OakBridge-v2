@@ -1,6 +1,15 @@
 [
   {
     "rank": 1,
+    "isbn": "9788199624542",
+    "publication_date": "2026-08-19",
+    "year": 2026,
+    "month": 8,
+    "in_catalogue": true,
+    "title": "Sacred Tiger Tales: From Vedic Hymns to Tryst with Stripes"
+  },
+  {
+    "rank": 2,
     "isbn": "9788199888159",
     "publication_date": "2026-07-01",
     "year": 2026,
@@ -9,7 +18,7 @@
     "title": "Legal Aptitude & Reasoning LA/LR  2/e (2026-27)"
   },
   {
-    "rank": 2,
+    "rank": 3,
     "isbn": "9788199888111",
     "publication_date": "2026-07-01",
     "year": 2026,
@@ -18,7 +27,7 @@
     "title": "In-House Matters"
   },
   {
-    "rank": 3,
+    "rank": 4,
     "isbn": "9788199624559",
     "publication_date": "2026-05-01",
     "year": 2026,
@@ -27,7 +36,7 @@
     "title": "Climate Justice"
   },
   {
-    "rank": 4,
+    "rank": 5,
     "isbn": "9788199888173",
     "publication_date": "2026-05-01",
     "year": 2026,
@@ -36,7 +45,7 @@
     "title": "Corporate Law Referencer 12/e"
   },
   {
-    "rank": 5,
+    "rank": 6,
     "isbn": "9788199624573",
     "publication_date": "2026-03-02",
     "year": 2026,
@@ -45,7 +54,7 @@
     "title": "Master Guide to NTA UGC NET | SET | JRF | PhD Paper 1 (Teaching and Research Aptitude)"
   },
   {
-    "rank": 6,
+    "rank": 7,
     "isbn": "9788199624566",
     "publication_date": "2026-03-01",
     "year": 2026,
@@ -54,7 +63,7 @@
     "title": "In an era where financial returns are no longer the sole metric of success, stakeholder management has evolved from a “soft skill” into a strategic muscle and a leadership imperative.\nStakeholder Management : A Board and C-Suite Level Guide to Engagement, Governance and Sustainable Value Creation serves as a practical roadmap for C-suite executives, board members, and professionals to navigate this complex landscape. Moving beyond simple compliance checklists, this book is developed to be a deeply insightful guide to elevating stakeholder voices within corporate decision-making.\nThis actionable toolkit equips leaders with:\n• Proven Frameworks: Master strategic navigation using models to prioritize engagement eﬀectively.\n• Real-World Intelligence: Gain ringside insights through case studies of industry leaders.\n• Conflict Resolution: Learn to transform friction into “forward motion” using structured escalation ladders.\n• Future-Proofing: Prepare for emerging trends such as AI-driven engagement, Web3, and Stakeholder Impact Tokens (SITs).\nWhether you are integrating stakeholder insights into ESG reporting or managing high-stakes reputational risks, this guide ensures that trust remains your North Star."
   },
   {
-    "rank": 7,
+    "rank": 8,
     "isbn": "9789389176803",
     "publication_date": "2026-03-01",
     "year": 2026,
@@ -63,7 +72,7 @@
     "title": "A Treatise and Commentary on Digital Personal Data Protection Act, 2023"
   },
   {
-    "rank": 8,
+    "rank": 9,
     "isbn": "9788199888142",
     "publication_date": "2026-03-01",
     "year": 2026,
@@ -72,7 +81,7 @@
     "title": "Insights into the Protection of Children from Sexual Offences Act, 2012"
   },
   {
-    "rank": 9,
+    "rank": 10,
     "isbn": "9788198874023",
     "publication_date": "2026-03-01",
     "year": 2026,
@@ -81,7 +90,7 @@
     "title": "ARTIFICIAL INTELLIGENCE AND INTELLECTUAL PROPERTY RIGHTS Navigating Emerging Challenges"
   },
   {
-    "rank": 10,
+    "rank": 11,
     "isbn": "9788199624511",
     "publication_date": "2026-02-25",
     "year": 2026,
@@ -90,7 +99,7 @@
     "title": "Sashakt Nari Viksit Bharat – Women-Led Development @ 2047"
   },
   {
-    "rank": 11,
+    "rank": 12,
     "isbn": "9788199624597",
     "publication_date": "2026-02-12",
     "year": 2026,
@@ -99,7 +108,7 @@
     "title": "The Union of States: Contemporary Political History of India’s Federal Challenges"
   },
   {
-    "rank": 12,
+    "rank": 13,
     "isbn": "9788199305229",
     "publication_date": "2026-01-26",
     "year": 2026,
@@ -108,7 +117,7 @@
     "title": "Compulsory English for IAS (Mains) Examination 6/e"
   },
   {
-    "rank": 13,
+    "rank": 14,
     "isbn": "9788199305212",
     "publication_date": "2026-01-26",
     "year": 2026,
@@ -117,7 +126,7 @@
     "title": "Mastering the Essay Paper"
   },
   {
-    "rank": 14,
+    "rank": 15,
     "isbn": "9788199305274",
     "publication_date": "2026-01-26",
     "year": 2026,
@@ -126,7 +135,7 @@
     "title": "International Relations and Foreign Policy of India"
   },
   {
-    "rank": 15,
+    "rank": 16,
     "isbn": "9789389176865",
     "publication_date": "2026-01-26",
     "year": 2026,
@@ -135,7 +144,7 @@
     "title": "Day 1 to One Day"
   },
   {
-    "rank": 16,
+    "rank": 17,
     "isbn": "9788198661166",
     "publication_date": "2026-01-26",
     "year": 2026,
@@ -144,7 +153,7 @@
     "title": "Fun-in-Law"
   },
   {
-    "rank": 17,
+    "rank": 18,
     "isbn": "9788199305243",
     "publication_date": "2026-01-26",
     "year": 2026,
@@ -153,7 +162,7 @@
     "title": "A Treatise on the Black Money Act of India – Law Practice & Jurisprudence"
   },
   {
-    "rank": 18,
+    "rank": 19,
     "isbn": "9788199624528",
     "publication_date": "2026-01-26",
     "year": 2026,
@@ -162,7 +171,7 @@
     "title": "Perspectives from and within India and its Neighbourhood"
   },
   {
-    "rank": 19,
+    "rank": 20,
     "isbn": "9789395764599",
     "publication_date": "2025-12-18",
     "year": 2025,
@@ -171,7 +180,7 @@
     "title": "The Law Relating to The Code on Social Security, 2020: With Draft Central Rules, Notifications and Judgments"
   },
   {
-    "rank": 20,
+    "rank": 21,
     "isbn": "9789395764568",
     "publication_date": "2025-12-18",
     "year": 2025,
@@ -180,7 +189,7 @@
     "title": "The Law Relating to The Occupational Safety, Health and Working Conditions Code, 2020: With Draft Central Rules, Notifications and Judgments"
   },
   {
-    "rank": 21,
+    "rank": 22,
     "isbn": "9789395764575",
     "publication_date": "2025-12-18",
     "year": 2025,
@@ -189,7 +198,7 @@
     "title": "The Law Relating to The Industrial Relations Code, 2020: With Draft Central Rules, Orders, Notifications and Judgments"
   },
   {
-    "rank": 22,
+    "rank": 23,
     "isbn": "9789395764582",
     "publication_date": "2025-12-18",
     "year": 2025,
@@ -198,7 +207,7 @@
     "title": "The Law Relating to The Code on Wages, 2019: With Draft Central Rules, Notifications and Judgments"
   },
   {
-    "rank": 23,
+    "rank": 24,
     "isbn": "9788199305236",
     "publication_date": "2025-12-11",
     "year": 2025,
@@ -207,7 +216,7 @@
     "title": "Pet Care Made Easy"
   },
   {
-    "rank": 24,
+    "rank": 25,
     "isbn": "9788199305267",
     "publication_date": "2025-12-11",
     "year": 2025,
@@ -216,7 +225,7 @@
     "title": "Tales of Wagging Tails"
   },
   {
-    "rank": 25,
+    "rank": 26,
     "isbn": "9788199305298",
     "publication_date": "2025-12-11",
     "year": 2025,
@@ -225,7 +234,7 @@
     "title": "In Service of the Nation: Reflections of a Bureaucrat"
   },
   {
-    "rank": 26,
+    "rank": 27,
     "isbn": "9788199305205",
     "publication_date": "2025-11-17",
     "year": 2025,
@@ -234,7 +243,7 @@
     "title": "Guardians of the Boardroom: A Strategic Guide To Boardroom Excellence, Ethical Leadership, And Risk Oversight"
   },
   {
-    "rank": 27,
+    "rank": 28,
     "isbn": "9788198874030",
     "publication_date": "2025-09-29",
     "year": 2025,
@@ -243,7 +252,7 @@
     "title": "Mastering Governance, Leadership, & Strategic Storytelling"
   },
   {
-    "rank": 28,
+    "rank": 29,
     "isbn": "9788198874092",
     "publication_date": "2025-09-22",
     "year": 2025,
@@ -252,7 +261,7 @@
     "title": "Insight into the Promotion and Regulation of Online Gaming Act, 2025"
   },
   {
-    "rank": 29,
+    "rank": 30,
     "isbn": "9788198874085",
     "publication_date": "2025-09-18",
     "year": 2025,
@@ -261,7 +270,7 @@
     "title": "Balance Sheet of the Soul (2/e)"
   },
   {
-    "rank": 30,
+    "rank": 31,
     "isbn": "9788198661128",
     "publication_date": "2025-09-11",
     "year": 2025,
@@ -270,7 +279,7 @@
     "title": "In Search of Courtroom Ethics"
   },
   {
-    "rank": 31,
+    "rank": 32,
     "isbn": "9788198874009",
     "publication_date": "2025-09-10",
     "year": 2025,
@@ -279,7 +288,7 @@
     "title": "Bailed Out! Precept & Practice of Bail Jurisprudence"
   },
   {
-    "rank": 32,
+    "rank": 33,
     "isbn": "9788198874054",
     "publication_date": "2025-09-02",
     "year": 2025,
@@ -288,7 +297,7 @@
     "title": "Handbook for Executive Magistrates"
   },
   {
-    "rank": 33,
+    "rank": 34,
     "isbn": "9788198661135",
     "publication_date": "2025-08-05",
     "year": 2025,
@@ -297,7 +306,7 @@
     "title": "Unfiltered and Unapologetic"
   },
   {
-    "rank": 34,
+    "rank": 35,
     "isbn": "9788198661111",
     "publication_date": "2025-07-30",
     "year": 2025,
@@ -306,7 +315,7 @@
     "title": "Environment and Ecology With Disaster Management 5/e"
   },
   {
-    "rank": 35,
+    "rank": 36,
     "isbn": "9788198751256",
     "publication_date": "2025-05-20",
     "year": 2025,
@@ -315,7 +324,7 @@
     "title": "Insights into The Unified Waqf Management, Empowerment, Efficiency and Development Act, 1995"
   },
   {
-    "rank": 36,
+    "rank": 37,
     "isbn": "9788198751225",
     "publication_date": "2025-05-20",
     "year": 2025,
@@ -324,7 +333,7 @@
     "title": "A Commentary on the Sexual Harassment of Women at Workplace (Prevention, Prohibition and Redressal) Act, 2013"
   },
   {
-    "rank": 37,
+    "rank": 38,
     "isbn": "9788196413513",
     "publication_date": "2025-05-20",
     "year": 2025,
@@ -333,7 +342,7 @@
     "title": "Legal Aptitude & Reasoning LA/LR"
   },
   {
-    "rank": 38,
+    "rank": 39,
     "isbn": "9788198661159",
     "publication_date": "2025-05-20",
     "year": 2025,
@@ -342,7 +351,7 @@
     "title": "A Guide to Bharatiya Nagarik Suraksha Sanhita, 2023"
   },
   {
-    "rank": 39,
+    "rank": 40,
     "isbn": "9788198348890",
     "publication_date": "2025-04-29",
     "year": 2025,
@@ -351,7 +360,7 @@
     "title": "Insight into Bharatiya Nyaya Sanhita, 2023"
   },
   {
-    "rank": 40,
+    "rank": 41,
     "isbn": "9788198431103",
     "publication_date": "2025-04-18",
     "year": 2025,
@@ -360,7 +369,7 @@
     "title": "AI on Trial"
   },
   {
-    "rank": 41,
+    "rank": 42,
     "isbn": "9788198431189",
     "publication_date": "2025-04-18",
     "year": 2025,
@@ -369,7 +378,7 @@
     "title": "Corporate Law Referencer®"
   },
   {
-    "rank": 42,
+    "rank": 43,
     "isbn": "9788198348883",
     "publication_date": "2025-04-10",
     "year": 2025,
@@ -378,7 +387,7 @@
     "title": "Boss vs Coach: Transforming your Leadership Style"
   },
   {
-    "rank": 43,
+    "rank": 44,
     "isbn": "9788198431196",
     "publication_date": "2025-04-10",
     "year": 2025,
@@ -387,7 +396,7 @@
     "title": "Sehall’s Suspended Heart"
   },
   {
-    "rank": 44,
+    "rank": 45,
     "isbn": "9788198348845",
     "publication_date": "2025-03-25",
     "year": 2025,
@@ -396,7 +405,7 @@
     "title": "Practitioner’s Guide to International Family Law"
   },
   {
-    "rank": 45,
+    "rank": 46,
     "isbn": "9788198431165",
     "publication_date": "2025-03-25",
     "year": 2025,
@@ -405,7 +414,7 @@
     "title": "All-in-One Master Guide to NTA UGC NET Paper I (Teaching and Research Aptitude)"
   },
   {
-    "rank": 46,
+    "rank": 47,
     "isbn": "9788198348869",
     "publication_date": "2025-03-10",
     "year": 2025,
@@ -414,7 +423,7 @@
     "title": "Yogi @ Corporate Street"
   },
   {
-    "rank": 47,
+    "rank": 48,
     "isbn": "9789395764902",
     "publication_date": "2025-02-25",
     "year": 2025,
@@ -423,7 +432,7 @@
     "title": "UPPSC Samanya Adhyayan Paper 6"
   },
   {
-    "rank": 48,
+    "rank": 49,
     "isbn": "9788197939266",
     "publication_date": "2025-02-13",
     "year": 2025,
@@ -432,7 +441,7 @@
     "title": "Treatise on the POSH Act - A Critical and Comparative Commentary on the Sexual Harassment of Women at Workplace (Prevention, Prohibition and Redressal) Act, 2013"
   },
   {
-    "rank": 49,
+    "rank": 50,
     "isbn": "9788198348838",
     "publication_date": "2025-02-10",
     "year": 2025,
@@ -441,7 +450,7 @@
     "title": "A Treatise and Commentary on The Prevention of Money Laundering Act, 2002 (Set of 2 Volumes)"
   },
   {
-    "rank": 50,
+    "rank": 51,
     "isbn": "9788198348821",
     "publication_date": "2025-02-10",
     "year": 2025,
@@ -450,7 +459,7 @@
     "title": "Sheroes Amongst Us - Real Women Real Stories"
   },
   {
-    "rank": 51,
+    "rank": 52,
     "isbn": "9789389176919",
     "publication_date": "2024-12-21",
     "year": 2024,
@@ -459,7 +468,7 @@
     "title": "The Unyielding Judge: The Life and Legacy of Justice A.N. Grover"
   },
   {
-    "rank": 52,
+    "rank": 53,
     "isbn": "9789389176759",
     "publication_date": "2024-12-21",
     "year": 2024,
@@ -468,7 +477,7 @@
     "title": "UGC-NET Solved PYQs on Psychology"
   },
   {
-    "rank": 53,
+    "rank": 54,
     "isbn": "9788197288333",
     "publication_date": "2024-12-09",
     "year": 2024,
@@ -477,7 +486,7 @@
     "title": "75 Years of the Constitution - Supreme Court's Role in Promoting Constitutionalism"
   },
   {
-    "rank": 54,
+    "rank": 55,
     "isbn": "9788197413599",
     "publication_date": "2024-12-09",
     "year": 2024,
@@ -486,7 +495,7 @@
     "title": "Ramanujan’s Patent Law"
   },
   {
-    "rank": 55,
+    "rank": 56,
     "isbn": "9788197939297",
     "publication_date": "2024-09-30",
     "year": 2024,
@@ -495,7 +504,7 @@
     "title": "Artificial Intelligence and Constitutionalism: The Challenges in Law"
   },
   {
-    "rank": 56,
+    "rank": 57,
     "isbn": "9788197939273",
     "publication_date": "2024-09-29",
     "year": 2024,
@@ -504,7 +513,7 @@
     "title": "Bharatiya Sakshya Adhiniyam, 2023: The New Era of Evidence Law"
   },
   {
-    "rank": 57,
+    "rank": 58,
     "isbn": "9789395764926",
     "publication_date": "2024-09-29",
     "year": 2024,
@@ -513,7 +522,7 @@
     "title": "Capital Taxation Law and Practice"
   },
   {
-    "rank": 58,
+    "rank": 59,
     "isbn": "9789395764858",
     "publication_date": "2024-09-20",
     "year": 2024,
@@ -522,7 +531,7 @@
     "title": "Handbook on Comparative IPR Law Technology Law and Emerging Legal Domains"
   },
   {
-    "rank": 59,
+    "rank": 60,
     "isbn": "9788197939228",
     "publication_date": "2024-09-20",
     "year": 2024,
@@ -531,7 +540,7 @@
     "title": "Handbook on Comparative IPR Law Technology Law and Emerging Legal Domains"
   },
   {
-    "rank": 60,
+    "rank": 61,
     "isbn": "9788197413537",
     "publication_date": "2024-09-18",
     "year": 2024,
@@ -540,7 +549,7 @@
     "title": "Capital Gains Tax Law and Practice"
   },
   {
-    "rank": 61,
+    "rank": 62,
     "isbn": "9788197288371",
     "publication_date": "2024-09-14",
     "year": 2024,
@@ -549,7 +558,7 @@
     "title": "Corporate Sustainability Heroes"
   },
   {
-    "rank": 62,
+    "rank": 63,
     "isbn": "9789391032951",
     "publication_date": "2024-08-30",
     "year": 2024,
@@ -558,7 +567,7 @@
     "title": "Balance Sheet of the Soul"
   },
   {
-    "rank": 63,
+    "rank": 64,
     "isbn": "9789395764773",
     "publication_date": "2024-08-20",
     "year": 2024,
@@ -567,7 +576,7 @@
     "title": "Commentary on The Prohibition of Benami Property Transactions Act, 1988"
   },
   {
-    "rank": 64,
+    "rank": 65,
     "isbn": "9788197413582",
     "publication_date": "2024-08-02",
     "year": 2024,
@@ -576,7 +585,7 @@
     "title": "Rapid Revision Series: Environment, Ecology & Disaster Management"
   },
   {
-    "rank": 65,
+    "rank": 66,
     "isbn": "9789395764803",
     "publication_date": "2024-07-29",
     "year": 2024,
@@ -585,7 +594,7 @@
     "title": "Electricity Laws in India – A Comprehensive Analysis with Regulatory Provisions & Case Law"
   },
   {
-    "rank": 66,
+    "rank": 67,
     "isbn": "9789395764896",
     "publication_date": "2024-07-29",
     "year": 2024,
@@ -594,7 +603,7 @@
     "title": "Sociology"
   },
   {
-    "rank": 67,
+    "rank": 68,
     "isbn": "9789395764933",
     "publication_date": "2024-07-29",
     "year": 2024,
@@ -603,7 +612,7 @@
     "title": "History of Ancient India"
   },
   {
-    "rank": 68,
+    "rank": 69,
     "isbn": "9789395764728",
     "publication_date": "2024-06-01",
     "year": 2024,
@@ -612,7 +621,7 @@
     "title": "Corporate Law Referencer"
   },
   {
-    "rank": 69,
+    "rank": 70,
     "isbn": "9789395764766",
     "publication_date": "2024-06-01",
     "year": 2024,
@@ -621,7 +630,7 @@
     "title": "India’s Odyssey: From a Developing Country to an Emerging Superpower"
   },
   {
-    "rank": 70,
+    "rank": 71,
     "isbn": "9789395764940",
     "publication_date": "2024-05-30",
     "year": 2024,
@@ -630,7 +639,7 @@
     "title": "General Studies Paper I-VI | Mock Test and Previous Year Papers"
   },
   {
-    "rank": 71,
+    "rank": 72,
     "isbn": "9789395764667",
     "publication_date": "2024-05-30",
     "year": 2024,
@@ -639,7 +648,7 @@
     "title": "Environment and Ecology with Disaster Management"
   },
   {
-    "rank": 72,
+    "rank": 73,
     "isbn": "9789395764872",
     "publication_date": "2024-05-30",
     "year": 2024,
@@ -648,7 +657,7 @@
     "title": "Indian Geography Through Maps"
   },
   {
-    "rank": 73,
+    "rank": 74,
     "isbn": "9788197288395",
     "publication_date": "2024-05-10",
     "year": 2024,
@@ -657,7 +666,7 @@
     "title": "Compulsory English"
   },
   {
-    "rank": 74,
+    "rank": 75,
     "isbn": "9789395764698",
     "publication_date": "2024-05-01",
     "year": 2024,
@@ -666,7 +675,7 @@
     "title": "Court Jester"
   },
   {
-    "rank": 75,
+    "rank": 76,
     "isbn": "9789395764759",
     "publication_date": "2024-05-01",
     "year": 2024,
@@ -675,7 +684,7 @@
     "title": "Tales of Law & Laughter"
   },
   {
-    "rank": 76,
+    "rank": 77,
     "isbn": "9789395764735",
     "publication_date": "2024-05-01",
     "year": 2024,
@@ -684,7 +693,7 @@
     "title": "New-Age Economy Taxation: An Overview of Taxation of Digital Businesses"
   },
   {
-    "rank": 77,
+    "rank": 78,
     "isbn": "9789395764889",
     "publication_date": "2024-04-27",
     "year": 2024,
@@ -693,7 +702,7 @@
     "title": "Practical Guide to Digital Personal Data Protection Act, 2023 Law and Compliance"
   },
   {
-    "rank": 78,
+    "rank": 79,
     "isbn": "9789395764865",
     "publication_date": "2024-04-18",
     "year": 2024,
@@ -702,7 +711,7 @@
     "title": "Previous Years Solved Papers- Psychology Paper-I (2015-2023)"
   },
   {
-    "rank": 79,
+    "rank": 80,
     "isbn": "9789395764711",
     "publication_date": "2024-04-18",
     "year": 2024,
@@ -711,7 +720,7 @@
     "title": "MasterGuide to NTA UGC NET | SET | JRF Paper 1 (Teaching and Research Aptitude)"
   },
   {
-    "rank": 80,
+    "rank": 81,
     "isbn": "9789395764971",
     "publication_date": "2024-03-01",
     "year": 2024,
@@ -720,7 +729,7 @@
     "title": "Supreme Court of India: Musings, Anecdotes & Episodes"
   },
   {
-    "rank": 81,
+    "rank": 82,
     "isbn": "9789395764780",
     "publication_date": "2024-02-01",
     "year": 2024,
@@ -729,7 +738,7 @@
     "title": "Transforming HARYANA 9 Incredible Years of Haryana Government"
   },
   {
-    "rank": 82,
+    "rank": 83,
     "isbn": "9789395764964",
     "publication_date": "2024-02-01",
     "year": 2024,
@@ -738,7 +747,7 @@
     "title": "हरियाणा सरकार के 9 अतुलनीय वर्ष एक नए एवं जीवंत हरियाणा का उदय"
   },
   {
-    "rank": 83,
+    "rank": 84,
     "isbn": "9789395764742",
     "publication_date": "2024-02-01",
     "year": 2024,
@@ -747,7 +756,7 @@
     "title": "Double Taxation Treaties - Concepts, Practices & Trends (2 Vol. Set)"
   },
   {
-    "rank": 84,
+    "rank": 85,
     "isbn": "9789395764995",
     "publication_date": "2024-01-01",
     "year": 2024,
@@ -756,7 +765,7 @@
     "title": "New Range & Orthodox Concerns in International Taxation"
   },
   {
-    "rank": 85,
+    "rank": 86,
     "isbn": "9789395764650",
     "publication_date": "2024-01-01",
     "year": 2024,
@@ -765,7 +774,7 @@
     "title": "Samanya Adhyayan Paper 5 | सामान्य अध्ययन पेपर - 5"
   },
   {
-    "rank": 86,
+    "rank": 87,
     "isbn": "9789395764643",
     "publication_date": "2023-12-23",
     "year": 2023,
@@ -774,7 +783,7 @@
     "title": "The Definitive Guide to UPSC Success: Crafting Your IAS Journey"
   },
   {
-    "rank": 87,
+    "rank": 88,
     "isbn": "9789395764919",
     "publication_date": "2023-12-23",
     "year": 2023,
@@ -783,7 +792,7 @@
     "title": "Treatise on Arbitration Law & Practice – A Critical Commentary on Part I of the Act of 1996 (2 Vol. Set)"
   },
   {
-    "rank": 88,
+    "rank": 89,
     "isbn": "9789395764612",
     "publication_date": "2023-11-23",
     "year": 2023,
@@ -792,7 +801,7 @@
     "title": "CSAT: Practice Papers"
   },
   {
-    "rank": 89,
+    "rank": 90,
     "isbn": "9789395764292",
     "publication_date": "2023-11-23",
     "year": 2023,
@@ -801,7 +810,7 @@
     "title": "Indian Polity & Governance (Updated Edition)"
   },
   {
-    "rank": 90,
+    "rank": 91,
     "isbn": "9789395764551",
     "publication_date": "2023-10-23",
     "year": 2023,
@@ -810,7 +819,7 @@
     "title": "Capital Gains Tax Law and Practice"
   },
   {
-    "rank": 91,
+    "rank": 92,
     "isbn": "9789395764681",
     "publication_date": "2023-10-23",
     "year": 2023,
@@ -819,7 +828,7 @@
     "title": "Technology and Analytics for Law & Justice"
   },
   {
-    "rank": 92,
+    "rank": 93,
     "isbn": "9789395764537",
     "publication_date": "2023-09-23",
     "year": 2023,
@@ -828,7 +837,7 @@
     "title": "The Law of Goods and Services Tax A Comprehensive Commentary"
   },
   {
-    "rank": 93,
+    "rank": 94,
     "isbn": "9789395764841",
     "publication_date": "2023-09-23",
     "year": 2023,
@@ -837,7 +846,7 @@
     "title": "Reforms in Tax Administration An Indian Experience"
   },
   {
-    "rank": 94,
+    "rank": 95,
     "isbn": "9789395764605",
     "publication_date": "2023-09-23",
     "year": 2023,
@@ -846,7 +855,7 @@
     "title": "Reform & Deform A Five-Side Critique of GST"
   },
   {
-    "rank": 95,
+    "rank": 96,
     "isbn": "9789395764636",
     "publication_date": "2023-08-23",
     "year": 2023,
@@ -855,7 +864,7 @@
     "title": "ESM English Studies Manual"
   },
   {
-    "rank": 96,
+    "rank": 97,
     "isbn": "9789395764490",
     "publication_date": "2023-08-23",
     "year": 2023,
@@ -864,7 +873,7 @@
     "title": "At the Intersection of Law & Life Essays in Honour of Justice MN Venkatachaliah"
   },
   {
-    "rank": 97,
+    "rank": 98,
     "isbn": "9789391032517",
     "publication_date": "2023-08-23",
     "year": 2023,
@@ -873,7 +882,7 @@
     "title": "MPPSC Mains Examination Series General Studies Paper 2 Vol I"
   },
   {
-    "rank": 98,
+    "rank": 99,
     "isbn": "9789395764629",
     "publication_date": "2023-08-23",
     "year": 2023,
@@ -882,7 +891,7 @@
     "title": "Disaster Management"
   },
   {
-    "rank": 99,
+    "rank": 100,
     "isbn": "9788269286601",
     "publication_date": "2023-08-23",
     "year": 2023,
@@ -891,7 +900,7 @@
     "title": "The Good Divorce It’s Not What You Think A Memoir"
   },
   {
-    "rank": 100,
+    "rank": 101,
     "isbn": "9789395764506",
     "publication_date": "2023-07-01",
     "year": 2023,
@@ -900,7 +909,7 @@
     "title": "Social Justice"
   },
   {
-    "rank": 101,
+    "rank": 102,
     "isbn": "9789395764469",
     "publication_date": "2023-07-01",
     "year": 2023,
@@ -909,7 +918,7 @@
     "title": "Indian Geography Through Maps"
   },
   {
-    "rank": 102,
+    "rank": 103,
     "isbn": "9789395764476",
     "publication_date": "2023-06-01",
     "year": 2023,
@@ -918,7 +927,7 @@
     "title": "NCERT-India and World Geography"
   },
   {
-    "rank": 103,
+    "rank": 104,
     "isbn": "9789395764162",
     "publication_date": "2023-06-01",
     "year": 2023,
@@ -927,7 +936,7 @@
     "title": "Rising Relevance of Quality Control and Bureau of Indian Standards"
   },
   {
-    "rank": 104,
+    "rank": 105,
     "isbn": "9789395764421",
     "publication_date": "2023-05-23",
     "year": 2023,
@@ -936,7 +945,7 @@
     "title": "An Analysis of GST Advance Rulings – Important Propositions"
   },
   {
-    "rank": 105,
+    "rank": 106,
     "isbn": "9789395764452",
     "publication_date": "2023-05-23",
     "year": 2023,
@@ -945,7 +954,7 @@
     "title": "Corporate Law Referencer (2 Vol. Set)"
   },
   {
-    "rank": 106,
+    "rank": 107,
     "isbn": "9789395764360",
     "publication_date": "2023-05-23",
     "year": 2023,
@@ -954,7 +963,7 @@
     "title": "India 2047 – High Income With Equity"
   },
   {
-    "rank": 107,
+    "rank": 108,
     "isbn": "9789395764322",
     "publication_date": "2023-05-23",
     "year": 2023,
@@ -963,7 +972,7 @@
     "title": "Mediation Simplified – An Interactive Workbook"
   },
   {
-    "rank": 108,
+    "rank": 109,
     "isbn": "9789395764315",
     "publication_date": "2023-04-23",
     "year": 2023,
@@ -972,7 +981,7 @@
     "title": "Internal Security"
   },
   {
-    "rank": 109,
+    "rank": 110,
     "isbn": "9789395764384",
     "publication_date": "2023-04-23",
     "year": 2023,
@@ -981,7 +990,7 @@
     "title": "Royalty and FTS – Understanding Business and Tax Interplay"
   },
   {
-    "rank": 110,
+    "rank": 111,
     "isbn": "9789395764179",
     "publication_date": "2023-04-23",
     "year": 2023,
@@ -990,7 +999,7 @@
     "title": "Contract Drafting – Tips and Tricks"
   },
   {
-    "rank": 111,
+    "rank": 112,
     "isbn": "9789395764247",
     "publication_date": "2023-04-23",
     "year": 2023,
@@ -999,7 +1008,7 @@
     "title": "Fairytales – A Poetry Anthology"
   },
   {
-    "rank": 112,
+    "rank": 113,
     "isbn": "9789395764254",
     "publication_date": "2023-04-23",
     "year": 2023,
@@ -1008,7 +1017,7 @@
     "title": "FAQ’s on the POSH Act"
   },
   {
-    "rank": 113,
+    "rank": 114,
     "isbn": "9789395764353",
     "publication_date": "2023-04-23",
     "year": 2023,
@@ -1017,7 +1026,7 @@
     "title": "Public Administration and Public Policy Vol I"
   },
   {
-    "rank": 114,
+    "rank": 115,
     "isbn": "9789395764445",
     "publication_date": "2023-04-23",
     "year": 2023,
@@ -1026,7 +1035,7 @@
     "title": "General Studies Series Part 5 -Indian Economy and Socio-Economic Developments"
   },
   {
-    "rank": 115,
+    "rank": 116,
     "isbn": "9789395764124",
     "publication_date": "2023-04-01",
     "year": 2023,
@@ -1035,7 +1044,7 @@
     "title": "Constitutional Ideals – Development and Realisation Through Court-led Justice"
   },
   {
-    "rank": 116,
+    "rank": 117,
     "isbn": "9789395764230",
     "publication_date": "2023-02-01",
     "year": 2023,
@@ -1044,7 +1053,7 @@
     "title": "UGC/NTA CUET (UG) English"
   },
   {
-    "rank": 117,
+    "rank": 118,
     "isbn": "9789395764148",
     "publication_date": "2023-02-01",
     "year": 2023,
@@ -1053,7 +1062,7 @@
     "title": "Prevention of Money Laundering Act, 2002 – A Commentary"
   },
   {
-    "rank": 118,
+    "rank": 119,
     "isbn": "9789395764131",
     "publication_date": "2023-01-01",
     "year": 2023,
@@ -1062,7 +1071,7 @@
     "title": "Paryavaran Evam Paristhitiki"
   },
   {
-    "rank": 119,
+    "rank": 120,
     "isbn": "9789395764186",
     "publication_date": "2023-01-01",
     "year": 2023,
@@ -1071,7 +1080,7 @@
     "title": "Constitutional Czars in the Hall of fame Musings, Anectodes & Episodes"
   },
   {
-    "rank": 120,
+    "rank": 121,
     "isbn": "9789391032807",
     "publication_date": "2022-12-01",
     "year": 2022,
@@ -1080,7 +1089,7 @@
     "title": "General Studies Series Part 1 – Indian Art and Culture"
   },
   {
-    "rank": 121,
+    "rank": 122,
     "isbn": "9789391032708",
     "publication_date": "2022-12-01",
     "year": 2022,
@@ -1089,7 +1098,7 @@
     "title": "General Studies Series Part 2 – Modern India and Indian National Movement"
   },
   {
-    "rank": 122,
+    "rank": 123,
     "isbn": "9789395764049",
     "publication_date": "2022-12-01",
     "year": 2022,
@@ -1098,7 +1107,7 @@
     "title": "General Studies Series Part 3-Indian Constitution, Political System and Rights Issues"
   },
   {
-    "rank": 123,
+    "rank": 124,
     "isbn": "9789395764018",
     "publication_date": "2022-12-01",
     "year": 2022,
@@ -1107,7 +1116,7 @@
     "title": "General Studies Series Part 4 – Geography of India and the World"
   },
   {
-    "rank": 124,
+    "rank": 125,
     "isbn": "9789395764025",
     "publication_date": "2022-12-01",
     "year": 2022,
@@ -1116,7 +1125,7 @@
     "title": "General Studies Series Part 6 – General Science and Technology"
   },
   {
-    "rank": 125,
+    "rank": 126,
     "isbn": "9789395764056",
     "publication_date": "2022-12-01",
     "year": 2022,
@@ -1125,7 +1134,7 @@
     "title": "General Studies Series Part 7 – Environment and Ecology"
   },
   {
-    "rank": 126,
+    "rank": 127,
     "isbn": "9789391032449",
     "publication_date": "2022-12-01",
     "year": 2022,
@@ -1134,7 +1143,7 @@
     "title": "LawyerIN: LinkedIn for Lawyers"
   },
   {
-    "rank": 127,
+    "rank": 128,
     "isbn": "9789395764001",
     "publication_date": "2022-11-01",
     "year": 2022,
@@ -1143,7 +1152,7 @@
     "title": "Compulsory English"
   },
   {
-    "rank": 128,
+    "rank": 129,
     "isbn": "9789391032197",
     "publication_date": "2022-11-01",
     "year": 2022,
@@ -1152,7 +1161,7 @@
     "title": "Ethics, Integrity and Aptitude"
   },
   {
-    "rank": 129,
+    "rank": 130,
     "isbn": "9789391032791",
     "publication_date": "2022-11-01",
     "year": 2022,
@@ -1161,7 +1170,7 @@
     "title": "Geography of India"
   },
   {
-    "rank": 130,
+    "rank": 131,
     "isbn": "9789391032678",
     "publication_date": "2022-11-01",
     "year": 2022,
@@ -1170,7 +1179,7 @@
     "title": "Corporate Social Responsibility: Concept, Genesis, Evolution & Practice"
   },
   {
-    "rank": 131,
+    "rank": 132,
     "isbn": "9789391032210",
     "publication_date": "2022-11-01",
     "year": 2022,
@@ -1179,7 +1188,7 @@
     "title": "CSassy Tales: Cybercrime Stories & The Law"
   },
   {
-    "rank": 132,
+    "rank": 133,
     "isbn": "9789395764087",
     "publication_date": "2022-11-01",
     "year": 2022,
@@ -1188,7 +1197,7 @@
     "title": "The Law of Prevention of Money Laundering"
   },
   {
-    "rank": 133,
+    "rank": 134,
     "isbn": "9789391032524",
     "publication_date": "2022-10-01",
     "year": 2022,
@@ -1197,7 +1206,7 @@
     "title": "International Organisations, Conferences and Treaties"
   },
   {
-    "rank": 134,
+    "rank": 135,
     "isbn": "9789391032258",
     "publication_date": "2022-09-01",
     "year": 2022,
@@ -1206,7 +1215,7 @@
     "title": "Greed - Powering Some of the Most Creative Frauds in Human History"
   },
   {
-    "rank": 135,
+    "rank": 136,
     "isbn": "9789391032456",
     "publication_date": "2022-09-01",
     "year": 2022,
@@ -1215,7 +1224,7 @@
     "title": "Prevailing and Emerging Dilemmas in International Taxation"
   },
   {
-    "rank": 136,
+    "rank": 137,
     "isbn": "9789391032043",
     "publication_date": "2022-08-01",
     "year": 2022,
@@ -1224,7 +1233,7 @@
     "title": "Indian Society: Perspectives and Issues"
   },
   {
-    "rank": 137,
+    "rank": 138,
     "isbn": "9789391032388",
     "publication_date": "2022-08-01",
     "year": 2022,
@@ -1233,7 +1242,7 @@
     "title": "Samanya Gyan (Hindi)"
   },
   {
-    "rank": 138,
+    "rank": 139,
     "isbn": "9789391032371",
     "publication_date": "2022-08-01",
     "year": 2022,
@@ -1242,7 +1251,7 @@
     "title": "Protection of Children from Sexual Offences Act, 2012 – An Analysis"
   },
   {
-    "rank": 139,
+    "rank": 140,
     "isbn": "9789391032081",
     "publication_date": "2022-07-01",
     "year": 2022,
@@ -1251,7 +1260,7 @@
     "title": "Case Studies in Ethics, Integrity & Aptitude"
   },
   {
-    "rank": 140,
+    "rank": 141,
     "isbn": "9789391032289",
     "publication_date": "2022-07-01",
     "year": 2022,
@@ -1260,7 +1269,7 @@
     "title": "CSAT: Practice Papers"
   },
   {
-    "rank": 141,
+    "rank": 142,
     "isbn": "9789391032166",
     "publication_date": "2022-07-01",
     "year": 2022,
@@ -1269,7 +1278,7 @@
     "title": "Indian Culture Art and Heritage: An Illustrated Journey"
   },
   {
-    "rank": 142,
+    "rank": 143,
     "isbn": "9789391032227",
     "publication_date": "2022-07-01",
     "year": 2022,
@@ -1278,7 +1287,7 @@
     "title": "Saga of the Three Top Courts of India (2 Vol. Set)"
   },
   {
-    "rank": 143,
+    "rank": 144,
     "isbn": "9789391032883",
     "publication_date": "2022-05-01",
     "year": 2022,
@@ -1287,7 +1296,7 @@
     "title": "MPPSC Mains Examination Series General Studies Paper 3 Volume I"
   },
   {
-    "rank": 144,
+    "rank": 145,
     "isbn": "9789391032968",
     "publication_date": "2022-05-01",
     "year": 2022,
@@ -1296,7 +1305,7 @@
     "title": "MPPSC Mains Examination Series General Studies Paper 3 Volume II"
   },
   {
-    "rank": 145,
+    "rank": 146,
     "isbn": "9789391032654",
     "publication_date": "2022-04-01",
     "year": 2022,
@@ -1305,7 +1314,7 @@
     "title": "The Making of Modern India: Amidst the making of Modern World"
   },
   {
-    "rank": 146,
+    "rank": 147,
     "isbn": "9789391032937",
     "publication_date": "2022-04-01",
     "year": 2022,
@@ -1314,7 +1323,7 @@
     "title": "Law of Bail"
   },
   {
-    "rank": 147,
+    "rank": 148,
     "isbn": "9789391032814",
     "publication_date": "2022-04-01",
     "year": 2022,
@@ -1323,7 +1332,7 @@
     "title": "Private Placement of Shares"
   },
   {
-    "rank": 148,
+    "rank": 149,
     "isbn": "9789391032852",
     "publication_date": "2022-04-01",
     "year": 2022,
@@ -1332,7 +1341,7 @@
     "title": "Tax, Constitution and the Supreme Court"
   },
   {
-    "rank": 149,
+    "rank": 150,
     "isbn": "9789391032920",
     "publication_date": "2022-03-10",
     "year": 2022,
@@ -1341,7 +1350,7 @@
     "title": "Environment & Ecology"
   },
   {
-    "rank": 150,
+    "rank": 151,
     "isbn": "9789391032982",
     "publication_date": "2022-03-10",
     "year": 2022,
@@ -1350,7 +1359,7 @@
     "title": "Indian Public Administration and Public Policy: Volume II"
   },
   {
-    "rank": 151,
+    "rank": 152,
     "isbn": "9789391032845",
     "publication_date": "2022-03-10",
     "year": 2022,
@@ -1359,7 +1368,7 @@
     "title": "Cannabis Indica: Perception vs Potential"
   },
   {
-    "rank": 152,
+    "rank": 153,
     "isbn": "9789391032913",
     "publication_date": "2022-03-01",
     "year": 2022,
@@ -1368,7 +1377,7 @@
     "title": "Taxation of Copyright Royalties in India"
   },
   {
-    "rank": 153,
+    "rank": 154,
     "isbn": "9789391032906",
     "publication_date": "2022-02-01",
     "year": 2022,
@@ -1377,7 +1386,7 @@
     "title": "GES Periodos Vol. I: Physical, World and Biogeography"
   },
   {
-    "rank": 154,
+    "rank": 155,
     "isbn": "9789391032562",
     "publication_date": "2022-02-01",
     "year": 2022,
@@ -1386,7 +1395,7 @@
     "title": "The Art of Writing Essay"
   },
   {
-    "rank": 155,
+    "rank": 156,
     "isbn": "9789391032975",
     "publication_date": "2022-02-01",
     "year": 2022,
@@ -1395,7 +1404,7 @@
     "title": "Courtroom Wit and Wisdom: True & Anecdotal"
   },
   {
-    "rank": 156,
+    "rank": 157,
     "isbn": "9789391032821",
     "publication_date": "2022-01-01",
     "year": 2022,
@@ -1404,7 +1413,7 @@
     "title": "General Knowledge"
   },
   {
-    "rank": 157,
+    "rank": 158,
     "isbn": "9789391032739",
     "publication_date": "2022-01-01",
     "year": 2022,
@@ -1413,7 +1422,7 @@
     "title": "Nautanki Sala and Other Stories"
   },
   {
-    "rank": 158,
+    "rank": 159,
     "isbn": "9789391032753",
     "publication_date": "2022-01-01",
     "year": 2022,
@@ -1422,7 +1431,7 @@
     "title": "FAQs on Arbitration in India"
   },
   {
-    "rank": 159,
+    "rank": 160,
     "isbn": "9789391032760",
     "publication_date": "2021-12-01",
     "year": 2021,
@@ -1431,7 +1440,7 @@
     "title": "Evolution of Privacy – From Turbulence to Triumph"
   },
   {
-    "rank": 160,
+    "rank": 161,
     "isbn": "9789391032777",
     "publication_date": "2021-12-01",
     "year": 2021,
@@ -1440,7 +1449,7 @@
     "title": "Law Relating to Social Media Crimes, Intermediaries, Digital Media, and OTT Platforms"
   },
   {
-    "rank": 161,
+    "rank": 162,
     "isbn": "9789391032333",
     "publication_date": "2021-11-01",
     "year": 2021,
@@ -1449,7 +1458,7 @@
     "title": "International Relations"
   },
   {
-    "rank": 162,
+    "rank": 163,
     "isbn": "9789391032340",
     "publication_date": "2021-11-01",
     "year": 2021,
@@ -1458,7 +1467,7 @@
     "title": "MPPSC Mains Examination Series General Studies Paper 4"
   },
   {
-    "rank": 163,
+    "rank": 164,
     "isbn": "9789391032692",
     "publication_date": "2021-11-01",
     "year": 2021,
@@ -1467,7 +1476,7 @@
     "title": "Miracles do Happen"
   },
   {
-    "rank": 164,
+    "rank": 165,
     "isbn": "9789391032623",
     "publication_date": "2021-11-01",
     "year": 2021,
@@ -1476,7 +1485,7 @@
     "title": "Article 370 - A Monograph"
   },
   {
-    "rank": 165,
+    "rank": 166,
     "isbn": "9789391032746",
     "publication_date": "2021-11-01",
     "year": 2021,
@@ -1485,7 +1494,7 @@
     "title": "Decoding Child Sexual Abuse"
   },
   {
-    "rank": 166,
+    "rank": 167,
     "isbn": "9789391032661",
     "publication_date": "2021-11-01",
     "year": 2021,
@@ -1494,7 +1503,7 @@
     "title": "Story of the Clan – A Legacy Untold"
   },
   {
-    "rank": 167,
+    "rank": 168,
     "isbn": "9789391032579",
     "publication_date": "2021-10-01",
     "year": 2021,
@@ -1503,7 +1512,7 @@
     "title": "Constitution and its Working"
   },
   {
-    "rank": 168,
+    "rank": 169,
     "isbn": "9789391032593",
     "publication_date": "2021-10-01",
     "year": 2021,
@@ -1512,7 +1521,7 @@
     "title": "Constitution of India - MCQs, Essays & Lectures"
   },
   {
-    "rank": 169,
+    "rank": 170,
     "isbn": "9789391032685",
     "publication_date": "2021-10-01",
     "year": 2021,
@@ -1521,7 +1530,7 @@
     "title": "Digital Economy & Direct Taxation – An Overview"
   },
   {
-    "rank": 170,
+    "rank": 171,
     "isbn": "9789391032272",
     "publication_date": "2021-09-01",
     "year": 2021,
@@ -1530,7 +1539,7 @@
     "title": "Indian Economy"
   },
   {
-    "rank": 171,
+    "rank": 172,
     "isbn": "9789391032357",
     "publication_date": "2021-09-01",
     "year": 2021,
@@ -1539,7 +1548,7 @@
     "title": "Constitution of Tax"
   },
   {
-    "rank": 172,
+    "rank": 173,
     "isbn": "9789395764278",
     "publication_date": "2021-09-01",
     "year": 2021,
@@ -1548,7 +1557,7 @@
     "title": "Science and Technology – From Inception to Advancement"
   },
   {
-    "rank": 173,
+    "rank": 174,
     "isbn": "9789391032005",
     "publication_date": "2021-08-01",
     "year": 2021,
@@ -1557,7 +1566,7 @@
     "title": "UPPSC Samanya Adhyayan Prashna Patra-1"
   },
   {
-    "rank": 174,
+    "rank": 175,
     "isbn": "9789391032012",
     "publication_date": "2021-08-01",
     "year": 2021,
@@ -1566,7 +1575,7 @@
     "title": "UPPSC Samanya Adhyayan Prashna Patra-2"
   },
   {
-    "rank": 175,
+    "rank": 176,
     "isbn": "9789391032029",
     "publication_date": "2021-08-01",
     "year": 2021,
@@ -1575,7 +1584,7 @@
     "title": "UPPSC Samanya Adhyayan Prashna Patra-3"
   },
   {
-    "rank": 176,
+    "rank": 177,
     "isbn": "9789391032074",
     "publication_date": "2021-08-01",
     "year": 2021,
@@ -1584,7 +1593,7 @@
     "title": "UPPSC Samanya Adhyayan Prashna Patra-4"
   },
   {
-    "rank": 177,
+    "rank": 178,
     "isbn": "9789391032548",
     "publication_date": "2021-08-01",
     "year": 2021,
@@ -1593,7 +1602,7 @@
     "title": "Accelerating India : 7 Years of Modi Government"
   },
   {
-    "rank": 178,
+    "rank": 179,
     "isbn": "9789391032494",
     "publication_date": "2021-08-01",
     "year": 2021,
@@ -1602,7 +1611,7 @@
     "title": "COVID 19: Genocide Without Parallel"
   },
   {
-    "rank": 179,
+    "rank": 180,
     "isbn": "9789391032487",
     "publication_date": "2021-08-01",
     "year": 2021,
@@ -1611,7 +1620,7 @@
     "title": "Taxpayer Rights: Deciphering the Indian Charter"
   },
   {
-    "rank": 180,
+    "rank": 181,
     "isbn": "9789391032425",
     "publication_date": "2021-08-01",
     "year": 2021,
@@ -1620,7 +1629,7 @@
     "title": "The Theory of Inverse Logic in Forensic Accounting"
   },
   {
-    "rank": 181,
+    "rank": 182,
     "isbn": "9789391032555",
     "publication_date": "2021-07-01",
     "year": 2021,
@@ -1629,7 +1638,7 @@
     "title": "Arthvyavastha – Prashnottar Roop Mein"
   },
   {
-    "rank": 182,
+    "rank": 183,
     "isbn": "9789391032203",
     "publication_date": "2021-07-01",
     "year": 2021,
@@ -1638,7 +1647,7 @@
     "title": "Ethics and Morality : From Vice to Virtue"
   },
   {
-    "rank": 183,
+    "rank": 184,
     "isbn": "9789391032128",
     "publication_date": "2021-07-01",
     "year": 2021,
@@ -1647,7 +1656,7 @@
     "title": "Vishwa Ka Itihaas"
   },
   {
-    "rank": 184,
+    "rank": 185,
     "isbn": "9788194991137",
     "publication_date": "2021-06-01",
     "year": 2021,
@@ -1656,7 +1665,7 @@
     "title": "Indian Polity & Governance"
   },
   {
-    "rank": 185,
+    "rank": 186,
     "isbn": "9788194991120",
     "publication_date": "2021-04-01",
     "year": 2021,
@@ -1665,7 +1674,7 @@
     "title": "Justice M N Venkatachaliah - The Man & The Judge"
   },
   {
-    "rank": 186,
+    "rank": 187,
     "isbn": "9788194991175",
     "publication_date": "2021-04-01",
     "year": 2021,
@@ -1674,7 +1683,7 @@
     "title": "Reimagining International Taxation"
   },
   {
-    "rank": 187,
+    "rank": 188,
     "isbn": "9788194991199",
     "publication_date": "2021-03-01",
     "year": 2021,
@@ -1683,7 +1692,7 @@
     "title": "Ethical Leadership - Concepts and Cases on Ethics in Governance"
   },
   {
-    "rank": 188,
+    "rank": 189,
     "isbn": "9788194991106",
     "publication_date": "2021-02-01",
     "year": 2021,
@@ -1692,7 +1701,7 @@
     "title": "Commentary on the Motor Vehicles Act"
   },
   {
-    "rank": 189,
+    "rank": 190,
     "isbn": "9789391032630",
     "publication_date": "2021-01-01",
     "year": 2021,
@@ -1701,7 +1710,7 @@
     "title": "Previous Years' Solved Papers - Psychology Paper 1"
   },
   {
-    "rank": 190,
+    "rank": 191,
     "isbn": "9789389176711",
     "publication_date": "2021-01-01",
     "year": 2021,
@@ -1710,7 +1719,7 @@
     "title": "Mediation - Policy & Practice"
   },
   {
-    "rank": 191,
+    "rank": 192,
     "isbn": "9788194991151",
     "publication_date": "2021-01-01",
     "year": 2021,
@@ -1719,7 +1728,7 @@
     "title": "Rethinking Palkhivala"
   },
   {
-    "rank": 192,
+    "rank": 193,
     "isbn": "9789389176698",
     "publication_date": "2020-12-01",
     "year": 2020,
@@ -1728,7 +1737,7 @@
     "title": "Cultural Anthropology"
   },
   {
-    "rank": 193,
+    "rank": 194,
     "isbn": "9789389176704",
     "publication_date": "2020-12-01",
     "year": 2020,
@@ -1737,7 +1746,7 @@
     "title": "Constitution and its Making"
   },
   {
-    "rank": 194,
+    "rank": 195,
     "isbn": "9789389176650",
     "publication_date": "2020-11-01",
     "year": 2020,
@@ -1746,7 +1755,7 @@
     "title": "GES Periodos Vol II:  Indian, Human and Physical Geography"
   },
   {
-    "rank": 195,
+    "rank": 196,
     "isbn": "9789389176667",
     "publication_date": "2020-10-01",
     "year": 2020,
@@ -1755,7 +1764,7 @@
     "title": "Jurisprudence of Privacy"
   },
   {
-    "rank": 196,
+    "rank": 197,
     "isbn": "9789389176155",
     "publication_date": "2020-09-01",
     "year": 2020,
@@ -1764,7 +1773,7 @@
     "title": "Anuprayukt Manovigyan"
   },
   {
-    "rank": 197,
+    "rank": 198,
     "isbn": "9789389176599",
     "publication_date": "2020-09-01",
     "year": 2020,
@@ -1773,7 +1782,7 @@
     "title": "UPPSC Prarambhik Pariksha: Samanya Adhyayan"
   },
   {
-    "rank": 198,
+    "rank": 199,
     "isbn": "9789389176605",
     "publication_date": "2020-09-01",
     "year": 2020,
@@ -1782,7 +1791,7 @@
     "title": "Investing in Indian & Foreign Start-Up Companies"
   },
   {
-    "rank": 199,
+    "rank": 200,
     "isbn": "9789389176148",
     "publication_date": "2020-08-01",
     "year": 2020,
@@ -1791,7 +1800,7 @@
     "title": "110+ in GS 2 (Hindi)"
   },
   {
-    "rank": 200,
+    "rank": 201,
     "isbn": "9789389176537",
     "publication_date": "2020-08-01",
     "year": 2020,
@@ -1800,7 +1809,7 @@
     "title": "Samanya Vigyan evam Praudyogiki"
   },
   {
-    "rank": 201,
+    "rank": 202,
     "isbn": "9789389176544",
     "publication_date": "2020-08-01",
     "year": 2020,
@@ -1809,7 +1818,7 @@
     "title": "The Global Indians and The Law"
   },
   {
-    "rank": 202,
+    "rank": 203,
     "isbn": "9789389176575",
     "publication_date": "2020-07-01",
     "year": 2020,
@@ -1818,7 +1827,7 @@
     "title": "GST for Construction Industry 2/e"
   },
   {
-    "rank": 203,
+    "rank": 204,
     "isbn": "9789389176551",
     "publication_date": "2020-05-01",
     "year": 2020,
@@ -1827,7 +1836,7 @@
     "title": "Post Independence India"
   },
   {
-    "rank": 204,
+    "rank": 205,
     "isbn": "9789389176278",
     "publication_date": "2020-05-01",
     "year": 2020,
@@ -1836,7 +1845,7 @@
     "title": "Q&A Part 4: Geography of India & The World"
   },
   {
-    "rank": 205,
+    "rank": 206,
     "isbn": "9789389176520",
     "publication_date": "2020-03-01",
     "year": 2020,
@@ -1845,7 +1854,7 @@
     "title": "Samanya Adhyayan Srinkhla Bhaag 2: Adhunik Bharat Evam Bhartiya Rashtriya Andolan"
   },
   {
-    "rank": 206,
+    "rank": 207,
     "isbn": "9789389176513",
     "publication_date": "2020-03-01",
     "year": 2020,
@@ -1854,7 +1863,7 @@
     "title": "Samanya Hindi"
   },
   {
-    "rank": 207,
+    "rank": 208,
     "isbn": "9789389176490",
     "publication_date": "2020-03-01",
     "year": 2020,
@@ -1863,7 +1872,7 @@
     "title": "Taxation of Digital Economy"
   },
   {
-    "rank": 208,
+    "rank": 209,
     "isbn": "9789389176506",
     "publication_date": "2020-02-01",
     "year": 2020,
@@ -1872,7 +1881,7 @@
     "title": "A Brief History of the Modern World"
   },
   {
-    "rank": 209,
+    "rank": 210,
     "isbn": "9789389176469",
     "publication_date": "2020-02-01",
     "year": 2020,
@@ -1881,7 +1890,7 @@
     "title": "Q&A Bhaag 3: Hindi: Bhartiya Samvidhan"
   },
   {
-    "rank": 210,
+    "rank": 211,
     "isbn": "9789389176445",
     "publication_date": "2020-02-01",
     "year": 2020,
@@ -1890,7 +1899,7 @@
     "title": "Samanya Adhyayan Srinkhla Bhaag 1: Bhartiya Kala Evam Sanskriti"
   },
   {
-    "rank": 211,
+    "rank": 212,
     "isbn": "9789389176483",
     "publication_date": "2020-02-01",
     "year": 2020,
@@ -1899,7 +1908,7 @@
     "title": "International Taxation in the Digital Era"
   },
   {
-    "rank": 212,
+    "rank": 213,
     "isbn": "9789395764544",
     "publication_date": "2020-01-01",
     "year": 2020,
@@ -1908,7 +1917,7 @@
     "title": "Practical Guide to Drafting Commercial Contracts 3/e"
   },
   {
-    "rank": 213,
+    "rank": 214,
     "isbn": "9789389176087",
     "publication_date": "2019-11-01",
     "year": 2019,
@@ -1917,7 +1926,7 @@
     "title": "Governance in India"
   },
   {
-    "rank": 214,
+    "rank": 215,
     "isbn": "9789389176261",
     "publication_date": "2019-10-01",
     "year": 2019,
@@ -1926,7 +1935,7 @@
     "title": "Naye Bharat Ki Chunautiyan"
   },
   {
-    "rank": 215,
+    "rank": 216,
     "isbn": "9789389176094",
     "publication_date": "2019-10-01",
     "year": 2019,
@@ -1935,7 +1944,7 @@
     "title": "Heroes Amongst Us"
   },
   {
-    "rank": 216,
+    "rank": 217,
     "isbn": "9789389176254",
     "publication_date": "2019-10-01",
     "year": 2019,
@@ -1944,7 +1953,7 @@
     "title": "Data Protection Laws Demystified"
   },
   {
-    "rank": 217,
+    "rank": 218,
     "isbn": "9789389176339",
     "publication_date": "2019-10-01",
     "year": 2019,
@@ -1953,7 +1962,7 @@
     "title": "Practical Guide to Prohibition of Benami Property Transactions Act"
   },
   {
-    "rank": 218,
+    "rank": 219,
     "isbn": "9789389176346",
     "publication_date": "2019-10-01",
     "year": 2019,
@@ -1962,7 +1971,7 @@
     "title": "Tax Consolidation - A Global Perspective on Economic Unity"
   },
   {
-    "rank": 219,
+    "rank": 220,
     "isbn": "9789389176230",
     "publication_date": "2019-09-01",
     "year": 2019,
@@ -1971,7 +1980,7 @@
     "title": "Q&A: Part 3: Indian Constitution, Political System and Rights Issues"
   },
   {
-    "rank": 220,
+    "rank": 221,
     "isbn": "9789389176247",
     "publication_date": "2019-09-01",
     "year": 2019,
@@ -1980,7 +1989,7 @@
     "title": "Transfer Pricing in India"
   },
   {
-    "rank": 221,
+    "rank": 222,
     "isbn": "9789389176070",
     "publication_date": "2019-09-01",
     "year": 2019,
@@ -1989,7 +1998,7 @@
     "title": "Q&A: Part 1: Indian Art and Culture"
   },
   {
-    "rank": 222,
+    "rank": 223,
     "isbn": "9789389176117",
     "publication_date": "2019-08-01",
     "year": 2019,
@@ -1998,7 +2007,7 @@
     "title": "Disaster Management"
   },
   {
-    "rank": 223,
+    "rank": 224,
     "isbn": "9789389176186",
     "publication_date": "2019-08-01",
     "year": 2019,
@@ -2007,7 +2016,7 @@
     "title": "Q&A: Part 2: Modern India and Indian National Movement"
   },
   {
-    "rank": 224,
+    "rank": 225,
     "isbn": "9789389176223",
     "publication_date": "2019-08-01",
     "year": 2019,
@@ -2016,7 +2025,7 @@
     "title": "Buyback of Securities and Delisting of Equity Shares"
   },
   {
-    "rank": 225,
+    "rank": 226,
     "isbn": "9789389176193",
     "publication_date": "2019-08-01",
     "year": 2019,
@@ -2025,7 +2034,7 @@
     "title": "The Art of Legal Writing"
   },
   {
-    "rank": 226,
+    "rank": 227,
     "isbn": "9789389176209",
     "publication_date": "2019-08-01",
     "year": 2019,
@@ -2034,7 +2043,7 @@
     "title": "Goods & Services Tax: Law, Practice & Procedure (2 Volumes) 4/e"
   },
   {
-    "rank": 227,
+    "rank": 228,
     "isbn": "9789389176124",
     "publication_date": "2019-07-01",
     "year": 2019,
@@ -2043,7 +2052,7 @@
     "title": "Contemporary Social Issues"
   },
   {
-    "rank": 228,
+    "rank": 229,
     "isbn": "9789389176100",
     "publication_date": "2019-07-01",
     "year": 2019,
@@ -2052,7 +2061,7 @@
     "title": "Prohibition of Insider Trading"
   },
   {
-    "rank": 229,
+    "rank": 230,
     "isbn": "9788194031239",
     "publication_date": "2019-02-01",
     "year": 2019,
@@ -2061,7 +2070,7 @@
     "title": "Applied Psychology"
   },
   {
-    "rank": 230,
+    "rank": 231,
     "isbn": "9788193917138",
     "publication_date": "2019-02-01",
     "year": 2019,
@@ -2070,7 +2079,7 @@
     "title": "Law, Justice & Judicial Power"
   },
   {
-    "rank": 231,
+    "rank": 232,
     "isbn": "9788193966969",
     "publication_date": "2019-02-01",
     "year": 2019,
@@ -2079,7 +2088,7 @@
     "title": "Substantial Acquisition of Shares and Takeovers"
   },
   {
-    "rank": 232,
+    "rank": 233,
     "isbn": "9788193966945",
     "publication_date": "2019-01-01",
     "year": 2019,
@@ -2088,7 +2097,7 @@
     "title": "Constitutional Supremacy"
   },
   {
-    "rank": 233,
+    "rank": 234,
     "isbn": "9788193966938",
     "publication_date": "2019-01-01",
     "year": 2019,
@@ -2097,7 +2106,7 @@
     "title": "The Commercial Mediation Monograph"
   },
   {
-    "rank": 234,
+    "rank": 235,
     "isbn": "9788193917152",
     "publication_date": "2018-12-01",
     "year": 2018,
@@ -2106,7 +2115,7 @@
     "title": "110+ in GS 2"
   },
   {
-    "rank": 235,
+    "rank": 236,
     "isbn": "9788193917190",
     "publication_date": "2018-12-01",
     "year": 2018,
@@ -2115,7 +2124,7 @@
     "title": "Issue of Capital and Disclosure Requirements"
   },
   {
-    "rank": 236,
+    "rank": 237,
     "isbn": "9788193917145",
     "publication_date": "2018-11-01",
     "year": 2018,
@@ -2124,7 +2133,7 @@
     "title": "Anthropological Thought"
   },
   {
-    "rank": 237,
+    "rank": 238,
     "isbn": "9788193917114",
     "publication_date": "2018-10-01",
     "year": 2018,
@@ -2133,7 +2142,7 @@
     "title": "Bihar At a Glance"
   },
   {
-    "rank": 238,
+    "rank": 239,
     "isbn": "9788193746899",
     "publication_date": "2018-10-01",
     "year": 2018,
@@ -2142,7 +2151,7 @@
     "title": "Challenges in Domestic & International Taxation"
   },
   {
-    "rank": 239,
+    "rank": 240,
     "isbn": "9788193746882",
     "publication_date": "2018-10-01",
     "year": 2018,
@@ -2151,7 +2160,7 @@
     "title": "UAE VAT"
   },
   {
-    "rank": 240,
+    "rank": 241,
     "isbn": "9788193746875",
     "publication_date": "2018-09-01",
     "year": 2018,
@@ -2160,7 +2169,7 @@
     "title": "Software Protection"
   },
   {
-    "rank": 241,
+    "rank": 242,
     "isbn": "9788193746868",
     "publication_date": "2018-08-01",
     "year": 2018,
@@ -2169,7 +2178,7 @@
     "title": "Decoding Section 5"
   },
   {
-    "rank": 242,
+    "rank": 243,
     "isbn": "9788193473450",
     "publication_date": "2018-02-01",
     "year": 2018,
@@ -2178,7 +2187,7 @@
     "title": "An Introduction to Civil Services"
   },
   {
-    "rank": 243,
+    "rank": 244,
     "isbn": "9788198751218",
     "publication_date": null,
     "year": null,
@@ -2187,7 +2196,7 @@
     "title": "Insights into The Real Estate (Regulation and Development) Act, 2016"
   },
   {
-    "rank": 244,
+    "rank": 245,
     "isbn": "9788198751201",
     "publication_date": null,
     "year": null,
@@ -2196,7 +2205,7 @@
     "title": "Indian Polity and Governance (2/e)"
   },
   {
-    "rank": 245,
+    "rank": 246,
     "isbn": "9788198874078",
     "publication_date": null,
     "year": null,
@@ -2205,7 +2214,7 @@
     "title": "OakBridge’s Primary Law Series Bharatiya Nagarik Suraksha Sanhita, 2023 (46 of 2023)"
   },
   {
-    "rank": 246,
+    "rank": 247,
     "isbn": "9788198751270",
     "publication_date": null,
     "year": null,
@@ -2214,7 +2223,7 @@
     "title": "Story of the Clan – A Legacy Untold"
   },
   {
-    "rank": 247,
+    "rank": 248,
     "isbn": "9788198661197",
     "publication_date": null,
     "year": null,
@@ -2223,7 +2232,7 @@
     "title": "Protection of Trademarks: A Glimpse of Landmark Judgments"
   },
   {
-    "rank": 248,
+    "rank": 249,
     "isbn": "9788198661142",
     "publication_date": null,
     "year": null,
@@ -2232,7 +2241,7 @@
     "title": "The Art of Legal Writing (2/e)"
   },
   {
-    "rank": 249,
+    "rank": 250,
     "isbn": "9788198751249",
     "publication_date": null,
     "year": null,
@@ -2241,7 +2250,7 @@
     "title": "The Journey To The Earth of A Star"
   },
   {
-    "rank": 250,
+    "rank": 251,
     "isbn": "9788198751294",
     "publication_date": null,
     "year": null,
@@ -2250,7 +2259,7 @@
     "title": "Social Justice (2/e)"
   },
   {
-    "rank": 251,
+    "rank": 252,
     "isbn": "9788198751232",
     "publication_date": null,
     "year": null,
