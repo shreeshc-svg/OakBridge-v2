@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import VerifyNotice from "../components/VerifyNotice";
 import { hiddenSet } from "../lib/sections";
 import { ebookEdition } from "../lib/ebook";
+import { preorderState, useCountdown, formatLaunchDate } from "../lib/preorder";
 
 // Trust badges under the price. Admin-managed via Settings key `pdp_badges`;
 // this is only the fallback when nothing is saved yet. Spelled-out column
@@ -128,6 +129,18 @@ export default function BookDetail() {
         }
     }, [book, settings]);
 
+    /*
+     * Above the early returns on purpose.
+     *
+     * useCountdown is a hook, and the two `return`s below mean a hook placed
+     * after them runs on some renders and not others — React counts hooks by
+     * position, so the first load (still fetching) and the second (book in
+     * hand) would disagree about how many there are. preorderState handles a
+     * null book, so this is safe to read before the book exists.
+     */
+    const preorder = preorderState(book);
+    const left = useCountdown(preorder.active ? preorder.at : null);
+
     if (loading) {
         return (
             <div className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-32 text-center text-sm font-mono text-[#4B5563]">
@@ -211,7 +224,10 @@ export default function BookDetail() {
 
     const LOW_STOCK = 5;
     const stock = hasVariants ? activeStock : Number.isFinite(book.stock) ? book.stock : 0;
-    const oos = stock <= 0;
+    const oos = stock <= 0 && !preorder.active;
+    // Quantity is capped at stock everywhere below; a pre-order has none, so it
+    // gets the same per-order limit the cart uses.
+    const qtyCap = preorder.active ? 10 : stock;
     const low = !oos && stock <= LOW_STOCK;
 
     const seoDesc = (book.description || "").slice(0, 160);
@@ -502,6 +518,47 @@ export default function BookDetail() {
                         </div>
                     )}
 
+                    {preorder.active && (
+                        /*
+                         * Sits between the price and the buy buttons, which is
+                         * the one place a customer is already deciding. Above
+                         * the price it would be decoration; below the buttons
+                         * it would be an explanation nobody scrolled to.
+                         */
+                        <div
+                            data-testid="preorder-panel"
+                            className="mt-8 max-w-md border border-[#F59E0B]/45 bg-[#F59E0B]/[0.07] p-5"
+                        >
+                            <div className="font-mono uppercase tracking-[0.14em] text-[10px] text-[#854F0B]">
+                                Publishes in
+                            </div>
+                            <div className="mt-3 flex gap-2.5" data-testid="preorder-countdown">
+                                {[
+                                    ["Days", left.days],
+                                    ["Hrs", left.hours],
+                                    ["Min", left.minutes],
+                                    ["Sec", left.seconds],
+                                ].map(([unit, value]) => (
+                                    <div
+                                        key={unit}
+                                        className="flex-1 bg-white border border-[#F59E0B]/40 py-2.5 text-center"
+                                    >
+                                        <div className="font-serif text-2xl md:text-[26px] leading-none text-[#002B5C]">
+                                            {String(value).padStart(2, "0")}
+                                        </div>
+                                        <div className="mt-1.5 font-mono uppercase tracking-[0.14em] text-[9px] text-[#854F0B]">
+                                            {unit}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                            <p className="mt-3 text-xs text-[#4B5563] leading-relaxed">
+                                Ships on {formatLaunchDate(preorder.at)}. Pre-order now and we
+                                despatch on publication day — you are charged today.
+                            </p>
+                        </div>
+                    )}
+
                     {oos ? (
                         <div data-testid="oos-panel" className="mt-8 border border-[#E5E7EB] bg-[#F5F7FA] p-6 max-w-md">
                             <div className="font-serif text-lg text-[#002B5C]">Currently out of stock</div>
@@ -551,9 +608,9 @@ export default function BookDetail() {
                                     {qty}
                                 </span>
                                 <button
-                                    onClick={() => setQty(Math.min(qty + 1, stock))}
+                                    onClick={() => setQty(Math.min(qty + 1, qtyCap))}
                                     data-testid="qty-increment"
-                                    disabled={qty >= stock}
+                                    disabled={qty >= qtyCap}
                                     className="px-3 py-3 hover:bg-[#F5F7FA] disabled:opacity-40"
                                     aria-label="Increase"
                                 >
@@ -566,7 +623,7 @@ export default function BookDetail() {
                                 className="inline-flex items-center gap-2 bg-[#002B5C] text-[#FFFFFF] px-8 py-4 text-sm font-medium hover:bg-[#001F42] transition-all"
                             >
                                 <ShoppingBag size={16} strokeWidth={1.5} />
-                                Add to Cart
+                                {preorder.active ? "Pre-order" : "Add to Cart"}
                             </button>
                             <button
                                 onClick={() => {
@@ -582,7 +639,7 @@ export default function BookDetail() {
                                 data-testid="buy-now-button"
                                 className="inline-flex items-center gap-2 border border-[#002B5C] px-8 py-4 text-sm font-medium hover:bg-[#F5F7FA] transition-all"
                             >
-                                Buy Now
+                                {preorder.active ? "Pre-order & pay" : "Buy Now"}
                             </button>
                         </div>
                     )}

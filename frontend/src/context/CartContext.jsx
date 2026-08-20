@@ -10,9 +10,14 @@ import React, {
 import { useAuth } from "./AuthContext";
 import { saveCart, loadCart, fetchSettings, fetchSiteContent } from "../lib/api";
 import { track } from "../lib/analytics";
+import { preorderState } from "../lib/preorder";
 
 const CartContext = createContext(null);
 const STORAGE_KEY = "oakbridge_cart_v1";
+// A pre-order cannot be capped at what is on the shelf, because nothing is.
+// Ten is a bookshop-sized limit: enough for a department, low enough that a
+// mistyped quantity is not a five-figure order for a book nobody has printed.
+const PREORDER_MAX_QTY = 10;
 
 const keyOf = (book_id, binding, size) => `${book_id}::${binding || ""}::${size || ""}`;
 const itemKey = (i) => i.key || keyOf(i.book_id, i.binding, i.size);
@@ -85,13 +90,25 @@ export function CartProvider({ children }) {
             : Number.isFinite(book.stock)
               ? book.stock
               : 9999;
-        if (stock <= 0) return;
+        /*
+         * A pre-order is a sale of something that does not exist yet, so the
+         * stock guard has to stand aside — otherwise the Pre-order button
+         * silently does nothing and the feature is decorative.
+         *
+         * The cap below is lifted with it: `stock` for these titles is 0, and
+         * Math.min(qty, 0) would put a zero-quantity line in the cart. A
+         * pre-order is capped at a sane per-order number instead of at what is
+         * on the shelf.
+         */
+        const preorder = preorderState(book).active;
+        if (stock <= 0 && !preorder) return;
+        const cap = preorder ? PREORDER_MAX_QTY : stock;
         const k = keyOf(book.id, binding, size);
         setItems((prev) => {
             const existing = prev.find((i) => itemKey(i) === k);
             if (existing) {
-                const capped = Math.min(existing.quantity + qty, stock);
-                return prev.map((i) => (itemKey(i) === k ? { ...i, quantity: capped, stock, price } : i));
+                const capped = Math.min(existing.quantity + qty, cap);
+                return prev.map((i) => (itemKey(i) === k ? { ...i, quantity: capped, stock: cap, price } : i));
             }
             return [
                 ...prev,
@@ -102,8 +119,9 @@ export function CartProvider({ children }) {
                     author: book.author,
                     cover_image: book.cover_image,
                     price,
-                    quantity: Math.min(qty, stock),
-                    stock,
+                    quantity: Math.min(qty, cap),
+                    stock: cap,
+                    preorder,
                     binding,
                     size,
                 },

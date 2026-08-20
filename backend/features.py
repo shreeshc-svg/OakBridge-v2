@@ -996,6 +996,8 @@ TEMPLATE_COLUMNS = [
     ("star_title", "TRUE / FALSE — gives the title a gold frame wherever it appears"),
     ("ebook_url", "Link to this title on the eReader — shows the eBook label and CTA. Blank = no eBook"),
     ("ebook_price", "eBook price BEFORE GST — the site adds the GST rate set in Admin → E-Books"),
+    ("coming_soon", "TRUE / FALSE — pre-order: shows a countdown and a Pre-order button"),
+    ("launch_at", "Publication day for a coming-soon title, e.g. 2026-09-14 or 2026-09-14T10:00"),
     ("grade", "Optional grade level, e.g. 'Ages 8-12' for children's titles"),
     ("language", "Default: English"),
     ("publisher", "Default: Oakbridge Publishing"),
@@ -1023,6 +1025,8 @@ SAMPLE_ROW = {
     "star_title": "FALSE",
     "ebook_url": "",
     "ebook_price": "",
+    "coming_soon": "FALSE",
+    "launch_at": "",
     "grade": "",
     "language": "English",
     "publisher": "Oakbridge Publishing",
@@ -1207,6 +1211,8 @@ def _csv_row_to_book_doc(clean: dict) -> dict:
         # None, not 0.0 — "no eBook price" and "free" must not collapse into the
         # same value, and _csv_float returns 0.0 for a blank cell.
         "ebook_price": _csv_float(clean.get("ebook_price")) or None,
+        "coming_soon": _csv_bool(clean.get("coming_soon")),
+        "launch_at": (clean.get("launch_at") or "").strip() or None,
         "rating": _csv_float(clean.get("rating")) or 4.5,
         "stock": _csv_int(clean.get("stock"), default=100),
     }

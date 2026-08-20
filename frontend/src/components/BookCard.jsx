@@ -1,11 +1,12 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
-import { Star, Truck, BookOpen } from "lucide-react";
+import { Star, Truck, BookOpen, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { formatINR, notifyBackInStock, mediaUrl } from "../lib/api";
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
 import { ebookEdition } from "../lib/ebook";
+import { preorderState, useCountdown } from "../lib/preorder";
 
 const LOW_STOCK = 5;
 
@@ -68,7 +69,15 @@ export default function BookCard({ book, index = 0, compact = false }) {
     const hasCover = book.cover_image && !imgErr;
 
     const stock = Number.isFinite(book.stock) ? book.stock : (book.stock ?? 0);
-    const oos = stock <= 0;
+    /*
+     * A pre-order has no stock and that is not a fault, so it must never fall
+     * into the out-of-stock branch — that branch replaces the price row with
+     * "Notify me" and stamps OUT OF STOCK across the cover, which is the exact
+     * opposite of what a title we are taking money for should say.
+     */
+    const preorder = preorderState(book);
+    const left = useCountdown(preorder.active ? preorder.at : null);
+    const oos = stock <= 0 && !preorder.active;
     // Editor's pick. Ticked per book in Admin → Books; it drives no carousel and
     // no filter, it only dresses the tile.
     const starred = !!book.star_title;
@@ -229,12 +238,23 @@ export default function BookCard({ book, index = 0, compact = false }) {
                             Out of Stock
                         </span>
                     )}
-                    {!oos && book.bestseller && (
+                    {preorder.active && (
+                        /* A band, not a corner badge: top-left is Bestseller or
+                           New Arrival and top-right is the discount chip, and
+                           this has to outrank all three. */
+                        <span
+                            data-testid={`coming-soon-badge-${book.id}`}
+                            className={`absolute inset-x-0 top-0 bg-[#002B5C] text-[#F59E0B] font-mono uppercase text-center ${compact ? "text-[8px] tracking-[0.14em] py-1" : "text-[10px] tracking-[0.18em] py-1.5"}`}
+                        >
+                            {preorder.label}
+                        </span>
+                    )}
+                    {!preorder.active && !oos && book.bestseller && (
                         <span className={`absolute top-2 left-2 bg-[#002B5C] text-[#FFFFFF] font-mono uppercase tracking-widest px-1.5 py-0.5 ${compact ? "text-[8px]" : "text-[10px] top-3 left-3 px-2 py-1"}`}>
                             Bestseller
                         </span>
                     )}
-                    {!oos && book.new_release && !book.bestseller && (
+                    {!preorder.active && !oos && book.new_release && !book.bestseller && (
                         <span className={`absolute top-2 left-2 bg-[#F59E0B] text-[#002B5C] font-mono uppercase tracking-widest px-1.5 py-0.5 ${compact ? "text-[8px]" : "text-[10px] top-3 left-3 px-2 py-1"}`}>
                             New Arrival
                         </span>
@@ -329,10 +349,12 @@ export default function BookCard({ book, index = 0, compact = false }) {
                      */
                     <button
                         onClick={() => addItem(book)}
-                        data-testid={`add-to-cart-${book.id}`}
-                        className={`group/add -m-2.5 p-2.5 font-medium text-[#002B5C] hover:text-[#CC0033] transition-colors ${compact ? "text-[10px]" : "text-xs"}`}
+                        data-testid={`${preorder.active ? "preorder" : "add-to-cart"}-${book.id}`}
+                        className={`group/add -m-2.5 p-2.5 font-medium transition-colors ${preorder.active ? "text-[#B4750F] hover:text-[#002B5C]" : "text-[#002B5C] hover:text-[#CC0033]"} ${compact ? "text-[10px]" : "text-xs"}`}
                     >
-                        <span className="border-b border-current pb-0.5">Add +</span>
+                        <span className="border-b border-current pb-0.5">
+                            {preorder.active ? "Pre-order" : "Add +"}
+                        </span>
                     </button>
                 )}
             </div>
@@ -362,7 +384,26 @@ export default function BookCard({ book, index = 0, compact = false }) {
                 <div
                     className={`flex items-center gap-2 ${compact ? "pt-1.5 text-[10px]" : "pt-2 text-[11px]"}`}
                 >
-                    {showDelivery ? (
+                    {preorder.active ? (
+                        /*
+                         * Replaces the delivery estimate rather than joining it:
+                         * this row is the bottom of the mt-auto cluster, so an
+                         * extra line here lifts the price out of step with every
+                         * neighbouring card. And "3-7 days" beside a countdown
+                         * would be two contradictory promises anyway — the book
+                         * does not exist yet.
+                         */
+                        <span
+                            data-testid={`preorder-countdown-${book.id}`}
+                            className="flex items-center gap-1.5 text-[#854F0B]"
+                        >
+                            <Clock size={compact ? 11 : 12} strokeWidth={1.5} className="flex-shrink-0" />
+                            <span className="font-mono tracking-tight">
+                                {left.days}d {String(left.hours).padStart(2, "0")}h{" "}
+                                {String(left.minutes).padStart(2, "0")}m
+                            </span>
+                        </span>
+                    ) : showDelivery ? (
                         <span
                             aria-hidden={oos}
                             className={`flex items-center gap-1.5 text-[#4B5563] ${oos ? "invisible" : ""}`}
@@ -395,7 +436,7 @@ export default function BookCard({ book, index = 0, compact = false }) {
                                 left to separate from — with the delivery line
                                 switched off it would dangle in front of the
                                 link. */}
-                            {showDelivery && (
+                            {(showDelivery || preorder.active) && (
                                 <span aria-hidden="true" className="text-[#D0D5DD]">
                                     ·
                                 </span>

@@ -122,6 +122,19 @@ class Book(BaseModel):
     #
     # Same rule as ebook_url: declared here or response_model=Book drops it.
     ebook_price: Optional[float] = None
+    # Pre-order. `coming_soon` is the switch, `launch_at` is when it stops
+    # being one — an ISO datetime, so the countdown can be exact rather than
+    # rounding to a day.
+    #
+    # Deliberately NOT publication_date: that is the historical date the
+    # release master owns and overwrites on every apply, which would wipe a
+    # launch date the moment somebody ranked the catalogue.
+    #
+    # Same rule as every other field here — declared or response_model=Book
+    # drops it.
+    coming_soon: bool = False
+    launch_at: Optional[str] = None
+    coming_soon_label: Optional[str] = None
     variants: list = Field(default_factory=list)  # [{binding,size,price,mrp?,stock?}]
 
 

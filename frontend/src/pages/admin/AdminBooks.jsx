@@ -48,6 +48,9 @@ const BLANK = {
     bestseller: false,
     new_release: false,
     star_title: false,
+    coming_soon: false,
+    launch_at: "",
+    coming_soon_label: "",
     ebook_url: "",
     ebook_price: "",
     stock: 100,
@@ -666,6 +669,12 @@ function BookForm({ initial, categories, onClose, onSaved }) {
                         ? null
                         : Number(form.ebook_price),
                 pages: Number(form.pages),
+                coming_soon: !!form.coming_soon,
+                // Empty rather than a half-value: a flag with no date is treated
+                // as not-a-pre-order everywhere, so it shows nothing rather than
+                // a countdown to an invalid time.
+                launch_at: (form.launch_at || "").trim() || null,
+                coming_soon_label: (form.coming_soon_label || "").trim() || null,
                 publication_year:
                     Number(form.publication_year) || new Date().getFullYear(),
                 stock: Number(form.stock),
@@ -858,6 +867,76 @@ function BookForm({ initial, categories, onClose, onSaved }) {
                                 </span>
                             </span>
                         </label>
+                    </div>
+
+                    {/*
+                     * Pre-order. Two fields that only matter together: the
+                     * switch does nothing without a date, and the date does
+                     * nothing without the switch, so they are shown as one
+                     * block and the date only appears once it is ticked.
+                     */}
+                    <div className="col-span-2 border border-[#F59E0B]/40 bg-[#F59E0B]/[0.05] p-4">
+                        <label className="flex items-start gap-2.5 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                name="coming_soon"
+                                checked={!!form.coming_soon}
+                                onChange={onChange}
+                                data-testid="book-form-coming-soon"
+                                className="mt-0.5 accent-[#002B5C] w-4 h-4"
+                            />
+                            <span>
+                                <span className="block text-sm font-medium text-[#002B5C]">
+                                    Coming soon — take pre-orders
+                                </span>
+                                <span className="block text-[11px] text-[#4B5563] mt-0.5">
+                                    Shows a band on the cover and a countdown, and turns Add to
+                                    Cart into Pre-order. Customers are charged today and the book
+                                    despatches on publication day. Stock is ignored, so the title
+                                    sells even at zero.
+                                </span>
+                            </span>
+                        </label>
+
+                        {form.coming_soon && (
+                            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="overline !text-[10px] block mb-2">
+                                        Publication day
+                                    </label>
+                                    <input
+                                        type="datetime-local"
+                                        name="launch_at"
+                                        value={(form.launch_at || "").slice(0, 16)}
+                                        onChange={onChange}
+                                        data-testid="book-form-launch-at"
+                                        className="w-full border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none focus:border-[#002B5C]"
+                                    />
+                                    <div className="text-[11px] text-[#4B5563] mt-1">
+                                        The countdown ends here, and the band and timer disappear
+                                        on their own — nothing to switch off afterwards.
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="overline !text-[10px] block mb-2">
+                                        Band text
+                                    </label>
+                                    <input
+                                        type="text"
+                                        name="coming_soon_label"
+                                        value={form.coming_soon_label || ""}
+                                        onChange={onChange}
+                                        placeholder="Coming soon"
+                                        data-testid="book-form-coming-soon-label"
+                                        className="w-full border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none focus:border-[#002B5C]"
+                                    />
+                                    <div className="text-[11px] text-[#4B5563] mt-1">
+                                        Blank shows &ldquo;Coming soon&rdquo;. Keep it short — it
+                                        sits across the top of the cover.
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {/* Per title, because only some titles are on the reader.

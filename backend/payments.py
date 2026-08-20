@@ -321,6 +321,14 @@ async def _apply_stock_decrement(order_id: str) -> None:
             {"$inc": {"stock": -qty}},
         )
         if res.modified_count == 0:
+            # A pre-order has no stock by definition, so the miss is expected
+            # and must not raise the backorder alarm — the whole point is that
+            # the book does not exist yet. Stock still goes negative-safe: the
+            # guarded update simply does nothing.
+            book = await db.books.find_one({"id": bid}, {"_id": 0, "coming_soon": 1})
+            if (book or {}).get("coming_soon"):
+                logger.info("Pre-order line, no stock to decrement: book=%s order=%s", bid, order_id)
+                continue
             logger.warning("Insufficient stock at capture for book=%s order=%s — flagged backorder", bid, order_id)
             await db.orders.update_one(
                 {"id": order_id},
