@@ -617,14 +617,27 @@ export default function BookDetail() {
                                     <Plus size={14} strokeWidth={1.5} />
                                 </button>
                             </div>
-                            <button
-                                onClick={onAdd}
-                                data-testid="add-to-cart-main-button"
-                                className="inline-flex items-center gap-2 bg-[#002B5C] text-[#FFFFFF] px-8 py-4 text-sm font-medium hover:bg-[#001F42] transition-all"
-                            >
-                                <ShoppingBag size={16} strokeWidth={1.5} />
-                                {preorder.active ? "Pre-order" : "Add to Cart"}
-                            </button>
+                            {/*
+                             * A pre-order gets ONE button, and it goes straight
+                             * to payment.
+                             *
+                             * Add to Cart beside it would offer a choice that
+                             * does not exist: a reserved copy of an unprinted
+                             * book is only reserved once it is paid for. Two
+                             * buttons would also leave the softer one looking
+                             * like the safe option, and a cart full of
+                             * unpaid pre-orders reserves nothing for anybody.
+                             */}
+                            {!preorder.active && (
+                                <button
+                                    onClick={onAdd}
+                                    data-testid="add-to-cart-main-button"
+                                    className="inline-flex items-center gap-2 bg-[#002B5C] text-[#FFFFFF] px-8 py-4 text-sm font-medium hover:bg-[#001F42] transition-all"
+                                >
+                                    <ShoppingBag size={16} strokeWidth={1.5} />
+                                    Add to Cart
+                                </button>
+                            )}
                             <button
                                 onClick={() => {
                                     addItem(book, qty, chosenVariant);
@@ -636,10 +649,15 @@ export default function BookDetail() {
                                         nav("/login", { state: { from: { pathname: "/checkout" } } });
                                     }
                                 }}
-                                data-testid="buy-now-button"
-                                className="inline-flex items-center gap-2 border border-[#002B5C] px-8 py-4 text-sm font-medium hover:bg-[#F5F7FA] transition-all"
+                                data-testid={preorder.active ? "preorder-button" : "buy-now-button"}
+                                className={
+                                    preorder.active
+                                        ? "inline-flex items-center gap-2 bg-[#002B5C] text-[#FFFFFF] px-8 py-4 text-sm font-medium hover:bg-[#001F42] transition-all"
+                                        : "inline-flex items-center gap-2 border border-[#002B5C] px-8 py-4 text-sm font-medium hover:bg-[#F5F7FA] transition-all"
+                                }
                             >
-                                {preorder.active ? "Pre-order & pay" : "Buy Now"}
+                                {preorder.active && <ShoppingBag size={16} strokeWidth={1.5} />}
+                                {preorder.active ? "Pre-order" : "Buy Now"}
                             </button>
                         </div>
                     )}
