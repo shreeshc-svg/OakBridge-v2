@@ -1102,6 +1102,72 @@ function checkNoindexRoutes() {
     pass("noindex-routes", `${routes.length} noindex routes prerendered, none in the sitemap`);
 }
 
+
+/* ------------------------------------- 19. Canonicals point at real routes
+ * <Seo path=...> becomes the canonical link. Three legal pages built theirs
+ * from a slug that did not match the route — /shipping-policy declared its
+ * canonical as /shipping — so they spent months telling Google the real
+ * version of themselves was a URL with nothing behind it.
+ *
+ * Read from the AST and scoped to <Seo>, because `path` is an ordinary prop
+ * name: a first pass on the raw text flagged five CSV export buttons whose
+ * path is an API endpoint, not a route.
+ *
+ * Only string literals are checked. A computed path (pathname, a template with
+ * an id) is skipped rather than guessed at — the whole point of the fix was to
+ * make it computed.
+ */
+function checkCanonicalRoutes() {
+    try {
+        require("@babel/parser");
+    } catch {
+        warn("canonical-routes", "@babel/parser unavailable — skipped");
+        return;
+    }
+    const app = read(path.join(FRONTEND, "src", "App.js"));
+    const routes = [...app.matchAll(/path="([^"]+)"/g)].map((m) => m[1]);
+    const files = walk(path.join(FRONTEND, "src", "pages"), (n) => /\.jsx$/.test(n));
+    const bad = [];
+    let checked = 0;
+
+    for (const f of files) {
+        let ast;
+        try {
+            ast = parseFile(f);
+        } catch {
+            continue;
+        }
+        walkAst(ast.program.body, (node) => {
+            if (node.type !== "JSXOpeningElement") return true;
+            if (!node.name || node.name.name !== "Seo") return true;
+            const attr = (node.attributes || []).find((a) => a.name && a.name.name === "path");
+            if (!attr || !attr.value) return true;
+            const literal =
+                attr.value.type === "StringLiteral"
+                    ? attr.value.value
+                    : attr.value.type === "JSXExpressionContainer" &&
+                        attr.value.expression.type === "StringLiteral"
+                      ? attr.value.expression.value
+                      : null;
+            if (literal === null) return true; // computed — nothing to verify
+            checked++;
+            const ok = routes.some((r) => r === literal || r.replace(/\/:.*$/, "") === literal);
+            if (!ok) {
+                bad.push(
+                    `${path.relative(REPO, f)}:${node.loc ? node.loc.start.line : "?"} → ${literal}`,
+                );
+            }
+            return true;
+        });
+    }
+
+    if (bad.length) {
+        bad.forEach((b) => fail("canonical-routes", `canonical names a path with no route: ${b}`));
+    } else {
+        pass("canonical-routes", `${checked} literal canonicals resolve to routes`);
+    }
+}
+
 /* --------------------------------------------------------------- reporting */
 const CHECKS = [
     checkJsSyntax, checkNodeScripts, checkPython, checkJson,
@@ -1109,6 +1175,7 @@ const CHECKS = [
     checkVercelFallback, checkJsxDefined, checkJsDefined, checkImgAlt,
     checkNoStaticSitemap, checkSecrets, checkTopLevelJsx, checkAdminSections,
     checkNestedInteractive, checkIosZoomGuard, checkNoindexRoutes,
+    checkCanonicalRoutes,
 ];
 
 for (const c of CHECKS) {

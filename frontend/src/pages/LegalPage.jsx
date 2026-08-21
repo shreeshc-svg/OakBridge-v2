@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import Breadcrumbs from "../components/Breadcrumbs";
 import Seo from "../components/Seo";
 import { fetchLegalPage } from "../lib/api";
@@ -85,6 +85,7 @@ function renderMarkdown(md) {
 }
 
 export default function LegalPage({ slug }) {
+    const { pathname } = useLocation();
     const [page, setPage] = useState(null);
     const [loading, setLoading] = useState(true);
     const [notFound, setNotFound] = useState(false);
@@ -103,7 +104,25 @@ export default function LegalPage({ slug }) {
     return (
         <div data-testid={`legal-page-${slug}`}>
             <Breadcrumbs items={[{ label: title }]} />
-            <Seo title={title} description={`${title} — Oakbridge Publishing.`} path={`/${slug}`} />
+            {/*
+                The canonical is the URL we are actually on, not one built from
+                the slug.
+
+                It used to be `/${slug}`, and three of the five slugs do not
+                match their route: "shipping" serves /shipping-policy, "refund"
+                serves /refund-policy, "cookie" serves /cookie-policy. So those
+                pages told Google the real version of themselves lived at
+                /shipping, /refund and /cookie — URLs that do not exist. Terms
+                and privacy happened to match, which is why it went unnoticed.
+
+                Reading the location makes the two impossible to drift apart:
+                the canonical is the page, by construction.
+            */}
+            <Seo
+                title={title}
+                description={`${title} — Oakbridge Publishing.`}
+                path={pathname}
+            />
             <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 pt-16 pb-24 max-w-3xl">
                 <div className="overline">Legal</div>
                 <h1 className="font-serif text-4xl md:text-5xl mt-3 text-[#002B5C] leading-tight">
