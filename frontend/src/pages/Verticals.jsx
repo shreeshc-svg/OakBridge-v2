@@ -4,6 +4,7 @@ import Breadcrumbs from "../components/Breadcrumbs";
 import Seo from "../components/Seo";
 import { Link } from "react-router-dom";
 import { BookOpen, Calendar, Cpu, GraduationCap, ArrowUpRight } from "lucide-react";
+import { breadcrumbLd } from "../lib/schema";
 
 // Icons are referenced by name so admin-editable cards can pick one.
 const ICONS = { BookOpen, Calendar, Cpu, GraduationCap };
@@ -182,6 +183,7 @@ export default function Verticals() {
                 title="What We Do"
                 description="Oakbridge Publishing's business verticals — publishing, events, digital solutions and professional training."
                 path="/what-we-do"
+                jsonLd={breadcrumbLd([{ name: "What We Do" }])}
             />
             <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 pt-16 md:pt-20 pb-12 border-b border-[#E5E7EB]">
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-14 items-center">

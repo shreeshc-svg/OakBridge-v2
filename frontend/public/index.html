@@ -95,6 +95,21 @@
              largest download on the page. -->
         <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
 
+        <!--
+          Structured data: Organization
+
+          `sameAs` is what ties the social profiles to this entity rather than
+          leaving them as three unrelated pages. It is hardcoded because this
+          file is static, while the footer's links are admin-editable — so if
+          somebody changes a social URL in Admin, change it here too. The URLs
+          are deliberately clean: the LinkedIn one in the footer carries a
+          ?viewAsMember tracking parameter that does not belong in an identity
+          claim.
+
+          logo is logo.jpg, not favicon.png. Google asks for an actual logo; a
+          32px favicon is not one, and the knowledge panel shows what it is
+          given.
+        -->
         <!-- Structured data: Organization -->
         <script type="application/ld+json">
         {
@@ -102,10 +117,22 @@
           "@type": "Organization",
           "name": "Oakbridge Publishing",
           "url": "https://www.oakbridge.in/",
-          "logo": "https://www.oakbridge.in/favicon.png",
+          "logo": "https://www.oakbridge.in/logo.jpg",
           "foundingDate": "2017",
           "description": "A leading law and academic publishing house — law books, tax, business and academic titles, reference works, events, training and digital solutions.",
           "email": "info@oakbridge.in",
+          "contactPoint": {
+            "@type": "ContactPoint",
+            "contactType": "customer support",
+            "email": "info@oakbridge.in",
+            "areaServed": "IN",
+            "availableLanguage": ["English", "Hindi"]
+          },
+          "sameAs": [
+            "https://www.linkedin.com/company/oakbridgepublishing/",
+            "https://www.instagram.com/oakbridge.publishing/",
+            "https://www.facebook.com/OakbridgePublishing/"
+          ],
           "address": { "@type": "PostalAddress", "addressLocality": "Gurugram", "addressRegion": "Haryana", "addressCountry": "IN" }
         }
         </script>

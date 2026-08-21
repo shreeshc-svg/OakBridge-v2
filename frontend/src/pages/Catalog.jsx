@@ -9,6 +9,7 @@ import EbookCta from "../components/EbookCta";
 import { loadIndex, suggestFrom, readRecent, pushRecent } from "../components/SearchBox";
 import { fuzzySearch, didYouMean as didYouMeanTerm } from "../lib/fuzzy";
 import { responsiveImage } from "../lib/img";
+import { itemListLd, breadcrumbLd } from "../lib/schema";
 
 // Renders admin copy where *text* becomes the accent colour and \n a line break.
 function renderRich(text, color = "#CC0033") {
@@ -505,6 +506,33 @@ export default function Catalog() {
                         : activeCat.description
                 }
                 path={category && category !== "professional" ? `/books?category=${category}` : "/books"}
+                /*
+                 * An ItemList of what is actually rendered, in the order it is
+                 * rendered, plus the trail. Books load in pages, so this
+                 * describes the first screenful rather than the whole
+                 * catalogue — a claim about 200 titles on a page showing 24
+                 * would not match what is there.
+                 */
+                jsonLd={[
+                    ...(books.length
+                        ? [
+                              itemListLd(books, {
+                                  name: isDefaultView
+                                      ? "Oakbridge Publishing — Bookstore"
+                                      : activeCat.name,
+                                  path:
+                                      category && category !== "professional"
+                                          ? `/books?category=${category}`
+                                          : "/books",
+                              }),
+                          ]
+                        : []),
+                    breadcrumbLd(
+                        isDefaultView
+                            ? [{ name: "Bookstore" }]
+                            : [{ name: "Bookstore", path: "/books" }, { name: activeCat.name }],
+                    ),
+                ]}
             />
             {/* ============ HERO BANNER ============ */}
             <section

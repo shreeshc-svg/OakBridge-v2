@@ -4,6 +4,7 @@ import Breadcrumbs from "../components/Breadcrumbs";
 import Seo from "../components/Seo";
 import { Link, useParams } from "react-router-dom";
 import { ArrowUpRight, Check } from "lucide-react";
+import { breadcrumbLd } from "../lib/schema";
 
 // Defaults mirror what was live. Every text field is now editable in Admin →
 // Pages → Solutions (collection "page_solutions"); images stay on the
@@ -161,6 +162,7 @@ export default function Solutions() {
                 title="Solutions"
                 description="Institutional solutions from Oakbridge Publishing — for schools, colleges, educators and firms: bulk orders, adoptions and custom publishing."
                 path="/solutions"
+                jsonLd={breadcrumbLd([{ name: "Solutions" }])}
             />
             <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 pt-20 pb-12 border-b border-[#E5E7EB]">
                 <div className="overline">{site.solutions_index_overline || "Institutional Solutions"}</div>

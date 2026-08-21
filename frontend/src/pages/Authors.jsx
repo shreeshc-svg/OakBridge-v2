@@ -7,6 +7,7 @@ import { ArrowLeft, ArrowUpRight, ChevronLeft, ChevronRight, Search, X } from "l
 import BookCard from "../components/BookCard";
 import { fetchAuthor, fetchAuthorBooks, fetchAuthors, fetchSiteContent, fetchSettings, mediaUrl } from "../lib/api";
 import { fold, fuzzySearch, didYouMean } from "../lib/fuzzy";
+import { personLd, breadcrumbLd, metaDescription } from "../lib/schema";
 
 const AUTHORS_DEFAULTS = {
     overline: "Our Authors",
@@ -123,13 +124,36 @@ function AuthorDetail({ id }) {
                 before capturing — so these pages would have timed out and
                 shipped the empty shell. */}
             <Seo
-                title={author.name}
-                description={
-                    (author.bio || `Books by ${author.name}, published by Oakbridge Publishing.`).slice(0, 160)
-                }
+                /* "Name — Books" rather than the bare name: the query these
+                   pages can realistically win is "<author> books", and the
+                   title tag is the strongest signal of what a page answers. */
+                title={`${author.name} — Books`}
+                description={metaDescription(
+                    author.bio ||
+                        `Books by ${author.name}, published by Oakbridge Publishing.`,
+                )}
                 path={`/authors/${id}`}
                 image={author.photo ? mediaUrl(author.photo) : undefined}
                 type="profile"
+                /* These pages carried no structured data at all. A Person with
+                   their works is exactly what they are, and it is the thing
+                   that lets Google treat the author as an entity rather than
+                   as a string that happens to appear on some book pages. */
+                jsonLd={[
+                    personLd(
+                        {
+                            id,
+                            name: author.name,
+                            bio: author.bio,
+                            photoUrl: author.photo ? mediaUrl(author.photo) : "",
+                        },
+                        books,
+                    ),
+                    breadcrumbLd([
+                        { name: "Authors", path: "/authors" },
+                        { name: author.name },
+                    ]),
+                ]}
             />
             <div className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 pt-10">
                 <Link
@@ -541,6 +565,7 @@ function AuthorsIndex() {
                 title="Authors"
                 description="Meet the scholars, practitioners and subject-matter experts who write for Oakbridge Publishing."
                 path="/authors"
+                jsonLd={breadcrumbLd([{ name: "Authors" }])}
             />
             <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 pt-20 pb-16 border-b border-[#E5E7EB]">
                 <div className="overline">{site.authors_overline || AUTHORS_DEFAULTS.overline}</div>

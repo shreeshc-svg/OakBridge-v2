@@ -6,6 +6,7 @@ import { ArrowUpRight } from "lucide-react";
 import { fetchSiteContent, fetchSettings, fetchCollection, resolveCollection, mediaUrl } from "../lib/api";
 import { hiddenSet } from "../lib/sections";
 import TimelineRoad, { MilestoneList } from "../components/about/TimelineRoad";
+import { breadcrumbLd } from "../lib/schema";
 
 /**
  * Renders admin-editable copy. Text wrapped in *asterisks* is shown in the
@@ -146,6 +147,7 @@ export default function About() {
                 title="About"
                 description="An independent scholarly press founded in 2017 by two publishing veterans, producing authoritative law, tax, business and academic titles."
                 path="/about"
+                jsonLd={breadcrumbLd([{ name: "About" }])}
             />
             <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 pt-12 pb-14 md:pt-20 md:pb-24 border-b border-[#E5E7EB]">
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-10">

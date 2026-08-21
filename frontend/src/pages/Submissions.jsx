@@ -7,6 +7,7 @@ import { submitManuscript, fetchSiteContent, fetchSettings, formatApiError } fro
 import { hiddenSet } from "../lib/sections";
 import { toast } from "sonner";
 import { useFormShield, HoneypotField } from "../lib/formShield";
+import { breadcrumbLd } from "../lib/schema";
 
 const asLines = (v, fallback) => {
     const s = (v || "").trim();
@@ -79,6 +80,7 @@ export default function Submissions() {
                 title="Author Submissions"
                 description="Submit your manuscript to Oakbridge Publishing. We welcome scholarly and professional proposals across law, tax, business, academic and reference subjects."
                 path="/submissions"
+                jsonLd={breadcrumbLd([{ name: "Author submissions" }])}
             />
             <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 pt-20 pb-16 border-b border-[#E5E7EB]">
                 <div className="overline">{site.sub_overline || "Author Submissions"}</div>

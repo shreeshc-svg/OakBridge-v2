@@ -9,6 +9,7 @@ import CONTENT_DEFAULTS from "../lib/contentDefaults";
 const CONTACT_DEFAULT_ORDER = ["form", "details"];
 import { toast } from "sonner";
 import { useFormShield, HoneypotField } from "../lib/formShield";
+import { breadcrumbLd } from "../lib/schema";
 
 export default function Contact() {
     const { website, setWebsite, shield } = useFormShield();
@@ -85,6 +86,7 @@ export default function Contact() {
                 title="Contact"
                 description="Get in touch with Oakbridge Publishing about orders, manuscript submissions, rights, adoptions and partnerships."
                 path="/contact"
+                jsonLd={breadcrumbLd([{ name: "Contact" }])}
             />
             <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 pt-20 pb-16 border-b border-[#E5E7EB]">
                 <div className="overline">{site.contact_overline || "Get in Touch"}</div>

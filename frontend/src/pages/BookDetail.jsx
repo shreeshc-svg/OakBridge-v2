@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import VerifyNotice from "../components/VerifyNotice";
 import { hiddenSet } from "../lib/sections";
 import { ebookEdition } from "../lib/ebook";
+import { metaDescription } from "../lib/schema";
 import { preorderState, useCountdown, formatLaunchDate } from "../lib/preorder";
 
 // Trust badges under the price. Admin-managed via Settings key `pdp_badges`;
@@ -230,7 +231,21 @@ export default function BookDetail() {
     const qtyCap = preorder.active ? 10 : stock;
     const low = !oos && stock <= LOW_STOCK;
 
-    const seoDesc = (book.description || "").slice(0, 160);
+    /*
+     * The line that earns the click, so it is not a hard character cut.
+     *
+     * slice(0, 160) ended a lot of these mid-word — "…an overview of the
+     * Compan" — and led with whatever the description happened to open with,
+     * which for a reference title is often a sentence about scope rather than
+     * about the book. Author and edition go first: they are what somebody
+     * scanning ten blue links is actually checking.
+     */
+    const seoLead = [book.author, book.edition ? `${book.edition} edition` : ""]
+        .filter(Boolean)
+        .join(" · ");
+    const seoDesc = metaDescription(
+        seoLead ? `${seoLead}. ${book.description || ""}` : book.description,
+    );
     // Absolute, www-host cover URL. og:image and schema.org `image` are fetched
     // by machines that have no page to resolve a relative path against, so the
     // stored "/api/files/…" value is useless to them as-is.

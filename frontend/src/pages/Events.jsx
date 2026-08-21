@@ -27,6 +27,7 @@ function renderRich(text, color = "#F59E0B") {
         );
 }
 import { ArrowUpRight, Calendar, MapPin, Users, Sparkles, Mic, BookOpen, Award, Music, Smile, ShoppingBag, Brain, Building2 } from "lucide-react";
+import { breadcrumbLd } from "../lib/schema";
 
 const ASSET = (p) => `${process.env.REACT_APP_BACKEND_URL}${p}`;
 
@@ -544,6 +545,7 @@ export default function Events() {
                 title="Events"
                 description="Oakbridge Publishing events — Vidhi Utsav, the ILATS summit, book launches, panels and roundtables with scholars and policymakers."
                 path="/events"
+                jsonLd={breadcrumbLd([{ name: "Events" }])}
             />
             {/* HERO */}
             <section className="relative overflow-hidden border-b border-[#E5E7EB]">

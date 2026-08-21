@@ -8,6 +8,7 @@ import { hiddenSet, resolveSectionOrder } from "../lib/sections";
 
 const CAREERS_DEFAULT_ORDER = ["roles", "form"];
 import { toast } from "sonner";
+import { breadcrumbLd } from "../lib/schema";
 
 export default function Careers() {
     const [jobs, setJobs] = useState([]);
@@ -75,6 +76,7 @@ export default function Careers() {
                 title="Careers"
                 description="Join Oakbridge Publishing — open roles across editorial, sales and technology, plus how to apply."
                 path="/careers"
+                jsonLd={breadcrumbLd([{ name: "Careers" }])}
             />
 
             <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 pt-20 pb-14 border-b border-[#E5E7EB]">
