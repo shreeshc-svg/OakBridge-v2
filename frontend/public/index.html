@@ -68,25 +68,40 @@
 
           media="print" makes it non-blocking (the browser fetches it but does
           not need it to paint the screen), and onload flips it back to all.
-          display=swap already meant text appeared in the fallback face first
-          and swapped when the webfont landed, so what the visitor sees is
-          unchanged — it just starts sooner.
+
+          display=OPTIONAL, not swap. With swap, the page paints in the
+          fallback face and then reflows every line when Public Sans arrives —
+          which is a layout shift on every text block on every page, and
+          Search Console measured the result at CLS 0.45 on mobile across 48
+          URLs. Making the stylesheet non-blocking did not create that; it
+          made it worse, because painting sooner means more text is on screen
+          when the swap lands.
+
+          `optional` gives the font a short window and, if it misses, uses the
+          fallback for that page load and never swaps. No shift, ever. The cost
+          is honest: a first-time visitor on a slow connection may read the
+          whole page in system sans. Every later visit has the font cached and
+          gets Public Sans from the first paint.
+
+          Self-hosting the fonts would let us preload them and win both — the
+          brand face on first paint AND no shift. That is the next step if the
+          fallback rendering bothers anyone.
         -->
         <link
             rel="preload"
             as="style"
-            href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+            href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=optional"
         />
         <link
             rel="stylesheet"
-            href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+            href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=optional"
             media="print"
             onload="this.media='all'; this.onload=null;"
         />
         <noscript>
             <link
                 rel="stylesheet"
-                href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+                href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=optional"
             />
         </noscript>
 

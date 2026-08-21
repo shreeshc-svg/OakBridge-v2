@@ -1168,6 +1168,42 @@ function checkCanonicalRoutes() {
     }
 }
 
+
+/* ---------------------------------------- 20. Webfonts must not reflow text
+ * `display=swap` paints the page in a fallback face and then reflows every
+ * line when the webfont lands. On a text-heavy site that is a layout shift on
+ * every block of every page — Search Console measured CLS 0.45 on mobile
+ * across 48 URLs, which is squarely in the "Poor" band.
+ *
+ * `optional` uses the fallback for that load and never swaps, so the shift
+ * cannot happen. swap is the value every tutorial suggests, which is exactly
+ * why this is worth a gate.
+ */
+function checkFontDisplay() {
+    const html = read(path.join(FRONTEND, "public", "index.html"));
+    const css = read(path.join(FRONTEND, "src", "index.css"));
+    // Only the URLs. A first pass scanned the raw text and flagged the prose
+    // comment that explains why swap was abandoned — the third time in this
+    // file that a check has matched its own documentation.
+    const bad = [];
+    for (const [name, text] of [["public/index.html", html], ["src/index.css", css]]) {
+        // /css2 required: the bare host also appears as a <link preconnect>,
+        // which carries no stylesheet URL and therefore no display value.
+        for (const m of text.matchAll(/fonts\.googleapis\.com\/css2[^"')\s]*/g)) {
+            const d = m[0].match(/display=(\w+)/);
+            if (!d) bad.push(`${name} loads a font with no display value`);
+            else if (d[1] !== "optional") bad.push(`${name} requests display=${d[1]}`);
+        }
+    }
+    if (bad.length) {
+        bad.forEach((b) => fail("font-display", `${b} — swap reflows every line when the font lands`));
+    } else if (/fonts\.googleapis/.test(html)) {
+        pass("font-display", "webfonts load with display=optional, so they cannot reflow text");
+    } else {
+        warn("font-display", "no Google Fonts link found — check this is deliberate");
+    }
+}
+
 /* --------------------------------------------------------------- reporting */
 const CHECKS = [
     checkJsSyntax, checkNodeScripts, checkPython, checkJson,
@@ -1175,7 +1211,7 @@ const CHECKS = [
     checkVercelFallback, checkJsxDefined, checkJsDefined, checkImgAlt,
     checkNoStaticSitemap, checkSecrets, checkTopLevelJsx, checkAdminSections,
     checkNestedInteractive, checkIosZoomGuard, checkNoindexRoutes,
-    checkCanonicalRoutes,
+    checkCanonicalRoutes, checkFontDisplay,
 ];
 
 for (const c of CHECKS) {
