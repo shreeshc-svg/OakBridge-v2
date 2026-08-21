@@ -134,6 +134,30 @@ const STATIC_ROUTES = [
 ];
 
 /*
+ * Prerendered, but deliberately NOT in the sitemap.
+ *
+ * These carry <NoIndex>, which emits `noindex, follow` and a title — from
+ * React, at runtime. A crawler that does not execute JavaScript never sees
+ * either: it gets app-shell.html, which is the empty CRA shell with no title,
+ * no h1 and no meta description. That is one page reported as three separate
+ * faults by any non-rendering auditor, and it is also a noindex directive that
+ * only works if the crawler happens to render.
+ *
+ * Rendering them bakes the robots tag into the HTML, so the instruction no
+ * longer depends on anybody's JavaScript engine.
+ *
+ * Parameterised routes are excluded: /reset-password?token=… and
+ * /order-confirmation/:id have no canonical instance to render, and rendering
+ * one would publish a real token or order id into the build.
+ *
+ * Kept separate from STATIC_ROUTES because that list is checked against the
+ * sitemap for parity, and these must never appear in a sitemap — asking Google
+ * to crawl a URL and simultaneously telling it not to index it is a
+ * contradiction, and a sitemap is a request to index.
+ */
+const NOINDEX_ROUTES = ["/cart", "/checkout", "/account", "/login", "/register", "/forgot-password"];
+
+/*
  * Routes whose rendered HTML must contain a given string, or the render counts
  * as a failure.
  *
@@ -261,7 +285,7 @@ async function getRoutes() {
         console.warn(`Author routes skipped (${e.message}).`);
     }
 
-    return [...STATIC_ROUTES, ...dynamic];
+    return [...STATIC_ROUTES, ...NOINDEX_ROUTES, ...dynamic];
 }
 
 /*

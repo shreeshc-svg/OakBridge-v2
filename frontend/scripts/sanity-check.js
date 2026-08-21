@@ -1064,13 +1064,51 @@ function checkIosZoomGuard() {
     }
 }
 
+
+/* ------------------------------- 18. Noindex routes: rendered, never listed
+ * /cart, /login and friends carry `noindex, follow` from React. If they are
+ * not prerendered, a crawler that does not run JavaScript gets app-shell.html
+ * — no title, no h1, no robots tag — so the directive silently does not apply
+ * and three separate "missing tag" faults get reported for one page.
+ *
+ * The other half matters just as much: none of them may appear in the sitemap.
+ * A sitemap is a request to index; pairing it with noindex is a contradiction.
+ */
+function checkNoindexRoutes() {
+    const pre = read(path.join(FRONTEND, "scripts", "prerender.js"));
+    const srv = read(path.join(REPO, "backend", "server.py"));
+    const m = pre.match(/const NOINDEX_ROUTES = \[([^\]]*)\]/);
+    if (!m) {
+        fail("noindex-routes", "NOINDEX_ROUTES is gone from prerender.js — those pages ship the empty shell again");
+        return;
+    }
+    const routes = [...m[1].matchAll(/"([^"]+)"/g)].map((x) => x[1]);
+    if (!routes.length) {
+        fail("noindex-routes", "NOINDEX_ROUTES is empty");
+        return;
+    }
+    const sitemap = srv.slice(srv.indexOf("_SITEMAP_STATIC_PATHS"));
+    const listed = routes.filter((r) => sitemap.includes(`"${r}"`));
+    if (listed.length) {
+        fail("noindex-routes", `in the sitemap but marked noindex: ${listed.join(", ")}`);
+        return;
+    }
+    const app = read(path.join(FRONTEND, "src", "App.js"));
+    const unwrapped = routes.filter((r) => !app.includes(`path="${r}"`));
+    if (unwrapped.length) {
+        fail("noindex-routes", `prerendered but not a route in App.js: ${unwrapped.join(", ")}`);
+        return;
+    }
+    pass("noindex-routes", `${routes.length} noindex routes prerendered, none in the sitemap`);
+}
+
 /* --------------------------------------------------------------- reporting */
 const CHECKS = [
     checkJsSyntax, checkNodeScripts, checkPython, checkJson,
     checkUnusedImports, checkRouteTitles, checkRouteParity,
     checkVercelFallback, checkJsxDefined, checkJsDefined, checkImgAlt,
     checkNoStaticSitemap, checkSecrets, checkTopLevelJsx, checkAdminSections,
-    checkNestedInteractive, checkIosZoomGuard,
+    checkNestedInteractive, checkIosZoomGuard, checkNoindexRoutes,
 ];
 
 for (const c of CHECKS) {

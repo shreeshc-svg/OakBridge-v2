@@ -1,4 +1,5 @@
 import React from "react";
+import { pageTitle } from "./Seo";
 
 /**
  * Marks a route as private: `noindex, follow`, plus a proper browser-tab title.
@@ -32,7 +33,8 @@ import React from "react";
 export default function NoIndex({ title }) {
     return (
         <>
-            {title && <title>{`${title} · Oakbridge Publishing`}</title>}
+            {/* Same rule as Seo: the brand is appended only when it fits. */}
+            {title && <title>{pageTitle(title)}</title>}
             <meta name="robots" content="noindex, follow" />
         </>
     );
