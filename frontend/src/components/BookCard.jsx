@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { formatINR, notifyBackInStock, mediaUrl } from "../lib/api";
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
-import { ebookEdition } from "../lib/ebook";
+import { ebookEdition, printOutOffer } from "../lib/ebook";
 import { preorderState, useCountdown } from "../lib/preorder";
 
 const LOW_STOCK = 5;
@@ -78,6 +78,12 @@ export default function BookCard({ book, index = 0, compact = false }) {
     const preorder = preorderState(book);
     const left = useCountdown(preorder.active ? preorder.at : null);
     const oos = stock <= 0 && !preorder.active;
+    /*
+     * Out of print, not out of reach: what the price row shows instead of the
+     * old grey cover and OUT OF STOCK stamp. Computed for every card so the
+     * hook order never depends on stock, and read only in the oos branch.
+     */
+    const offer = printOutOffer(book, site, "plp");
     // Editor's pick. Ticked per book in Admin → Books; it drives no carousel and
     // no filter, it only dresses the tile.
     const starred = !!book.star_title;
@@ -219,24 +225,16 @@ export default function BookCard({ book, index = 0, compact = false }) {
                                is what they are usually choosing between. */
                             alt={book.author ? `${book.title} — book cover, by ${book.author}` : `${book.title} — book cover`}
                             onError={() => setImgErr(true)}
-                            className={`absolute inset-0 w-full h-full object-contain book-tilt ${oos ? "opacity-40 grayscale" : ""}`}
+                            className="absolute inset-0 w-full h-full object-contain book-tilt"
                             loading="lazy"
                             decoding="async"
                         />
                     ) : (
-                        <div className={`absolute inset-0 flex flex-col items-center justify-center text-center px-4 bg-[#F5F7FA] ${oos ? "opacity-40 grayscale" : ""}`}>
+                        <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-4 bg-[#F5F7FA]">
                             <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-[#CC0033] mb-2">Oakbridge</span>
                             <span className="font-serif text-sm md:text-base text-[#002B5C] leading-snug">{book.title}</span>
                             {book.author && <span className="mt-2 text-[10px] text-[#4B5563]">{book.author}</span>}
                         </div>
-                    )}
-                    {oos && (
-                        <span
-                            data-testid={`oos-badge-${book.id}`}
-                            className="absolute inset-x-0 top-1/2 -translate-y-1/2 bg-[#002B5C]/85 text-white text-center font-mono uppercase tracking-widest text-[11px] py-1.5"
-                        >
-                            Out of Stock
-                        </span>
                     )}
                     {preorder.active && (
                         /* A band, not a corner badge: top-left is Bestseller or
@@ -313,6 +311,39 @@ export default function BookCard({ book, index = 0, compact = false }) {
                 )}
 
                 <div className={`flex items-end justify-between ${compact ? "pt-2" : "pt-3"}`}>
+                {oos ? (
+                    /*
+                     * Two editions, one struck. No "out of stock" wording: the
+                     * struck price already says it, and the cover is no longer
+                     * greyed, so the card reads as "buy the eBook" rather than
+                     * as a dead end. Same two lines whether the eBook is priced
+                     * or still coming, so a row of cards keeps its baseline.
+                     */
+                    <div className="flex flex-col gap-0.5" data-testid={`oos-prices-${book.id}`}>
+                        <div className="flex items-baseline gap-1.5 opacity-45">
+                            <span className={`font-mono uppercase tracking-wider text-[#4B5563] border border-[#E5E7EB] px-1 ${compact ? "text-[8px]" : "text-[9px]"}`}>
+                                Print
+                            </span>
+                            <span className={`font-serif text-[#002B5C] line-through ${compact ? "text-sm" : "text-base"}`}>
+                                {formatINR(book.price)}
+                            </span>
+                        </div>
+                        <div className="flex items-baseline gap-1.5">
+                            <span className={`font-mono uppercase tracking-wider px-1 border ${offer.state === "ebook" ? "text-[#3D9970] border-[#3D9970]" : "text-[#B4750F] border-[#B4750F]"} ${compact ? "text-[8px]" : "text-[9px]"}`}>
+                                eBook
+                            </span>
+                            {offer.state === "ebook" ? (
+                                <span className={`font-serif text-[#002B5C] ${compact ? "text-base" : "text-xl"}`}>
+                                    {formatINR(offer.ebookPrice)}
+                                </span>
+                            ) : (
+                                <span className={`text-[#B4750F] ${compact ? "text-[10px]" : "text-xs"}`}>
+                                    Coming soon
+                                </span>
+                            )}
+                        </div>
+                    </div>
+                ) : (
                 <div className="flex items-baseline gap-2">
                     <span className={`font-serif text-[#002B5C] ${compact ? "text-base" : "text-xl"}`}>
                         {formatINR(book.price)}
@@ -323,7 +354,22 @@ export default function BookCard({ book, index = 0, compact = false }) {
                         </span>
                     )}
                 </div>
+                )}
                 {oos ? (
+                    offer.state === "ebook" ? (
+                        /* Leaves the site, so an anchor and not the cart button.
+                           Outside the card's <Link>, so it is not a nested
+                           interactive element. */
+                        <a
+                            href={offer.ebookUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            data-testid={`read-ebook-${book.id}`}
+                            className={`-m-2.5 p-2.5 font-medium text-[#3D9970] hover:text-[#002B5C] transition-colors whitespace-nowrap ${compact ? "text-[10px]" : "text-xs"}`}
+                        >
+                            <span className="border-b border-current pb-0.5">Read eBook ↗</span>
+                        </a>
+                    ) : (
                     notified ? (
                         <span className={`text-[#4B5563] ${compact ? "text-[10px]" : "text-xs"}`}>✓ We'll notify you</span>
                     ) : (
@@ -334,6 +380,7 @@ export default function BookCard({ book, index = 0, compact = false }) {
                         >
                             Notify me
                         </button>
+                    )
                     )
                 ) : (
                     /*

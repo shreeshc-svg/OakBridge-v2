@@ -71,3 +71,35 @@ export const ebookEdition = (book, site, placement = "plp") => {
         price: featureOn && priceOn && linked ? gross : null,
     };
 };
+
+/**
+ * What to show where the price used to be, on a title whose print run is out.
+ *
+ * The old treatment greyed the cover, stamped OUT OF STOCK across it and
+ * replaced the price with a notify link — three separate ways of saying "dead
+ * end" before the customer reached the edition they could actually buy. These
+ * titles are not unavailable, they are unavailable IN PRINT, and the eBook is
+ * the answer rather than the consolation.
+ *
+ * So both prices are shown: print struck through, eBook live beside it. No
+ * "out of stock" wording anywhere — a struck price already says it, and saying
+ * it twice reads as an apology.
+ *
+ * Returns `state`:
+ *   "ebook" — priced and linked, so it can be bought right now
+ *   "soon"  — no price we are allowed to show, so the eBook is promised, not sold
+ *
+ * "soon" is what every out-of-stock title returns until the eBook price list is
+ * uploaded AND the price toggles are switched on in Admin — both are off today.
+ * Notify-me therefore stays on the "soon" branch: it is the only thing on that
+ * card a customer can act on, and it is what captures demand for the reprint.
+ */
+export const printOutOffer = (book, site, placement = "plp") => {
+    const ebook = ebookEdition(book, site, placement);
+    return {
+        printPrice: book?.price ?? null,
+        ebookPrice: ebook.price,
+        ebookUrl: ebook.url,
+        state: ebook.price !== null && ebook.linked ? "ebook" : "soon",
+    };
+};

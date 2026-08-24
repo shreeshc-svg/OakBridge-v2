@@ -480,14 +480,23 @@ export default function BookDetail() {
                      */}
                     <div className="mt-8 pb-8 border-b border-[#E5E7EB]">
                         <div className="flex items-baseline gap-4">
-                            {ebookPrice !== null && (
+                            {/* Labelled whenever a second line follows it, which now
+                                includes the out-of-print case where that line reads
+                                "Coming soon". An unlabelled struck price above a
+                                labelled one asks the reader to infer which is which. */}
+                            {(ebookPrice !== null || oos) && (
                                 <span className="text-xs text-[#4B5563] w-11 flex-shrink-0">
                                     {printLabel}
                                 </span>
                             )}
                             <span
                                 data-testid="book-price"
-                                className="font-serif text-5xl text-[#002B5C]"
+                                /* Struck and dimmed when the print run is out, so the
+                                   eBook line below it reads as the live option. No
+                                   "out of stock" wording beside it -- a struck price
+                                   says that already, and the panel further down says
+                                   it once more in full. */
+                                className={`font-serif text-5xl text-[#002B5C] ${oos ? "line-through opacity-45" : ""}`}
                             >
                                 {formatINR(activePrice)}
                             </span>
@@ -502,6 +511,23 @@ export default function BookDetail() {
                                 </>
                             )}
                         </div>
+                        {ebookPrice === null && oos && (
+                            /* Out of print, with no eBook price we are allowed to
+                               show. Promised rather than sold — and still a line
+                               in the price block, so the card that linked here and
+                               this page say the same thing. */
+                            <div className="mt-3 flex items-baseline gap-4">
+                                <span className="text-xs text-[#4B5563] w-11 flex-shrink-0">
+                                    {ebookPriceLabel}
+                                </span>
+                                <span
+                                    data-testid="pdp-ebook-soon"
+                                    className="font-serif text-2xl text-[#B4750F]"
+                                >
+                                    Coming soon
+                                </span>
+                            </div>
+                        )}
                         {ebookPrice !== null && (
                             <div className="mt-3 flex items-baseline gap-4">
                                 <span className="text-xs text-[#4B5563] w-11 flex-shrink-0">
