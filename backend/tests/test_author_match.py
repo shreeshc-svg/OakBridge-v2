@@ -16,7 +16,8 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 BACKEND = os.path.dirname(HERE)
 
-WANTED = {"author_match_key", "match_authors", "_HONORIFIC_PREFIX", "_POST_NOMINAL"}
+WANTED = {"author_match_key", "match_authors", "_HONORIFIC_PREFIX", "_POST_NOMINAL",
+          "AUTHOR_ALIASES"}
 
 
 def load():
@@ -29,8 +30,12 @@ def load():
             for t in node.targets:
                 if isinstance(t, ast.Name) and t.id in WANTED:
                     out.append(node)
+    for node in tree.body:                      # AUTHOR_ALIASES carries a type hint
+        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) \
+                and node.target.id in WANTED:
+            out.append(node)
     mod = ast.Module(body=out, type_ignores=[])
-    ns = {"re": re, "List": list}
+    ns = {"re": re, "List": list, "dict": dict}
     exec(compile(mod, "<extracted>", "exec"), ns)
     missing = WANTED - set(ns)
     assert not missing, f"could not extract {missing} from extensions.py"
@@ -40,6 +45,7 @@ def load():
 ns = load()
 author_match_key = ns["author_match_key"]
 match_authors = ns["match_authors"]
+AUTHOR_ALIASES = ns["AUTHOR_ALIASES"]
 
 failures = []
 
@@ -208,6 +214,57 @@ check(_master_name("  Asheeta   Regidi  ") == "Asheeta Regidi", "runs of spaces 
 idx = index("Mukesh Bhutani", "Kinshuk Jha")
 check(match_authors(_master_name("Mukesh Bhutani\nKinshuk Jha"), idx)
       == ids("Mukesh Bhutani", "Kinshuk Jha"), "and both authors still match afterwards")
+
+print("\n-- alternate spellings (AUTHOR_ALIASES) --")
+# The book's author line and the author record are maintained separately and
+# disagree in ways no rule can bridge safely -- spacing ("AP" for "A P"),
+# misspellings ("Butani" for "Bhutani"), and outright different forms
+# ("Apoorva Kumar Singh" where the record says "Apoorva K Singh"). A fuzzy
+# match would cover all three and is exactly what must not be used, so this is
+# a hand-checked list. These assertions guard the list, not a formula.
+def index_with_aliases(*pairs):
+    """(id, name) pairs, expanded through AUTHOR_ALIASES like _author_index()."""
+    out = []
+    for aid, name in pairs:
+        for sp in (name, *AUTHOR_ALIASES.get(aid, ())):
+            k = author_match_key(sp)
+            if k:
+                out.append({"id": aid, "match_key": k})
+    return out
+
+idx = index_with_aliases(("a-p-bhardwaj", "A P Bhardwaj"), ("apoorva-k-singh", "Apoorva K Singh"),
+                         ("mukesh-bhutani", "Mukesh Bhutani"), ("ns-nappinai", "NS Nappinai"),
+                         ("dr-k-k-khandelwal-ias-r", "Dr K K Khandelwal, IAS (R)"))
+for spelling, want in [("AP Bhardwaj", "a-p-bhardwaj"), ("Ap Bhardwaj", "a-p-bhardwaj"),
+                       ("A P Bharadwaj", "a-p-bhardwaj"), ("A P Bhardwaj", "a-p-bhardwaj"),
+                       ("Mukesh Butani", "mukesh-bhutani"), ("N S Nappinai", "ns-nappinai")]:
+    check(match_authors(spelling, idx) == [want], f"{spelling!r} reaches the right record")
+check(match_authors("Dr K K Khandelwal & Apoorva Kumar Singh", idx)
+      == ["dr-k-k-khandelwal-ias-r", "apoorva-k-singh"],
+      "the book that prompted this renders both authors")
+
+# The failure this design must not have: one person listed twice because their
+# name and an alias both hit.
+check(match_authors("A P Bhardwaj and AP Bhardwaj", idx) == ["a-p-bhardwaj"],
+      "name and alias both matching still yields ONE author")
+
+print("\n-- guarding the alias list itself --")
+check(all(isinstance(v, tuple) for v in AUTHOR_ALIASES.values()),
+      "every entry is a tuple, so a bare string cannot be iterated per character")
+short = [a for v in AUTHOR_ALIASES.values() for a in v if len(a.split()) < 2]
+check(not short, f"no alias is a single word -- one would match inside other names {short or ''}")
+seen = {}
+dupes = []
+for aid, v in AUTHOR_ALIASES.items():
+    for a in v:
+        k = author_match_key(a)
+        if k in seen and seen[k] != aid:
+            dupes.append((a, seen[k], aid))
+        seen[k] = aid
+check(not dupes, f"no spelling is claimed by two different authors {dupes or ''}")
+check(all(a.strip() and a == a.strip() for v in AUTHOR_ALIASES.values() for a in v),
+      "no alias is blank or carries stray whitespace")
+check(len(AUTHOR_ALIASES) == len(set(AUTHOR_ALIASES)), "no id appears twice")
 
 print()
 if failures:

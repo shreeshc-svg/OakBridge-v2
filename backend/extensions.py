@@ -782,6 +782,44 @@ def match_authors(book_author: str, index: List[dict]) -> List[str]:
     return [aid for _, _, aid in kept]
 
 
+# Spellings a book uses for an author we file under a different one.
+#
+# The book's author line and the author record are maintained by different
+# people at different times, and they disagree in ways no rule can bridge
+# safely. Three kinds appear here:
+#
+#   spacing   "AP Bhardwaj" / "A P Bhardwaj", "NS Nappinai" / "N S Nappinai"
+#   misspelt  "Mukesh Butani" for Bhutani, "N Vijiayaraghavan", "Kacchwaha"
+#   different "Apoorva Kumar Singh" where the record says "Apoorva K Singh"
+#
+# A general fuzzy match would cover all three and is exactly what must not be
+# used: the cost of a wrong match is a real person's biography printed under
+# another person's name. Measured, a rule that merely collapsed spaced initials
+# made things WORSE -- 164 books correct down to 146 -- because it also fused
+# names that should stay apart. So this is a list, not an algorithm. Every
+# entry was read and confirmed against the record's own bio.
+#
+# Keyed by author id. Add a line when a book credits someone we already hold
+# under another spelling; it takes effect on deploy, with no data migration.
+AUTHOR_ALIASES: dict = {
+    "a-p-bhardwaj": ("AP Bhardwaj", "Ap Bhardwaj", "A P Bharadwaj"),
+    "ss-naganand": ("S S Naganand",),
+    "p-v-srinivasan": ("PV Srinivasan",),
+    "n-vijayaraghavan": ("N Vijiayaraghavan",),
+    "mukesh-bhutani": ("Mukesh Butani",),
+    "ns-nappinai": ("N S Nappinai",),
+    "sandhya-p.r.": ("Sandhya P. R.", "Sandhya P. R"),
+    "somesh-upadhyay": ("Somesh Upadhyay",),
+    "tg-suresh": ("T G Suresh",),
+    "md.-tauseef-alam-": ("Md Tauseef Alam",),
+    "richa-kachhwaha": ("Richa Kacchwaha",),
+    "apoorva-k-singh": ("Apoorva Kumar Singh",),
+    # The Hindi edition credits him in Devanagari. Same man, and no
+    # normalisation can cross scripts -- only a list can.
+    "dr.-kuldip-chand-agnihotri-": ("प्रोफेसर कुलदीप चन्द अग्निहोत्री",),
+}
+
+
 # Every PDP view would otherwise re-read the whole 140+ roster to answer one
 # book. The index is names only and rebuilt on a short TTL, so an edit in
 # Admin shows up within the minute without a restart.
@@ -797,11 +835,17 @@ async def _author_index() -> List[dict]:
         rows = await db.authors.find(
             {"enabled": {"$ne": False}}, {"_id": 0, "id": 1, "name": 1}
         ).to_list(None)
-        _author_index_cache = [
-            {"id": r["id"], "match_key": author_match_key(r.get("name", ""))}
-            for r in rows
-            if r.get("id")
-        ]
+        # One entry per spelling, all pointing at the same id. match_authors
+        # dedupes by id, so an author whose book names them twice over -- once
+        # as filed and once as an alias -- still renders once.
+        _author_index_cache = []
+        for r in rows:
+            if not r.get("id"):
+                continue
+            for spelling in (r.get("name", ""), *AUTHOR_ALIASES.get(r["id"], ())):
+                key = author_match_key(spelling)
+                if key:
+                    _author_index_cache.append({"id": r["id"], "match_key": key})
         _author_index_at = now
     return _author_index_cache
 
