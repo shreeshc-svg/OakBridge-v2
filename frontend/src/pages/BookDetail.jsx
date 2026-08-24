@@ -10,7 +10,7 @@ import BookCard from "../components/BookCard";
 import DeskCopyDialog from "../components/DeskCopyDialog";
 import ReviewsSection from "../components/ReviewsSection";
 import { fetchBook, fetchBooks, formatINR, notifyBackInStock, fetchSettings, mediaUrl,
-    fetchBookPreview,
+    fetchBookPreview, fetchBookAuthors,
 } from "../lib/api";
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
@@ -83,6 +83,17 @@ export default function BookDetail() {
     const hidden = hiddenSet(settings);
     const [binding, setBinding] = useState(null);
     const [size, setSize] = useState(null);
+    // Author records behind this book. The book's own author_bio is a separate
+    // copy that drifts from the author page, so the record wins wherever we
+    // have one and author_bio is the fallback for books nobody in the roster
+    // matches. Kept in its own request so a failure here cannot affect the
+    // product itself, for the same reason the related-books call is separate.
+    const [bookAuthors, setBookAuthors] = useState([]);
+
+    useEffect(() => {
+        setBookAuthors([]);
+        fetchBookAuthors(id).then(setBookAuthors).catch(() => setBookAuthors([]));
+    }, [id]);
 
     useEffect(() => {
         setLoading(true);
@@ -256,7 +267,27 @@ export default function BookDetail() {
         "@type": "Book",
         name: book.title,
         ...(book.subtitle ? { alternateName: book.subtitle } : {}),
-        author: { "@type": "Person", name: book.author },
+        /*
+         * One Person per author we can actually identify, each with the @id of
+         * their author page, so Google can join the book to the same entity the
+         * author page describes instead of treating "A & B" as one person with
+         * a peculiar name.
+         *
+         * Falls back to the raw string when nobody matches the roster. Note
+         * this only reaches a crawler that runs JS: /books/:id is prerendered,
+         * and at prerender time this request has to resolve before the capture
+         * — which it does, since the prerenderer waits on network idle.
+         */
+        author:
+            bookAuthors.length > 0
+                ? bookAuthors.map((a) => ({
+                      "@type": "Person",
+                      "@id": `${SITE}/authors/${a.id}#person`,
+                      name: a.name,
+                      url: `${SITE}/authors/${a.id}`,
+                      ...(a.photo ? { image: mediaUrl(a.photo) } : {}),
+                  }))
+                : { "@type": "Person", name: book.author },
         isbn: book.isbn,
         numberOfPages: book.pages,
         inLanguage: book.language,
@@ -790,7 +821,13 @@ export default function BookDetail() {
                             {[
                                 { v: "description", label: "Description" },
                                 { v: "specs", label: "Specifications" },
-                                { v: "author", label: "About the Author" },
+                                {
+                                    v: "author",
+                                    label:
+                                        bookAuthors.length > 1
+                                            ? "About the Authors"
+                                            : "About the Author",
+                                },
                             ].map((t) => (
                                 <button
                                     key={t.v}
@@ -836,31 +873,106 @@ export default function BookDetail() {
                             )}
                             {tab === "author" && (
                                 <div className="max-w-2xl">
-                                    <div className="flex items-start gap-6">
-                                        {book.author_photo && (
-                                            <img
-                                                src={book.author_photo.startsWith("/api/") ? `${process.env.REACT_APP_BACKEND_URL}${book.author_photo}` : book.author_photo}
-                                                alt={book.author}
-                                                data-testid="book-author-photo"
-                                                className="w-24 h-24 object-cover border border-[#E5E7EB] flex-shrink-0"
-                                            />
-                                        )}
-                                        <div>
-                                            <p
-                                                data-testid="book-author-name"
-                                                className="font-serif text-2xl text-[#002B5C]"
-                                            >
-                                                {book.author}
-                                            </p>
-                                            <p
-                                                data-testid="book-author-bio"
-                                                className="mt-3 text-sm whitespace-pre-line"
-                                            >
-                                                {book.author_bio ||
-                                                    "A distinguished Oakbridge author with deep subject expertise and years of classroom experience. Every Oakbridge author is vetted by our editorial board for scholarship, clarity and cultural relevance."}
-                                            </p>
+                                    {bookAuthors.length > 0 ? (
+                                        /* One block per author on the book, each showing the
+                                           same bio as that author's own page and linking to
+                                           it. Divided rather than boxed so a four-author
+                                           title still reads as one section. */
+                                        <div className="divide-y divide-[#E5E7EB]">
+                                            {bookAuthors.map((a) => (
+                                                <div
+                                                    key={a.id}
+                                                    data-testid={`book-author-${a.id}`}
+                                                    className="flex items-start gap-6 py-6 first:pt-0 last:pb-0"
+                                                >
+                                                    {a.photo && (
+                                                        <Link
+                                                            to={`/authors/${a.id}`}
+                                                            className="flex-shrink-0"
+                                                            tabIndex={-1}
+                                                            aria-hidden="true"
+                                                        >
+                                                            <img
+                                                                src={mediaUrl(a.photo)}
+                                                                alt={a.name}
+                                                                data-testid="book-author-photo"
+                                                                loading="lazy"
+                                                                className="w-24 h-24 object-cover border border-[#E5E7EB]"
+                                                            />
+                                                        </Link>
+                                                    )}
+                                                    <div className="min-w-0">
+                                                        <Link
+                                                            to={`/authors/${a.id}`}
+                                                            data-testid="book-author-name"
+                                                            className="font-serif text-2xl text-[#002B5C] hover:underline underline-offset-4"
+                                                        >
+                                                            {a.name}
+                                                        </Link>
+                                                        {(a.affiliation || a.specialty) && (
+                                                            <p className="mt-1 text-xs uppercase tracking-wider text-[#6B7280]">
+                                                                {[a.specialty, a.affiliation]
+                                                                    .filter(Boolean)
+                                                                    .join(" · ")}
+                                                            </p>
+                                                        )}
+                                                        {a.bio && (
+                                                            <p
+                                                                data-testid="book-author-bio"
+                                                                className="mt-3 text-sm whitespace-pre-line"
+                                                            >
+                                                                {a.bio}
+                                                            </p>
+                                                        )}
+                                                        <Link
+                                                            to={`/authors/${a.id}`}
+                                                            className="mt-3 inline-block text-xs uppercase tracking-wider text-[#CC0033] hover:underline underline-offset-4"
+                                                        >
+                                                            All books by {a.name}
+                                                        </Link>
+                                                    </div>
+                                                </div>
+                                            ))}
                                         </div>
-                                    </div>
+                                    ) : (
+                                        /* Nobody on this book is in the author roster. Fall
+                                           back to the copy stored on the book itself.
+
+                                           If that is empty too we render nothing. This used
+                                           to print "A distinguished Oakbridge author with
+                                           deep subject expertise and years of classroom
+                                           experience" under whichever name happened to be
+                                           there — a specific claim about a real person that
+                                           nobody had checked. An empty tab is better than
+                                           an invented biography. */
+                                        book.author_bio && (
+                                            <div className="flex items-start gap-6">
+                                                {book.author_photo && (
+                                                    <img
+                                                        src={mediaUrl(book.author_photo)}
+                                                        alt={book.author}
+                                                        data-testid="book-author-photo"
+                                                        loading="lazy"
+                                                        className="w-24 h-24 object-cover border border-[#E5E7EB] flex-shrink-0"
+                                                    />
+                                                )}
+                                                <div className="min-w-0">
+                                                    <p
+                                                        data-testid="book-author-name"
+                                                        className="font-serif text-2xl text-[#002B5C]"
+                                                    >
+                                                        {book.author}
+                                                    </p>
+                                                    <p
+                                                        data-testid="book-author-bio"
+                                                        className="mt-3 text-sm whitespace-pre-line"
+                                                    >
+                                                        {book.author_bio}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        )
+                                    )}
                                 </div>
                             )}
                         </div>

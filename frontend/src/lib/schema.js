@@ -67,6 +67,12 @@ export const personLd = (author, books = []) => {
     return {
         "@context": "https://schema.org",
         "@type": "Person",
+        // Stable identity for this person across the site. The Book schema on
+        // every PDP they appear on emits the same @id, which is what lets
+        // Google treat the author of those books and the subject of this page
+        // as one entity rather than as a recurring string. Both sides must use
+        // this exact shape -- test-structured-data.mjs holds them together.
+        "@id": `${SITE}/authors/${author.id}#person`,
         name: author.name,
         url: `${SITE}/authors/${author.id}`,
         ...(author.bio ? { description: metaDescription(author.bio, 300) } : {}),

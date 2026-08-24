@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 import re
+import time
 import uuid
 import logging
 import secrets
@@ -695,6 +696,115 @@ async def get_author(author_id: str):
     if not author:
         raise HTTPException(status_code=404, detail="Author not found")
     return author
+
+
+# Honorifics and post-nominals that appear glued to a name in the Title Master
+# but are not part of it. "Lohit Matani, IPS" is one author, not two, and the
+# author record is filed as plain "Lohit Matani".
+_HONORIFIC_PREFIX = re.compile(
+    r"^(?:prof\.?|dr\.?|adv\.?|justice|hon\.?|shri|smt\.?|ca|cs|cma)\s+",
+    re.IGNORECASE,
+)
+
+
+def author_match_key(name: str) -> str:
+    """The form of an author's name we look for inside a book's author string."""
+    n = re.sub(r"\s+", " ", (name or "").strip())
+    # Strip repeatedly: "Prof. Dr. Anil Malhotra" carries two.
+    while True:
+        stripped = _HONORIFIC_PREFIX.sub("", n)
+        if stripped == n:
+            break
+        n = stripped
+    return n.strip().lower()
+
+
+def match_authors(book_author: str, index: List[dict]) -> List[str]:
+    """Author ids whose name appears in `book_author`, in order of appearance.
+
+    Books store their authors as one free-text string. The Title Master writes
+    multi-author titles every way a human might -- "A & B", "A, B and C",
+    "A, B, and C" -- and also writes post-nominals that look exactly like a
+    separator ("Lohit Matani, IPS") and nested editor lists ("Daksh ( Editor -
+    Shruti Vidyasagar, Sandhya P. R., ... and Harish Narasappa)"). Splitting
+    that string on punctuation gets all of those wrong.
+
+    So we do not split it. We ask which known authors appear inside it, which
+    is the same question /authors/{id}/books already asks in the other
+    direction, and it degrades gracefully: a name we have no record for simply
+    contributes nothing instead of producing a bogus author.
+
+    Matches must fall on word boundaries, or "Vishal" would match inside
+    "Vishalakshi". Where two records both match and one's span sits inside the
+    other's, the longer wins -- with records for both "Chythanya" and
+    "K K Chythanya", the string "H Padamchand Khincha & K K Chythanya" names
+    the latter, once.
+    """
+    haystack = re.sub(r"\s+", " ", (book_author or "")).lower()
+    if not haystack:
+        return []
+    spans = []  # (start, end, author_id)
+    for entry in index:
+        key = entry.get("match_key") or ""
+        if not key:
+            continue
+        for m in re.finditer(rf"(?<![\w']){re.escape(key)}(?![\w'])", haystack):
+            spans.append((m.start(), m.end(), entry["id"]))
+            break  # one hit per author is enough; we only need position
+    # Longest first, then drop any span contained in one we already kept.
+    spans.sort(key=lambda s: (s[0] - s[1], s[0]))
+    kept: List[tuple] = []
+    for start, end, aid in spans:
+        if any(start >= k[0] and end <= k[1] for k in kept):
+            continue
+        if any(aid == k[2] for k in kept):
+            continue
+        kept.append((start, end, aid))
+    kept.sort(key=lambda s: s[0])
+    return [aid for _, _, aid in kept]
+
+
+# Every PDP view would otherwise re-read the whole 140+ roster to answer one
+# book. The index is names only and rebuilt on a short TTL, so an edit in
+# Admin shows up within the minute without a restart.
+_author_index_cache: Optional[List[dict]] = None
+_author_index_at: float = 0.0
+_AUTHOR_INDEX_TTL = 60.0
+
+
+async def _author_index() -> List[dict]:
+    global _author_index_cache, _author_index_at
+    now = time.monotonic()
+    if _author_index_cache is None or now - _author_index_at > _AUTHOR_INDEX_TTL:
+        rows = await db.authors.find(
+            {"enabled": {"$ne": False}}, {"_id": 0, "id": 1, "name": 1}
+        ).to_list(None)
+        _author_index_cache = [
+            {"id": r["id"], "match_key": author_match_key(r.get("name", ""))}
+            for r in rows
+            if r.get("id")
+        ]
+        _author_index_at = now
+    return _author_index_cache
+
+
+@extras_router.get("/books/{book_id}/authors", response_model=List[Author])
+async def book_authors(book_id: str):
+    """The author records behind a book, for the About the Author section.
+
+    The book carries its own author_bio, but that is a separate copy that
+    drifts from the author page. The author record is the source of truth; the
+    frontend falls back to author_bio only when this returns nothing.
+    """
+    book = await db.books.find_one({"id": book_id}, {"_id": 0, "author": 1})
+    if not book:
+        raise HTTPException(status_code=404, detail="Book not found")
+    ids = match_authors(book.get("author", ""), await _author_index())
+    if not ids:
+        return []
+    rows = await db.authors.find({"id": {"$in": ids}}, {"_id": 0}).to_list(None)
+    by_id = {r["id"]: r for r in rows}
+    return [by_id[i] for i in ids if i in by_id]
 
 
 @extras_router.get("/authors/{author_id}/books")

@@ -84,6 +84,11 @@ export const fetchOrder = (id) => api.get(`/orders/${id}`).then((r) => r.data);
 // Authors
 export const fetchAuthors = () => api.get("/authors").then((r) => r.data);
 export const fetchAuthor = (id) => api.get(`/authors/${id}`).then((r) => r.data);
+// The author records behind a book, for the PDP's About the Author section.
+// Empty list is a normal answer, not an error: the book's author may not be in
+// the roster at all, in which case the page falls back to book.author_bio.
+export const fetchBookAuthors = (id) =>
+    api.get(`/books/${id}/authors`).then((r) => r.data);
 export const fetchAuthorBooks = (id) =>
     api.get(`/authors/${id}/books`).then((r) => r.data);
 

@@ -89,10 +89,39 @@ eq('ends on a sentence when one falls past halfway',
 eq('but ignores an early full stop rather than throwing the snippet away',
    metaDescription('Vol 1. ' + 'y '.repeat(200)).length > 100, true);
 
-console.log('\n-- nothing fabricated --');
 // Comments explain why aggregateRating is absent, and a naive scan matches
 // those. Strip them, or the test reports the explanation as the offence.
 const strip = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+console.log('\n-- the author entity is one entity --');
+/*
+ * The PDP's Book schema and the author page's Person schema each mint an @id
+ * for the same human. If those two strings ever stop agreeing, both documents
+ * stay individually valid and Google quietly goes back to treating the author
+ * as two unrelated nodes -- no error anywhere, just the entity link gone. So
+ * assert the shape on both sides.
+ */
+const personIdOf = personLd({ id: 'k-kannan', name: 'K Kannan' }, []);
+eq('personLd mints an @id', personIdOf['@id'], 'https://www.oakbridge.in/authors/k-kannan#person');
+eq('and it is distinct from url', personIdOf['@id'] !== personIdOf.url, true);
+const pdp = read('src/pages/BookDetail.jsx');
+eq('BookDetail mints the same shape',
+   /\$\{SITE\}\/authors\/\$\{a\.id\}#person/.test(pdp), true);
+eq('BookDetail maps every matched author, not just the first',
+   /author:\s*[\s\S]{0,200}bookAuthors\.map\(/.test(pdp), true);
+eq('and still falls back to the raw string when none match',
+   /"@type":\s*"Person",\s*name:\s*book\.author/.test(pdp), true);
+
+console.log('\n-- no invented biography --');
+// The tab used to print "A distinguished Oakbridge author with deep subject
+// expertise and years of classroom experience" under whichever name was on the
+// book -- a specific claim about a real person that nobody had verified.
+// Read the stripped source: the comment explaining WHY this line went away
+// quotes it verbatim, and a raw scan reports the explanation as the offence.
+eq('the generic author paragraph is gone', /A distinguished Oakbridge author/.test(strip(pdp)), false);
+eq('the bio shown is the author record\'s own', /\{a\.bio\}/.test(pdp), true);
+
+console.log('\n-- nothing fabricated --');
 const all = strip(read('src/lib/schema.js')) + strip(read('src/pages/BookDetail.jsx'));
 eq('no aggregateRating anywhere', /aggregateRating/.test(all), false);
 eq('no reviewCount anywhere', /reviewCount/.test(all), false);
