@@ -780,6 +780,132 @@ async def admin_reseed_authors(confirm: bool = False):
     return {"dry_run": False, "replaced_from": before, "authors_now": after}
 
 
+@admin_router.post("/import-authors")
+async def admin_import_authors(confirm: bool = False, file: str = "authors_new_2026_08.json"):
+    """Add author records from a JSON file in the deploy, WITHOUT deleting anything.
+
+    Deliberately not /reseed-authors. That one calls delete_many({}) before it
+    inserts, so running it to add a handful of people would silently discard
+    every bio, photo and ordering change made in Admin since the last seed.
+    This upserts by id: an id we already hold is reported as a skip and left
+    exactly as it is, so a second run is a no-op and nothing you typed is ever
+    overwritten by a file.
+
+    Dry run by default -- call with ?confirm=true to write.
+    """
+    safe = os.path.basename(file or "")
+    if not safe.endswith(".json"):
+        raise HTTPException(status_code=400, detail="file must be a .json in the backend directory")
+    path = os.path.join(os.path.dirname(__file__), safe)
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404, detail=f"{safe} not found in deploy")
+    records = json.load(open(path, encoding="utf-8"))
+
+    existing = {
+        d["id"] async for d in db.authors.find({}, {"_id": 0, "id": 1}) if d.get("id")
+    }
+    to_add, skipped, bad = [], [], []
+    for r in records:
+        doc = {k: v for k, v in r.items() if not k.startswith("_")}
+        aid = (doc.get("id") or "").strip()
+        if not aid or not (doc.get("name") or "").strip():
+            bad.append(r.get("name") or r.get("id") or "<blank>")
+            continue
+        if aid in existing:
+            skipped.append(aid)
+            continue
+        # Author (the response model) declares bio/photo/affiliation/specialty as
+        # plain str, so a null here would 500 /api/authors for every visitor.
+        for k in ("bio", "photo", "affiliation", "specialty", "category"):
+            doc[k] = doc.get(k) or ""
+        doc.setdefault("enabled", True)
+        doc.setdefault("order", 0)
+        doc.setdefault("title_count", 0)
+        to_add.append(doc)
+
+    result = {
+        "dry_run": not confirm,
+        "file": safe,
+        "in_file": len(records),
+        "would_add" if not confirm else "added": len(to_add),
+        "already_present": len(skipped),
+        "rejected": bad,
+        "with_bio": sum(1 for d in to_add if d.get("bio")),
+        "without_bio": sum(1 for d in to_add if not d.get("bio")),
+        "names": [d["name"] for d in to_add][:60],
+    }
+    if not confirm:
+        result["note"] = "re-call with ?confirm=true to write. Nothing is ever deleted or overwritten."
+        return result
+    if to_add:
+        await db.authors.insert_many(to_add)
+    result["authors_now"] = await db.authors.count_documents({})
+    return result
+
+
+def _master_authors_by_isbn() -> dict:
+    """ISBN -> Author Name, read from the Title Master shipped with the deploy."""
+    import openpyxl
+
+    path = os.path.join(os.path.dirname(__file__), "title_master_go_live.xlsx")
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="title_master_go_live.xlsx not found in deploy")
+    ws = openpyxl.load_workbook(path, read_only=True).active
+    rows = list(ws.iter_rows(values_only=True))
+    hdr = [str(h).strip() if h else "" for h in rows[0]]
+    try:
+        ci, ca = hdr.index("ISBN"), hdr.index("Author Name")
+    except ValueError:
+        raise HTTPException(status_code=500, detail="Title Master is missing ISBN or Author Name")
+    out = {}
+    for r in rows[1:]:
+        if not r[ci] or not r[ca]:
+            continue
+        out[re.sub(r"\D", "", str(r[ci]))] = re.sub(r"\s+", " ", str(r[ca])).strip()
+    return out
+
+
+@admin_router.post("/repair-book-authors")
+async def admin_repair_book_authors(confirm: bool = False):
+    """Bring each book's author string back in line with the Title Master.
+
+    The master is where these names are actually maintained; the book documents
+    are a copy made at import, and the copy has drifted. Most of the drift is
+    cosmetic ("A and B" became "A & B"), but at least one is corrupting: the
+    master reads "Dr K K Khandelwal, IAS (R)" -- one man and his service -- and
+    the book reads "Dr K K Khandelwal & IAS (R)", which every reader and every
+    matcher sees as two authors, one of them named "IAS (R)".
+
+    Matched on ISBN, so a retitled book still lines up. Dry run by default.
+    """
+    master = _master_authors_by_isbn()
+    books = await db.books.find({}, {"_id": 0, "id": 1, "isbn": 1, "title": 1, "author": 1}).to_list(None)
+    changes, unmatched = [], 0
+    for b in books:
+        key = re.sub(r"\D", "", b.get("isbn") or "")
+        want = master.get(key)
+        if want is None:
+            unmatched += 1
+            continue
+        have = re.sub(r"\s+", " ", (b.get("author") or "")).strip()
+        if have != want:
+            changes.append({"id": b["id"], "title": b.get("title", ""), "from": have, "to": want})
+
+    result = {
+        "dry_run": not confirm,
+        "books": len(books),
+        "not_in_master": unmatched,
+        "would_change" if not confirm else "changed": len(changes),
+        "changes": changes if not confirm else changes[:40],
+    }
+    if not confirm:
+        result["note"] = "re-call with ?confirm=true to apply"
+        return result
+    for c in changes:
+        await db.books.update_one({"id": c["id"]}, {"$set": {"author": c["to"]}})
+    return result
+
+
 # ---------------------------------------------------------------- book preview
 # "Look inside": the preview PDF is rendered to page IMAGES on upload and only
 # those images are ever served. The source PDF is never exposed, so the preview

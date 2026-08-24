@@ -707,6 +707,20 @@ _HONORIFIC_PREFIX = re.compile(
 )
 
 
+# Post-nominals typed into the record's own name field. One author is filed as
+# "Dr K K Khandelwal, IAS (R)" -- books credit him as "K K Khandelwal" or
+# "Dr K K Khandelwal" and never carry the suffix, so an exact-substring match
+# missed him on all eleven of his titles, the most of any author. His page was
+# also absent from the sitemap, which advertises only authors a book resolves to.
+#
+# \b binds only to the bare-word alternatives: "(retd.)" ends in a bracket, so a
+# trailing \b after the whole group would never match it.
+_POST_NOMINAL = re.compile(
+    r"[,\s]+(?:(?:ias|ips|irs|ifs|irts|icas)\b|\(\s*r\s*\)|\(\s*retd\.?\s*\)).*$",
+    re.IGNORECASE,
+)
+
+
 def author_match_key(name: str) -> str:
     """The form of an author's name we look for inside a book's author string."""
     n = re.sub(r"\s+", " ", (name or "").strip())
@@ -716,7 +730,11 @@ def author_match_key(name: str) -> str:
         if stripped == n:
             break
         n = stripped
-    return n.strip().lower()
+    n = n.strip().lower()
+    # Only drop the suffix while two or more words survive. "Rao, IAS" must not
+    # collapse to "rao", which would match inside half the catalogue.
+    without = _POST_NOMINAL.sub("", n).strip()
+    return without if len(without.split()) >= 2 else n
 
 
 def match_authors(book_author: str, index: List[dict]) -> List[str]:

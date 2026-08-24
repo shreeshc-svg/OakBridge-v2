@@ -3,11 +3,12 @@ import { fetchSettings, mediaUrl,
     adminUploadBookPreview,
     adminRemoveBookPreview,
 } from "../../lib/api";
-import { Plus, Pencil, Trash2, X, FileUp, FileCheck2, Upload, ImagePlus, Trash, Sparkles, ArrowDownWideNarrow } from "lucide-react";
+import { Plus, Pencil, Trash2, X, FileUp, FileCheck2, Upload, ImagePlus, Trash, Sparkles, ArrowDownWideNarrow, UserCheck } from "lucide-react";
 import {
     adminBulkDeleteBooks,
     adminBulkDraftAuthorBios,
     adminApplyReleaseOrder,
+    adminRepairBookAuthors,
     adminBulkImportBooks,
     adminCreateBook,
     adminDeleteAllBooks,
@@ -278,6 +279,129 @@ function ReleaseOrderDialog({ onClose, onDone }) {
                         className="bg-[#002B5C] text-white px-5 py-2.5 text-sm font-medium hover:bg-[#001F42] disabled:opacity-50"
                     >
                         {busy ? "Working…" : "Apply"}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+/**
+ * Author strings, back in line with the Title Master.
+ *
+ * The book documents hold a COPY of the author name made at import, and the
+ * copy has drifted from the sheet the names are actually maintained in. Most of
+ * the drift is cosmetic — "A and B" became "A & B" — but one is corrupting: the
+ * master reads "Dr K K Khandelwal, IAS (R)", one man and his service, and the
+ * book reads "Dr K K Khandelwal & IAS (R)", which reads as two authors, the
+ * second of them named "IAS (R)".
+ *
+ * Matched on ISBN so a retitled book still lines up, and every change is listed
+ * before anything is written.
+ */
+function RepairAuthorsDialog({ onClose, onDone }) {
+    const [preview, setPreview] = useState(null);
+    const [busy, setBusy] = useState(false);
+
+    const run = async (dryRun) => {
+        setBusy(true);
+        try {
+            const res = await adminRepairBookAuthors(!dryRun);
+            setPreview(res);
+            if (!dryRun) {
+                toast.success(`${res.changed} book(s) brought back in line with the master.`);
+                onDone?.();
+            }
+        } catch (err) {
+            toast.error(formatApiError(err));
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    useEffect(() => {
+        run(true);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    const n = preview ? (preview.dry_run ? preview.would_change : preview.changed) : 0;
+
+    return (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-start justify-center p-4 overflow-y-auto">
+            <div
+                data-testid="repair-authors-dialog"
+                className="bg-white border border-[#002B5C] w-full max-w-2xl p-8 my-10"
+            >
+                <div className="overline">Catalogue data</div>
+                <h2 className="font-serif text-3xl mt-1 text-[#002B5C]">Author names</h2>
+                <p className="text-sm text-[#4B5563] mt-3">
+                    Rewrites each book&rsquo;s author line to match the Title Master, which is where
+                    these names are maintained. Matched on ISBN. Nothing else on the book is touched.
+                </p>
+
+                {!preview ? (
+                    <p className="mt-6 font-mono text-xs text-[#4B5563]">Checking…</p>
+                ) : (
+                    <>
+                        <div className="mt-6 grid grid-cols-3 gap-2">
+                            <div className="border border-[#E5E7EB] bg-white px-3 py-2">
+                                <div className="overline !text-[9px]">Books</div>
+                                <div className="font-serif text-2xl text-[#002B5C]">{preview.books}</div>
+                            </div>
+                            <div className="border border-[#E5E7EB] bg-white px-3 py-2">
+                                <div className="overline !text-[9px]">Will change</div>
+                                <div className="font-serif text-2xl text-[#002B5C]">{n}</div>
+                            </div>
+                            <div className="border border-[#E5E7EB] bg-white px-3 py-2">
+                                <div className="overline !text-[9px]">Not in master</div>
+                                <div className="font-serif text-2xl text-[#002B5C]">
+                                    {preview.not_in_master}
+                                </div>
+                                <div className="text-[10px] text-[#4B5563] mt-0.5">Left alone</div>
+                            </div>
+                        </div>
+
+                        {preview.changes?.length > 0 && (
+                            <div className="mt-5 max-h-72 overflow-y-auto border border-[#E5E7EB]">
+                                {preview.changes.map((c) => (
+                                    <div
+                                        key={c.id}
+                                        className="px-3 py-2 text-[12px] border-b border-[#E5E7EB] last:border-0"
+                                    >
+                                        <div className="text-[#002B5C]">{c.title}</div>
+                                        <div className="font-mono text-[11px] text-[#CC0033] mt-0.5">
+                                            − {c.from}
+                                        </div>
+                                        <div className="font-mono text-[11px] text-[#3d9970]">
+                                            + {c.to}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                        {n === 0 && (
+                            <p className="mt-5 text-sm text-[#4B5563]">
+                                Every book already matches the master. Nothing to do.
+                            </p>
+                        )}
+                    </>
+                )}
+
+                <div className="mt-7 flex items-center justify-end gap-3">
+                    <button
+                        onClick={onClose}
+                        disabled={busy}
+                        className="px-4 py-2 text-sm text-[#4B5563] hover:text-[#002B5C]"
+                    >
+                        Close
+                    </button>
+                    <button
+                        onClick={() => run(false)}
+                        disabled={busy || !preview || n === 0}
+                        data-testid="repair-authors-apply"
+                        className="bg-[#002B5C] text-white px-5 py-2.5 text-sm font-medium hover:bg-[#001F42] disabled:opacity-50"
+                    >
+                        {busy ? "Working…" : `Apply${n ? ` to ${n}` : ""}`}
                     </button>
                 </div>
             </div>
@@ -1077,6 +1201,7 @@ export default function AdminBooks() {
     const [editing, setEditing] = useState(null); // object or "new"
     const [csvOpen, setCsvOpen] = useState(false);
     const [releaseOrderOpen, setReleaseOrderOpen] = useState(false);
+    const [repairAuthorsOpen, setRepairAuthorsOpen] = useState(false);
     const [loading, setLoading] = useState(true);
     const [query, setQuery] = useState("");
     const [catFilter, setCatFilter] = useState("all");
@@ -1253,6 +1378,14 @@ export default function AdminBooks() {
                         <ArrowDownWideNarrow size={14} strokeWidth={1.5} /> Release order
                     </button>
                     <button
+                        onClick={() => setRepairAuthorsOpen(true)}
+                        data-testid="admin-repair-authors-button"
+                        title="Bring book author lines back in line with the Title Master"
+                        className="inline-flex items-center gap-2 border border-[#002B5C] text-[#002B5C] px-4 py-2 text-sm hover:bg-[#F5F7FA]"
+                    >
+                        <UserCheck size={14} strokeWidth={1.5} /> Author names
+                    </button>
+                    <button
                         onClick={onBulkDraftBios}
                         disabled={bulkDraftingBios}
                         data-testid="admin-bulk-draft-bios-button"
@@ -1404,6 +1537,12 @@ export default function AdminBooks() {
                     categories={cats}
                     onClose={() => setEditing(null)}
                     onSaved={load}
+                />
+            )}
+            {repairAuthorsOpen && (
+                <RepairAuthorsDialog
+                    onClose={() => setRepairAuthorsOpen(false)}
+                    onDone={load}
                 />
             )}
             {releaseOrderOpen && (

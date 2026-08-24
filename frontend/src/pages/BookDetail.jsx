@@ -92,6 +92,10 @@ export default function BookDetail() {
 
     useEffect(() => {
         setBookAuthors([]);
+        // Back to Description on every book. The author tab is conditional now,
+        // so arriving on a book that has no author content while `tab` still
+        // reads "author" would render an empty panel under no visible tab.
+        setTab("description");
         fetchBookAuthors(id).then(setBookAuthors).catch(() => setBookAuthors([]));
     }, [id]);
 
@@ -821,13 +825,20 @@ export default function BookDetail() {
                             {[
                                 { v: "description", label: "Description" },
                                 { v: "specs", label: "Specifications" },
-                                {
-                                    v: "author",
-                                    label:
-                                        bookAuthors.length > 1
-                                            ? "About the Authors"
-                                            : "About the Author",
-                                },
+                                /* Hidden when there is nothing to put in it.
+                                   A book with no author record and no
+                                   author_bio used to render a selectable tab
+                                   over an empty bordered box, which reads as a
+                                   broken page rather than as absent copy. */
+                                ...(bookAuthors.length || book.author_bio
+                                    ? [{
+                                        v: "author",
+                                        label:
+                                            bookAuthors.length > 1
+                                                ? "About the Authors"
+                                                : "About the Author",
+                                    }]
+                                    : []),
                             ].map((t) => (
                                 <button
                                     key={t.v}

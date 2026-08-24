@@ -232,6 +232,11 @@ export const adminUploadEbookPriceList = (file, dryRun = false) => {
  * title never surfaces as new however recent it is. dryRun reports without
  * writing.
  */
+// Both are additive/repair tools, superadmin-only, and dry-run unless confirmed.
+export const adminImportAuthors = (confirm = false) =>
+    api.post(`/admin/import-authors?confirm=${confirm ? "true" : "false"}`).then((r) => r.data);
+export const adminRepairBookAuthors = (confirm = false) =>
+    api.post(`/admin/repair-book-authors?confirm=${confirm ? "true" : "false"}`).then((r) => r.data);
 export const adminApplyReleaseOrder = (dryRun = true) =>
     api.post(`/admin/apply-release-order?dry_run=${dryRun ? "true" : "false"}`).then((r) => r.data);
 

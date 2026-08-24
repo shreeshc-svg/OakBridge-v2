@@ -123,5 +123,32 @@ check("that tier is exactly superadmin + the legacy admin", roles == {"superadmi
 check("the frontend hides the buttons for the same tier",
       "export const canDelete" in js and "isSuperadmin(user?.role)" in js)
 
+print("\n-- bulk author tools are superadmin-only --")
+# Neither deletes, so require_admin()'s DELETE-method gate cannot cover them:
+# both are POSTs that rewrite the whole roster or the whole catalogue in one go.
+rb = open(os.path.join(BACKEND, "rbac.py"), encoding="utf-8").read()
+_only = rb.split("SUPERADMIN_ONLY_PATHS")[1].split(")")[0]
+for _p in ("import-authors", "repair-book-authors"):
+    check(f"{_p} is in SUPERADMIN_ONLY_PATHS", f'"{_p}"' in _only)
+feat = open(os.path.join(BACKEND, "features.py"), encoding="utf-8").read()
+# Parsed, not grepped. The docstring explains that it is deliberately NOT
+# /reseed-authors "which calls delete_many({})" -- a text scan reads the
+# explanation as the offence. Third time this file pattern has bitten.
+_tree = ast.parse(feat)
+_fn = next(n for n in ast.walk(_tree)
+           if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+           and n.name == "admin_import_authors")
+_calls = {ast.unparse(n.func) for n in ast.walk(_fn) if isinstance(n, ast.Call)}
+check("import-authors never deletes -- that is the whole point of it existing",
+      not any("delete" in c for c in _calls))
+check("and it does insert",
+      any("insert_many" in c for c in _calls))
+check("import-authors is a dry run unless confirmed",
+      "async def admin_import_authors(confirm: bool = False" in feat)
+check("repair-book-authors is a dry run unless confirmed",
+      "async def admin_repair_book_authors(confirm: bool = False" in feat)
+check("reseed-authors, which DOES delete, is still fenced off",
+      '"reseed-authors"' in _only)
+
 print("\n" + (f"{fail} FAILED" if fail else "all assertions passed"))
 sys.exit(1 if fail else 0)

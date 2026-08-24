@@ -2,9 +2,10 @@ import React, { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "../../context/AuthContext";
 import { canDelete } from "../../lib/rbac";
-import { Eye, EyeOff, Trash2, Plus, ArrowUp, ArrowDown, Upload, Save, X } from "lucide-react";
+import { Eye, EyeOff, Trash2, Plus, ArrowUp, ArrowDown, Upload, Save, X, UserPlus } from "lucide-react";
 import {
     adminListAuthors,
+    adminImportAuthors,
     adminCreateAuthor,
     adminUpdateAuthor,
     adminDeleteAuthor,
@@ -160,12 +161,146 @@ function AuthorRow({ a, index, count, mode, onChange, onSave, onDelete, onMove, 
     );
 }
 
+/**
+ * Add the authors we know are missing, without touching the ones we have.
+ *
+ * Deliberately not "Reseed authors" — that one empties the collection before it
+ * reloads, so using it to add a few people would discard every bio, photo and
+ * ordering change made on this screen since the last seed. This only inserts
+ * ids we do not already hold; anything present is reported and left alone, so a
+ * second run does nothing.
+ *
+ * Records whose bio could not be sourced are added blank on purpose. A name and
+ * a working link is honest; an invented biography under a real person's name is
+ * not.
+ */
+function ImportAuthorsDialog({ onClose, onDone }) {
+    const [preview, setPreview] = useState(null);
+    const [busy, setBusy] = useState(false);
+
+    const run = async (dryRun) => {
+        setBusy(true);
+        try {
+            const res = await adminImportAuthors(!dryRun);
+            setPreview(res);
+            if (!dryRun) {
+                toast.success(`${res.added} author(s) added. Nothing was replaced.`);
+                onDone?.();
+            }
+        } catch (err) {
+            toast.error(err?.response?.data?.detail || err.message || "Could not import");
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    useEffect(() => {
+        run(true);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    const n = preview ? (preview.dry_run ? preview.would_add : preview.added) : 0;
+
+    return (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-start justify-center p-4 overflow-y-auto">
+            <div
+                data-testid="import-authors-dialog"
+                className="bg-white border border-[#002B5C] w-full max-w-2xl p-8 my-10"
+            >
+                <div className="overline">Roster</div>
+                <h2 className="font-serif text-3xl mt-1 text-[#002B5C]">Add missing authors</h2>
+                <p className="text-sm text-[#4B5563] mt-3">
+                    People credited on a book who have no author record, so their book&rsquo;s
+                    About&nbsp;the&nbsp;Author section has nothing to show. Adds only what is
+                    missing — an author you already have is skipped, never overwritten.
+                </p>
+
+                {!preview ? (
+                    <p className="mt-6 font-mono text-xs text-[#4B5563]">Checking…</p>
+                ) : (
+                    <>
+                        <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-2">
+                            <div className="border border-[#E5E7EB] px-3 py-2">
+                                <div className="overline !text-[9px]">In the file</div>
+                                <div className="font-serif text-2xl text-[#002B5C]">{preview.in_file}</div>
+                            </div>
+                            <div className="border border-[#E5E7EB] px-3 py-2">
+                                <div className="overline !text-[9px]">Will add</div>
+                                <div className="font-serif text-2xl text-[#002B5C]">{n}</div>
+                            </div>
+                            <div className="border border-[#E5E7EB] px-3 py-2">
+                                <div className="overline !text-[9px]">With a bio</div>
+                                <div className="font-serif text-2xl text-[#002B5C]">{preview.with_bio}</div>
+                                <div className="text-[10px] text-[#4B5563] mt-0.5">From the master</div>
+                            </div>
+                            <div className="border border-[#E5E7EB] px-3 py-2">
+                                <div className="overline !text-[9px]">Already here</div>
+                                <div className="font-serif text-2xl text-[#002B5C]">
+                                    {preview.already_present}
+                                </div>
+                                <div className="text-[10px] text-[#4B5563] mt-0.5">Untouched</div>
+                            </div>
+                        </div>
+
+                        {preview.without_bio > 0 && (
+                            <p className="text-[11px] text-[#4B5563] mt-3">
+                                <strong>{preview.without_bio}</strong> are added with an empty bio —
+                                their book credits them alongside others, so the master&rsquo;s
+                                &ldquo;About the Author&rdquo; text covers the whole group and cannot
+                                be split per person without reading it. Write those here and they
+                                appear on the book page immediately.
+                            </p>
+                        )}
+
+                        {preview.names?.length > 0 && (
+                            <div className="mt-4 border border-[#E5E7EB] max-h-56 overflow-y-auto">
+                                {preview.names.map((nm) => (
+                                    <div
+                                        key={nm}
+                                        className="px-3 py-1.5 text-[12px] text-[#002B5C] border-b border-[#E5E7EB] last:border-0"
+                                    >
+                                        {nm}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                        {n === 0 && (
+                            <p className="mt-5 text-sm text-[#4B5563]">
+                                Nothing to add — every author in the file is already here.
+                            </p>
+                        )}
+                    </>
+                )}
+
+                <div className="mt-7 flex items-center justify-end gap-3">
+                    <button
+                        onClick={onClose}
+                        disabled={busy}
+                        className="px-4 py-2 text-sm text-[#4B5563] hover:text-[#002B5C]"
+                    >
+                        Close
+                    </button>
+                    <button
+                        onClick={() => run(false)}
+                        disabled={busy || !preview || n === 0}
+                        data-testid="import-authors-apply"
+                        className="bg-[#002B5C] text-white px-5 py-2.5 text-sm font-medium hover:bg-[#001F42] disabled:opacity-50"
+                    >
+                        {busy ? "Working…" : `Add${n ? ` ${n}` : ""}`}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 export default function AdminAuthors() {
     // Deleting is admin-only; the server refuses it either way, this just
     // keeps a button off the screen that would only say no.
     const { user: me } = useAuth();
     const mayDelete = canDelete(me);
     const [authors, setAuthors] = useState(null);
+    const [importOpen, setImportOpen] = useState(false);
     const [mode, setMode] = useState("alpha");
     const [dirty, setDirty] = useState({});   // id -> true when edited but unsaved
     const [q, setQ] = useState("");
@@ -340,6 +475,15 @@ export default function AdminAuthors() {
                     <Plus size={15} strokeWidth={1.5} /> Add author
                 </button>
 
+                <button
+                    onClick={() => setImportOpen(true)}
+                    data-testid="admin-import-authors-button"
+                    title="Add the authors credited on a book but missing from the roster"
+                    className="inline-flex items-center gap-1.5 border border-[#002B5C] text-[#002B5C] px-4 py-2 text-sm hover:bg-[#F5F7FA]"
+                >
+                    <UserPlus size={15} strokeWidth={1.5} /> Add missing
+                </button>
+
                 <div className="inline-flex border border-[#E5E7EB]">
                     <button
                         onClick={() => switchMode("alpha")}
@@ -398,6 +542,12 @@ export default function AdminAuthors() {
                     </div>
                 )}
             </div>
+            {importOpen && (
+                <ImportAuthorsDialog
+                    onClose={() => setImportOpen(false)}
+                    onDone={load}
+                />
+            )}
         </div>
     );
 }

@@ -116,8 +116,22 @@ SECTION_PATHS: dict[str, set[str]] = {
 }
 
 # Bulk/destructive operations — always superadmin, never grantable.
+#
+# import-authors only ever adds, and repair-book-authors only rewrites a field
+# from the Title Master — neither deletes. They are here anyway because both
+# rewrite the whole catalogue or the whole roster in one call, and the delete
+# rule in require_admin() cannot help: it keys on the DELETE method, and these
+# are POSTs.
 SUPERADMIN_ONLY_PATHS = frozenset(
-    {"reset-test-data", "merge-titles", "delete-coverless", "find-generated-covers", "reseed-authors"}
+    {
+        "reset-test-data",
+        "merge-titles",
+        "delete-coverless",
+        "find-generated-covers",
+        "reseed-authors",
+        "import-authors",
+        "repair-book-authors",
+    }
 )
 
 # Settings keys only a superadmin may write. Everything else (page layout,

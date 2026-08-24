@@ -16,7 +16,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 BACKEND = os.path.dirname(HERE)
 
-WANTED = {"author_match_key", "match_authors", "_HONORIFIC_PREFIX"}
+WANTED = {"author_match_key", "match_authors", "_HONORIFIC_PREFIX", "_POST_NOMINAL"}
 
 
 def load():
@@ -72,6 +72,30 @@ check(author_match_key("Prof. Dr. Anil Malhotra") == "anil malhotra", "stacked h
 check(author_match_key("  CA  Kiran   Shah ") == "kiran shah", "whitespace collapses, CA comes off")
 check(author_match_key("") == "", "empty name yields an empty key")
 check(author_match_key("Andrew Dr Smith") == "andrew dr smith", "an honorific mid-name is left alone")
+
+print("\n-- post-nominals in the RECORD's own name --")
+# One record is filed as "Dr K K Khandelwal, IAS (R)". Books credit him without
+# the suffix, so requiring the whole stored name missed him on all eleven of his
+# titles -- more than any other author -- and kept his page out of the sitemap.
+check(author_match_key("Dr K K Khandelwal, IAS (R)") == "k k khandelwal",
+      "the suffix comes off the stored name, honorific too")
+check(author_match_key("Smarak Swain, IRS") == "smarak swain", "IRS likewise")
+check(author_match_key("Dhanashree Patil, ICAS") == "dhanashree patil", "ICAS likewise")
+check(author_match_key("Nitesh Dhawan (Retd.)") == "nitesh dhawan", "a parenthesised Retd. too")
+# The guard that makes it safe: never strip down to a single word.
+check(author_match_key("Rao, IAS") == "rao, ias",
+      "a one-word remainder is left alone, or 'rao' would match half the catalogue")
+check(author_match_key("Vishal, IPS") == "vishal, ips", "same for any single-word name")
+
+idx = index("Dr K K Khandelwal, IAS (R)", "Dheera Khandelwal", "Apoorva K Singh")
+kk = ids("Dr K K Khandelwal, IAS (R)")
+check(match_authors("K K Khandelwal", idx) == kk, "the bare name now finds the record")
+check(match_authors("Dr K K Khandelwal", idx) == kk, "and the Dr form")
+check(match_authors("Dr K K Khandelwal, IAS (R)", idx) == kk, "and the full stored form, once")
+check(match_authors("Dr K K Khandelwal & Apoorva K Singh", idx) == kk + ids("Apoorva K Singh"),
+      "alongside a co-author")
+check(match_authors("Dheera Khandelwal", idx) == ids("Dheera Khandelwal"),
+      "a different Khandelwal is still their own person")
 
 print("\n-- single author --")
 idx = index("Asheeta Regidi", "Surendra Raut")
