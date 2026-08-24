@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle, PackageX, Package, Search } from "lucide-react";
+import { AlertTriangle, PackageX, Search } from "lucide-react";
 import { adminLowStock, fetchBooks, adminUpdateBook, formatINR, mediaUrl, syncInventoryFromSheet } from "../../lib/api";
 import { toast } from "sonner";
 import ExportButton from "../../components/admin/ExportButton";
@@ -391,5 +391,3 @@ function BookRow({ book, critical = false }) {
         </div>
     );
 }
-
-export { Package };  // re-export to avoid unused import warnings

@@ -88,10 +88,6 @@ def _resolve(path: str) -> str:
     return full
 
 
-def _storage_ready() -> bool:
-    return True
-
-
 def init_storage() -> Optional[str]:
     if _s3_enabled():
         log.info(

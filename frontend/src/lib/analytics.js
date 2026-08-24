@@ -55,7 +55,7 @@ let ready = false;
  */
 const isRealVisitor = () => !isPrerender();
 
-export function hasConsent() {
+function hasConsent() {
     try {
         return localStorage.getItem(CONSENT_KEY) === "accepted";
     } catch {

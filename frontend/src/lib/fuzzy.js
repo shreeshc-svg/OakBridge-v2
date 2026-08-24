@@ -25,7 +25,7 @@ export const fold = (s) =>
  * Levenshtein distance, abandoned early once it exceeds `max`.
  * Bailing out keeps this cheap across a few hundred titles.
  */
-export function editDistance(a, b, max = 2) {
+function editDistance(a, b, max = 2) {
     if (a === b) return 0;
     if (Math.abs(a.length - b.length) > max) return max + 1;
     let prev = Array.from({ length: b.length + 1 }, (_, i) => i);

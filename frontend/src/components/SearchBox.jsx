@@ -47,7 +47,7 @@ export function loadIndex() {
  */
 let authorCache = null;
 let authorPromise = null;
-export function loadAuthorIndex() {
+function loadAuthorIndex() {
     if (authorCache) return Promise.resolve(authorCache);
     if (!authorPromise) {
         authorPromise = fetchAuthors()
@@ -90,7 +90,7 @@ export function pushRecent(q) {
  * so "978-93-9576-4544" matches "9789395764544" and "e-commerce" matches
  * "e commerce". Mirrors the tolerance the backend applies server-side.
  */
-export const norm = (s) =>
+const norm = (s) =>
     (s || "").toLowerCase().replace(/['']/g, "'").replace(/[^0-9a-z]+/g, "");
 
 /** Titles/authors matching `q`, prefix hits first. Shared by the header and the Bookstore. */

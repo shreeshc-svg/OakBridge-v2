@@ -2,7 +2,7 @@
 Resend diagnostic — sends ONE test email and prints the real result/error.
 
 Usage (from backend/, with your venv active):
-    python test_email.py you@example.com
+    python check_email.py you@example.com
 
 It uses the same .env, key and sender as the app, so whatever it prints is
 exactly what signup/OTP sees. Read the output:
@@ -34,7 +34,7 @@ if not key:
 
 to = sys.argv[1] if len(sys.argv) > 1 else os.environ.get("ADMIN_NOTIFY_EMAIL", "")
 if not to:
-    print("Usage: python test_email.py you@example.com")
+    print("Usage: python check_email.py you@example.com")
     sys.exit(1)
 
 resend.api_key = key

@@ -51,7 +51,7 @@ import React from "react";
  * bullet character, so a year where the editor typed their own dashes counted
  * as one point in the spine and three in the list.
  */
-export function splitPoints(text) {
+function splitPoints(text) {
     return String(text || "")
         .split("\n")
         // Tolerate an author who types their own bullet character or dash.
@@ -131,7 +131,7 @@ const BOTTOM_PAD = 34;
 const PASS_GAP = 44; // clear air between the two passes' label zones
 
 /** Beyond this the wave is too tight to read, and the list serves better. */
-export const ROAD_MAX_YEARS = 14;
+const ROAD_MAX_YEARS = 14;
 /** At or under this, one pass holds everything and no hairpin is needed. */
 const SINGLE_PASS_MAX = 5;
 
@@ -201,7 +201,7 @@ function catmullRom(pts, tension = 0.5) {
  * checked for "no pin touches the tarmac" over any item count without a browser.
  * Returns null when the road cannot hold the content; the caller shows the list.
  */
-export function buildLayout(items) {
+function buildLayout(items) {
     const n = items.length;
     if (!n || n > ROAD_MAX_YEARS) return null;
 

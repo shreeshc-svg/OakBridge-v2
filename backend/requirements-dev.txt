@@ -1,0 +1,9 @@
+# Test-only dependencies. Not installed in production -- render.yaml installs
+# requirements-local.txt, which deliberately excludes these.
+#
+# Install:  pip install -r requirements.txt -r requirements-dev.txt
+# Run:      pytest        (pytest.ini limits collection to backend/tests)
+
+-r requirements.txt
+
+pytest

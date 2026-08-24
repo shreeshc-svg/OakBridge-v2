@@ -40,10 +40,10 @@ uvicorn server:app --reload --port 8000
 On first start the API auto-seeds 5 categories, 30 books, the admin account,
 authors and coupons. Verify it's up: <http://localhost:8000/api/books>.
 
-> **Note:** `emergentintegrations` in `requirements.txt` is the Emergent
-> platform SDK and may not resolve from public PyPI. If `pip install` fails on
-> it, comment that one line out — the app boots fine without it (AI author-bio
-> drafting is simply disabled). See "Migrating off Emergent" below.
+> **Note:** `requirements.txt` lists only what the app imports. It is kept
+> byte-identical to `requirements-local.txt` (the file `render.yaml` installs
+> in production) and `sanity-check.js` fails the build if the two drift. For
+> the test suite, also install `requirements-dev.txt`.
 
 ## 3. Frontend
 

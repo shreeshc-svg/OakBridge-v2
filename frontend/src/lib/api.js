@@ -289,8 +289,6 @@ export const adminSetUserRole = (id, role) =>
     api.patch(`/admin/users/${id}/role`, { role }).then((r) => r.data);
 export const adminSetUserSections = (id, sections) =>
     api.patch(`/admin/users/${id}/sections`, { sections }).then((r) => r.data);
-export const adminFetchRoles = () =>
-    api.get("/admin/roles").then((r) => r.data);
 
 // Coupons
 export const validateCoupon = (code, subtotal) =>
@@ -377,13 +375,10 @@ export const adminUploadEbook = (bookId, file) => {
 };
 export const adminRemoveEbook = (bookId) =>
     api.delete(`/admin/books/${bookId}/ebook`).then((r) => r.data);
-export const myBookEbookUrl = (bookId) => `${API}/my/books/${bookId}/ebook`;
 
 // Inventory
 export const adminLowStock = (threshold = 10) =>
     api.get("/admin/inventory/low-stock", { params: { threshold } }).then((r) => r.data);
-export const adminInventory = (threshold = 10) =>
-    api.get("/admin/inventory", { params: { threshold } }).then((r) => r.data);
 
 // Submissions
 export const submitManuscript = (payload) =>

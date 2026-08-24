@@ -8,7 +8,6 @@ import {
     SheetContent,
     SheetHeader,
     SheetTitle,
-    SheetDescription,
 } from "./ui/sheet";
 import { useCart } from "../context/CartContext";
 import { formatINR, mediaUrl } from "../lib/api";

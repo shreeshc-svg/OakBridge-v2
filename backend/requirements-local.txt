@@ -1,8 +1,11 @@
-# Lean local-dev dependencies for the Oakbridge backend.
-# Only the packages the app actually imports to boot & serve — no
-# google/grpc/pandas/boto3/stripe/litellm bloat from the Emergent base
-# image. Versions are left unpinned so pip picks wheels that exist for
-# your Python (works on 3.12, 3.13, 3.14).
+# Runtime dependencies for the Oakbridge backend.
+#
+# Keep this file and requirements.txt IDENTICAL below the header --
+# sanity-check.js enforces it (check: requirements-parity). This is the file
+# render.yaml's buildCommand installs, so it is the one production boots from.
+#
+# Versions are left unpinned so pip picks wheels that exist for your Python
+# (works on 3.12, 3.13, 3.14).
 #
 # Install:  pip install -r requirements-local.txt
 

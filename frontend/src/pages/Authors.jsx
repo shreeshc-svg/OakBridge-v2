@@ -41,7 +41,7 @@ const AUTHORS_DEFAULTS = {
  */
 const NAME_SUFFIXES = /^(ias|ips|irs|icas|ifs|retd|advocate|jr|sr|ii|iii|phd|llm)\.?$/i;
 const IS_INITIAL = (w) => /^[a-z]{1,2}$/i.test(w.replace(/\./g, ""));
-export function fillAuthorTokens(template, fullName) {
+function fillAuthorTokens(template, fullName) {
     const parts = String(fullName || "")
         .replace(/[(),]/g, " ")
         .split(/\s+/)

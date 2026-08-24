@@ -1204,6 +1204,55 @@ function checkFontDisplay() {
     }
 }
 
+/* -------------------------------- 21. The two requirements files must agree
+ * render.yaml's buildCommand installs requirements-local.txt, but README tells
+ * a developer to install requirements.txt. For a long time those described
+ * completely different environments: requirements.txt was the untouched
+ * 128-line Emergent pip freeze (litellm, openai, google-generativeai, stripe,
+ * pandas, numpy, tiktoken, huggingface_hub) that nothing installs and nothing
+ * imports, while production quietly booted from the lean file.
+ *
+ * Anyone following our own README got a environment production never runs.
+ * Rather than gamble on changing a live build command, both files now carry
+ * the same package list and this check keeps them that way. Comments and
+ * blank lines are ignored, so each file can explain itself.
+ *
+ * requirements-dev.txt is deliberately not part of the comparison: it pulls in
+ * requirements.txt via -r and adds pytest on top, which production must not
+ * install.
+ */
+function checkRequirementsParity() {
+    const pkgs = (file) => {
+        const p = path.join(FRONTEND, "..", "backend", file);
+        if (!fs.existsSync(p)) return null;
+        return fs.readFileSync(p, "utf8")
+            .split("\n")
+            .map((l) => l.trim())
+            .filter((l) => l && !l.startsWith("#"));
+    };
+    const a = pkgs("requirements.txt");
+    const b = pkgs("requirements-local.txt");
+    if (!a || !b) {
+        fail("requirements-parity", "backend/requirements.txt or requirements-local.txt is missing");
+        return;
+    }
+    const only = (x, y) => x.filter((p) => !y.includes(p));
+    const missingLocal = only(a, b);
+    const missingMain = only(b, a);
+    if (missingLocal.length || missingMain.length) {
+        if (missingLocal.length) {
+            fail("requirements-parity",
+                `requirements-local.txt is missing: ${missingLocal.join(", ")} — production would boot without it`);
+        }
+        if (missingMain.length) {
+            fail("requirements-parity",
+                `requirements.txt is missing: ${missingMain.join(", ")} — the README install would not match production`);
+        }
+        return;
+    }
+    pass("requirements-parity", `${a.length} backend packages, identical in both requirements files`);
+}
+
 /* --------------------------------------------------------------- reporting */
 const CHECKS = [
     checkJsSyntax, checkNodeScripts, checkPython, checkJson,
@@ -1211,7 +1260,7 @@ const CHECKS = [
     checkVercelFallback, checkJsxDefined, checkJsDefined, checkImgAlt,
     checkNoStaticSitemap, checkSecrets, checkTopLevelJsx, checkAdminSections,
     checkNestedInteractive, checkIosZoomGuard, checkNoindexRoutes,
-    checkCanonicalRoutes, checkFontDisplay,
+    checkCanonicalRoutes, checkFontDisplay, checkRequirementsParity,
 ];
 
 for (const c of CHECKS) {
