@@ -187,6 +187,28 @@ try:
 except ImportError:
     print("skip openpyxl not installed -- real-data sweep skipped")
 
+print("\n-- the master separates some co-authors with a NEWLINE --")
+# Seven cells in the sheet do this. repair-book-authors used to collapse all
+# whitespace, which still matched both people but printed the byline as
+# "Mukesh Bhutani Kinshuk Jha" -- one person with four names.
+import re as _re
+def _master_name(cell):
+    """The normalisation repair-book-authors applies. Mirrors features.py."""
+    n = _re.sub(r"\s*\n\s*", " & ", cell.strip())
+    return _re.sub(r"[ \t]+", " ", n).strip()
+check(_master_name("Mukesh Bhutani\nKinshuk Jha") == "Mukesh Bhutani & Kinshuk Jha",
+      "a line break between two names becomes an ampersand")
+check(_master_name("Atul Kumar Gupta\nAjay Sharma\nSwati Chutani")
+      == "Atul Kumar Gupta & Ajay Sharma & Swati Chutani", "three names, two breaks")
+check(_master_name("Anil Malhotra \nRanjit Malhotra") == "Anil Malhotra & Ranjit Malhotra",
+      "trailing space before the break does not survive")
+check(_master_name("Dr K K Khandelwal, IAS (R)") == "Dr K K Khandelwal, IAS (R)",
+      "a cell with no break is left exactly as it is")
+check(_master_name("  Asheeta   Regidi  ") == "Asheeta Regidi", "runs of spaces still collapse")
+idx = index("Mukesh Bhutani", "Kinshuk Jha")
+check(match_authors(_master_name("Mukesh Bhutani\nKinshuk Jha"), idx)
+      == ids("Mukesh Bhutani", "Kinshuk Jha"), "and both authors still match afterwards")
+
 print()
 if failures:
     print(f"{len(failures)} assertion(s) failed:")

@@ -861,7 +861,13 @@ def _master_authors_by_isbn() -> dict:
     for r in rows[1:]:
         if not r[ci] or not r[ca]:
             continue
-        out[re.sub(r"\D", "", str(r[ci]))] = re.sub(r"\s+", " ", str(r[ca])).strip()
+        # Seven cells separate co-authors with a NEWLINE inside the cell rather
+        # than an ampersand. Collapsing all whitespace turns "Mukesh Bhutani\n
+        # Kinshuk Jha" into "Mukesh Bhutani Kinshuk Jha" -- both names still
+        # match, but the byline printed on the book reads as one person with
+        # four names. The line break means "and", so write that.
+        name = re.sub(r"\s*\n\s*", " & ", str(r[ca]).strip())
+        out[re.sub(r"\D", "", str(r[ci]))] = re.sub(r"[ \t]+", " ", name).strip()
     return out
 
 
