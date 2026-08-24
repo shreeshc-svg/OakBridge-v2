@@ -82,14 +82,14 @@ cd backend && pytest tests/     # set REACT_APP_BACKEND_URL if not localhost:800
 ## Migrating off Emergent
 
 This project was scaffolded on Emergent. Branding/telemetry have been removed.
-Three functional integrations still reference Emergent services and need
-replacements before a fully independent production launch:
+Done. Nothing in this repo calls an Emergent service any more.
 
-1. **Object storage** (`backend/features.py`) — book covers / eBook PDFs upload
-   to Emergent object storage. Swap to S3 or Cloudflare R2.
-2. **AI author bios** (`backend/extensions.py`, `emergentintegrations`) — uses
-   the Emergent LLM proxy. Swap to a direct provider (OpenAI / Gemini / Anthropic).
-3. **Hero images** (`design_guidelines.json`, `frontend/src/pages/Solutions.jsx`,
-   `Verticals.jsx`) — hosted on Emergent's CDN; self-host for independence.
-
-None of these block local development.
+1. **Object storage** — replaced. `backend/features.py` writes to a private S3
+   bucket when `S3_BUCKET` is set and to local disk under `STORAGE_DIR`
+   otherwise; both are served through `/api/files/*`. See `COVERS-UPLOAD.md`.
+2. **AI author bios** — removed. `emergentintegrations` is not imported
+   anywhere and is not in `requirements.txt`.
+3. **Hero images** — the last two `static.prod-images.emergentagent.com` URLs
+   lived in `design_guidelines.json`, a scaffold file no code ever read. It has
+   been deleted. Hero images are admin-uploaded and served from our own
+   storage.
