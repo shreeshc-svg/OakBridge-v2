@@ -20,6 +20,8 @@ const m = await import('data:text/javascript;base64,' +
   Buffer.from(body.replace(/^export /gm, '') + '\nexport { pageTitle, SUFFIX, TITLE_MAX };').toString('base64'));
 const { pageTitle, SUFFIX, TITLE_MAX } = m;
 
+const read = (rel) => readFileSync(fileURLToPath(new URL('../' + rel, import.meta.url)), 'utf8');
+
 let fail = 0;
 const eq = (n, got, want) => {
   const ok = JSON.stringify(got) === JSON.stringify(want);
@@ -51,6 +53,35 @@ for (const t of ['Bookstore', long, 'Climate Justice', exact, exact + 'y']) {
   if (!out.startsWith(t) && t) { fail++; console.log(`FAIL  "${t}" was altered`); }
 }
 console.log('ok    every title still begins with the page it names');
+
+console.log('\n-- the solutions detail pages --');
+/*
+ * These three shipped a document with nothing in its head at all: no title, no
+ * meta description, no canonical. The listing branch of Solutions.jsx had a
+ * <Seo>; the detail branch never did. Semrush reported it three separate ways,
+ * all naming the same URLs.
+ *
+ * Two halves, and both are asserted here, because either alone leaves the page
+ * broken for a crawler that does not run JS.
+ */
+const sol = read('src/pages/Solutions.jsx');
+const detail = sol.slice(sol.indexOf('function SolutionDetail'), sol.indexOf('export default'));
+eq('SolutionDetail renders a Seo', /<Seo\b/.test(detail), true);
+eq('with a canonical built from the slug', /path=\{`\/solutions\/\$\{slug\}`\}/.test(detail), true);
+eq('and a description, not just a title', /description=\{metaDescription\(/.test(detail), true);
+
+const pre = read('scripts/prerender.js');
+for (const slug of ['schools', 'higher-ed', 'educators']) {
+  eq(`/solutions/${slug} is prerendered`, pre.includes(`"/solutions/${slug}"`), true);
+}
+// Titles have to survive the 60-char rule that drops the suffix rather than
+// truncating the page's own name.
+for (const [t_, k] of [['For Schools', 'K-12 Programmes'], ['For Colleges', 'Higher Education'],
+                       ['For Educators', 'Teacher Resources']]) {
+  const full = pageTitle(`${t_} — ${k}`);
+  eq(`"${t_}" keeps its suffix`, full.endsWith('Oakbridge Publishing'), true);
+  eq(`   and fits in 60 chars (${full.length})`, full.length <= 60, true);
+}
 
 console.log(fail ? `\n${fail} FAILED` : '\nall assertions passed');
 process.exit(fail ? 1 : 0);

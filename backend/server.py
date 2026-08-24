@@ -437,7 +437,12 @@ SITE_URL = (os.environ.get("SITE_URL") or "https://www.oakbridge.in").rstrip("/"
 _SITEMAP_STATIC_PATHS = [
     "/", "/books", "/authors", "/events", "/about", "/contact",
     "/submissions", "/academy", "/digital-solutions", "/what-we-do",
-    "/solutions", "/careers", "/media",
+    # The three detail pages are listed one by one rather than derived: the
+    # prerenderer keeps an identical hardcoded list and sanity-check #7 compares
+    # the two, so a slug added in Admin needs adding in both places or it ships
+    # the empty shell. Deriving it here alone would silently break that parity.
+    "/solutions", "/solutions/schools", "/solutions/higher-ed", "/solutions/educators",
+    "/careers", "/media",
     "/terms", "/privacy", "/refund-policy", "/shipping-policy", "/cookie-policy",
 ]
 

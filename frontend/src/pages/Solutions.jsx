@@ -4,7 +4,7 @@ import Breadcrumbs from "../components/Breadcrumbs";
 import Seo from "../components/Seo";
 import { Link, useParams } from "react-router-dom";
 import { ArrowUpRight, Check } from "lucide-react";
-import { breadcrumbLd } from "../lib/schema";
+import { breadcrumbLd, metaDescription } from "../lib/schema";
 
 // Defaults mirror what was live. Every text field is now editable in Admin →
 // Pages → Solutions (collection "page_solutions"); images stay on the
@@ -94,8 +94,41 @@ function SolutionDetail({ slug }) {
     const { site, items } = useSolutions();
     const s = items.find((x) => x.slug === slug) || SOLUTION_DEFAULTS.find((x) => x.slug === slug);
     if (!s) return null;
+    const hero = mediaUrl(site["solutions_" + slug]) || s.image;
     return (
         <div>
+            {/*
+             * These three pages had NO title, no meta description and no
+             * canonical — the only routed pages left on the site in that state.
+             * The listing branch below carries a <Seo>; this branch never did,
+             * so /solutions/schools, /higher-ed and /educators shipped a
+             * document with nothing in its head.
+             *
+             * Semrush reported it three separate ways — "no title tag", "no
+             * meta description", "no h1" — all naming the same URLs, and only
+             * two of the three because its crawl capped at 100 pages.
+             *
+             * Half of the fix. The other half is prerendering: these routes are
+             * now in prerender.js STATIC_ROUTES and in the backend sitemap, or
+             * a crawler that does not run JS would still be served app-shell,
+             * which deliberately carries no title of its own.
+             *
+             * Title leads with the audience and adds the kicker, because
+             * "For Schools" alone says nothing about K-12 textbook adoption —
+             * which is the query these pages can realistically win.
+             */}
+            <Seo
+                title={`${s.title} — ${s.kicker}`}
+                description={metaDescription(s.lede)}
+                path={`/solutions/${slug}`}
+                image={hero}
+                jsonLd={[
+                    breadcrumbLd([
+                        { name: "Solutions", path: "/solutions" },
+                        { name: s.title },
+                    ]),
+                ]}
+            />
             <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 pt-20 pb-12 border-b border-[#E5E7EB]">
                 <Link
                     to="/solutions"
@@ -114,7 +147,7 @@ function SolutionDetail({ slug }) {
             <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-24 grid grid-cols-1 lg:grid-cols-12 gap-10">
                 <div className="lg:col-span-5 relative aspect-[4/3] border border-[#E5E7EB] overflow-hidden">
                     <img
-                        src={mediaUrl(site["solutions_" + slug]) || s.image}
+                        src={hero}
                         alt={s.title}
                         className="absolute inset-0 w-full h-full object-cover"
                     />

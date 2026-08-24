@@ -129,7 +129,8 @@ const MIME = {
 const STATIC_ROUTES = [
     "/", "/books", "/authors", "/events", "/about", "/contact",
     "/submissions", "/academy", "/digital-solutions", "/what-we-do",
-    "/solutions", "/careers", "/media",
+    "/solutions", "/solutions/schools", "/solutions/higher-ed", "/solutions/educators",
+    "/careers", "/media",
     "/terms", "/privacy", "/refund-policy", "/shipping-policy", "/cookie-policy",
 ];
 
