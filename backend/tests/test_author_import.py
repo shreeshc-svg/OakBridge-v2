@@ -188,11 +188,15 @@ for r in recs:
         missing.append(r["name"])
 check(f"all {len(recs)} imported authors find a portrait {missing or ''}", not missing)
 
-# The one that needed a list rather than a rule: the file carries a middle name
-# the sheet, the book and DAKSH all omit.
-check("Harish Narasappa is reached via his alias",
-      author_match_key("Harish Byrasandra Narasappa") in photo_keys
-      and "Harish Byrasandra Narasappa" in AUTHOR_ALIASES["harish-narasappa"])
+# His portrait first arrived as "Harish Byrasandra Narasappa" -- a middle name
+# the sheet, the book and DAKSH all omit -- and the alias was what reached it.
+# The replacement is filed under his own name, so the alias is no longer load-
+# bearing here. It stays as a safety net for a book that credits the fuller
+# form, and the alias mechanism itself is exercised below on a synthetic case.
+check("his portrait is filed under the name everything else uses",
+      photo_keys.get(author_match_key("Harish Narasappa")) == "Harish Narasappa.jpg")
+check("and the alias survives for a book crediting the fuller form",
+      "Harish Byrasandra Narasappa" in AUTHOR_ALIASES["harish-narasappa"])
 # A post-nominal in the FILE name is stripped the same as one in a record name.
 check("'Amrit Agrahari IRS-IT.jpg' reaches Amrit Agrahari",
       photo_keys.get(author_match_key("Amrit Agrahari")) == "Amrit Agrahari IRS-IT.jpg")
