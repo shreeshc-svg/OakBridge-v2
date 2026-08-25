@@ -29,7 +29,8 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
-from extensions import db, get_current_user, get_current_user_optional, require_admin
+from extensions import (AUTHOR_ALIASES, author_match_key, db, get_current_user,
+                        get_current_user_optional, require_admin)
 
 log = logging.getLogger(__name__)
 
@@ -780,6 +781,51 @@ async def admin_reseed_authors(confirm: bool = False):
     return {"dry_run": False, "replaced_from": before, "authors_now": after}
 
 
+def _author_photos_on_disk(limit: int = 2000) -> dict:
+    """Every image under the authors folder, keyed by its normalised file name.
+
+    The photos are named after the PERSON ("Dr Prabhat Kumar.jpg"), while the
+    site serves them from a slug-shaped path. Rather than make anyone rename
+    twenty-seven files by hand -- where one typo fails silently -- the file name
+    is normalised through the same function that matches an author's name to a
+    book, so honorifics, case, punctuation and spacing all stop mattering.
+    """
+    base = f"{APP_NAME}/authors/"
+    found = {}
+
+    def remember(name: str, url: str) -> None:
+        stem = re.sub(r"\.[A-Za-z0-9]+$", "", name)          # drop the extension
+        stem = re.sub(r"[_\-]+", " ", stem)                   # underscores are spaces
+        key = author_match_key(stem)
+        if key:
+            found.setdefault(key, url)
+
+    if _s3_enabled():
+        token = None
+        while len(found) < limit:
+            kwargs = {"Bucket": S3_BUCKET, "Prefix": _safe_key(base), "MaxKeys": 1000}
+            if token:
+                kwargs["ContinuationToken"] = token
+            resp = _s3().list_objects_v2(**kwargs)
+            for obj in resp.get("Contents", []) or []:
+                key = obj["Key"]
+                if not key.lower().endswith(IMAGE_EXTS):
+                    continue
+                rel = key[len(S3_PREFIX) + 1:] if S3_PREFIX and key.startswith(S3_PREFIX + "/") else key
+                remember(key.rsplit("/", 1)[-1], f"/api/files/{rel}")
+            if resp.get("IsTruncated") and len(found) < limit:
+                token = resp.get("NextContinuationToken")
+            else:
+                break
+    else:
+        folder = _resolve(base)
+        if os.path.isdir(folder):
+            for name in sorted(os.listdir(folder)):
+                if name.lower().endswith(IMAGE_EXTS):
+                    remember(name, f"/api/files/{APP_NAME}/authors/{name}")
+    return found
+
+
 @admin_router.post("/import-authors")
 async def admin_import_authors(confirm: bool = False, file: str = "authors_new_2026_08.json"):
     """Add author records from a JSON file in the deploy, WITHOUT deleting anything.
@@ -801,44 +847,98 @@ async def admin_import_authors(confirm: bool = False, file: str = "authors_new_2
         raise HTTPException(status_code=404, detail=f"{safe} not found in deploy")
     records = json.load(open(path, encoding="utf-8"))
 
-    existing = {
-        d["id"] async for d in db.authors.find({}, {"_id": 0, "id": 1}) if d.get("id")
-    }
-    to_add, skipped, bad = [], [], []
+    rows = await db.authors.find({}, {"_id": 0, "id": 1, "name": 1}).to_list(None)
+    by_id = {r["id"] for r in rows if r.get("id")}
+    # Resolve an incoming name to a record we already hold, through the SAME
+    # matcher the storefront uses -- aliases included. Slugifying the name and
+    # comparing ids would not do it: we file "Apoorva K Singh" where a book says
+    # "Apoorva Kumar Singh", and there are thirteen more pairs like that. Each
+    # would have become a second author page for a person we already have.
+    by_name = {}
+    name_by_id = {}
+    for r in rows:
+        name_by_id[r.get("id", "")] = r.get("name", "")
+        for spelling in (r.get("name", ""), *AUTHOR_ALIASES.get(r.get("id", ""), ())):
+            key = author_match_key(spelling)
+            if key:
+                by_name.setdefault(key, r["id"])
+
+    photos = _author_photos_on_disk()
+    FIELDS = ("bio", "photo", "affiliation", "specialty", "category")
+
+    to_add, to_update, bad, photo_hits = [], [], [], 0
     for r in records:
         doc = {k: v for k, v in r.items() if not k.startswith("_")}
+        name = (doc.get("name") or "").strip()
         aid = (doc.get("id") or "").strip()
-        if not aid or not (doc.get("name") or "").strip():
-            bad.append(r.get("name") or r.get("id") or "<blank>")
+        if not name:
+            bad.append(r.get("id") or "<blank name>")
             continue
-        if aid in existing:
-            skipped.append(aid)
-            continue
-        # Author (the response model) declares bio/photo/affiliation/specialty as
-        # plain str, so a null here would 500 /api/authors for every visitor.
-        for k in ("bio", "photo", "affiliation", "specialty", "category"):
+        # Author (the response model) declares bio/photo/affiliation/specialty
+        # as plain str, so a null here would 500 /api/authors for every visitor.
+        for k in FIELDS:
             doc[k] = doc.get(k) or ""
+
+        # Prefer the id when the file carries one we already hold; otherwise
+        # fall back to resolving the name.
+        hit = aid if aid in by_id else by_name.get(author_match_key(name))
+
+        # A photo named after the person. Tried under EVERY spelling we know for
+        # them, not just the one in the sheet: the file may be named
+        # "Apoorva K Singh.jpg" while the sheet says "Apoorva Kumar Singh", which
+        # is exactly the mismatch this whole feature exists to absorb.
+        if not (doc.get("photo") or "").strip():
+            spellings = [name]
+            if hit:
+                spellings.append(name_by_id.get(hit, ""))
+                spellings.extend(AUTHOR_ALIASES.get(hit, ()))
+            for sp in spellings:
+                shot = photos.get(author_match_key(sp))
+                if shot:
+                    doc["photo"] = shot
+                    photo_hits += 1
+                    break
+        if hit:
+            # Only fields this file actually carries. A blank cell must not wipe
+            # a bio somebody wrote by hand in Admin.
+            patch = {k: doc[k] for k in FIELDS if doc[k]}
+            if patch:
+                to_update.append({"id": hit, "name": name, "set": patch})
+            continue
+        if not aid:
+            bad.append(name)
+            continue
         doc.setdefault("enabled", True)
         doc.setdefault("order", 0)
         doc.setdefault("title_count", 0)
         to_add.append(doc)
 
+    unmatched_photos = sorted(
+        k for k in photos
+        if k not in by_name and k not in {author_match_key(d["name"]) for d in to_add}
+    )
     result = {
         "dry_run": not confirm,
         "file": safe,
         "in_file": len(records),
         "would_add" if not confirm else "added": len(to_add),
-        "already_present": len(skipped),
+        "would_update" if not confirm else "updated": len(to_update),
         "rejected": bad,
         "with_bio": sum(1 for d in to_add if d.get("bio")),
         "without_bio": sum(1 for d in to_add if not d.get("bio")),
+        "photos_found": len(photos),
+        "photos_attached": photo_hits,
+        "photos_matching_nobody": unmatched_photos[:40],
         "names": [d["name"] for d in to_add][:60],
+        "updating": [u["name"] for u in to_update][:60],
     }
     if not confirm:
-        result["note"] = "re-call with ?confirm=true to write. Nothing is ever deleted or overwritten."
+        result["note"] = "re-call with ?confirm=true to write. Nothing is ever deleted."
         return result
     if to_add:
         await db.authors.insert_many(to_add)
+    for u in to_update:
+        await db.authors.update_one({"id": u["id"]}, {"$set": u["set"]})
     result["authors_now"] = await db.authors.count_documents({})
     return result
 
