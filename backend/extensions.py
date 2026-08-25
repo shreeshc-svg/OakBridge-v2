@@ -817,6 +817,10 @@ AUTHOR_ALIASES: dict = {
     # The Hindi edition credits him in Devanagari. Same man, and no
     # normalisation can cross scripts -- only a list can.
     "dr.-kuldip-chand-agnihotri-": ("प्रोफेसर कुलदीप चन्द अग्निहोत्री",),
+    # Disaster Management credits "P Kumar" and "Praveen Kumar" as if they were
+    # two people. Confirmed one man by the editorial team, 2026-08-25. An alias
+    # rather than a second record, or his one title would show him twice.
+    "p-kumar": ("Praveen Kumar",),
 }
 
 

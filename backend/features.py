@@ -827,7 +827,7 @@ def _author_photos_on_disk(limit: int = 2000) -> dict:
 
 
 @admin_router.post("/import-authors")
-async def admin_import_authors(confirm: bool = False, file: str = "authors_new_2026_08.json"):
+async def admin_import_authors(confirm: bool = False, file: str = "authors_from_sheet_2026_08_25.json"):
     """Add author records from a JSON file in the deploy, WITHOUT deleting anything.
 
     Deliberately not /reseed-authors. That one calls delete_many({}) before it
