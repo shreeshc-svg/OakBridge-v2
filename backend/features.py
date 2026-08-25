@@ -781,6 +781,44 @@ async def admin_reseed_authors(confirm: bool = False):
     return {"dry_run": False, "replaced_from": before, "authors_now": after}
 
 
+def _seed_author_photos() -> list:
+    """Copy any portrait shipped in the repo into storage, once.
+
+    The photos arrive from the editorial team as files named after the person.
+    Uploading fifteen of them through Admin by hand is the sort of step that
+    gets half-done, so they ride along in backend/seed_media/authors/ and this
+    puts them where /api/files serves from -- S3 in production, the disk
+    locally, decided by the same _s3_enabled() switch as every other upload.
+
+    Never overwrites: a portrait replaced through Admin stays replaced, and a
+    second run of the import does nothing. Returns the names it copied.
+    """
+    src = os.path.join(os.path.dirname(__file__), "seed_media", "authors")
+    if not os.path.isdir(src):
+        return []
+    copied = []
+    for name in sorted(os.listdir(src)):
+        if not name.lower().endswith(IMAGE_EXTS):
+            continue
+        rel = f"{APP_NAME}/authors/{name}"
+        try:
+            if _s3_enabled():
+                try:
+                    _s3().head_object(Bucket=S3_BUCKET, Key=_safe_key(rel))
+                    continue                      # already there
+                except Exception:
+                    pass
+            else:
+                if os.path.exists(_resolve(rel)):
+                    continue
+            with open(os.path.join(src, name), "rb") as fh:
+                put_object(rel, fh.read(), "image/jpeg")
+            copied.append(name)
+        except Exception as exc:                  # noqa: BLE001
+            log.warning("author photo %s could not be seeded: %s", name, exc)
+    return copied
+
+
 def _author_photos_on_disk(limit: int = 2000) -> dict:
     """Every image under the authors folder, keyed by its normalised file name.
 
@@ -863,6 +901,9 @@ async def admin_import_authors(confirm: bool = False, file: str = "authors_from_
             if key:
                 by_name.setdefault(key, r["id"])
 
+    # Ship-then-match: portraits committed to the repo are placed in storage
+    # first, so a fresh environment needs no manual upload step.
+    seeded = _seed_author_photos()
     photos = _author_photos_on_disk()
     FIELDS = ("bio", "photo", "affiliation", "specialty", "category")
 
@@ -926,6 +967,7 @@ async def admin_import_authors(confirm: bool = False, file: str = "authors_from_
         "rejected": bad,
         "with_bio": sum(1 for d in to_add if d.get("bio")),
         "without_bio": sum(1 for d in to_add if not d.get("bio")),
+        "photos_seeded_from_repo": len(seeded),
         "photos_found": len(photos),
         "photos_attached": photo_hits,
         "photos_matching_nobody": unmatched_photos[:40],

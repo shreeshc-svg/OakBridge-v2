@@ -821,6 +821,10 @@ AUTHOR_ALIASES: dict = {
     # two people. Confirmed one man by the editorial team, 2026-08-25. An alias
     # rather than a second record, or his one title would show him twice.
     "p-kumar": ("Praveen Kumar",),
+    # His portrait arrived as "Harish Byrasandra Narasappa"; the sheet, the book
+    # and DAKSH all say "Harish Narasappa". Without this the photo matches
+    # nobody and he is the one author of the fourteen who lands without one.
+    "harish-narasappa": ("Harish Byrasandra Narasappa",),
 }
 
 

@@ -148,6 +148,38 @@ for f, want in [("Dr Joshua Aston.jpg", "joshua aston"), ("dr_joshua_aston.PNG",
                 ("Prof. Manish Singh.webp", "manish singh"), ("K K Khandelwal, IAS (R).jpg", "k k khandelwal")]:
     check(f"{f!r} -> {want!r}", norm(f) == want)
 
+print("\n-- the portraits shipped in the repo --")
+# They arrive named after the person and ride along in backend/seed_media/authors,
+# so a fresh environment needs no manual upload. Every one of the fourteen being
+# added must find its own face, or someone renders as a name with a blank square.
+import json as _json, glob as _glob
+SEED = os.path.join(BACKEND, "seed_media", "authors")
+files = sorted(os.path.basename(f) for f in _glob.glob(os.path.join(SEED, "*")))
+check("the folder is present and populated", len(files) >= 14)
+check("every file is a jpeg after optimisation",
+      all(f.lower().endswith(".jpg") for f in files))
+big = [f for f in files if os.path.getsize(os.path.join(SEED, f)) > 200_000]
+check(f"none is oversized for a 96px avatar {big or ''}", not big)
+
+photo_keys = {author_match_key(re.sub(r"[_\-]+", " ", re.sub(r"\.[A-Za-z0-9]+$", "", f))): f
+              for f in files}
+recs = _json.load(open(os.path.join(BACKEND, "authors_from_sheet_2026_08_25.json"), encoding="utf-8"))
+missing = []
+for r in recs:
+    spellings = [r["name"], *AUTHOR_ALIASES.get(r["id"], ())]
+    if not any(author_match_key(s) in photo_keys for s in spellings):
+        missing.append(r["name"])
+check(f"all {len(recs)} imported authors find a portrait {missing or ''}", not missing)
+
+# The one that needed a list rather than a rule: the file carries a middle name
+# the sheet, the book and DAKSH all omit.
+check("Harish Narasappa is reached via his alias",
+      author_match_key("Harish Byrasandra Narasappa") in photo_keys
+      and "Harish Byrasandra Narasappa" in AUTHOR_ALIASES["harish-narasappa"])
+# A post-nominal in the FILE name is stripped the same as one in a record name.
+check("'Amrit Agrahari IRS-IT.jpg' reaches Amrit Agrahari",
+      photo_keys.get(author_match_key("Amrit Agrahari")) == "Amrit Agrahari IRS-IT.jpg")
+
 print()
 if failures:
     print(f"{len(failures)} assertion(s) failed:")
