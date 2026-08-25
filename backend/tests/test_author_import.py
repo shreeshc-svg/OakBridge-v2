@@ -73,7 +73,7 @@ def resolve(records, roster, photos=None):
             doc[k] = doc.get(k) or ""
         hit = aid if aid in by_id else by_name.get(author_match_key(name))
         if not doc["photo"]:
-            spellings = [name]
+            spellings = [name, *AUTHOR_ALIASES.get(aid, ())]
             if hit:
                 spellings.append(name_by_id.get(hit, ""))
                 spellings.extend(AUTHOR_ALIASES.get(hit, ()))
@@ -147,6 +147,23 @@ norm = lambda f: author_match_key(re.sub(r"[_\-]+", " ", re.sub(r"\.[A-Za-z0-9]+
 for f, want in [("Dr Joshua Aston.jpg", "joshua aston"), ("dr_joshua_aston.PNG", "joshua aston"),
                 ("Prof. Manish Singh.webp", "manish singh"), ("K K Khandelwal, IAS (R).jpg", "k k khandelwal")]:
     check(f"{f!r} -> {want!r}", norm(f) == want)
+
+print("\n-- an alias must reach a portrait on the FIRST insert --")
+# The bug this catches: aliases were keyed only off the MATCHED record, and on
+# an insert there is no matched record. Harish Narasappa went live with a bio
+# and a blank square while the other thirteen were fine, because his file reads
+# "Harish Byrasandra Narasappa". It self-healed on a second run, which is
+# exactly why it survived the first round of tests.
+PH = {author_match_key("Harish Byrasandra Narasappa"):
+      "/api/files/oakbridge/authors/Harish Byrasandra Narasappa.jpg"}
+a, u = resolve([{"id": "harish-narasappa", "name": "Harish Narasappa", "bio": "B"}], [], PH)
+check("a NEW record reaches its portrait through the alias",
+      a and a[0]["photo"].endswith("Harish Byrasandra Narasappa.jpg"))
+# And still works the other way round, once the record exists.
+a, u = resolve([{"id": "harish-narasappa", "name": "Harish Narasappa", "bio": "B"}],
+               [{"id": "harish-narasappa", "name": "Harish Narasappa"}], PH)
+check("and an EXISTING record still does",
+      u and u[0]["set"].get("photo", "").endswith("Harish Byrasandra Narasappa.jpg"))
 
 print("\n-- the portraits shipped in the repo --")
 # They arrive named after the person and ride along in backend/seed_media/authors,

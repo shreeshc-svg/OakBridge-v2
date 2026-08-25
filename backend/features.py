@@ -929,7 +929,15 @@ async def admin_import_authors(confirm: bool = False, file: str = "authors_from_
         # "Apoorva K Singh.jpg" while the sheet says "Apoorva Kumar Singh", which
         # is exactly the mismatch this whole feature exists to absorb.
         if not (doc.get("photo") or "").strip():
-            spellings = [name]
+            # The file's own id is consulted too, and that is not redundant:
+            # on an INSERT there is no `hit`, so keying aliases off the matched
+            # record alone left a brand-new author unable to reach a portrait
+            # filed under an alternate spelling. Harish Narasappa went in
+            # without his -- his file reads "Harish Byrasandra Narasappa" --
+            # while the other thirteen, whose files match their names, were
+            # fine. It self-heals on a second run, once the record exists, which
+            # is exactly the kind of bug that hides.
+            spellings = [name, *AUTHOR_ALIASES.get(aid, ())]
             if hit:
                 spellings.append(name_by_id.get(hit, ""))
                 spellings.extend(AUTHOR_ALIASES.get(hit, ()))
