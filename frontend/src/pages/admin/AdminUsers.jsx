@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { UserPlus, Trash2 } from "lucide-react";
+import { UserPlus, Trash2, Mail } from "lucide-react";
 import { toast } from "sonner";
 import {
     adminListUsers,
@@ -21,6 +21,7 @@ import {
     isSuperadmin,
 } from "../../lib/rbac";
 import ExportButton from "../../components/admin/ExportButton";
+import PurchaseNudgeDialog from "../../components/admin/PurchaseNudgeDialog";
 
 const ASSIGNABLE = ["superadmin", "manager", "editor", "fulfilment", "customer"];
 const BLANK = {
@@ -74,6 +75,7 @@ function SectionPicker({ value, onChange, disabled }) {
 export default function AdminUsers() {
     const { user: me } = useAuth();
     const canManage = isSuperadmin(me?.role);
+    const [showNudge, setShowNudge] = useState(false);
 
     // Deleting a customer leaves their ORDERS alone — an order carries its own
     // snapshot of name, address and what was bought, so the financial record
@@ -193,6 +195,16 @@ export default function AdminUsers() {
                 <ExportButton path="/admin/users/export.csv" count={users.length} />
                 {canManage && (
                     <button
+                        onClick={() => setShowNudge(true)}
+                        data-testid="admin-nudge-open"
+                        className="mt-3 inline-flex items-center gap-2 border border-[#002B5C] text-[#002B5C] px-4 py-2 text-sm font-medium hover:bg-[#F5F7FA]"
+                    >
+                        <Mail size={15} strokeWidth={1.5} />
+                        Nudge to purchase
+                    </button>
+                )}
+                {canManage && (
+                    <button
                         onClick={() => setShowNew((s) => !s)}
                         data-testid="admin-new-user"
                         className="mt-3 inline-flex items-center gap-2 bg-[#002B5C] text-white px-4 py-2 text-sm font-medium hover:bg-[#001F42]"
@@ -203,6 +215,8 @@ export default function AdminUsers() {
                 )}
                 </div>
             </div>
+
+            {showNudge && <PurchaseNudgeDialog onClose={() => setShowNudge(false)} />}
 
             {created && (
                 <div

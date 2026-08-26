@@ -237,6 +237,10 @@ export const adminImportAuthors = (confirm = false) =>
     api.post(`/admin/import-authors?confirm=${confirm ? "true" : "false"}`).then((r) => r.data);
 export const adminRepairBookAuthors = (confirm = false) =>
     api.post(`/admin/repair-book-authors?confirm=${confirm ? "true" : "false"}`).then((r) => r.data);
+export const adminSendPurchaseNudge = (body = {}) =>
+    api.post("/admin/send-purchase-nudge", {
+        confirm: false, coupon_code: "", test_to: "", ...body,
+    }).then((r) => r.data);
 export const adminApplyReleaseOrder = (dryRun = true) =>
     api.post(`/admin/apply-release-order?dry_run=${dryRun ? "true" : "false"}`).then((r) => r.data);
 

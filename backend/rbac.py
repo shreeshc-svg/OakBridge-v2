@@ -131,6 +131,9 @@ SUPERADMIN_ONLY_PATHS = frozenset(
         "reseed-authors",
         "import-authors",
         "repair-book-authors",
+        # Mails real people. A staff account with Users access should be able to
+        # read the list without being able to broadcast to it.
+        "send-purchase-nudge",
     }
 )
 

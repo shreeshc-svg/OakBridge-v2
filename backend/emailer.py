@@ -64,6 +64,7 @@ async def send_email(
     html: str,
     reply_to: Optional[str] = None,
     attachments: Optional[list] = None,
+    headers: Optional[dict] = None,
 ) -> bool:
     """Send a transactional email. Returns True on success, False on failure. Never raises.
 
@@ -90,6 +91,11 @@ async def send_email(
     }
     if reply_to:
         params["reply_to"] = reply_to
+    if headers:
+        # List-Unsubscribe lives here. Gmail and Yahoo require bulk senders to
+        # offer one-click unsubscribe, and honouring it protects the reputation
+        # that order receipts also depend on.
+        params["headers"] = headers
     if attachments:
         import base64
 
@@ -1594,3 +1600,247 @@ async def send_order_cancelled(order: dict, reason: str = "") -> bool:
         return False
     num = order.get("order_number", "")
     return await send_email(to=to, subject=f"Your Oakbridge order {num} was cancelled", html=render_order_cancelled_html(order, reason))
+
+
+# ============================================================================
+# Product email: opt-out, and the first-order nudge
+#
+# Everything above this line is transactional — a receipt, a code, a dispatch
+# note. A person who buys a book is asking for those. The nudge below is the
+# first email Oakbridge sends that nobody asked for, and that difference is not
+# cosmetic:
+#
+#   * Gmail and Yahoo require bulk senders to honour one-click unsubscribe.
+#     Ignoring it gets mail filed as spam at the domain level — which would take
+#     order receipts and password resets down with it. The unsubscribe is not
+#     politeness, it is what protects the transactional mail.
+#   * The DPDP Act expects a way to withdraw consent.
+#
+# So opting out is honoured here, in the sender, not left to the caller to
+# remember. And it suppresses product mail ONLY: someone who unsubscribes still
+# gets told where their order is.
+# ============================================================================
+
+_UNSUB_MAILTO = os.environ.get("UNSUBSCRIBE_MAILTO", "info@oakbridge.in")
+
+
+def _unsub_secret() -> str:
+    return os.environ.get("JWT_SECRET", "")
+
+
+def unsubscribe_token(email: str) -> str:
+    """Stateless opt-out token for `email`, signed with the app secret.
+
+    Stateless on purpose. A stored token would have to be issued before the
+    send, kept forever, and reissued on every campaign; this one is derived, so
+    a link in a two-year-old email still works and nothing extra is persisted.
+    Signed so the query string cannot be edited into somebody else's address.
+    """
+    import base64
+    import hashlib
+    import hmac
+
+    secret = _unsub_secret()
+    addr = (email or "").strip().lower()
+    if not secret or not addr:
+        return ""
+    body = base64.urlsafe_b64encode(addr.encode()).decode().rstrip("=")
+    sig = hmac.new(secret.encode(), body.encode(), hashlib.sha256).hexdigest()[:32]
+    return f"{body}.{sig}"
+
+
+def email_from_unsubscribe_token(token: str) -> str:
+    """The address a token belongs to, or "" if it is forged, stale or malformed."""
+    import base64
+    import binascii
+    import hashlib
+    import hmac
+
+    secret = _unsub_secret()
+    if not secret or not token or "." not in token:
+        return ""
+    body, _, sig = token.rpartition(".")
+    expect = hmac.new(secret.encode(), body.encode(), hashlib.sha256).hexdigest()[:32]
+    # compare_digest, not ==, so a wrong signature cannot be recovered one
+    # character at a time from how long the comparison took.
+    if not hmac.compare_digest(sig, expect):
+        return ""
+    try:
+        pad = "=" * (-len(body) % 4)
+        return base64.urlsafe_b64decode(body + pad).decode().strip().lower()
+    except (binascii.Error, UnicodeDecodeError, ValueError):
+        return ""
+
+
+def unsubscribe_url(email: str) -> str:
+    token = unsubscribe_token(email)
+    return f"{PUBLIC_API_URL}/api/email/unsubscribe?token={token}" if token else ""
+
+
+def _unsub_headers(email: str) -> dict:
+    """List-Unsubscribe headers, so the mail client shows its own opt-out button.
+
+    People who cannot find an unsubscribe link press "report spam" instead, and
+    that is the outcome this exists to avoid.
+    """
+    url = unsubscribe_url(email)
+    if not url:
+        return {}
+    return {
+        "List-Unsubscribe": f"<{url}>, <mailto:{_UNSUB_MAILTO}?subject=unsubscribe>",
+        "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+    }
+
+
+_NUDGE_SUBJECT = "Your Oakbridge shelf is still empty"
+_NUDGE_PREHEADER = "New titles from our press — and your account is ready to check out."
+
+
+def _nudge_book_row(book: dict) -> str:
+    """One title in the nudge. Covers are the whole point of this block."""
+    title = _html.escape(book.get("title") or "A new title")
+    author = _html.escape(book.get("author") or "")
+    bid = _html.escape(str(book.get("id") or ""))
+    link = f"{SITE_URL or 'https://www.oakbridge.in'}/book/{bid}?utm_source=email&utm_medium=nudge&utm_campaign=first_order"
+    cover = media_url(book.get("cover_image"))
+
+    # Every attribute here is load-bearing:
+    #   width as an ATTRIBUTE, not only CSS  -- Outlook ignores the style
+    #   border="0"                           -- Outlook draws a blue frame on a linked image
+    #   display:block                        -- kills the descender gap under the image
+    #   alt = the title                      -- images are off by default in Outlook and for
+    #                                           unknown senders in Gmail, so the alt text IS
+    #                                           the email for a good share of readers
+    # And when there is no cover at all we render a titled placeholder rather
+    # than an <img> with an empty src, which every client shows as a torn page.
+    if cover:
+        art = (
+            f'<a href="{link}"><img src="{_html.escape(cover, quote=True)}" alt="{title}" '
+            f'width="72" border="0" style="width:72px;height:auto;border:1px solid #E5E7EB;'
+            f'display:block;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;"></a>'
+        )
+    else:
+        art = (
+            f'<a href="{link}" style="display:block;width:72px;height:96px;background-color:'
+            f'{BRAND_NAVY};color:#FFFFFF;text-decoration:none;font-family:Georgia,serif;'
+            f'font-size:10px;line-height:1.3;padding:8px;box-sizing:border-box;">{title[:44]}</a>'
+        )
+
+    price = _money(book.get("price", 0))
+    was = book.get("original_price") or 0
+    off = ""
+    if was and float(was) > float(book.get("price", 0) or 0):
+        pct = round((1 - float(book["price"]) / float(was)) * 100)
+        off = (
+            f'<span style="color:{BRAND_GREY};font-size:12px;text-decoration:line-through;">{_money(was)}</span> '
+            f'<span style="color:{BRAND_RED};font-size:12px;font-weight:600;">{pct}% off</span>'
+        )
+    return f"""
+          <tr>
+            <td width="88" valign="top" style="padding:14px 0;">{art}</td>
+            <td valign="top" style="padding:14px 0;">
+              <a href="{link}" style="color:{BRAND_NAVY};font-size:15px;font-weight:600;text-decoration:none;font-family:Georgia,serif;">{title}</a>
+              <div style="color:{BRAND_GREY};font-size:12px;margin-top:3px;">{author}</div>
+              <div style="margin-top:7px;color:{BRAND_NAVY};font-size:15px;font-weight:600;">{price} <span style="font-weight:400;">{off}</span></div>
+            </td>
+          </tr>"""
+
+
+def render_purchase_nudge_html(name: str, books: list, coupon: Optional[dict] = None,
+                               unsub: str = "") -> str:
+    who = _html.escape((name or "there").split(" ")[0])
+    site = SITE_URL or "https://www.oakbridge.in"
+    rows = "".join(_nudge_book_row(b) for b in (books or [])[:3])
+
+    coupon_block = ""
+    if coupon and coupon.get("code"):
+        coupon_block = f"""
+      <tr><td style="padding:4px 36px 0;">
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border:1px dashed {BRAND_AMBER};background-color:#FFFBEB;">
+          <tr><td style="padding:16px 20px;text-align:center;">
+            <div style="font-family:monospace;text-transform:uppercase;letter-spacing:2px;font-size:10px;color:{BRAND_GREY};">Your first order</div>
+            <div style="font-family:monospace;font-size:20px;font-weight:700;color:{BRAND_NAVY};margin-top:6px;letter-spacing:2px;">{_html.escape(coupon['code'])}</div>
+            <div style="font-size:12px;color:{BRAND_GREY};margin-top:6px;">{_html.escape(coupon.get('description') or '')}</div>
+          </td></tr>
+        </table>
+      </td></tr>"""
+
+    unsub_line = (
+        f'<a href="{_html.escape(unsub, quote=True)}" style="color:#6B7280;text-decoration:underline;">Unsubscribe from product emails</a>'
+        f'&nbsp;·&nbsp; You will still get order and delivery updates.'
+        if unsub else ""
+    )
+
+    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background-color:#F5F7FA;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:{BRAND_NAVY};">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;">{_NUDGE_PREHEADER}</div>
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#F5F7FA;padding:40px 16px;">
+  <tr><td align="center">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="max-width:600px;background-color:#FFFFFF;border:1px solid #E5E7EB;">
+
+      <tr><td style="background-color:{BRAND_NAVY};padding:28px 36px;color:#FFFFFF;">
+        <div style="font-family:Georgia,serif;font-size:22px;">Oakbridge <span style="color:{BRAND_AMBER};">Publishing</span></div>
+        <div style="font-family:monospace;text-transform:uppercase;letter-spacing:2px;font-size:11px;margin-top:6px;color:rgba(255,255,255,0.6);">New from our press</div>
+      </td></tr>
+
+      <tr><td style="padding:36px 36px 0;">
+        <h1 style="margin:0;font-family:Georgia,serif;font-weight:normal;font-size:26px;line-height:1.3;color:{BRAND_NAVY};">Your shelf is still empty, {who}.</h1>
+        <p style="margin:14px 0 0;font-size:15px;line-height:1.65;color:{BRAND_GREY};">
+          You made an Oakbridge account, and we never showed you what came off the press since.
+          Here are three of our newest titles — your details are already saved, so an order
+          takes about a minute.
+        </p>
+      </td></tr>
+
+      <tr><td style="padding:18px 36px 0;">
+        <div style="border-top:2px solid {BRAND_NAVY};"></div>
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">{rows}</table>
+        <div style="border-top:1px solid #E5E7EB;"></div>
+      </td></tr>
+{coupon_block}
+      <tr><td style="padding:26px 36px 6px;">
+        <a href="{site}/bookstore?utm_source=email&utm_medium=nudge&utm_campaign=first_order" style="display:inline-block;background-color:{BRAND_NAVY};color:#FFFFFF;text-decoration:none;font-size:14px;font-weight:600;padding:14px 30px;">Browse the full catalogue</a>
+      </td></tr>
+
+      <tr><td style="padding:18px 36px 34px;">
+        <p style="margin:0;font-size:13px;line-height:1.6;color:{BRAND_GREY};">
+          Questions about a title, a bulk order for your firm, or a desk copy for your course?
+          Reply to this email — it reaches a person.
+        </p>
+      </td></tr>
+
+      <tr><td style="background-color:#F9FAFB;border-top:1px solid #E5E7EB;padding:22px 36px;">
+        <p style="margin:0;font-size:11px;line-height:1.6;color:#6B7280;">
+          You are receiving this because you created an account at oakbridge.in.<br>
+          {unsub_line}<br><br>
+          Oakbridge Publishing &nbsp;·&nbsp; New Delhi, India
+        </p>
+      </td></tr>
+
+    </table>
+  </td></tr>
+</table>
+</body></html>"""
+
+
+async def send_purchase_nudge(to: str, name: str, books: list,
+                              coupon: Optional[dict] = None) -> bool:
+    """The first-order nudge. Refuses to send without a working opt-out link.
+
+    That refusal is deliberate. If JWT_SECRET is missing the token cannot be
+    signed, and mail with no unsubscribe is what gets a sending domain blocked —
+    which would silently take the order receipts with it. Better to send nothing.
+    """
+    if not to:
+        return False
+    unsub = unsubscribe_url(to)
+    if not unsub:
+        logger.error("Refusing to send product email to %s — no unsubscribe link could be signed", to)
+        return False
+    return await send_email(
+        to=to,
+        subject=_NUDGE_SUBJECT,
+        html=render_purchase_nudge_html(name, books, coupon, unsub),
+        headers=_unsub_headers(to),
+    )

@@ -30,6 +30,7 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
+from antispam import normalise_email
 from extensions import (AUTHOR_ALIASES, author_match_key, db, get_current_user,
                         get_current_user_optional, require_admin)
 
@@ -118,6 +119,40 @@ def put_object(path: str, data: bytes, content_type: str) -> dict:
     return {"url": f"/api/files/{path}", "path": path, "size": len(data), "content_type": content_type}
 
 
+# S3 hands back whatever ContentType the object was written with, and
+# put_object falls back to "application/octet-stream" when the uploader did not
+# supply one. A browser sniffs past that; Gmail's image proxy does not — it
+# refuses to render an octet-stream, so a cover that looks fine on the site is a
+# grey box in the email. Treat the generic types as "unknown" and let the file
+# extension decide, which is what the local-disk branch has always done.
+_GENERIC_TYPES = {"application/octet-stream", "binary/octet-stream", "application/binary"}
+
+# Spelled out rather than left to mimetypes: this runtime's mimetypes does not
+# know .webp, and returning None there would hand the octet-stream straight back
+# and re-break the very thing this function exists to fix. These are the formats
+# every mail client renders.
+_IMAGE_TYPES = {
+    ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
+    ".gif": "image/gif", ".webp": "image/webp", ".svg": "image/svg+xml",
+    ".bmp": "image/bmp", ".ico": "image/x-icon", ".avif": "image/avif",
+}
+
+
+def _resolved_type(declared: str, path: str) -> str:
+    import mimetypes
+    import os as _os
+
+    if declared and declared.split(";")[0].strip().lower() not in _GENERIC_TYPES:
+        return declared
+    ext = _os.path.splitext(path)[1].lower()
+    return (
+        _IMAGE_TYPES.get(ext)
+        or mimetypes.guess_type(path)[0]
+        or declared
+        or "application/octet-stream"
+    )
+
+
 def get_object(path: str) -> tuple[bytes, str]:
     import mimetypes
 
@@ -134,8 +169,7 @@ def get_object(path: str) -> tuple[bytes, str]:
                 raise HTTPException(status_code=404, detail="File not found")
             log.error("S3 get_object failed for %s: %s", path, exc)
             raise HTTPException(status_code=502, detail="Storage error")
-        ctype = obj.get("ContentType") or mimetypes.guess_type(path)[0] or "application/octet-stream"
-        return obj["Body"].read(), ctype
+        return obj["Body"].read(), _resolved_type(obj.get("ContentType") or "", path)
 
     full = _resolve(path)
     if not os.path.isfile(full):
@@ -239,6 +273,95 @@ class NotifyRequest(BaseModel):
 
 # ============== PUBLIC ROUTER ==============
 public_router = APIRouter(prefix="/api", tags=["features"])
+
+
+# --- Email opt-out -----------------------------------------------------------
+#
+# Served by the API and not the React app on purpose. This link has to work from
+# a mail client years from now, with no session, no JS, and no dependency on
+# Vercel being up — and it must not add a frontend route, because every route
+# has to appear in both prerender.js and the sitemap to pass the parity check,
+# and an unsubscribe page belongs in neither.
+
+_UNSUB_PAGE = """<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex"><title>{title} — Oakbridge Publishing</title></head>
+<body style="margin:0;background:#F5F7FA;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#002B5C;">
+<div style="max-width:520px;margin:12vh auto;background:#fff;border:1px solid #E5E7EB;padding:40px;">
+  <div style="font-family:Georgia,serif;font-size:20px;">Oakbridge <span style="color:#F59E0B;">Publishing</span></div>
+  <h1 style="font-family:Georgia,serif;font-weight:normal;font-size:24px;margin:26px 0 0;">{title}</h1>
+  <p style="font-size:15px;line-height:1.65;color:#4B5563;">{body}</p>
+  <a href="https://www.oakbridge.in" style="display:inline-block;margin-top:14px;background:#002B5C;color:#fff;text-decoration:none;font-size:14px;font-weight:600;padding:13px 28px;">Back to Oakbridge</a>
+</div></body></html>"""
+
+
+def _unsub_page(title: str, body: str, status: int = 200) -> Response:
+    return Response(
+        content=_UNSUB_PAGE.format(title=title, body=body),
+        media_type="text/html; charset=utf-8",
+        status_code=status,
+        headers={"Cache-Control": "no-store", "X-Robots-Tag": "noindex"},
+    )
+
+
+async def is_opted_out(email: str) -> bool:
+    """True if this inbox has asked not to receive product email."""
+    key = normalise_email(email or "")
+    return bool(key) and await db.email_optouts.find_one({"email_key": key}) is not None
+
+
+async def _apply_unsubscribe(token: str) -> bool:
+    from emailer import email_from_unsubscribe_token
+
+    addr = email_from_unsubscribe_token(token or "")
+    if not addr:
+        return False
+    # Keyed on the normalised inbox, not the string as typed. Gmail delivers
+    # rahul.kr+news@gmail.com and rahulkr@gmail.com to one person; if he opts out
+    # from one and we keep mailing the other, he reports us as spam and he is
+    # right to. This is also why the suppression list is its own collection
+    # rather than a flag on the user: newsletter signups never became accounts,
+    # and the opt-out has to outlive an account being deleted and remade.
+    key = normalise_email(addr)
+    now = datetime.now(timezone.utc).isoformat()
+    await db.email_optouts.update_one(
+        {"email_key": key},
+        {"$set": {"email_key": key, "email": addr, "opted_out_at": now, "scope": "product"}},
+        upsert=True,
+    )
+    await db.users.update_many(
+        {"$or": [{"email_normalised": key}, {"email": addr}]},
+        {"$set": {"product_email_opt_out": True}},
+    )
+    log.info("Email opt-out recorded for %s", key)
+    return True
+
+
+@public_router.get("/email/unsubscribe")
+async def unsubscribe_get(token: str = ""):
+    ok = await _apply_unsubscribe(token)
+    if not ok:
+        return _unsub_page(
+            "That link didn't work",
+            "The unsubscribe link looks incomplete or has been altered. Reply to any "
+            "Oakbridge email and a person will take you off the list.",
+            status=400,
+        )
+    return _unsub_page(
+        "You're unsubscribed",
+        "We won't send you any more emails about new titles or offers. You will still "
+        "receive updates about orders you place — receipts, dispatch and delivery.",
+    )
+
+
+@public_router.post("/email/unsubscribe")
+async def unsubscribe_post(token: str = ""):
+    """One-click unsubscribe (RFC 8058).
+
+    Gmail and Yahoo POST here directly from their own button, without a human
+    ever seeing the page. It must be a POST, and it must not require a session.
+    """
+    return {"ok": await _apply_unsubscribe(token)}
 
 
 @public_router.post("/coupons/validate", response_model=CouponValidateResponse)
@@ -3189,3 +3312,141 @@ async def chat_endpoint(
         return {"reply": CHAT_REFUSAL}
 
     return {"reply": reply}
+
+
+# ============== PRODUCT EMAIL: FIRST-ORDER NUDGE ==============
+#
+# The one campaign tool. Same shape as import-authors: it shows you exactly who
+# it would mail, and sends nothing until confirm=true.
+
+NUDGE_COOLDOWN_DAYS = 30
+
+
+async def _nudge_books(limit: int = 3) -> list:
+    """The titles to show: newest first, in stock, actually buyable today.
+
+    coming_soon is excluded even though those are the newest things we have.
+    Sacred Tiger Tales is the current example — sending someone to a page that
+    cannot take their money is a wasted click and a small breach of trust.
+    """
+    docs = (
+        await db.books.find(
+            {
+                "coming_soon": {"$ne": True},
+                "stock": {"$gt": 0},
+                "$or": [{"enabled": {"$ne": False}}, {"enabled": {"$exists": False}}],
+            },
+            {"_id": 0, "id": 1, "title": 1, "author": 1, "price": 1,
+             "original_price": 1, "cover_image": 1},
+        )
+        .sort("release_rank", 1)
+        .to_list(limit * 4)
+    )
+    # A cover is the point of this email, so a title without one goes to the
+    # back rather than into a card with a placeholder where the book should be.
+    with_cover = [b for b in docs if (b.get("cover_image") or "").strip()]
+    return (with_cover or docs)[:limit]
+
+
+async def _nudge_recipients() -> dict:
+    """Who gets it, and who was skipped and why. Never sends."""
+    users = await db.users.find(
+        {"role": {"$in": [None, "customer"]}},
+        {"_id": 0, "id": 1, "email": 1, "email_normalised": 1, "name": 1,
+         "product_email_opt_out": 1, "last_nudged_at": 1, "created_at": 1},
+    ).to_list(None)
+
+    # One round trip each, not one per user.
+    buyers = set()
+    for e in await db.orders.distinct("email"):
+        if e:
+            buyers.add(normalise_email(e))
+    # Carts are keyed by user_id, not email — the same query written against an
+    # "email" field would match nothing, quietly defeating the whole exclusion
+    # and mailing every carted user twice.
+    carted = {
+        c["user_id"]
+        for c in await db.carts.find({"items.0": {"$exists": True}},
+                                     {"_id": 0, "user_id": 1}).to_list(None)
+        if c.get("user_id")
+    }
+    opted = {d["email_key"] for d in
+             await db.email_optouts.find({}, {"_id": 0, "email_key": 1}).to_list(None)
+             if d.get("email_key")}
+
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=NUDGE_COOLDOWN_DAYS)).isoformat()
+    send, skip = [], []
+    for u in users:
+        addr = (u.get("email") or "").strip()
+        key = u.get("email_normalised") or normalise_email(addr)
+        row = {"id": u.get("id"), "email": addr, "name": u.get("name") or ""}
+        if not addr or "@" not in addr:
+            skip.append({**row, "why": "no usable email address"})
+        elif key in opted or u.get("product_email_opt_out"):
+            skip.append({**row, "why": "unsubscribed from product email"})
+        elif key in buyers:
+            skip.append({**row, "why": "already a customer — has ordered"})
+        elif u.get("id") in carted:
+            # Otherwise they get this AND the 12h/1w/end-of-month cart reminder,
+            # which reads as two different people mailing from one company.
+            skip.append({**row, "why": "has a live cart — the cart reminder owns them"})
+        elif (u.get("last_nudged_at") or "") > cutoff:
+            skip.append({**row, "why": f"nudged within {NUDGE_COOLDOWN_DAYS} days"})
+        else:
+            send.append(row)
+    send.sort(key=lambda r: r["email"])
+    skip.sort(key=lambda r: (r["why"], r["email"]))
+    return {"send": send, "skip": skip}
+
+
+class NudgeRequest(BaseModel):
+    confirm: bool = False
+    coupon_code: str = ""
+    test_to: str = ""      # send one copy here and change nothing else
+
+
+@admin_router.post("/send-purchase-nudge")
+async def admin_send_purchase_nudge(payload: NudgeRequest):
+    from emailer import send_purchase_nudge
+
+    books = await _nudge_books()
+    coupon = None
+    code = (payload.coupon_code or "").strip().upper()
+    if code:
+        doc = await db.coupons.find_one({"code": code}, {"_id": 0})
+        if not doc or not doc.get("active"):
+            raise HTTPException(status_code=400, detail=f"Coupon {code} not found or inactive")
+        coupon = {"code": doc["code"], "description": doc.get("description") or ""}
+
+    if payload.test_to:
+        ok = await send_purchase_nudge(payload.test_to, "there", books, coupon)
+        return {"test": True, "to": payload.test_to, "sent": bool(ok),
+                "books": [b["title"] for b in books]}
+
+    picked = await _nudge_recipients()
+    result = {
+        "confirmed": payload.confirm,
+        "would_send": len(picked["send"]),
+        "skipped": len(picked["skip"]),
+        "books": [{"title": b["title"], "cover_image": b.get("cover_image") or ""} for b in books],
+        "coupon": code or None,
+        "recipients": picked["send"],
+        "skips": picked["skip"],
+    }
+    if not payload.confirm:
+        return {**result, "dry_run": True}
+    if not books:
+        raise HTTPException(status_code=400, detail="No in-stock titles to feature — nothing sent")
+
+    sent, failed = 0, []
+    now = datetime.now(timezone.utc).isoformat()
+    for r in picked["send"]:
+        if await send_purchase_nudge(r["email"], r["name"], books, coupon):
+            sent += 1
+            # Stamped per recipient as we go, so a crash halfway through cannot
+            # re-mail the people who already received it on the next run.
+            await db.users.update_one({"id": r["id"]}, {"$set": {"last_nudged_at": now}})
+        else:
+            failed.append(r["email"])
+    log.info("Purchase nudge: sent=%d failed=%d skipped=%d", sent, len(failed), len(picked["skip"]))
+    return {**result, "dry_run": False, "sent": sent, "failed": failed}
