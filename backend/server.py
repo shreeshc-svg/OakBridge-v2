@@ -33,6 +33,7 @@ logger = logging.getLogger(__name__)
 from extensions import (
     auth_router,
     admin_router,
+    books_for_authors,
     extras_router,
     get_current_user_optional,
     seed_admin,
@@ -481,25 +482,22 @@ async def sitemap():
     # The book test DELIBERATELY IGNORES the stored `title_count`. That field is
     # stale: it reads 0 for Sudhir Mishra, whose Climate Justice is live and on
     # sale right now, so filtering on it would have withheld authors who do have
-    # books. Instead this repeats the rule /authors/{id}/books uses — honorifics
-    # stripped, case-insensitive substring against the book's author string — so
-    # a page is advertised only if it will actually show titles when opened.
+    # books. A page is advertised only if it will actually show titles when
+    # opened — which means asking the question the way the page itself asks it.
     #
-    # Cost is one extra query and an in-memory scan (roughly 143 x 194 substring
-    # checks), not a query per author.
+    # It now literally does. This used to carry its own copy of the rule, a
+    # substring test that stripped only "Prof. " and "Dr. ", and the two drifted:
+    # Khandelwal's page was absent from the sitemap for months while his product
+    # pages listed him fine. Same function, one answer.
     authors = await db.authors.find(
         {"enabled": {"$ne": False}}, {"_id": 0, "id": 1, "name": 1, "bio": 1}
     ).to_list(None)
-    book_authors = [
-        (b.get("author") or "").lower()
-        for b in await db.books.find({}, {"_id": 0, "author": 1}).to_list(None)
-    ]
+    with_books = await books_for_authors()
     for a in authors:
         aid = escape(str(a.get("id", "")))
         if not aid or not (a.get("bio") or "").strip():
             continue
-        core = (a.get("name") or "").replace("Prof. ", "").replace("Dr. ", "").strip().lower()
-        if not core or not any(core in ba for ba in book_authors):
+        if not with_books.get(a.get("id")):
             continue
         urls.append(
             f"  <url><loc>{SITE_URL}/authors/{aid}</loc>"

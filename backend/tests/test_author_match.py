@@ -266,6 +266,36 @@ check(all(a.strip() and a == a.strip() for v in AUTHOR_ALIASES.values() for a in
       "no alias is blank or carries stray whitespace")
 check(len(AUTHOR_ALIASES) == len(set(AUTHOR_ALIASES)), "no id appears twice")
 
+print("\n-- the author page and the product page must agree --")
+# Prof Dr Aditya Tomar was filed with the honorific "Prof Dr" and his book
+# credits him as "Prof (Dr)". The product page listed him; his author page said
+# TITLES 0. One bracket. Both now go through match_authors, so the honorific a
+# book happens to use cannot change the answer.
+idx = index("Prof Dr Aditya Tomar", "Dr Joshua Aston", "Mini Srivastava", "Rupendra Singh")
+tomar = ids("Prof Dr Aditya Tomar")
+for spelling in ("Prof (Dr) Aditya Tomar", "Prof. (Dr.) Aditya Tomar", "Prof Dr Aditya Tomar",
+                 "Dr Aditya Tomar", "Prof Aditya Tomar", "Aditya Tomar"):
+    check(match_authors(spelling, idx) == tomar, f"'{spelling}' resolves to the one record")
+check(match_authors("Prof (Dr) Aditya Tomar, Dr Joshua Aston, Mini Srivastava & Rupendra Singh", idx)
+      == tomar + ids("Dr Joshua Aston", "Mini Srivastava", "Rupendra Singh"),
+      "the real book string credits all four")
+
+print("\n-- one implementation, not four --")
+src = {f: open(os.path.join(BACKEND, f), encoding="utf-8").read()
+       for f in ("extensions.py", "server.py", "features.py")}
+crude = [f for f, t in src.items() if 'replace("Prof. "' in t or "replace('Prof. '" in t]
+check(not crude, f"no module strips honorifics by hand any more {crude or ''}")
+check(src["extensions.py"].count("async def books_for_authors") == 1,
+      "the shared resolver is defined exactly once")
+for f in ("extensions.py", "server.py"):
+    check("books_for_authors" in src[f], f"{f} asks the shared resolver")
+check(re.search(r"async def author_books.*?books_for_authors", src["extensions.py"], re.S),
+      "the author page endpoint delegates to it")
+# A user-editable name must never reach a regex: 'Sandhya P.R.' would match any
+# character in place of each dot.
+check(not re.search(r'\$regex.*?a\[.name.\]|\$regex.*?author\[.name.\]', src["extensions.py"]),
+      "no author record's name is interpolated into a Mongo $regex")
+
 print()
 if failures:
     print(f"{len(failures)} assertion(s) failed:")

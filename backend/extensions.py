@@ -429,12 +429,14 @@ async def seed_authors():
     cnt = await db.authors.count_documents({})
     if cnt > 0:
         return
-    docs = []
-    for a in AUTHORS_SEED:
-        count = await db.books.count_documents({"author": {"$regex": a["name"].replace("Prof. ", "").replace("Dr. ", ""), "$options": "i"}})
-        docs.append({**a, "title_count": count})
-    await db.authors.insert_many(docs)
-    log.info(f"Seeded {len(docs)} authors")
+    # title_count is left at 0 on purpose. It was computed here with a fourth
+    # private copy of the author-matching rule, and being written once at seed
+    # it was stale from the next import onwards -- it reads 0 for Sudhir Mishra,
+    # whose Climate Justice is live and on sale. Nothing on the storefront reads
+    # it: the author page counts the books it actually renders. Kept on the
+    # model only so old documents still validate.
+    await db.authors.insert_many([{**a, "title_count": 0} for a in AUTHORS_SEED])
+    log.info(f"Seeded {len(AUTHORS_SEED)} authors")
 
 
 async def ensure_indexes():
@@ -877,18 +879,36 @@ async def book_authors(book_id: str):
     return [by_id[i] for i in ids if i in by_id]
 
 
+async def books_for_authors(author_ids: Optional[set] = None) -> dict:
+    """author id -> the books crediting them, using the ONE matcher.
+
+    This used to be a Mongo $regex on the record's raw name, with only the
+    literal "Prof. " and "Dr. " stripped. It failed the moment a book spelled an
+    honorific differently: Prof Dr Aditya Tomar is filed as "Prof Dr" and his
+    book credits "Prof (Dr)", so his page reported zero titles while the product
+    page listed him correctly. One bracket.
+
+    It also passed a user-editable name straight into a regex, so the dots in
+    "Sandhya P.R." matched any character.
+
+    Same answer as the PDP now, aliases and all, because it is the same code.
+    """
+    index = await _author_index()
+    books = await db.books.find({}, {"_id": 0}).to_list(None)
+    out: dict = {}
+    for book in books:
+        for aid in match_authors(book.get("author", ""), index):
+            if author_ids is None or aid in author_ids:
+                out.setdefault(aid, []).append(book)
+    return out
+
+
 @extras_router.get("/authors/{author_id}/books")
 async def author_books(author_id: str):
-    author = await db.authors.find_one({"id": author_id}, {"_id": 0})
+    author = await db.authors.find_one({"id": author_id}, {"_id": 0, "id": 1})
     if not author:
         raise HTTPException(status_code=404, detail="Author not found")
-    # Strip honorifics for matching
-    name_core = author["name"].replace("Prof. ", "").replace("Dr. ", "")
-    books = await db.books.find(
-        {"author": {"$regex": name_core, "$options": "i"}},
-        {"_id": 0},
-    ).to_list(50)
-    return books
+    return (await books_for_authors({author_id})).get(author_id, [])[:50]
 
 
 @extras_router.post("/desk-copies", response_model=DeskCopy)
