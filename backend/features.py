@@ -13,6 +13,7 @@ import io
 import json
 import os
 import re
+from urllib.parse import unquote
 import uuid
 import logging
 import calendar
@@ -832,8 +833,19 @@ def _author_photos_on_disk(limit: int = 2000) -> dict:
     found = {}
 
     def remember(name: str, url: str) -> None:
-        stem = re.sub(r"\.[A-Za-z0-9]+$", "", name)          # drop the extension
+        # Percent-decode FIRST. Several portraits were uploaded through a form
+        # that encoded the name, so the key on disk reads
+        # "%e0%a4%b5%e0%a5%88..." for a Devanagari name and
+        # "mrityunjay-rai-%28bahubali-sir%29" for a parenthetical. Left encoded
+        # they normalise to gibberish and match nobody, which is why two real
+        # portraits sat in the bucket unused.
+        stem = unquote(name)
+        stem = re.sub(r"\.[A-Za-z0-9]+$", "", stem)           # drop the extension
         stem = re.sub(r"[_\-]+", " ", stem)                   # underscores are spaces
+        # "(Bahubali Sir)", "(UILS)" -- a nickname or an institution, never part
+        # of the name we file them under. Post-nominals in brackets, "(Retd.)",
+        # are handled downstream by author_match_key either way.
+        stem = re.sub(r"\s*\([^)]*\)\s*", " ", stem)
         key = author_match_key(stem)
         if key:
             found.setdefault(key, url)
@@ -871,9 +883,16 @@ async def admin_import_authors(confirm: bool = False, file: str = "authors_from_
     Deliberately not /reseed-authors. That one calls delete_many({}) before it
     inserts, so running it to add a handful of people would silently discard
     every bio, photo and ordering change made in Admin since the last seed.
-    This upserts by id: an id we already hold is reported as a skip and left
-    exactly as it is, so a second run is a no-op and nothing you typed is ever
-    overwritten by a file.
+
+    A name resolving to a record we already hold UPDATES it -- matched through
+    the storefront's own matcher, aliases included, because we file "Apoorva K
+    Singh" where a book says "Apoorva Kumar Singh" and thirteen more pairs like
+    it would otherwise each become a second page for one person.
+
+    What gets written is a diff: a field the file leaves blank is not touched,
+    and a field already holding that exact value is not a change. So a second
+    run really is a no-op and reports zero, rather than re-reporting every row
+    it has already applied.
 
     Dry run by default -- call with ?confirm=true to write.
     """
@@ -885,8 +904,14 @@ async def admin_import_authors(confirm: bool = False, file: str = "authors_from_
         raise HTTPException(status_code=404, detail=f"{safe} not found in deploy")
     records = json.load(open(path, encoding="utf-8"))
 
-    rows = await db.authors.find({}, {"_id": 0, "id": 1, "name": 1}).to_list(None)
+    # Every field, not just id and name: the patch below is a DIFF against what
+    # is stored, and without the current values it cannot be one.
+    rows = await db.authors.find(
+        {}, {"_id": 0, "id": 1, "name": 1, "bio": 1, "photo": 1,
+             "affiliation": 1, "specialty": 1, "category": 1},
+    ).to_list(None)
     by_id = {r["id"] for r in rows if r.get("id")}
+    current = {r["id"]: r for r in rows if r.get("id")}
     # Resolve an incoming name to a record we already hold, through the SAME
     # matcher the storefront uses -- aliases included. Slugifying the name and
     # comparing ids would not do it: we file "Apoorva K Singh" where a book says
@@ -945,14 +970,26 @@ async def admin_import_authors(confirm: bool = False, file: str = "authors_from_
                 shot = photos.get(author_match_key(sp))
                 if shot:
                     doc["photo"] = shot
-                    photo_hits += 1
                     break
         if hit:
-            # Only fields this file actually carries. A blank cell must not wipe
-            # a bio somebody wrote by hand in Admin.
-            patch = {k: doc[k] for k in FIELDS if doc[k]}
+            # A DIFF, not a copy. Two rules stack here:
+            #
+            #   `doc[k]`  -- a blank cell never wipes a bio somebody typed.
+            #   `!= cur`  -- a field already holding this exact value is not a
+            #               change, so it is not reported and not written.
+            #
+            # Without the second rule the tool never converged: all fourteen
+            # records carry a bio, so all fourteen produced a non-empty patch,
+            # and the dry run said "14 updates" no matter how many times it had
+            # already been applied. Nothing was wrong with the data and no
+            # amount of clicking Apply would make the number fall.
+            cur = current.get(hit, {})
+            patch = {k: doc[k] for k in FIELDS if doc[k] and doc[k] != (cur.get(k) or "")}
             if patch:
-                to_update.append({"id": hit, "name": name, "set": patch})
+                if "photo" in patch:
+                    photo_hits += 1
+                to_update.append({"id": hit, "name": name, "set": patch,
+                                  "fields": sorted(patch)})
             continue
         if not aid:
             bad.append(name)
@@ -960,6 +997,8 @@ async def admin_import_authors(confirm: bool = False, file: str = "authors_from_
         doc.setdefault("enabled", True)
         doc.setdefault("order", 0)
         doc.setdefault("title_count", 0)
+        if doc.get("photo"):
+            photo_hits += 1
         to_add.append(doc)
 
     # Only report a portrait nobody is USING. The authors folder already holds
@@ -976,8 +1015,11 @@ async def admin_import_authors(confirm: bool = False, file: str = "authors_from_
         for r in await db.authors.find({}, {"_id": 0, "photo": 1}).to_list(None)
     }
     known = by_name.keys() | {author_match_key(d["name"]) for d in to_add}
+    # The FILE NAME, not the normalised key. The key is what the matcher failed
+    # on and reads as gibberish; the file name is the thing someone can rename.
     unmatched_photos = sorted(
-        k for k, url in photos.items()
+        unquote(url.rsplit("/", 1)[-1])
+        for k, url in photos.items()
         if k not in known and url.rsplit("/", 1)[-1] not in in_use
     )
     result = {
@@ -994,7 +1036,7 @@ async def admin_import_authors(confirm: bool = False, file: str = "authors_from_
         "photos_attached": photo_hits,
         "photos_matching_nobody": unmatched_photos[:40],
         "names": [d["name"] for d in to_add][:60],
-        "updating": [u["name"] for u in to_update][:60],
+        "updating": [f"{u['name']} ({', '.join(u['fields'])})" for u in to_update][:60],
     }
     if not confirm:
         result["note"] = "re-call with ?confirm=true to write. Nothing is ever deleted."

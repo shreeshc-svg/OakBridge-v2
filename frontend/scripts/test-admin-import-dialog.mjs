@@ -48,6 +48,18 @@ for (const f of ['photos_attached', 'photos_found', 'photos_matching_nobody', 'u
   eq(`${f} is surfaced`, dlg.includes(f), true);
 }
 
+console.log('\n-- an update says WHICH field it touches --');
+// "14 updates" is not information. The endpoint appends the field names, so a
+// run that only attaches a photo reads "Harish Narasappa (photo)" rather than
+// looking identical to one that rewrites every bio.
+const api = read('../backend/features.py');
+eq('the endpoint reports the fields it will write',
+   /"updating": \[f"\{u\['name'\]\} \(\{', '\.join\(u\['fields'\]\)\}\)"/.test(api), true);
+eq('and the patch is a diff, not a copy',
+   /doc\[k\] != \(cur\.get\(k\) or ""\)/.test(api), true);
+eq('photos are counted when written, not when found',
+   /if "photo" in patch:\s*\n\s*photo_hits \+= 1/.test(api), true);
+
 console.log('\n-- and the copy matches what it now does --');
 // It updates existing records. Saying otherwise on the button someone is about
 // to press is worse than saying nothing.

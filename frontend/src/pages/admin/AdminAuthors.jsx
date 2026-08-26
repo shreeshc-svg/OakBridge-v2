@@ -263,12 +263,21 @@ function ImportAuthorsDialog({ onClose, onDone }) {
                         {preview.photos_matching_nobody?.length > 0 && (
                             /* Named, not counted: a portrait matching nobody is
                                almost always a misspelt file name, and the only
-                               way to fix it is to see which one. */
-                            <p className="text-[11px] text-[#B4750F] mt-3">
-                                <strong>{preview.photos_matching_nobody.length}</strong> photo(s)
-                                match no author:{" "}
-                                {preview.photos_matching_nobody.join(", ")}
-                            </p>
+                               way to fix it is to see which one. Reported as the
+                               FILE NAME, since that is the thing you can rename.
+                               These are also only the files no author record is
+                               already pointing at -- an unused file, not merely
+                               an oddly named one. */
+                            <div className="text-[11px] text-[#B4750F] mt-3">
+                                <strong>{preview.photos_matching_nobody.length}</strong> portrait(s)
+                                in storage that no author is using — rename one to match an
+                                author and the next run will attach it:
+                                <ul className="mt-1 font-mono text-[10px] leading-relaxed">
+                                    {preview.photos_matching_nobody.map((f) => (
+                                        <li key={f}>· {f}</li>
+                                    ))}
+                                </ul>
+                            </div>
                         )}
 
                         {preview.without_bio > 0 && (
@@ -309,8 +318,9 @@ function ImportAuthorsDialog({ onClose, onDone }) {
                         )}
                         {n === 0 && (
                             <p className="mt-5 text-sm text-[#4B5563]">
-                                Nothing to do — every author in the file is already here, with
-                                everything the file carries.
+                                Nothing to do — every author in the file is already here and
+                                already holds exactly what the file carries. Running it again
+                                will keep saying this.
                             </p>
                         )}
                     </>

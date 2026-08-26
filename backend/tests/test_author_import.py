@@ -83,7 +83,8 @@ def resolve(records, roster, photos=None):
                     doc["photo"] = shot
                     break
         if hit:
-            patch = {k: doc[k] for k in FIELDS if doc[k]}
+            cur = next((r for r in roster if r["id"] == hit), {})
+            patch = {k: doc[k] for k in FIELDS if doc[k] and doc[k] != (cur.get(k) or "")}
             if patch:
                 updates.append({"id": hit, "set": patch})
             continue
@@ -124,6 +125,51 @@ check("only the filled field is written", u[0]["set"] == {"specialty": "Law"})
 check("   bio is absent from the patch", "bio" not in u[0]["set"])
 a, u = resolve([{"id": "x", "name": "Apoorva K Singh"}], ROSTER)
 check("a row with nothing at all writes nothing", (len(a), len(u)) == (0, 0))
+
+print("\n-- a second run must do nothing --")
+# The bug: the patch copied every non-empty field rather than diffing against
+# what was stored. All fourteen records carry a bio, so all fourteen produced a
+# non-empty patch and the dry run reported "14 updates" however many times it
+# had already been applied. Nothing was wrong with the data; the number simply
+# never fell, and no amount of clicking Apply would move it.
+LIVE = [{"id": "a", "name": "Ada Lovelace", "bio": "Mathematician.",
+         "photo": "/api/files/oakbridge/authors/Ada Lovelace.jpg",
+         "affiliation": "", "specialty": "", "category": ""}]
+SAME = [{"id": "a", "name": "Ada Lovelace", "bio": "Mathematician.",
+         "photo": "/api/files/oakbridge/authors/Ada Lovelace.jpg"}]
+a, u = resolve(SAME, LIVE)
+check("re-importing identical values is a no-op", (len(a), len(u)) == (0, 0))
+
+CHANGED = [{"id": "a", "name": "Ada Lovelace", "bio": "Mathematician and writer."}]
+a, u = resolve(CHANGED, LIVE)
+check("a genuinely changed field is still an update", len(u) == 1)
+check("   and only that field is written", u[0]["set"] == {"bio": "Mathematician and writer."})
+
+# The live shape of the problem: everyone has their bio already, one lacks a photo.
+NOPIC = [dict(LIVE[0], id="b", name="Bob Blank", photo="")]
+FILE = [{"id": "b", "name": "Bob Blank", "bio": "Mathematician."}]
+PICS = {author_match_key("Bob Blank"): "/api/files/oakbridge/authors/Bob Blank.jpg"}
+a, u = resolve(FILE, NOPIC, PICS)
+check("the one record missing a photo is the only update", len(u) == 1)
+check("   and the patch is the photo alone, not the bio it already has",
+      u[0]["set"] == {"photo": "/api/files/oakbridge/authors/Bob Blank.jpg"})
+
+print("\n-- percent-encoded and parenthesised file names --")
+# Portraits uploaded through a form that encoded the name sat unused: they
+# normalise to gibberish and match nobody.
+from urllib.parse import unquote as _unq
+def filekey(f):
+    s = _unq(f)
+    s = re.sub(r"\.[A-Za-z0-9]+$", "", s)
+    s = re.sub(r"[_\-]+", " ", s)
+    s = re.sub(r"\s*\([^)]*\)\s*", " ", s)
+    return author_match_key(s)
+check("a bracketed nickname is not part of the name",
+      filekey("mrityunjay-rai-%28bahubali-sir%29.jpg") == "mrityunjay rai")
+check("and it works undecoded too", filekey("Mrityunjay Rai (Bahubali Sir).jpg") == "mrityunjay rai")
+check("a post-nominal in brackets still resolves",
+      filekey("Dr K K Khandelwal, IAS (R).jpg") == "k k khandelwal")
+check("an ordinary name is untouched", filekey("Bibek Debroy.jpg") == "bibek debroy")
 
 print("\n-- photos are matched on the person, not the slug --")
 PHOTOS = {author_match_key(n): f"/api/files/oakbridge/authors/{f}" for n, f in [
