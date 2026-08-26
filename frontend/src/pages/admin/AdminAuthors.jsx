@@ -184,7 +184,9 @@ function ImportAuthorsDialog({ onClose, onDone }) {
             const res = await adminImportAuthors(!dryRun);
             setPreview(res);
             if (!dryRun) {
-                toast.success(`${res.added} author(s) added. Nothing was replaced.`);
+                toast.success(
+                    `${res.added} added, ${res.updated} updated, ${res.photos_attached ?? 0} portrait(s) attached.`,
+                );
                 onDone?.();
             }
         } catch (err) {
@@ -199,7 +201,16 @@ function ImportAuthorsDialog({ onClose, onDone }) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    const n = preview ? (preview.dry_run ? preview.would_add : preview.added) : 0;
+    /*
+     * Adds AND updates. The endpoint gained the ability to patch an existing
+     * record -- that is how a bio or a portrait reaches someone already on the
+     * roster -- but this dialog still counted only inserts. So a run with
+     * nothing to add and one photo to attach read "Nothing to add" and greyed
+     * out Apply, hiding the only work there was to do.
+     */
+    const adds = preview ? (preview.dry_run ? preview.would_add : preview.added) : 0;
+    const updates = preview ? (preview.dry_run ? preview.would_update : preview.updated) : 0;
+    const n = adds + updates;
 
     return (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-start justify-center p-4 overflow-y-auto">
@@ -211,8 +222,9 @@ function ImportAuthorsDialog({ onClose, onDone }) {
                 <h2 className="font-serif text-3xl mt-1 text-[#002B5C]">Add missing authors</h2>
                 <p className="text-sm text-[#4B5563] mt-3">
                     People credited on a book who have no author record, so their book&rsquo;s
-                    About&nbsp;the&nbsp;Author section has nothing to show. Adds only what is
-                    missing — an author you already have is skipped, never overwritten.
+                    About&nbsp;the&nbsp;Author section has nothing to show. Someone you already
+                    have is matched by name — aliases included — and updated rather than
+                    duplicated. A blank field in the file never overwrites what is there.
                 </p>
 
                 {!preview ? (
@@ -229,18 +241,31 @@ function ImportAuthorsDialog({ onClose, onDone }) {
                                 <div className="font-serif text-2xl text-[#002B5C]">{n}</div>
                             </div>
                             <div className="border border-[#E5E7EB] px-3 py-2">
-                                <div className="overline !text-[9px]">With a bio</div>
-                                <div className="font-serif text-2xl text-[#002B5C]">{preview.with_bio}</div>
-                                <div className="text-[10px] text-[#4B5563] mt-0.5">From the master</div>
+                                <div className="overline !text-[9px]">Will update</div>
+                                <div className="font-serif text-2xl text-[#002B5C]">{updates}</div>
+                                <div className="text-[10px] text-[#4B5563] mt-0.5">Already on the site</div>
                             </div>
                             <div className="border border-[#E5E7EB] px-3 py-2">
-                                <div className="overline !text-[9px]">Already here</div>
+                                <div className="overline !text-[9px]">Portraits</div>
                                 <div className="font-serif text-2xl text-[#002B5C]">
-                                    {preview.already_present}
+                                    {preview.photos_attached ?? 0}
                                 </div>
-                                <div className="text-[10px] text-[#4B5563] mt-0.5">Untouched</div>
+                                <div className="text-[10px] text-[#4B5563] mt-0.5">
+                                    {preview.photos_found ?? 0} in storage
+                                </div>
                             </div>
                         </div>
+
+                        {preview.photos_matching_nobody?.length > 0 && (
+                            /* Named, not counted: a portrait matching nobody is
+                               almost always a misspelt file name, and the only
+                               way to fix it is to see which one. */
+                            <p className="text-[11px] text-[#B4750F] mt-3">
+                                <strong>{preview.photos_matching_nobody.length}</strong> photo(s)
+                                match no author:{" "}
+                                {preview.photos_matching_nobody.join(", ")}
+                            </p>
+                        )}
 
                         {preview.without_bio > 0 && (
                             <p className="text-[11px] text-[#4B5563] mt-3">
@@ -252,13 +277,27 @@ function ImportAuthorsDialog({ onClose, onDone }) {
                             </p>
                         )}
 
-                        {preview.names?.length > 0 && (
+                        {(preview.names?.length > 0 || preview.updating?.length > 0) && (
                             <div className="mt-4 border border-[#E5E7EB] max-h-56 overflow-y-auto">
-                                {preview.names.map((nm) => (
+                                {preview.names?.map((nm) => (
                                     <div
-                                        key={nm}
+                                        key={`a-${nm}`}
                                         className="px-3 py-1.5 text-[12px] text-[#002B5C] border-b border-[#E5E7EB] last:border-0"
                                     >
+                                        <span className="font-mono text-[9px] uppercase tracking-wider text-[#3D9970] mr-2">
+                                            new
+                                        </span>
+                                        {nm}
+                                    </div>
+                                ))}
+                                {preview.updating?.map((nm) => (
+                                    <div
+                                        key={`u-${nm}`}
+                                        className="px-3 py-1.5 text-[12px] text-[#002B5C] border-b border-[#E5E7EB] last:border-0"
+                                    >
+                                        <span className="font-mono text-[9px] uppercase tracking-wider text-[#4B5563] mr-2">
+                                            update
+                                        </span>
                                         {nm}
                                     </div>
                                 ))}
@@ -266,7 +305,8 @@ function ImportAuthorsDialog({ onClose, onDone }) {
                         )}
                         {n === 0 && (
                             <p className="mt-5 text-sm text-[#4B5563]">
-                                Nothing to add — every author in the file is already here.
+                                Nothing to do — every author in the file is already here, with
+                                everything the file carries.
                             </p>
                         )}
                     </>
@@ -286,7 +326,13 @@ function ImportAuthorsDialog({ onClose, onDone }) {
                         data-testid="import-authors-apply"
                         className="bg-[#002B5C] text-white px-5 py-2.5 text-sm font-medium hover:bg-[#001F42] disabled:opacity-50"
                     >
-                        {busy ? "Working…" : `Add${n ? ` ${n}` : ""}`}
+                        {busy
+                            ? "Working…"
+                            : n === 0
+                              ? "Nothing to do"
+                              : [adds && `Add ${adds}`, updates && `Update ${updates}`]
+                                    .filter(Boolean)
+                                    .join(" · ")}
                     </button>
                 </div>
             </div>
