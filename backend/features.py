@@ -962,9 +962,23 @@ async def admin_import_authors(confirm: bool = False, file: str = "authors_from_
         doc.setdefault("title_count", 0)
         to_add.append(doc)
 
+    # Only report a portrait nobody is USING. The authors folder already holds
+    # ~150 files from the original seed, named after each author's slug rather
+    # than their name -- "advocate-karan-trehan.jpg" for Karan Trehan, a couple
+    # of URL-encoded Devanagari names, some UUIDs. None of those normalises back
+    # to a person, so a bare "matches nobody" list reported the entire existing
+    # library as a problem and buried the one file that actually was one.
+    #
+    # A file already referenced by some author's photo field is doing its job,
+    # whatever it is called.
+    in_use = {
+        (r.get("photo") or "").rsplit("/", 1)[-1]
+        for r in await db.authors.find({}, {"_id": 0, "photo": 1}).to_list(None)
+    }
+    known = by_name.keys() | {author_match_key(d["name"]) for d in to_add}
     unmatched_photos = sorted(
-        k for k in photos
-        if k not in by_name and k not in {author_match_key(d["name"]) for d in to_add}
+        k for k, url in photos.items()
+        if k not in known and url.rsplit("/", 1)[-1] not in in_use
     )
     result = {
         "dry_run": not confirm,

@@ -238,7 +238,11 @@ function ImportAuthorsDialog({ onClose, onDone }) {
                             </div>
                             <div className="border border-[#E5E7EB] px-3 py-2">
                                 <div className="overline !text-[9px]">Will add</div>
-                                <div className="font-serif text-2xl text-[#002B5C]">{n}</div>
+                                {/* `adds`, not `n`. n is adds+updates and gates the
+                                    button; this card counts inserts alone, and
+                                    reading n here made a pure-update run report
+                                    fourteen adds and fourteen updates at once. */}
+                                <div className="font-serif text-2xl text-[#002B5C]">{adds}</div>
                             </div>
                             <div className="border border-[#E5E7EB] px-3 py-2">
                                 <div className="overline !text-[9px]">Will update</div>

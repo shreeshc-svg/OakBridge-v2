@@ -32,6 +32,17 @@ eq('Apply is gated on adds PLUS updates', /const n = adds \+ updates/.test(dlg),
 eq('it no longer reads the removed already_present field',
    /already_present/.test(dlg), false);
 
+console.log('\n-- each card shows its own number --');
+// n is adds+updates and exists to gate the button. Rendering it in the "Will
+// add" card made a pure-update run report fourteen adds AND fourteen updates.
+const card = (label) => {
+  const i = dlg.indexOf(`>${label}</div>`);
+  return i < 0 ? '' : dlg.slice(i, i + 900);
+};
+eq('Will add renders adds', /\{adds\}/.test(card('Will add')), true);
+eq('   and not the combined total', /\{n\}/.test(card('Will add')), false);
+eq('Will update renders updates', /\{updates\}/.test(card('Will update')), true);
+
 console.log('\n-- the numbers a run actually turns on --');
 for (const f of ['photos_attached', 'photos_found', 'photos_matching_nobody', 'updating']) {
   eq(`${f} is surfaced`, dlg.includes(f), true);
