@@ -66,8 +66,13 @@ export default function Gifting() {
                 ) : (
                     <div className="mt-14 grid sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-12">
                         {hampers.map((h) => {
-                            const full = Number(h.contents_value || 0);
+                            // Same precedence as the product page: an explicit
+                            // list price wins, the contents sum is the fallback.
+                            // A card that disagrees with the page it links to is
+                            // a pricing error as far as the customer is concerned.
                             const price = Number(h.price || 0);
+                            const listed = Number(h.original_price || 0);
+                            const full = listed > price ? listed : Number(h.contents_value || 0);
                             const saves = full > price ? Math.round((1 - price / full) * 100) : 0;
                             const oos = Number(h.stock ?? 0) <= 0;
                             return (

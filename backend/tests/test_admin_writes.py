@@ -86,7 +86,7 @@ create = model_fields(hampers, "HamperCreate")
 update = model_fields(hampers, "HamperUpdate")
 # Mirrors BLANK in AdminHampers.jsx: every key the editor puts in its payload.
 FORM_KEYS = [
-    "title", "subtitle", "description", "price", "cover_image", "gallery",
+    "title", "subtitle", "description", "price", "original_price", "cover_image", "gallery",
     "sku", "stock", "occasion", "order_by", "hamper_items", "hamper_copy",
     "gift_message_enabled", "bulk_enquiry", "enabled", "order",
 ]

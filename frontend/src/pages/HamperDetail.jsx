@@ -95,11 +95,28 @@ export default function HamperDetail({ id }) {
     // not urgency, it is arithmetic, and customers read it as a gimmick.
     const scarce = !oos && stock <= 15;
 
+    /*
+     * The struck-through figure, and where it came from.
+     *
+     * An explicit list price wins over the sum of the contents. Both are honest
+     * claims but they answer different questions — "this is what the box used to
+     * cost" versus "this is what the pieces come to separately" — and showing
+     * both would make the customer arbitrate. When an admin has typed a list
+     * price they have made that decision; when they have not, the contents sum
+     * is the better answer than no answer.
+     *
+     * `basis` travels with the number because the sentence under it only makes
+     * sense for one of the two. A struck MRP explains itself; "bought
+     * separately, the contents come to..." does not describe an MRP at all.
+     */
     const savings = useMemo(() => {
-        const full = Number(h?.contents_value || 0);
         const price = Number(h?.price || 0);
+        const listed = Number(h?.original_price || 0);
+        const contents = Number(h?.contents_value || 0);
+        const full = listed > price ? listed : contents;
+        const basis = listed > price ? "list" : "contents";
         if (!full || full <= price) return null;
-        return { full, amount: full - price, pct: Math.round((1 - price / full) * 100) };
+        return { full, basis, amount: full - price, pct: Math.round((1 - price / full) * 100) };
     }, [h]);
 
     const orderBy = useMemo(() => {
@@ -226,7 +243,7 @@ export default function HamperDetail({ id }) {
                             </>
                         )}
                     </div>
-                    {savings && copy.value_note && (
+                    {savings?.basis === "contents" && copy.value_note && (
                         <p className="text-xs text-[#4B5563] mt-2">
                             {fill(copy.value_note, { value: formatINR(savings.full) })}
                         </p>

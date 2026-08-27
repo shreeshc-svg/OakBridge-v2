@@ -29,7 +29,7 @@ import {
  */
 
 const BLANK = {
-    title: "", subtitle: "", description: "", price: 0, cover_image: "",
+    title: "", subtitle: "", description: "", price: 0, original_price: 0, cover_image: "",
     gallery: [], sku: "", stock: 0, occasion: "", order_by: "",
     hamper_items: [], hamper_copy: {}, gift_message_enabled: true,
     bulk_enquiry: true, enabled: true, order: 0,
@@ -720,7 +720,8 @@ export default function AdminHampers() {
                                         <Field label="SKU"><input value={editing.sku || ""} onChange={(e) => setEditing({ ...editing, sku: e.target.value })} className={input} /></Field>
                                         <Field label="Subtitle"><input value={editing.subtitle || ""} onChange={(e) => setEditing({ ...editing, subtitle: e.target.value })} className={input} /></Field>
                                         <Field label="Occasion" hint="Shown above the name"><input value={editing.occasion || ""} onChange={(e) => setEditing({ ...editing, occasion: e.target.value })} placeholder="Raksha Bandhan" className={input} /></Field>
-                                        <Field label="Price ₹"><input type="number" value={editing.price} onChange={(e) => setEditing({ ...editing, price: Number(e.target.value) })} data-testid="hamper-price" className={input} /></Field>
+                                        <Field label="Price ₹" hint="What the customer pays"><input type="number" value={editing.price} onChange={(e) => setEditing({ ...editing, price: Number(e.target.value) })} data-testid="hamper-price" className={input} /></Field>
+                                        <Field label="List price ₹" hint="Struck through beside the price. Leave 0 and the saving is worked out from the contents instead."><input type="number" value={editing.original_price ?? 0} onChange={(e) => setEditing({ ...editing, original_price: Number(e.target.value) })} data-testid="hamper-original-price" className={input} /></Field>
                                         <Field label="Boxes available"><input type="number" value={editing.stock} onChange={(e) => setEditing({ ...editing, stock: Number(e.target.value) })} data-testid="hamper-stock" className={input} /></Field>
                                         <Field label="Order-by date" hint="The page hides the deadline once it passes"><input type="date" value={(editing.order_by || "").slice(0, 10)} onChange={(e) => setEditing({ ...editing, order_by: e.target.value })} className={input} /></Field>
                                     </div>

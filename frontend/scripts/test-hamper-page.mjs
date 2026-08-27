@@ -41,15 +41,19 @@ check(fill(undefined, {}) === "" && fill(null, {}) === "",
 
 // ------------------------------------------------------------- savings ----
 const savings = (h) => {
-    const full = Number(h?.contents_value || 0);
     const price = Number(h?.price || 0);
+    const listed = Number(h?.original_price || 0);
+    const contents = Number(h?.contents_value || 0);
+    const full = listed > price ? listed : contents;
+    const basis = listed > price ? "list" : "contents";
     if (!full || full <= price) return null;
-    return { full, amount: full - price, pct: Math.round((1 - price / full) * 100) };
+    return { full, basis, amount: full - price, pct: Math.round((1 - price / full) * 100) };
 };
 
 console.log("\n-- the savings claim --");
 const s = savings({ contents_value: 2780, price: 2190 });
-check(s.amount === 590 && s.pct === 21, "computed from the contents, never typed in by hand");
+check(s.amount === 590 && s.pct === 21, "worked out from the contents when there is no list price");
+check(s.basis === "contents", "and says so, because the sentence under it only fits that case");
 check(savings({ contents_value: 2000, price: 2000 }) === null,
       "no claim when the hamper costs what its contents cost");
 check(savings({ contents_value: 1800, price: 2190 }) === null,
@@ -57,6 +61,20 @@ check(savings({ contents_value: 1800, price: 2190 }) === null,
 check(savings({ contents_value: 0, price: 2190 }) === null,
       "an unpriced contents list makes no claim at all");
 check(savings({ price: 2190 }) === null, "nor does a missing one");
+
+console.log("\n-- an explicit list price --");
+const listed = savings({ price: 649, original_price: 899, contents_value: 780 });
+check(listed.full === 899, "a typed list price wins over the contents sum");
+check(listed.basis === "list", "and is marked as such");
+check(listed.pct === 28, "the percentage comes off the list price");
+check(savings({ price: 649, original_price: 0, contents_value: 780 }).full === 780,
+      "left at zero, the contents sum is used instead — the field is optional");
+check(savings({ price: 649, original_price: 500, contents_value: 780 }).full === 780,
+      "a list price BELOW the selling price is ignored rather than shown as a markup");
+check(savings({ price: 649, original_price: 649, contents_value: 0 }) === null,
+      "a list price equal to the price is no discount, so nothing is struck through");
+check(savings({ price: 0, original_price: 899 }).pct === 100,
+      "a free hamper against a list price does not divide by zero");
 
 // ------------------------------------------------------------- scarcity ---
 const scarce = (stock) => stock > 0 && stock <= 15;
@@ -89,6 +107,14 @@ check(!/["'](What's inside|Add to Cart|Send it as a gift)["']/.test(page),
 check(page.includes("copy.add_to_cart_label") && page.includes("copy.contents_heading"),
       "labels are read from the copy object");
 check(page.includes("stock <= 15"), "the scarcity threshold lives in the page, and is the one tested above");
+// The shipped page must use the same precedence as the function tested above,
+// and must only print the contents sentence when the figure IS the contents sum.
+check(/const listed = Number\(h\?\.original_price \|\| 0\)/.test(page),
+      "the page reads the admin's list price");
+check(page.includes('listed > price ? listed : contents'),
+      "and prefers it over the contents sum, exactly as tested");
+check(page.includes('savings?.basis === "contents" && copy.value_note'),
+      "the 'bought separately' line appears only when the figure came from the contents — it does not describe an MRP");
 check(/d\.getTime\(\)\s*<\s*Date\.now\(\)/.test(page), "the deadline is compared against now");
 check(page.includes("metaDescription") && page.includes("breadcrumbLd"),
       "the page carries SEO metadata like every other route");
