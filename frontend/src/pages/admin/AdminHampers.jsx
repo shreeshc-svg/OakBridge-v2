@@ -96,6 +96,67 @@ function ImagePicker({ value, onChange, label, hint }) {
     );
 }
 
+/**
+ * The picture for one line of the contents list.
+ *
+ * A book brings its own cover from the catalogue and cannot be overridden here
+ * — that is the point of linking it — so this is read-only for those rows and
+ * an upload for everything else. Without it a bookmark set or a carry bag
+ * renders as a grey rectangle beside two books with covers, which reads as a
+ * missing image rather than a deliberate one.
+ */
+function ItemImage({ item, onChange, index }) {
+    const [busy, setBusy] = useState(false);
+    const linked = Boolean(item.book_id);
+    const pick = async (file) => {
+        if (!file) return;
+        setBusy(true);
+        try {
+            const res = await adminUploadCover(file);
+            onChange(res.url);
+        } catch (err) {
+            toast.error(formatApiError(err));
+        } finally {
+            setBusy(false);
+        }
+    };
+    return (
+        <div className="shrink-0 w-[46px]">
+            <div className="w-[46px] h-[62px] border border-[#E5E7EB] bg-[#F5F7FA] overflow-hidden flex items-center justify-center">
+                {item.image ? (
+                    <img
+                        src={mediaUrl(item.image)}
+                        alt={item.label || "Item in this hamper"}
+                        className="w-full h-full object-cover"
+                    />
+                ) : (
+                    <ImageIcon size={14} className="text-[#9CA3AF]" strokeWidth={1.5} />
+                )}
+            </div>
+            {!linked && (
+                <label className="block mt-1 text-[10px] text-[#002B5C] cursor-pointer hover:underline text-center">
+                    {busy ? "…" : item.image ? "Change" : "Add"}
+                    <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => pick(e.target.files?.[0])}
+                        data-testid={`hamper-item-image-${index}`}
+                        className="hidden"
+                    />
+                </label>
+            )}
+            {!linked && item.image && (
+                <button
+                    onClick={() => onChange("")}
+                    className="block w-full text-[10px] text-[#CC0033] hover:underline text-center"
+                >
+                    Remove
+                </button>
+            )}
+        </div>
+    );
+}
+
 /** Pick a catalogue title, or type a free-text good. */
 function ContentsBuilder({ items, onChange, books }) {
     const [q, setQ] = useState("");
@@ -123,6 +184,7 @@ function ContentsBuilder({ items, onChange, books }) {
             <div className="border border-[#E5E7EB] divide-y divide-[#E5E7EB]">
                 {items.map((it, i) => (
                     <div key={i} className="p-3 flex gap-3 items-start">
+                        <ItemImage item={it} index={i} onChange={(v) => set(i, { image: v })} />
                         <div className="flex-1 grid sm:grid-cols-[1fr_110px_80px] gap-2">
                             <input
                                 value={it.label || ""}
@@ -285,14 +347,41 @@ export default function AdminHampers() {
             .catch(() => {});
     }, []);
 
+    /*
+     * The server HYDRATES a book-linked contents line before sending it here —
+     * it fills in label, note, image and stock from the catalogue so the editor
+     * can show them. Saving the row back as-is would write those derived values
+     * into the hamper, and from then on they are frozen: rename the book or
+     * change its cover and the hamper keeps advertising the old one. That is
+     * precisely the drift linking a title was supposed to prevent.
+     *
+     * So a linked row is persisted as what it actually is — a pointer, a
+     * quantity, and the editorial value — and everything else is re-read on the
+     * way out. Free-text rows keep all their fields; nobody derives those.
+     */
+    const forStorage = (h) => ({
+        ...h,
+        hamper_items: (h.hamper_items || []).map((it) =>
+            it.book_id
+                ? { book_id: it.book_id, qty: it.qty ?? 1, value: it.value ?? 0 }
+                : {
+                      label: it.label || "",
+                      note: it.note || "",
+                      image: it.image || "",
+                      qty: it.qty ?? 1,
+                      value: it.value ?? 0,
+                  },
+        ),
+    });
+
     const save = async () => {
         if (!editing.title?.trim()) return toast.error("A hamper needs a name.");
         try {
             if (editing.id) {
-                await adminUpdateHamper(editing.id, editing);
+                await adminUpdateHamper(editing.id, forStorage(editing));
                 toast.success("Hamper updated.");
             } else {
-                await adminCreateHamper(editing);
+                await adminCreateHamper(forStorage(editing));
                 toast.success("Hamper created.");
             }
             setEditing(null);

@@ -144,6 +144,61 @@ const links = banner.match(/\{inner\}|\{picture\}/g) || [];
 check(links.filter((x) => x === "{inner}").length === 2,
       "BOTH the internal and external link branches render the backdrop, not just one");
 
+console.log("\n-- pictures for the things that are not books --");
+const adminSrc = readFileSync(join(SRC, "pages", "admin", "AdminHampers.jsx"), "utf8");
+check(adminSrc.includes("function ItemImage"),
+      "each contents line has its own picture control");
+check(/const linked = Boolean\(item\.book_id\)/.test(adminSrc),
+      "a linked book is read-only — its cover comes from the catalogue, which is the point of linking it");
+check(adminSrc.includes("{!linked && ("),
+      "and the upload only appears for the free-text goods");
+check(/alt=\{item\.label \|\| "Item in this hamper"\}/.test(adminSrc),
+      "the thumbnail is labelled");
+check(adminSrc.includes('data-testid={`hamper-item-image-'),
+      "and is addressable");
+
+console.log("\n-- a linked title is stored as a pointer, not a snapshot --");
+// The server hydrates label/note/image/stock into a linked row before the
+// editor sees it. Saving that back freezes today's cover and title into the
+// hamper, which is exactly the drift that linking was meant to prevent.
+const forStorage = (h) => ({
+    ...h,
+    hamper_items: (h.hamper_items || []).map((it) =>
+        it.book_id
+            ? { book_id: it.book_id, qty: it.qty ?? 1, value: it.value ?? 0 }
+            : { label: it.label || "", note: it.note || "", image: it.image || "",
+                qty: it.qty ?? 1, value: it.value ?? 0 },
+    ),
+});
+const hydrated = {
+    title: "Rakhi Box",
+    hamper_items: [
+        { book_id: "bk-1", label: "Climate Justice", note: "Sudhir Mishra · Paperback",
+          image: "/api/files/cover.jpg", is_book: true, component_stock: 55, qty: 1, value: 595 },
+        { label: "Brass bookmarks", note: "Set of 4", image: "/api/files/bm.jpg", qty: 1, value: 690 },
+    ],
+};
+const stored = forStorage(hydrated);
+check(Object.keys(stored.hamper_items[0]).sort().join(",") === "book_id,qty,value",
+      `a linked row keeps only the pointer, quantity and value (got ${Object.keys(stored.hamper_items[0]).sort().join(",")})`);
+check(!("image" in stored.hamper_items[0]) && !("label" in stored.hamper_items[0]),
+      "the cover and title are NOT frozen in — they are re-read from the catalogue every time");
+check(!("is_book" in stored.hamper_items[0]) && !("component_stock" in stored.hamper_items[0]),
+      "and the display-only fields the server added are not written back");
+check(stored.hamper_items[1].image === "/api/files/bm.jpg",
+      "a free-text good keeps its own picture — nobody derives that one");
+check(stored.hamper_items[1].label === "Brass bookmarks", "and its own label");
+check(stored.title === "Rakhi Box", "the rest of the hamper is untouched");
+check(forStorage({}).hamper_items.length === 0, "a hamper with no contents does not throw");
+check(adminSerialisesThroughIt(),
+      "and both save paths go through it, not just one");
+
+function adminSerialisesThroughIt() {
+    const calls = adminSrc.match(/adminUpdateHamper\(editing\.id, forStorage\(editing\)\)/g) || [];
+    const creates = adminSrc.match(/adminCreateHamper\(forStorage\(editing\)\)/g) || [];
+    return calls.length === 1 && creates.length === 1;
+}
+
 console.log();
 if (failed) {
     console.log(`${failed} assertion(s) failed`);
