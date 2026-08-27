@@ -5,6 +5,7 @@ export const SECTION_REGISTRY = [
         page: "Homepage",
         slug: "home",
         items: [
+            { key: "home.gifting_banner", label: "Gift Hamper Banner" },
             { key: "home.businesses", label: "Our Businesses" },
             { key: "home.imprints", label: "Imprints (Five Imprints)" },
             { key: "home.hot_off_press", label: "Hot Off the Press" },
@@ -72,10 +73,36 @@ export function resolveSectionOrder(defaultBareKeys, saved, flagshipKeys = []) {
     const expand = (k) => (k === "flagship" && flagshipKeys.length ? flagshipKeys : [k]);
     const savedExp = (Array.isArray(saved) ? saved : []).flatMap(expand);
     const known = new Set(defaultBareKeys);
-    return [
-        ...savedExp.filter((k) => known.has(k)),
-        ...defaultBareKeys.filter((k) => !savedExp.includes(k)),
-    ];
+    const order = savedExp.filter((k) => known.has(k));
+
+    /*
+     * A section added to the code AFTER someone saved an order for this page is
+     * not in `saved`. Appending it — which is what this did — drops every new
+     * section at the very bottom of the page, below the footer-adjacent blocks,
+     * which is the worst position on the page and the least likely one intended.
+     * The gifting banner landed there: added second in the defaults, rendered
+     * last, because the stored order predated it.
+     *
+     * Instead, put it back where the defaults say it belongs, relative to the
+     * neighbours that ARE in the saved order. The admin's arrangement of the
+     * sections they know about is untouched; only the new one is placed.
+     */
+    for (const key of defaultBareKeys) {
+        if (order.includes(key)) continue;
+        const want = defaultBareKeys.indexOf(key);
+        // The nearest earlier default that survived into the saved order tells us
+        // who this should sit after.
+        let at = 0;
+        for (let i = want - 1; i >= 0; i--) {
+            const idx = order.indexOf(defaultBareKeys[i]);
+            if (idx !== -1) {
+                at = idx + 1;
+                break;
+            }
+        }
+        order.splice(at, 0, key);
+    }
+    return order;
 }
 
 // A Set of hidden section keys from the settings object.

@@ -391,6 +391,36 @@ export default function AdminHampers() {
                             className={input}
                         />
                     </Field>
+                    <Field
+                        label="Position on the homepage"
+                        hint="Below the hero, it can also be dragged in Admin → Pages"
+                    >
+                        <select
+                            value={banner.position || "below_hero"}
+                            onChange={(e) => setBanner((b) => ({ ...b, position: e.target.value }))}
+                            data-testid="banner-position"
+                            className={input}
+                        >
+                            <option value="above_hero">Very top — above the hero</option>
+                            <option value="below_hero">Below the hero, in the page flow</option>
+                        </select>
+                    </Field>
+                    <Field
+                        label="Height on desktop (px)"
+                        hint="Cropped from the centre, never squashed. 0 uses the image's own height."
+                    >
+                        <input
+                            type="number"
+                            min={0}
+                            step={20}
+                            value={banner.max_height ?? 320}
+                            onChange={(e) =>
+                                setBanner((b) => ({ ...b, max_height: Number(e.target.value) }))
+                            }
+                            data-testid="banner-max-height"
+                            className={input}
+                        />
+                    </Field>
                 </div>
                 <div className="flex items-center gap-4 mt-5">
                     <label className="flex items-center gap-2 text-sm cursor-pointer">

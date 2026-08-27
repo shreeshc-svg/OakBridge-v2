@@ -28,6 +28,18 @@ export default function HamperBanner({ banner }) {
     const alt = (banner.alt || "").trim() || "Oakbridge gift hampers";
     const to = (banner.link || "/gifting").trim();
 
+    /*
+     * Height is capped rather than left to the file's own aspect ratio. A
+     * full-width photograph at 1600px wide is around 500px tall, which is most
+     * of a laptop screen and pushes everything under it below the fold. Cropped
+     * from the centre with object-cover, never squashed — a squashed banner
+     * looks like a mistake, a cropped one looks deliberate.
+     *
+     * Only applied from `md` up: on a phone the mobile crop should run at its
+     * natural ratio, and a 320px cap on a 390px-wide screen would cut it to a
+     * letterbox.
+     */
+    const cap = Number(banner.max_height) || 0;
     const picture = (
         <picture>
             <source media="(max-width: 767px)" srcSet={mediaUrl(mobile)} />
@@ -39,7 +51,12 @@ export default function HamperBanner({ banner }) {
                    and shifts the page as it lands. */
                 loading="eager"
                 fetchpriority="high"
-                className="w-full h-auto block"
+                style={cap ? { "--banner-cap": `${cap}px` } : undefined}
+                className={
+                    cap
+                        ? "w-full block object-cover object-center h-auto md:h-[var(--banner-cap)]"
+                        : "w-full h-auto block"
+                }
             />
         </picture>
     );

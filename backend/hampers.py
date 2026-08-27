@@ -91,6 +91,15 @@ BANNER_DEFAULTS: dict = {
     "image_mobile": "",
     "alt": "",
     "link": "/gifting",
+    # above_hero puts it before the masthead image, which is the most prominent
+    # slot on the site; below_hero drops it into the ordinary section order where
+    # it can be dragged like any other block. Editable because "top of the page"
+    # is a marketing decision that changes per campaign, not a layout constant.
+    "position": "below_hero",   # above_hero | below_hero
+    # Desktop cap in px. A full-width photograph at its natural aspect ratio is
+    # roughly 500px tall at 1600px wide, which pushes everything else below the
+    # fold. Capped and cropped from the centre rather than squashed.
+    "max_height": 320,
 }
 
 

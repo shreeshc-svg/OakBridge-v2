@@ -591,8 +591,18 @@ export default function Home() {
                 order, so it can be dragged anywhere on the page or hidden from
                 Admin → Pages like any other block, and it renders nothing at
                 all until an image is uploaded and the switch is on. */}
+            {/* order -2 puts it ahead of the hero, which sits at -1. That is the
+                most prominent slot on the site and a marketing decision, so it
+                is a setting rather than a constant. */}
             {!hidden.has("home.gifting_banner") && (
-                <section style={{ order: homeOrd("gifting_banner") }}>
+                <section
+                    style={{
+                        order:
+                            site?.hamper_banner?.position === "above_hero"
+                                ? -2
+                                : homeOrd("gifting_banner"),
+                    }}
+                >
                     <HamperBanner banner={site?.hamper_banner} />
                 </section>
             )}
