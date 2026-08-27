@@ -1117,6 +1117,64 @@ function checkNoindexRoutes() {
  * an id) is skipped rather than guessed at — the whole point of the fix was to
  * make it computed.
  */
+/**
+ * Every site path an email links to must resolve to a real route.
+ *
+ * The purchase nudge shipped linking each title to `/book/{id}` while the route
+ * is `/books/:id`. Nothing caught it: the template renders, the tests asserted
+ * the link was present and absolute, and the address only fails when a customer
+ * clicks it and lands on the 404 page. An email cannot be recalled and edited,
+ * which makes a dead link there worse than a dead link on the site.
+ *
+ * Deliberately checked against App.js, the same source canonical-routes uses,
+ * rather than a hand-kept list that would drift the first time a route is
+ * renamed.
+ */
+function checkEmailLinks() {
+    const app = fs.readFileSync(path.join(FRONTEND, "src", "App.js"), "utf8");
+    const declared = [...app.matchAll(/path="([^"]+)"/g)].map((m) => m[1]);
+    // Admin screens are nested children of <Route path="/admin">, so they are
+    // declared as bare segments ("orders", not "/admin/orders"). Admin
+    // notification emails deep-link to the full path, so both forms must count.
+    const routes = declared.flatMap((r) => (r.startsWith("/") ? [r] : [`/admin/${r}`]));
+    const emailer = path.join(REPO, "backend", "emailer.py");
+    if (!fs.existsSync(emailer)) {
+        warn("email-links", "backend/emailer.py not found — skipped");
+        return;
+    }
+    const src = fs.readFileSync(emailer, "utf8");
+
+    // Only f-string paths built off the site root. Anything with a host in it is
+    // an external link (the eReader, Razorpay) and none of our business.
+    const bad = [];
+    let checked = 0;
+    // A path segment is either a plain word or a whole {…} f-string placeholder.
+    // The placeholder has to swallow quotes, dots and parentheses, or
+    // "{book.get('id','')}" is cut at the bracket and reported as a broken path
+    // that does not exist — a false alarm is how a check gets switched off.
+    const re =
+        /(?:SITE_URL[^\n]*?\}|https:\/\/www\.oakbridge\.in)((?:\/(?:\{[^{}]*\}|[a-zA-Z0-9\-_.]+))+\/?)/g;
+    for (const m of src.matchAll(re)) {
+        // Normalise the f-string placeholder to the router's param form.
+        const literal = m[1].replace(/\{[^}]+\}/g, ":id").replace(/\/+$/, "") || "/";
+        if (literal.startsWith("/api/")) continue; // served by the backend, not the SPA
+        checked++;
+        const ok = routes.some((r) => {
+            const a = r.replace(/:[^/]+/g, ":id");
+            return a === literal || a.replace(/\/:id$/, "") === literal;
+        });
+        if (!ok) bad.push(literal);
+    }
+
+    if (bad.length) {
+        [...new Set(bad)].forEach((b) =>
+            fail("email-links", `emailer.py links to ${b}, which is not a route — recipients get the 404 page`),
+        );
+    } else {
+        pass("email-links", `${checked} email links resolve to routes`);
+    }
+}
+
 function checkCanonicalRoutes() {
     try {
         require("@babel/parser");
@@ -1261,6 +1319,7 @@ const CHECKS = [
     checkNoStaticSitemap, checkSecrets, checkTopLevelJsx, checkAdminSections,
     checkNestedInteractive, checkIosZoomGuard, checkNoindexRoutes,
     checkCanonicalRoutes, checkFontDisplay, checkRequirementsParity,
+    checkEmailLinks,
 ];
 
 for (const c of CHECKS) {

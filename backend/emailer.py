@@ -1701,7 +1701,11 @@ def _nudge_book_row(book: dict) -> str:
     title = _html.escape(book.get("title") or "A new title")
     author = _html.escape(book.get("author") or "")
     bid = _html.escape(str(book.get("id") or ""))
-    link = f"{SITE_URL or 'https://www.oakbridge.in'}/book/{bid}?utm_source=email&utm_medium=nudge&utm_campaign=first_order"
+    # /books/, not /book/. The route is `/books/:id`; the singular form renders
+    # the 404 page, and it would have done so on every title in every copy of
+    # this email. Nothing else in this file gets it wrong — see the back-in-stock
+    # and stock-signup templates above.
+    link = f"{SITE_URL or 'https://www.oakbridge.in'}/books/{bid}?utm_source=email&utm_medium=nudge&utm_campaign=first_order"
     cover = media_url(book.get("cover_image"))
 
     # Every attribute here is load-bearing:
