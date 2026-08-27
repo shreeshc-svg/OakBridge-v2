@@ -118,6 +118,19 @@ check(page.includes('savings?.basis === "contents" && copy.value_note'),
 check(/d\.getTime\(\)\s*<\s*Date\.now\(\)/.test(page), "the deadline is compared against now");
 check(page.includes("metaDescription") && page.includes("breadcrumbLd"),
       "the page carries SEO metadata like every other route");
+// The hero photograph sets its own height. A fixed aspect box with the image
+// contained inside it left grey bands on anything not exactly that shape, which
+// reads as an image that failed to load rather than a deliberate mat.
+check(/alt=\{`\$\{h\.title\} — photograph/.test(page) && page.includes('className="w-full h-auto block border'),
+      "the hero photograph runs at its own aspect ratio, with no box behind it to show through");
+check(page.includes('aspect-[4/3] flex items-center justify-center'),
+      "the grey box survives only for the no-photograph case, where it holds the layout open");
+check(page.split('aspect-[4/3]').length === 2,
+      "and appears exactly once — not around the real image as well");
+// Contents rows sit beside book covers, so they must all be the same size.
+check(page.includes('w-[46px] h-[62px] shrink-0 object-cover'),
+      "every contents thumbnail is a uniform 46x62, cropped — mixed aspect ratios make each row a different height");
+
 check(!page.includes("arrives by") && !page.includes("guaranteed"),
       "no delivery promise is hardcoded — the note is admin-editable and honest by default");
 

@@ -31,11 +31,22 @@ function ContentsRow({ item, badge }) {
     const img = (item.image || "").trim();
     return (
         <div className="flex gap-4 py-3.5 border-b border-[#E5E7EB] items-center">
+            {/*
+              * A fixed 46x62 for every line, cropped to fill.
+              *
+              * These sit in a column beside book covers, which are all roughly
+              * the same portrait shape. A scrunchie photographed square and a
+              * carry bag photographed landscape, left at their own aspect
+              * ratios, make every row a different height and the list stops
+              * reading as a list. The placeholder is the same size for the same
+              * reason — a row with no picture must not be shorter than its
+              * neighbours.
+              */}
             {img ? (
                 <img
                     src={mediaUrl(img)}
                     alt={item.label || "Item in this hamper"}
-                    className="w-[46px] shrink-0 border border-[#E5E7EB]"
+                    className="w-[46px] h-[62px] shrink-0 object-cover object-center border border-[#E5E7EB]"
                 />
             ) : (
                 <div
@@ -180,19 +191,33 @@ export default function HamperDetail({ id }) {
             <div className="grid lg:grid-cols-[minmax(0,1fr)_440px] gap-14 mt-6">
                 {/* ---------- photography ---------- */}
                 <div>
-                    <div className="bg-[#F5F7FA] border border-[#E5E7EB] aspect-[4/3] flex items-center justify-center overflow-hidden">
-                        {shots[shot] ? (
-                            <img
-                                src={mediaUrl(shots[shot])}
-                                alt={`${h.title} — photograph ${shot + 1}`}
-                                className="max-h-full max-w-full object-contain"
-                            />
-                        ) : (
+                    {/*
+                      * The photograph IS the frame.
+                      *
+                      * This used to be a fixed 4:3 box with the image contained
+                      * inside it. Product photography is whatever shape the
+                      * photographer shot it, so anything not exactly 4:3 sat in
+                      * a grey band top and bottom — which reads as an image that
+                      * failed to load rather than a deliberate mat.
+                      *
+                      * The grey box now appears ONLY when there is no photograph,
+                      * where it is doing real work: holding the layout open and
+                      * saying so. When there is one, the image sets its own
+                      * height and there is nothing behind it to show through.
+                      */}
+                    {shots[shot] ? (
+                        <img
+                            src={mediaUrl(shots[shot])}
+                            alt={`${h.title} — photograph ${shot + 1}`}
+                            className="w-full h-auto block border border-[#E5E7EB]"
+                        />
+                    ) : (
+                        <div className="bg-[#F5F7FA] border border-[#E5E7EB] aspect-[4/3] flex items-center justify-center">
                             <span className="text-xs font-mono text-[#9CA3AF] tracking-widest uppercase">
                                 No photograph yet
                             </span>
-                        )}
-                    </div>
+                        </div>
+                    )}
                     {shots.length > 1 && (
                         <div className="flex gap-2.5 mt-3">
                             {shots.map((s, i) => (
