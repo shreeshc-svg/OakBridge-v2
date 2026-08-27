@@ -109,6 +109,16 @@ BANNER_DEFAULTS: dict = {
     # shorter without losing anything, upload a wider, shorter crop.
     "fit": "contain",       # contain | cover
     "max_height": 0,        # px on desktop; 0 = the image's own height
+    # What sits behind a contained image.
+    #
+    # Capping the height of an image that is not the shape of the strip leaves
+    # bars either side. White bars read as a broken layout, so the default fills
+    # them with an enlarged, blurred copy of the artwork itself -- it always
+    # matches, whatever the picture, and needs nobody to pick a colour. Set a
+    # colour instead when the artwork has a flat background worth matching
+    # exactly, or "none" to keep the page background showing through.
+    "backdrop": "blur",     # blur | color | none
+    "bg_color": "",         # used when backdrop is "color", e.g. #F6E3CE
 }
 
 

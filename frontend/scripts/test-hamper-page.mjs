@@ -122,6 +122,28 @@ check(banner.includes('loading="eager"'),
       "loads eagerly; it sits near the top and lazy-loading would shift the page as it lands");
 check(banner.includes("noopener"), "external links carry noopener");
 
+// Filling the bars either side of a letterboxed banner.
+const letterboxed = (cap, fit) => Boolean(cap) && fit !== "cover";
+check(letterboxed(320, "contain") === true, "a capped, contained banner IS letterboxed");
+check(letterboxed(320, "cover") === false, "a cover banner fills the strip itself — no bars to fill");
+check(letterboxed(0, "contain") === false, "an uncapped banner is full-bleed — nothing to fill");
+check(banner.includes("const letterboxed = Boolean(cap) && !crops"),
+      "and the component decides it the same way");
+check(banner.includes('banner.backdrop || "blur"'),
+      "the default fill is a blurred copy of the artwork — it matches any image and needs no colour picked");
+check(/alt=""/.test(banner) && banner.includes('aria-hidden="true"'),
+      "the blurred copy is marked decorative, so a screen reader does not announce the banner twice");
+check(banner.includes("pointer-events-none"),
+      "and it never intercepts the click meant for the banner");
+check(banner.includes("hidden md:block"),
+      "no backdrop on phones, where the mobile crop runs full-bleed and there are no bars");
+// The bug this caught: `inner` carries the backdrop, `picture` does not. The
+// internal-link branch rendered `picture`, so the fill never appeared on the
+// /gifting link — which is the link almost every banner uses.
+const links = banner.match(/\{inner\}|\{picture\}/g) || [];
+check(links.filter((x) => x === "{inner}").length === 2,
+      "BOTH the internal and external link branches render the backdrop, not just one");
+
 console.log();
 if (failed) {
     console.log(`${failed} assertion(s) failed`);

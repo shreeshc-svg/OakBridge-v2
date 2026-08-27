@@ -420,6 +420,40 @@ export default function AdminHampers() {
                         </select>
                     </Field>
                     <Field
+                        label="Fill the space either side"
+                        hint="Only when a height is set and the banner is shown whole"
+                    >
+                        <select
+                            value={banner.backdrop || "blur"}
+                            onChange={(e) => setBanner((b) => ({ ...b, backdrop: e.target.value }))}
+                            data-testid="banner-backdrop"
+                            className={input}
+                        >
+                            <option value="blur">Blurred copy of the banner</option>
+                            <option value="color">A colour I choose</option>
+                            <option value="none">Leave it as page background</option>
+                        </select>
+                    </Field>
+                    {banner.backdrop === "color" && (
+                        <Field label="Background colour" hint="Match the artwork, e.g. #F6E3CE">
+                            <div className="flex gap-2 items-center">
+                                <input
+                                    type="color"
+                                    value={banner.bg_color || "#F5F7FA"}
+                                    onChange={(e) => setBanner((b) => ({ ...b, bg_color: e.target.value }))}
+                                    data-testid="banner-bg-color"
+                                    className="h-10 w-14 border border-[#E5E7EB] p-1 bg-white"
+                                />
+                                <input
+                                    value={banner.bg_color || ""}
+                                    onChange={(e) => setBanner((b) => ({ ...b, bg_color: e.target.value }))}
+                                    placeholder="#F6E3CE"
+                                    className={`${input} font-mono`}
+                                />
+                            </div>
+                        </Field>
+                    )}
+                    <Field
                         label="Maximum height on desktop (px)"
                         hint="Leave 0 and the banner is as tall as your image — nothing cropped, nothing letterboxed. Set a value only to stop a very tall file taking the whole screen."
                     >

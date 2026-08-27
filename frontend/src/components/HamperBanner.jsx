@@ -71,12 +71,52 @@ export default function HamperBanner({ banner }) {
         </picture>
     );
 
+    /*
+     * What fills the bars either side of a contained image.
+     *
+     * Capping the height of a picture that is not the shape of the strip leaves
+     * empty space left and right. White bars read as a broken layout, so the
+     * default is an enlarged, blurred copy of the artwork behind it: it matches
+     * whatever the image happens to be, and needs nobody to pick a colour.
+     *
+     * Only when the image is actually letterboxed. object-cover fills the strip
+     * by itself, and with no cap the image is full-bleed — a backdrop in either
+     * case would be invisible work.
+     */
+    const letterboxed = Boolean(cap) && !crops;
+    const backdrop = banner.backdrop || "blur";
+    const tint =
+        letterboxed && backdrop === "color" && (banner.bg_color || "").trim()
+            ? { backgroundColor: banner.bg_color.trim() }
+            : undefined;
+
+    const inner = (
+        <div className="relative">
+            {letterboxed && backdrop === "blur" && (
+                <img
+                    src={mediaUrl(image)}
+                    /* Decorative: it is the same picture again, and a screen
+                       reader announcing it twice is noise. The real one below
+                       carries the description. */
+                    alt=""
+                    aria-hidden="true"
+                    className="hidden md:block absolute inset-0 w-full h-full object-cover scale-110 blur-2xl opacity-60 pointer-events-none"
+                />
+            )}
+            <div className="relative">{picture}</div>
+        </div>
+    );
+
     return (
-        <section data-testid="hamper-banner" className="w-full">
+        <section
+            data-testid="hamper-banner"
+            className="w-full overflow-hidden"
+            style={tint}
+        >
             {/^https?:\/\//i.test(to) ? (
-                <a href={to} target="_blank" rel="noopener noreferrer">{picture}</a>
+                <a href={to} target="_blank" rel="noopener noreferrer">{inner}</a>
             ) : (
-                <Link to={to}>{picture}</Link>
+                <Link to={to}>{inner}</Link>
             )}
         </section>
     );
