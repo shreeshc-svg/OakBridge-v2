@@ -284,6 +284,17 @@ class OrderCreate(BaseModel):
     delivery_pincode: Optional[str] = ""
     gift_message: Optional[str] = ""
     gift_recipient: Optional[str] = ""
+    # {utm_source, utm_medium, utm_campaign, utm_term, utm_content, referrer,
+    # landed_at} -- whichever of those the landing URL carried. Free-form
+    # because campaign tags are whatever the person building the link typed,
+    # and rejecting an order over an unexpected key would be absurd.
+    attribution: Optional[dict] = None
+
+
+_ATTRIBUTION_KEYS = frozenset(
+    {"utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
+     "referrer", "landed_at"}
+)
 
 
 class Order(BaseModel):
@@ -320,6 +331,9 @@ class Order(BaseModel):
     delivery_pincode: str = ""
     gift_message: str = ""
     gift_recipient: str = ""
+    # Declared here or response_model=Order drops it and the campaign that
+    # earned the sale is lost between creating the order and reading it back.
+    attribution: dict = Field(default_factory=dict)
     status: str = "pending"
     payment_status: str = "pending"  # pending | paid | failed
     payment_provider: Optional[str] = None
@@ -1304,6 +1318,13 @@ async def create_order(payload: OrderCreate, user: Optional[dict] = Depends(get_
         delivery_pincode=(payload.delivery_pincode or "").strip(),
         gift_message=(payload.gift_message or "").strip()[:200],
         gift_recipient=(payload.gift_recipient or "").strip()[:120],
+        # Trusted only as far as it is useful: keys we know, values clipped.
+        # This arrives from the browser, so it is somebody's input, not a fact.
+        attribution={
+            k: str(v)[:200]
+            for k, v in (payload.attribution or {}).items()
+            if k in _ATTRIBUTION_KEYS and v
+        },
         created_at=datetime.now(timezone.utc).isoformat(),
     )
     doc = order.model_dump()

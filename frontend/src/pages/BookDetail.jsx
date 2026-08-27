@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { track } from "../lib/analytics";
 import Breadcrumbs from "../components/Breadcrumbs";
 import HamperDetail from "./HamperDetail";
 import BookPreview from "../components/BookPreview";
@@ -117,6 +118,24 @@ export default function BookDetail() {
         fetchBook(id)
             .then((b) => {
                 setBook(b);
+                /*
+                 * The missing rung in the funnel. Pageviews say a URL was
+                 * opened; this says WHICH book was considered, so the gap
+                 * between looking and adding to cart can be read per title
+                 * rather than as one number for the whole catalogue.
+                 *
+                 * Fired here rather than in an effect on `book`: this runs once
+                 * per fetch, whereas an effect would re-fire on every unrelated
+                 * re-render that happened to touch the object.
+                 */
+                track("view_item", {
+                    book_id: b?.id,
+                    title: b?.title,
+                    price: b?.price,
+                    category: b?.category,
+                    in_stock: Number(b?.stock ?? 0) > 0,
+                    product_type: b?.product_type || "book",
+                });
                 return fetchBooks({ category: b.category, limit: 20 }).catch(() => []);
             })
             .then((list) => setRelated(list.filter((x) => x.id !== id).slice(0, 12)))
@@ -209,6 +228,21 @@ export default function BookDetail() {
        PDP mark are site-wide switches; ebook_url belongs to this title alone,
        and is what keeps the CTA off the 141 books that are not on the reader. */
     const ebookHref = (book?.ebook_url || "").trim();
+    /*
+     * The per-title eBook links leave for the eReader. They are the leading
+     * suspect for orders falling while traffic held: a visitor who clicks here
+     * may well buy the book, just not here, and nothing in this site's numbers
+     * would show it. `where` separates the small price link from the big CTA,
+     * because they are very different levels of intent.
+     */
+    const trackEbookExit = (where) => () =>
+        track("ebook_cta_clicked", {
+            placement: "pdp",
+            variant: where,
+            url: ebookHref,
+            book_id: book?.id,
+            title: book?.title,
+        });
     const ebookOnPdp =
         Boolean(ebookHref) &&
         String(site?.ebook_enabled ?? "on").toLowerCase() !== "off" &&
@@ -552,6 +586,7 @@ export default function BookDetail() {
                                     href={ebookHref}
                                     target="_blank"
                                     rel="noopener noreferrer"
+                                    onClick={trackEbookExit("price_link")}
                                     data-testid="pdp-ebook-price"
                                     aria-label={`Read this title on the Oakbridge eReader — ${formatINR(ebookPrice)}`}
                                     className="font-serif text-2xl text-[#0A7D55] border-b border-[#0A7D55]/40 hover:text-[#002B5C] hover:border-[#002B5C] transition-colors inline-flex items-center gap-2"
@@ -801,7 +836,8 @@ export default function BookDetail() {
                             href={ebookHref}
                             target="_blank"
                             rel="noopener noreferrer"
-                            data-testid="pdp-ebook-cta"
+                            onClick={trackEbookExit("cta")}
+                                    data-testid="pdp-ebook-cta"
                             className="mt-6 group flex items-center gap-4 border border-[#0A7D55] bg-[#0A7D55]/[0.06] p-4 hover:bg-[#0A7D55]/[0.12] transition-colors"
                         >
                             <BookOpen size={22} strokeWidth={1.5} className="flex-shrink-0 text-[#0A7D55]" />

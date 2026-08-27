@@ -18,20 +18,20 @@
  * traffic was fake. Two independent checks below, because one of them failing
  * silently would be indistinguishable from real traffic.
  *
- * WHAT IT DELIBERATELY DOES NOT DO
+ * SESSION RECORDING
  *
- * Session recording is off. This site's checkout collects names, addresses and
- * phone numbers, and a replay captures whatever is on screen. It can be turned
- * on later from the PostHog dashboard without touching this file — which is the
- * right place for that decision, because it is a policy choice rather than an
- * engineering one.
+ * Off unless the visitor agreed to it as its own category, and heavily masked
+ * even then — see the init call below. It is deliberately NOT bundled with
+ * analytics consent: watching a recording of somebody's screen is a different
+ * thing from counting their clicks, and asking once for both is the same trick
+ * as a single Accept button.
  */
 
 import { isPrerender } from "./runtime";
+import { readConsent } from "./consent";
 
 const KEY = process.env.REACT_APP_POSTHOG_KEY || "";
 const HOST = process.env.REACT_APP_POSTHOG_HOST || "https://us.i.posthog.com";
-export const CONSENT_KEY = "oakbridge_cookie_consent";
 
 /*
  * PostHog serves its library from a different host than its API: us.i.posthog.com
@@ -56,17 +56,14 @@ let ready = false;
 const isRealVisitor = () => !isPrerender();
 
 function hasConsent() {
-    try {
-        return localStorage.getItem(CONSENT_KEY) === "accepted";
-    } catch {
-        return false; // Safari in private mode throws rather than returning null.
-    }
+    return Boolean(readConsent()?.analytics);
 }
 
 /** Load and start PostHog. Safe to call repeatedly; only the first call works. */
 export function startAnalytics() {
     if (ready || loading) return;
     if (!KEY || !isRealVisitor() || !hasConsent()) return;
+    const allowReplay = Boolean(readConsent()?.replay);
     loading = true;
 
     const s = document.createElement("script");
@@ -80,8 +77,29 @@ export function startAnalytics() {
             // changes the URL without a document load, so PostHog's automatic
             // capture would record the first screen and nothing after it.
             capture_pageview: false,
-            disable_session_recording: true,
             persistence: "localStorage+cookie",
+            /*
+             * Recording is off unless it was consented to SEPARATELY, and even
+             * then it records almost nothing readable.
+             *
+             * This checkout collects names, addresses and phone numbers. A
+             * replay captures whatever is on screen, so an unmasked recording
+             * would be a store of personal data we never told anyone we were
+             * keeping — worse than the analytics it was meant to explain.
+             *
+             * maskAllInputs covers what people type. maskTextSelector "*" covers
+             * what is printed for them: the order confirmation, the saved
+             * address, the email in the account menu. What survives is layout,
+             * clicks and scrolling, which is all that was ever needed to find
+             * where checkout leaks.
+             */
+            disable_session_recording: !allowReplay,
+            session_recording: {
+                maskAllInputs: true,
+                maskTextSelector: "*",
+                maskInputOptions: { password: true, email: true, tel: true, text: true },
+                blockSelector: "[data-no-record]",
+            },
         });
         ready = true;
         // The visitor consented on some page; that page is the one to record.

@@ -348,33 +348,54 @@ browser's **local storage** for two purposes:
 We do **not** use advertising cookies, we do not build advertising profiles, and
 we do not sell your data.
 
-## 2. Analytics — only with your consent
-With your permission we use **PostHog** to understand how the Site is used: which
-pages are visited, which titles are viewed, and where people run into trouble
-while buying. This helps us fix what is broken and improve what is not.
+We also store, for the length of your visit only, the campaign tag on the link
+you arrived through — so we can tell which of our own emails or posts led to an
+order. It holds nothing about you, is not shared, and is discarded when you
+close the tab.
 
-Nothing analytics-related loads until you choose **Accept** on the cookie banner.
-If you choose **Decline**, the analytics script is never downloaded at all — it is
-not loaded and then ignored. We do not record your screen, and we do not use
-analytics for advertising.
+## 2. Your choices
+The banner asks about three things separately, and each is off until you turn it
+on. Nothing is pre-ticked. Rejecting is one click, exactly like accepting.
 
-You can change your mind at any time by clearing this site's storage in your
-browser settings, which will bring the banner back.
+**Analytics.** With your permission we use **PostHog** to understand how the Site
+is used: which pages are opened, which titles are viewed, and where people run
+into trouble while buying. If you do not agree, the analytics script is never
+downloaded at all — it is not loaded and then ignored.
 
-## 3. Third-party cookies
+**Session recording.** Separate from analytics, and off unless you ask for it.
+It records how a page was used — clicks, scrolling, the shape of the page — so we
+can see where checkout goes wrong. Everything you type is masked before it
+leaves your browser, and so is text shown about you: your name, address, email
+and order details are never captured. It requires analytics to be on, because it
+is delivered by the same library.
+
+**Marketing.** Advertising and remarketing. **We run none of this today.** The
+switch exists so that we would have to ask before we started, rather than
+quietly relying on a permission you gave for something else.
+
+## 3. Changing your mind
+Select **Cookie preferences** at the bottom of any page. The same choices open
+again, and turning something off stops it immediately. Withdrawing is meant to be
+exactly as easy as agreeing was, and you should not have to clear your browser to
+do it.
+
+If we add a genuinely new purpose, we ask again rather than treating an old yes
+as covering it.
+
+## 4. Third-party cookies
 When you make a payment, our payment partner **Razorpay** may set its own cookies
 within its secure checkout to process the transaction. These are governed by
 Razorpay's own cookie and privacy policies.
 
-## 4. Managing storage
+## 5. Managing storage
 You can clear or block local storage and cookies at any time through your browser
 settings; note that doing so may sign you out and empty your cart.
 
-## 5. Changes
+## 6. Changes
 If we introduce further non-essential cookies, we will update this policy and,
 where required, ask for your consent first.
 
-## 5. Contact
+## 7. Contact
 Questions about this policy? Email {_EMAIL}.
 """
 

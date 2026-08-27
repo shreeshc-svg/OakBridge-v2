@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { track } from "../lib/analytics";
 import { Tablet, ArrowUpRight } from "lucide-react";
 import { fetchSiteContent } from "../lib/api";
 
@@ -54,9 +55,18 @@ export default function EbookCta({ variant = "inline", site: siteProp, className
     );
 
     const external = /^https?:\/\//i.test(url);
+    /*
+     * Every eBook CTA leaves this site for the eReader. That makes it the one
+     * link on the page that can lose a sale without anything looking wrong: the
+     * visitor is happy, the book is bought, and none of it lands in these
+     * orders. Counting the click is how we find out whether that is happening,
+     * and where — the placement tells us which surface is diverting people.
+     */
+    const onLeave = () =>
+        track("ebook_cta_clicked", { placement: scope, variant, url, label: action });
     const linkProps = external
-        ? { href: url, target: "_blank", rel: "noopener noreferrer" }
-        : { href: url };
+        ? { href: url, target: "_blank", rel: "noopener noreferrer", onClick: onLeave }
+        : { href: url, onClick: onLeave };
 
     if (variant === "banner") {
         return (

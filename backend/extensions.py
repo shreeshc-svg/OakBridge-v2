@@ -1966,6 +1966,7 @@ async def admin_export_orders():
             "is_gift", "deliver_name", "deliver_phone",
             "deliver_address_1", "deliver_address_2", "deliver_city",
             "deliver_state", "deliver_pincode", "gift_message",
+            "utm_source", "utm_medium", "utm_campaign", "referrer",
             "courier", "tracking_id", "items",
         ],
         [
@@ -1985,6 +1986,10 @@ async def admin_export_orders():
                 o.get("delivery_address_line1", ""), o.get("delivery_address_line2", ""),
                 o.get("delivery_city", ""), o.get("delivery_state", ""),
                 o.get("delivery_pincode", ""), o.get("gift_message", ""),
+                (o.get("attribution") or {}).get("utm_source", ""),
+                (o.get("attribution") or {}).get("utm_medium", ""),
+                (o.get("attribution") or {}).get("utm_campaign", ""),
+                (o.get("attribution") or {}).get("referrer", ""),
                 o.get("courier"), o.get("tracking_id"),
                 flatten_items(o.get("items")),
             ]

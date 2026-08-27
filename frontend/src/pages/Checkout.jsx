@@ -12,6 +12,7 @@ import {
     verifyPayment, verifyOtp, resendOtp, mediaUrl } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { track } from "../lib/analytics";
+import { readAttribution } from "../lib/attribution";
 import { toast } from "sonner";
 import { loadRazorpay } from "../lib/razorpay";
 
@@ -182,6 +183,9 @@ export default function Checkout() {
                 // so a gift address typed and then unticked is not silently
                 // honoured by the server.
                 deliver_elsewhere: deliverElsewhere,
+                // Which link produced this sale. Read from the landing URL,
+                // not from here — by now the query string is four pages gone.
+                attribution: readAttribution(),
             });
 
             // 2. Create a Razorpay order tied to it
@@ -215,6 +219,20 @@ export default function Checkout() {
                     ondismiss: () => {
                         toast.info("Payment cancelled. Your order is held — try again to complete it.");
                         setSubmitting(false);
+                        /*
+                         * Closing the Razorpay window is not the same failure as
+                         * a card being declined, and until now both looked
+                         * identical from outside: an order that never became
+                         * paid. `reason` is what separates "changed my mind" —
+                         * a pricing or trust problem — from "the payment did
+                         * not go through", which is a gateway problem.
+                         */
+                        track("payment_abandoned", {
+                            reason: "closed_gateway",
+                            order_id: order.id,
+                            value: total,
+                            currency: "INR",
+                        });
                     },
                 },
                 handler: async (response) => {
@@ -229,6 +247,14 @@ export default function Checkout() {
                     } catch (err) {
                         toast.error(formatApiError(err) || "Payment verification failed.");
                         setSubmitting(false);
+                        // Paid at Razorpay, rejected here. The worst kind: the
+                        // customer's money moved and the order did not.
+                        track("payment_failed", {
+                            reason: "verification_failed",
+                            order_id: order.id,
+                            value: total,
+                            currency: "INR",
+                        });
                         nav(`/payment-failed/${order.id}`);
                     }
                 },
@@ -238,12 +264,28 @@ export default function Checkout() {
                     `Payment failed: ${resp?.error?.description || "please try again."}`,
                 );
                 setSubmitting(false);
+                track("payment_failed", {
+                    reason: resp?.error?.reason || "gateway_declined",
+                    code: resp?.error?.code || "",
+                    method: resp?.error?.metadata?.method || "",
+                    order_id: order.id,
+                    value: total,
+                    currency: "INR",
+                });
                 nav(`/payment-failed/${order.id}`);
             });
             checkout.open();
         } catch (err) {
             toast.error(formatApiError(err));
             setSubmitting(false);
+            // Never reached the gateway at all — the order or the Razorpay
+            // handoff failed. Counted separately, because this one is ours.
+            track("payment_failed", {
+                reason: "checkout_error",
+                detail: formatApiError(err),
+                value: total,
+                currency: "INR",
+            });
         }
     };
 

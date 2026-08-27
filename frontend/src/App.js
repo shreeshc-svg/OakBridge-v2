@@ -13,6 +13,7 @@ import OrderConfirmation from "@/pages/OrderConfirmation";
 import About from "@/pages/About";
 import Solutions from "@/pages/Solutions";
 import Gifting from "@/pages/Gifting";
+import { captureAttribution } from "@/lib/attribution";
 import Contact from "@/pages/Contact";
 import Authors from "@/pages/Authors";
 import Account from "@/pages/Account";
@@ -57,6 +58,17 @@ import DigitalSolutions from "@/pages/DigitalSolutions";
 import Academy from "@/pages/Academy";
 import { CartProvider } from "@/context/CartContext";
 import { AuthProvider } from "@/context/AuthContext";
+
+/*
+ * Read the campaign tags off the landing URL before anything navigates away.
+ *
+ * At module scope rather than in an effect: this must happen once, on the first
+ * URL the visitor arrived at, and an effect in StrictMode runs twice while a
+ * router redirect can replace the query string before it ever fires.
+ * captureAttribution is first-touch and self-guarding, so a second call is a
+ * no-op either way.
+ */
+captureAttribution();
 
 function App() {
     return (

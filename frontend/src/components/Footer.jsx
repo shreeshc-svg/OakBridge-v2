@@ -293,6 +293,28 @@ export default function Footer() {
                                 {l.label}
                             </Link>
                         ))}
+                        {/*
+                          * Reopens the cookie banner. Withdrawing consent has to
+                          * be as easy as giving it, and "clear your browser
+                          * storage" is not that. Sits with the legal links
+                          * rather than inside the policy page, because this is
+                          * where people look for it and because a link that only
+                          * exists on one page is a link nobody finds.
+                          *
+                          * A button, not a Link: it changes nothing about the
+                          * page you are on, and announcing it as navigation
+                          * would be a lie to a screen reader.
+                          */}
+                        <button
+                            type="button"
+                            onClick={() =>
+                                window.dispatchEvent(new Event("oakbridge:cookie-preferences"))
+                            }
+                            data-testid="footer-cookie-preferences"
+                            className="hover:text-white underline-offset-2 hover:underline"
+                        >
+                            Cookie preferences
+                        </button>
                     </div>
                 </div>
             </div>
