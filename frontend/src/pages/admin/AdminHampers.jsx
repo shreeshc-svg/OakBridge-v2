@@ -406,14 +406,28 @@ export default function AdminHampers() {
                         </select>
                     </Field>
                     <Field
-                        label="Height on desktop (px)"
-                        hint="Cropped from the centre, never squashed. 0 uses the image's own height."
+                        label="How it fits"
+                        hint="Only applies when a height is set below"
+                    >
+                        <select
+                            value={banner.fit || "contain"}
+                            onChange={(e) => setBanner((b) => ({ ...b, fit: e.target.value }))}
+                            data-testid="banner-fit"
+                            className={input}
+                        >
+                            <option value="contain">Show the whole banner</option>
+                            <option value="cover">Fill the strip (crops the edges)</option>
+                        </select>
+                    </Field>
+                    <Field
+                        label="Maximum height on desktop (px)"
+                        hint="Leave 0 and the banner is as tall as your image — nothing cropped, nothing letterboxed. Set a value only to stop a very tall file taking the whole screen."
                     >
                         <input
                             type="number"
                             min={0}
                             step={20}
-                            value={banner.max_height ?? 320}
+                            value={banner.max_height ?? 0}
                             onChange={(e) =>
                                 setBanner((b) => ({ ...b, max_height: Number(e.target.value) }))
                             }

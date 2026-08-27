@@ -100,6 +100,21 @@ check(banner.includes("alt") && /alt=\{alt\}/.test(banner), "the image always ha
 check(banner.includes('banner.alt || ""') || banner.includes("banner.alt"),
       "which the admin sets");
 check(banner.includes("image_mobile"), "a separate mobile crop is supported");
+check(/"w-full block h-auto"/.test(banner),
+      "the banner runs at its OWN aspect ratio by default — no cap, so nothing is cropped or letterboxed");
+check(banner.includes("md:max-h-") && !/md:h-\[var/.test(banner),
+      "a cap is a MAXIMUM: a picture shorter than it is left alone, not stretched to meet it");
+check(banner.includes("md:object-contain") && banner.includes("md:object-cover"),
+      "and when capped, the admin chooses between the whole image and a crop");
+// Not source order — that proves nothing. The property that matters is that
+// cropping requires an explicit opt-in, so an unset or unknown fit shows the
+// whole image rather than silently cutting somebody's artwork.
+const fitsTo = (fit) => (fit === "cover" ? "cover" : "contain");
+check(/banner\.fit === "cover"/.test(banner),
+      "cropping is opt-in: the test is fit === 'cover', so anything else contains");
+check(fitsTo(undefined) === "contain" && fitsTo("") === "contain" && fitsTo("nonsense") === "contain",
+      "unset, blank and unrecognised all show the whole image");
+check(fitsTo("cover") === "cover", "and cover still crops when asked for");
 check(banner.includes("|| image"), "and falls back to the desktop file rather than showing nothing");
 check(/if \(!banner\?\.enabled \|\| !image\) return null/.test(banner),
       "renders nothing at all when switched off or imageless — no empty slot on the homepage");

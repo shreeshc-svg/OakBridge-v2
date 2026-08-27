@@ -60,6 +60,27 @@ check("from hampers import BANNER_DEFAULTS" in features,
 check(features.count('"enabled": False, "image": ""') == 0,
       "no second literal copy of the banner shape survives")
 
+print("\n-- a stored value saved before a field existed --")
+# {**defaults, **stored} replaces a whole dict. The banner was saved when it had
+# five keys; position, fit and max_height were added later, and a shallow merge
+# knocked those defaults straight back out -- the setting reads blank and the
+# page behaves as though the feature never shipped.
+import ast as _ast
+tree = _ast.parse(features)
+fn = next(n for n in _ast.walk(tree)
+          if isinstance(n, _ast.AsyncFunctionDef) and n.name == "get_site_content")
+body = _ast.unparse(fn)
+check("isinstance(default, dict)" in body and "isinstance(values.get(key), dict)" in body,
+      "get_site_content merges one level into structured keys")
+check("{**default, **values[key]}" in body,
+      "and the stored value still wins field by field")
+
+# Deliberately NOT a hand-rolled {**a, **b} demonstration here: two dict
+# literals merged in the test prove something about Python, not about
+# get_site_content. The assertions above read the shipped function instead.
+check("out[key] = {**default, **values[key]}" in body.replace("\n", "\n"),
+      "the merged value is written back to the response, not computed and dropped")
+
 print("\n-- what the hamper form sends, the hamper model accepts --")
 create = model_fields(hampers, "HamperCreate")
 update = model_fields(hampers, "HamperUpdate")

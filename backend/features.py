@@ -2285,7 +2285,18 @@ async def admin_delete_media(media_id: str):
 async def get_site_content():
     docs = await db.site_content.find({}, {"_id": 0}).to_list(500)
     values = {d["key"]: d["value"] for d in docs if d.get("value")}
-    return {**SITE_CONTENT_DEFAULTS, **values}
+    out = {**SITE_CONTENT_DEFAULTS, **values}
+    # One level deeper for the structured keys.
+    #
+    # A plain {**defaults, **stored} REPLACES a whole dict. The banner was saved
+    # when it had five fields; `position`, `fit` and `max_height` were added
+    # afterwards, and the stored value -- having none of them -- knocked the new
+    # defaults out entirely. The symptom is a setting that reads as blank and a
+    # page that behaves as though the feature was never shipped.
+    for key, default in SITE_CONTENT_DEFAULTS.items():
+        if isinstance(default, dict) and isinstance(values.get(key), dict):
+            out[key] = {**default, **values[key]}
+    return out
 
 
 @admin_router.put("/site-content")

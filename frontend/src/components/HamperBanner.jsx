@@ -29,17 +29,22 @@ export default function HamperBanner({ banner }) {
     const to = (banner.link || "/gifting").trim();
 
     /*
-     * Height is capped rather than left to the file's own aspect ratio. A
-     * full-width photograph at 1600px wide is around 500px tall, which is most
-     * of a laptop screen and pushes everything under it below the fold. Cropped
-     * from the centre with object-cover, never squashed — a squashed banner
-     * looks like a mistake, a cropped one looks deliberate.
+     * By default the banner shows WHOLE, at its own aspect ratio.
      *
-     * Only applied from `md` up: on a phone the mobile crop should run at its
-     * natural ratio, and a 320px cap on a 390px-wide screen would cut it to a
-     * letterbox.
+     * An image's height follows from its width and its shape. There is no way
+     * to make the strip shorter while still showing every pixel — the only
+     * options are to cut the edges off or to letterbox it — so the default does
+     * neither, and the strip is simply as tall as the picture is. To get a
+     * shorter banner, upload a wider, shorter crop.
+     *
+     * A cap is available for when a very tall file would otherwise eat the fold:
+     *   contain — the whole image, letterboxed inside the cap. Nothing is lost.
+     *   cover   — fills the strip and crops what does not fit.
+     * Only from `md` up: a cap meant for a 1600px screen turns a 390px phone
+     * into a slot.
      */
     const cap = Number(banner.max_height) || 0;
+    const crops = banner.fit === "cover";
     const picture = (
         <picture>
             <source media="(max-width: 767px)" srcSet={mediaUrl(mobile)} />
@@ -52,11 +57,16 @@ export default function HamperBanner({ banner }) {
                 loading="eager"
                 fetchpriority="high"
                 style={cap ? { "--banner-cap": `${cap}px` } : undefined}
-                className={
-                    cap
-                        ? "w-full block object-cover object-center h-auto md:h-[var(--banner-cap)]"
-                        : "w-full h-auto block"
-                }
+                className={[
+                    "w-full block h-auto",
+                    // max-h, not h: a picture shorter than the cap is left alone
+                    // rather than stretched up to meet it.
+                    cap ? "md:max-h-[var(--banner-cap)]" : "",
+                    cap ? (crops ? "md:object-cover" : "md:object-contain") : "",
+                    cap ? "object-center" : "",
+                ]
+                    .filter(Boolean)
+                    .join(" ")}
             />
         </picture>
     );

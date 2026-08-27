@@ -96,10 +96,19 @@ BANNER_DEFAULTS: dict = {
     # it can be dragged like any other block. Editable because "top of the page"
     # is a marketing decision that changes per campaign, not a layout constant.
     "position": "below_hero",   # above_hero | below_hero
-    # Desktop cap in px. A full-width photograph at its natural aspect ratio is
-    # roughly 500px tall at 1600px wide, which pushes everything else below the
-    # fold. Capped and cropped from the centre rather than squashed.
-    "max_height": 320,
+    # How the banner sits in its strip.
+    #
+    # contain shows the WHOLE image and is the default, because a banner is
+    # artwork someone composed and cutting its edges off ruins it. cover fills
+    # the strip edge to edge and crops whatever does not fit.
+    #
+    # Neither matters unless max_height is set: at 0 the image simply runs at
+    # its own aspect ratio and the strip is however tall the picture is. That is
+    # the only setting that can neither crop nor letterbox, so it is the default.
+    # An image's height follows from its width and its shape -- to make the strip
+    # shorter without losing anything, upload a wider, shorter crop.
+    "fit": "contain",       # contain | cover
+    "max_height": 0,        # px on desktop; 0 = the image's own height
 }
 
 
