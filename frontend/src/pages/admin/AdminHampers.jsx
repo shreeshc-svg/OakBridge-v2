@@ -278,6 +278,80 @@ function ContentsBuilder({ items, onChange, books }) {
     );
 }
 
+/**
+ * The reassurance badges under the buy buttons — "Free delivery", "14-day
+ * returns" and so on.
+ *
+ * Kept out of the plain-string grid above because each is a PAIR: a bold line
+ * and the sentence under it. Squeezing that into one text box would mean
+ * inventing a separator for admins to remember, and the first person to type a
+ * comma would break their own page.
+ *
+ * An empty list is a real choice and is honoured — some hampers should carry no
+ * promises at all — which is why merge_copy replaces lists outright instead of
+ * falling back to the default the way it does for a blank string.
+ */
+function AssurancesEditor({ value, fallback, onChange }) {
+    // `??` not `||`: a saved empty array means "show none", and must not be
+    // mistaken for "nothing saved yet, use the defaults".
+    const rows = Array.isArray(value) ? value : (fallback ?? []);
+    const set = (i, patch) =>
+        onChange(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+
+    return (
+        <div className="mt-6">
+            <div className="overline !text-[10px]">Reassurance badges</div>
+            <p className="text-[11px] text-[#9CA3AF] mt-1 mb-2 leading-relaxed">
+                Shown in a grid under the buy buttons. Remove them all and the block
+                disappears — say nothing rather than promise something you cannot keep.
+            </p>
+            <div className="border border-[#E5E7EB] divide-y divide-[#E5E7EB]">
+                {rows.map((r, i) => (
+                    <div key={i} className="p-3 flex gap-2 items-start">
+                        <div className="flex-1 grid sm:grid-cols-[180px_1fr] gap-2">
+                            <input
+                                value={r.label || ""}
+                                onChange={(e) => set(i, { label: e.target.value })}
+                                placeholder="Free delivery"
+                                data-testid={`hamper-assurance-label-${i}`}
+                                className={`${input} font-medium`}
+                            />
+                            <input
+                                value={r.value || ""}
+                                onChange={(e) => set(i, { value: e.target.value })}
+                                placeholder="Boxed, wrapped and insured in transit"
+                                data-testid={`hamper-assurance-value-${i}`}
+                                className={input}
+                            />
+                        </div>
+                        <button
+                            onClick={() => onChange(rows.filter((_, j) => j !== i))}
+                            aria-label="Remove this badge"
+                            data-testid={`hamper-assurance-remove-${i}`}
+                            className="text-[#CC0033] hover:opacity-70 mt-2.5"
+                        >
+                            <Trash2 size={15} strokeWidth={1.5} />
+                        </button>
+                    </div>
+                ))}
+                {rows.length === 0 && (
+                    <div className="p-3 text-xs text-[#4B5563]">
+                        No badges. Nothing will be shown under the buttons.
+                    </div>
+                )}
+            </div>
+            <button
+                onClick={() => onChange([...rows, { label: "", value: "" }])}
+                data-testid="hamper-assurance-add"
+                className="mt-3 border border-[#002B5C] text-[#002B5C] px-4 py-2 text-sm hover:bg-[#F5F7FA]"
+            >
+                <Plus size={14} className="inline mr-1" strokeWidth={1.5} />
+                Add a badge
+            </button>
+        </div>
+    );
+}
+
 /** Every editable string, rendered from the server's defaults list. */
 function CopyEditor({ copy, defaults, onChange }) {
     const keys = Object.keys(defaults || {}).filter((k) => k !== "assurances");
@@ -301,6 +375,12 @@ function CopyEditor({ copy, defaults, onChange }) {
                     </Field>
                 ))}
             </div>
+
+            <AssurancesEditor
+                value={copy.assurances}
+                fallback={defaults?.assurances}
+                onChange={(v) => onChange({ ...copy, assurances: v })}
+            />
         </div>
     );
 }
@@ -656,7 +736,7 @@ export default function AdminHampers() {
                                 {h.short_components?.length > 0 && (
                                     <div className="text-xs text-[#CC0033] mt-1 flex items-start gap-1.5">
                                         <AlertTriangle size={12} strokeWidth={1.5} className="mt-0.5 shrink-0" />
-                                        Not enough stock to build every box: {h.short_components.join(", ")}
+                                        Not enough stock to build every hamper: {h.short_components.join(", ")}
                                     </div>
                                 )}
                             </div>
@@ -722,7 +802,7 @@ export default function AdminHampers() {
                                         <Field label="Occasion" hint="Shown above the name"><input value={editing.occasion || ""} onChange={(e) => setEditing({ ...editing, occasion: e.target.value })} placeholder="Raksha Bandhan" className={input} /></Field>
                                         <Field label="Price ₹" hint="What the customer pays"><input type="number" value={editing.price} onChange={(e) => setEditing({ ...editing, price: Number(e.target.value) })} data-testid="hamper-price" className={input} /></Field>
                                         <Field label="List price ₹" hint="Struck through beside the price. Leave 0 and the saving is worked out from the contents instead."><input type="number" value={editing.original_price ?? 0} onChange={(e) => setEditing({ ...editing, original_price: Number(e.target.value) })} data-testid="hamper-original-price" className={input} /></Field>
-                                        <Field label="Boxes available"><input type="number" value={editing.stock} onChange={(e) => setEditing({ ...editing, stock: Number(e.target.value) })} data-testid="hamper-stock" className={input} /></Field>
+                                        <Field label="Hampers available"><input type="number" value={editing.stock} onChange={(e) => setEditing({ ...editing, stock: Number(e.target.value) })} data-testid="hamper-stock" className={input} /></Field>
                                         <Field label="Order-by date" hint="The page hides the deadline once it passes"><input type="date" value={(editing.order_by || "").slice(0, 10)} onChange={(e) => setEditing({ ...editing, order_by: e.target.value })} className={input} /></Field>
                                     </div>
                                     <Field label="Description">

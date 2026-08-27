@@ -44,7 +44,7 @@ log = logging.getLogger(__name__)
 HAMPER_COPY_DEFAULTS: dict = {
     "eyebrow": "Gift hamper",
     "value_note": "Bought separately, the contents come to {value}.",
-    "stock_note": "Only {stock} boxes left",
+    "stock_note": "Only {stock} hampers left",
     "contents_heading": "What's inside",
     "contents_value_heading": "Value",
     "contents_badge": "From the catalogue",
@@ -55,15 +55,18 @@ HAMPER_COPY_DEFAULTS: dict = {
     "recipient_label": "Recipient's name, as it should appear",
     "recipient_placeholder": "Their name",
     "deliver_elsewhere_label": "Deliver to a different address",
-    "deliver_elsewhere_note": "You'll enter theirs at checkout. The invoice comes to you — no price goes in the box.",
+    "deliver_elsewhere_note": "You'll enter theirs at checkout. The invoice comes to you — no price goes with the hamper.",
     "add_to_cart_label": "Add to Cart",
     "buy_now_label": "Buy Now",
     "delivery_note": "Dispatched in 1 business day. Delivery 3–7 business days across India.",
     "order_by_label": "Order by {date}",
+    # No returns line. A gift hamper is made up per order and cannot be resold,
+    # so promising returns would be a promise we do not intend to keep -- and an
+    # unkept one on a product page is worse than a shorter list. Removing the
+    # last badge removes the block entirely; that is a real choice, not a bug.
     "assurances": [
-        {"label": "Free delivery", "value": "Boxed, wrapped and insured in transit"},
-        {"label": "No price in the box", "value": "The invoice goes to you, not to them"},
-        {"label": "14-day returns", "value": "Unopened boxes, no questions"},
+        {"label": "Free delivery", "value": "Wrapped and insured in transit"},
+        {"label": "No price shown", "value": "The invoice goes to you, not to them"},
     ],
     "bulk_heading": "Sending more than five?",
     "bulk_text": "Chambers, firms and in-house teams — your imprint on the card, your "
@@ -76,7 +79,7 @@ HAMPER_COPY_DEFAULTS: dict = {
 # settings under this key.
 GIFTING_PAGE_DEFAULTS: dict = {
     "eyebrow": "Oakbridge Gifting",
-    "heading": "Books, boxed and ready to give.",
+    "heading": "Books, wrapped and ready to give.",
     "lede": "Hampers put together by our editors — a couple of titles worth keeping, "
             "and the small things that make them feel given rather than ordered.",
     "empty": "No hampers are on sale just now. Do come back.",

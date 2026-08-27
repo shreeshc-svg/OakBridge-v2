@@ -170,6 +170,29 @@ const links = banner.match(/\{inner\}|\{picture\}/g) || [];
 check(links.filter((x) => x === "{inner}").length === 2,
       "BOTH the internal and external link branches render the backdrop, not just one");
 
+console.log("\n-- the reassurance badges are editable --");
+const adminFile = readFileSync(join(SRC, "pages", "admin", "AdminHampers.jsx"), "utf8");
+check(adminFile.includes("function AssurancesEditor"),
+      "the badges under the buy buttons have an editor — label/value pairs, which the plain-string grid skipped");
+check(adminFile.includes("<AssurancesEditor"), "and it is actually rendered in the Wording tab");
+check(adminFile.includes('onChange({ ...copy, assurances: v })'),
+      "writing back into hamper_copy, where the page reads them from");
+check(page.includes("copy.assurances?.length > 0"),
+      "and the page shows the block only when there are badges to show");
+check(page.includes("{a.label}") && page.includes("{a.value}"),
+      "rendering both halves of each pair");
+
+// `??` not `||`: [] is a saved decision to show none, and must not fall back.
+const rowsFor = (value, fallback) => (Array.isArray(value) ? value : (fallback ?? []));
+check(rowsFor(undefined, [{ label: "Free delivery" }]).length === 1,
+      "nothing saved yet falls back to the defaults");
+check(rowsFor([], [{ label: "Free delivery" }]).length === 0,
+      "but a saved EMPTY list means show none, and is not mistaken for 'unsaved'");
+check(rowsFor([{ label: "X" }], [{ label: "Free delivery" }])[0].label === "X",
+      "and a saved list wins");
+check(adminFile.includes("Array.isArray(value) ? value : (fallback ?? [])"),
+      "the editor makes that distinction the same way");
+
 console.log("\n-- pictures for the things that are not books --");
 const adminSrc = readFileSync(join(SRC, "pages", "admin", "AdminHampers.jsx"), "utf8");
 check(adminSrc.includes("function ItemImage"),

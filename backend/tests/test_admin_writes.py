@@ -81,6 +81,28 @@ check("{**default, **values[key]}" in body,
 check("out[key] = {**default, **values[key]}" in body.replace("\n", "\n"),
       "the merged value is written back to the response, not computed and dropped")
 
+print("\n-- promises the default copy makes --")
+import ast as _a
+_defaults = next(
+    n for n in _a.parse(hampers).body
+    if isinstance(n, _a.AnnAssign) and getattr(n.target, "id", "") == "HAMPER_COPY_DEFAULTS"
+)
+COPY = _a.literal_eval(_defaults.value)
+badges = COPY["assurances"]
+check(not any("return" in b["label"].lower() for b in badges),
+      "no returns badge: a hamper is made up per order and cannot be resold, so "
+      "promising returns would be a promise nobody intends to keep")
+check(not any("no questions" in b["value"].lower() for b in badges),
+      "and nothing else implies one either")
+customer_facing = " ".join(
+    v for k, v in COPY.items() if isinstance(v, str)
+) + " " + " ".join(f'{b["label"]} {b["value"]}' for b in badges)
+check("box" not in customer_facing.lower(),
+      f"the product is a hamper, not a box, and the default wording says so")
+check(len(badges) >= 1, "at least one badge remains, or the block would be empty by default")
+check(all(b.get("label") and b.get("value") for b in badges),
+      "every badge has both halves — a bold line with nothing under it looks broken")
+
 print("\n-- what the hamper form sends, the hamper model accepts --")
 create = model_fields(hampers, "HamperCreate")
 update = model_fields(hampers, "HamperUpdate")
