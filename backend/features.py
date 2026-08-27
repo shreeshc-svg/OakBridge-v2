@@ -31,6 +31,7 @@ from openpyxl.utils import get_column_letter
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from antispam import normalise_email
+from hampers import BANNER_DEFAULTS
 from extensions import (AUTHOR_ALIASES, author_match_key, db, get_current_user,
                         get_current_user_optional, require_admin)
 
@@ -2157,13 +2158,14 @@ async def admin_run_cart_reminders(force: bool = False):
 APP_MEDIA_MAX = 10 * 1024 * 1024  # 10 MB
 
 SITE_CONTENT_DEFAULTS = {
-    # Gifting. Defined here so /site-content answers with the keys before an
+    # Gifting. Present here so /site-content answers with the keys before an
     # admin has ever opened the screen -- the storefront reads this endpoint on
-    # every page load and a missing key would render the banner slot as a gap.
-    "hamper_banner": {
-        "enabled": False, "image": "", "image_mobile": "", "alt": "",
-        "link": "/gifting",
-    },
+    # every page load, and a missing key would render the banner slot as a gap.
+    #
+    # Imported rather than restated: two copies of the same default drift the
+    # first time one of them gains a field, and the symptom would be a banner
+    # setting that silently does nothing.
+    "hamper_banner": dict(BANNER_DEFAULTS),
     "gifting_page": {},
     "home_hero": "https://images.unsplash.com/photo-1507842217343-583bb7270b66?auto=format&fit=crop&w=1600&q=85",
     "plp_banner": "https://images.unsplash.com/photo-1507842217343-583bb7270b66?auto=format&fit=crop&w=2000&q=85",
@@ -2219,7 +2221,16 @@ class MediaUpdate(BaseModel):
 
 class SiteContentSet(BaseModel):
     key: str
-    value: str
+    # Any, not str. Site content was strings-only until the gifting banner
+    # needed to store {image, image_mobile, alt, link, enabled} under one key —
+    # a str annotation rejected the whole object with "Input should be a valid
+    # string", which is a confusing thing to read while saving a photograph.
+    #
+    # Widening is backward compatible: every existing caller still sends a
+    # string, the setter stores the value verbatim, and get_site_content merges
+    # it into the defaults untouched. The defaults dict is what tells a reader
+    # which keys are structured.
+    value: Any
 
 
 class CategoryImageSet(BaseModel):
