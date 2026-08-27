@@ -10,6 +10,7 @@
 export const SECTIONS = [
     "dashboard",
     "books",
+    "hampers",
     "inventory",
     "authors",
     "page-bookstore",
@@ -35,6 +36,7 @@ export const SECTIONS = [
 export const SECTION_LABELS = {
     dashboard: "Dashboard",
     books: "Books",
+    hampers: "Gift Hampers",
     inventory: "Inventory",
     authors: "Authors",
     "page-bookstore": "Bookstore Page",
@@ -59,7 +61,7 @@ export const SECTION_LABELS = {
 
 /** Grouping for the permission picker only — not a security boundary. */
 export const SECTION_GROUPS = [
-    { label: "Catalogue", sections: ["books", "authors", "inventory"] },
+    { label: "Catalogue", sections: ["books", "hampers", "authors", "inventory"] },
     {
         label: "Site content",
         sections: ["pages", "navigation", "media", "media-gallery", "careers", "page-bookstore", "page-book", "ebooks"],
@@ -82,6 +84,9 @@ export const SHARED_CONTENT_SECTIONS = [
     "page-bookstore",
     "page-book",
     "ebooks",
+    // Hampers saves its banner and /gifting copy through settings, so it is in
+    // the same bundle and cannot be fully isolated from the screens above.
+    "hampers",
 ];
 
 export const ROLE_PRESETS = {

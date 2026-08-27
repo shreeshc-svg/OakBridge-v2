@@ -237,6 +237,22 @@ export const adminImportAuthors = (confirm = false) =>
     api.post(`/admin/import-authors?confirm=${confirm ? "true" : "false"}`).then((r) => r.data);
 export const adminRepairBookAuthors = (confirm = false) =>
     api.post(`/admin/repair-book-authors?confirm=${confirm ? "true" : "false"}`).then((r) => r.data);
+// ---- Gift hampers ----
+export const listHampers = () => api.get("/hampers").then((r) => r.data);
+export const getHamper = (id) => api.get(`/hampers/${id}`).then((r) => r.data);
+export const adminListHampers = (q = "", enabled = "all") =>
+    api.get("/admin/hampers", { params: { q, enabled } }).then((r) => r.data);
+export const adminCreateHamper = (payload) =>
+    api.post("/admin/hampers", payload).then((r) => r.data);
+export const adminUpdateHamper = (id, payload) =>
+    api.patch(`/admin/hampers/${id}`, payload).then((r) => r.data);
+export const adminDeleteHamper = (id) =>
+    api.delete(`/admin/hampers/${id}`).then((r) => r.data);
+export const adminReorderHampers = (ids) =>
+    api.post("/admin/hampers/reorder", { ids }).then((r) => r.data);
+export const adminHamperDefaults = () =>
+    api.get("/admin/hampers-copy-defaults").then((r) => r.data);
+
 export const adminSendPurchaseNudge = (body = {}) =>
     api.post("/admin/send-purchase-nudge", {
         confirm: false, coupon_code: "", test_to: "", ...body,

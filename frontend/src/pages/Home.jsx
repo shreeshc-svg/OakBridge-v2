@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import Seo from "../components/Seo";
+import HamperBanner from "../components/HamperBanner";
 import { Link } from "react-router-dom";
 import { ArrowUpRight, BookOpen, GraduationCap, Building2, Calendar, Cpu, Briefcase, Users, ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
 import BestsellerCarousel from "../components/BestsellerCarousel";
@@ -21,7 +22,7 @@ import MarketingPopup from "../components/MarketingPopup";
 
 // Default top-to-bottom order of the reorderable homepage sections. Admin can
 // override via Admin → Pages → Section order & visibility (home_section_order).
-const HOME_DEFAULT_ORDER = ["businesses", "imprints", "hot_off_press", "solutions", "bestsellers", "testimonials", "manifesto"];
+const HOME_DEFAULT_ORDER = ["businesses", "gifting_banner", "imprints", "hot_off_press", "solutions", "bestsellers", "testimonials", "manifesto"];
 
 // How many titles the "Hot Off the Press" rail will hold. The API is asked for
 // the same number, so raising one without the other quietly does nothing.
@@ -583,6 +584,17 @@ export default function Home() {
                     })}
                 </div>
             </section>
+            )}
+
+            {/* ============== GIFTING BANNER ==============
+                A photograph the admin uploads. Sits in the ordinary section
+                order, so it can be dragged anywhere on the page or hidden from
+                Admin → Pages like any other block, and it renders nothing at
+                all until an image is uploaded and the switch is on. */}
+            {!hidden.has("home.gifting_banner") && (
+                <section style={{ order: homeOrd("gifting_banner") }}>
+                    <HamperBanner banner={site?.hamper_banner} />
+                </section>
             )}
 
             {/* ============== HOT OFF PRESS (new releases) ============== */}

@@ -1,6 +1,7 @@
 import {
     LayoutDashboard,
     BookOpen,
+    Gift,
     ShoppingBag,
     Mail,
     Users,
@@ -31,6 +32,7 @@ import {
 export const ADMIN_NAV = [
     { to: "/admin", end: true, label: "Dashboard", icon: LayoutDashboard },
     { to: "/admin/books", label: "Books", icon: BookOpen },
+    { to: "/admin/hampers", label: "Gift Hampers", icon: Gift },
     { to: "/admin/inventory", label: "Inventory", icon: PackageCheck },
     { to: "/admin/authors", label: "Authors", icon: Users },
     { to: "/admin/orders", label: "Orders", icon: ShoppingBag },

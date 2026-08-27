@@ -531,6 +531,7 @@ _SITEMAP_STATIC_PATHS = [
     # the two, so a slug added in Admin needs adding in both places or it ships
     # the empty shell. Deriving it here alone would silently break that parity.
     "/solutions", "/solutions/schools", "/solutions/higher-ed", "/solutions/educators",
+    "/gifting",
     "/careers", "/media",
     "/terms", "/privacy", "/refund-policy", "/shipping-policy", "/cookie-policy",
 ]

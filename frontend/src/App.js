@@ -12,6 +12,7 @@ import Checkout from "@/pages/Checkout";
 import OrderConfirmation from "@/pages/OrderConfirmation";
 import About from "@/pages/About";
 import Solutions from "@/pages/Solutions";
+import Gifting from "@/pages/Gifting";
 import Contact from "@/pages/Contact";
 import Authors from "@/pages/Authors";
 import Account from "@/pages/Account";
@@ -24,6 +25,7 @@ import ResetPassword from "@/pages/auth/ResetPassword";
 import AdminLayout from "@/pages/admin/AdminLayout";
 import AdminDashboard from "@/pages/admin/AdminDashboard";
 import AdminBooks from "@/pages/admin/AdminBooks";
+import AdminHampers from "@/pages/admin/AdminHampers";
 import AdminOrders from "@/pages/admin/AdminOrders";
 import AdminDeskCopies from "@/pages/admin/AdminDeskCopies";
 import AdminUsers from "@/pages/admin/AdminUsers";
@@ -104,6 +106,7 @@ function App() {
                                     }
                                 />
                                 <Route path="/about" element={<About />} />
+                                <Route path="/gifting" element={<Gifting />} />
                                 <Route path="/solutions" element={<Solutions />} />
                                 <Route
                                     path="/solutions/:slug"
@@ -202,6 +205,7 @@ function App() {
                             >
                                 <Route index element={<AdminDashboard />} />
                                 <Route path="books" element={<AdminBooks />} />
+                                <Route path="hampers" element={<AdminHampers />} />
                                 <Route path="orders" element={<AdminOrders />} />
                                 <Route
                                     path="desk-copies"

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import Breadcrumbs from "../components/Breadcrumbs";
+import HamperDetail from "./HamperDetail";
 import BookPreview from "../components/BookPreview";
 import Seo, { SITE } from "../components/Seo";
 import NoIndex from "../components/NoIndex";
@@ -164,6 +165,20 @@ export default function BookDetail() {
             </div>
         );
     }
+    /*
+     * A hamper is stored in db.books so it can be sold through the same cart and
+     * checkout, which means it arrives at this route. It is not a book, though,
+     * and everything below assumes one -- ISBN, pages, binding, related titles,
+     * desk copies, the eBook edition. Hand it over rather than adding a dozen
+     * conditionals to a page that is already long.
+     *
+     * Placed after the loading guard so `book` exists, and before the not-found
+     * guard so the branch cannot be reached with nothing to branch on.
+     */
+    if (book?.product_type === "hamper") {
+        return <HamperDetail id={id} />;
+    }
+
     if (!book) {
         return (
             <div className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-32 text-center">

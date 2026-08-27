@@ -31,6 +31,7 @@ from __future__ import annotations
 SECTIONS: tuple[str, ...] = (
     "dashboard",
     "books",
+    "hampers",
     "inventory",
     "authors",
     "page-bookstore",
@@ -56,6 +57,7 @@ SECTIONS: tuple[str, ...] = (
 SECTION_LABELS: dict[str, str] = {
     "dashboard": "Dashboard",
     "books": "Books",
+    "hampers": "Gift Hampers",
     "inventory": "Inventory",
     "authors": "Authors",
     "page-bookstore": "Bookstore Page",
@@ -80,7 +82,11 @@ SECTION_LABELS: dict[str, str] = {
 
 # The six that share endpoints — surfaced to the UI so it can say so honestly.
 SHARED_CONTENT_SECTIONS = frozenset(
-    {"pages", "navigation", "media-gallery", "careers", "page-bookstore", "page-book", "ebooks"}
+    {"pages", "navigation", "media-gallery", "careers", "page-bookstore", "page-book",
+     "ebooks",
+     # Hampers stores its banner and /gifting copy in settings, so it shares that
+     # endpoint with the screens above and cannot be fully isolated from them.
+     "hampers"}
 )
 
 # --------------------------------------------------------------- endpoints ---
@@ -88,6 +94,9 @@ SHARED_CONTENT_SECTIONS = frozenset(
 SECTION_PATHS: dict[str, set[str]] = {
     "dashboard": {"stats", "roles", "search-logs"},
     "books": {"books", "categories", "uploads", "apply-book-specs", "apply-release-order"},
+    # `uploads` is shared with books and authors: the hamper form posts its
+    # photography to the same image endpoint, and without it the picker 403s.
+    "hampers": {"hampers", "hampers-copy-defaults", "uploads", "settings"},
     "authors": {"authors", "authors-order", "authors-order-mode", "uploads"},
     "inventory": {"inventory"},
     "orders": {"orders", "cart-reminders"},

@@ -2157,6 +2157,14 @@ async def admin_run_cart_reminders(force: bool = False):
 APP_MEDIA_MAX = 10 * 1024 * 1024  # 10 MB
 
 SITE_CONTENT_DEFAULTS = {
+    # Gifting. Defined here so /site-content answers with the keys before an
+    # admin has ever opened the screen -- the storefront reads this endpoint on
+    # every page load and a missing key would render the banner slot as a gap.
+    "hamper_banner": {
+        "enabled": False, "image": "", "image_mobile": "", "alt": "",
+        "link": "/gifting",
+    },
+    "gifting_page": {},
     "home_hero": "https://images.unsplash.com/photo-1507842217343-583bb7270b66?auto=format&fit=crop&w=1600&q=85",
     "plp_banner": "https://images.unsplash.com/photo-1507842217343-583bb7270b66?auto=format&fit=crop&w=2000&q=85",
     # What We Do / verticals
