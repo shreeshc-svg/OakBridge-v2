@@ -26,6 +26,20 @@ const FIELDS = [
     { name: "pincode", label: "Pincode", type: "text", required: true, col: 1 },
 ];
 
+/*
+ * The same shape again for the parcel's destination.
+ *
+ * Built from one list rather than eight hand-written inputs so the gift address
+ * cannot drift from the billing one -- the iOS 16px rule, the testids and the
+ * two-column layout all come along automatically, and a field added above is a
+ * field added here.
+ */
+const DELIVERY_FIELDS = FIELDS.filter((f) => f.name !== "email").map((f) => ({
+    ...f,
+    name: f.name === "full_name" ? "delivery_name" : `delivery_${f.name}`,
+    label: f.name === "full_name" ? "Recipient's name" : f.label,
+}));
+
 export default function Checkout() {
     const {
         items,
@@ -51,7 +65,17 @@ export default function Checkout() {
         state: "",
         pincode: "",
         notes: "",
+        delivery_name: "",
+        delivery_phone: "",
+        delivery_address_line1: "",
+        delivery_address_line2: "",
+        delivery_city: "",
+        delivery_state: "",
+        delivery_pincode: "",
+        gift_message: "",
+        gift_recipient: "",
     });
+    const [deliverElsewhere, setDeliverElsewhere] = useState(false);
     const [couponCode, setCouponCode] = useState("");
     const [applyingCoupon, setApplyingCoupon] = useState(false);
     const [couponMsg, setCouponMsg] = useState(null);
@@ -154,6 +178,10 @@ export default function Checkout() {
                 total,
                 coupon_code: coupon?.code || null,
                 discount: discount || 0,
+                // Sent as false rather than omitted when the block is collapsed,
+                // so a gift address typed and then unticked is not silently
+                // honoured by the server.
+                deliver_elsewhere: deliverElsewhere,
             });
 
             // 2. Create a Razorpay order tied to it
@@ -278,8 +306,80 @@ export default function Checkout() {
                         </div>
                     </section>
 
+                    {/*
+                      * Sending it somewhere else.
+                      *
+                      * Off by default and collapsed, because the overwhelming
+                      * majority of orders go to the person paying and eight more
+                      * inputs on every checkout would cost more conversions than
+                      * gifting wins. `required` is bound to the toggle so a
+                      * collapsed, empty gift address can never block submit —
+                      * a hidden required input fails validation with no visible
+                      * field to fix, which is the worst dead end in a form.
+                      */}
                     <section>
-                        <div className="overline">2 · Delivery Notes (optional)</div>
+                        <div className="overline">2 · Where it's going</div>
+                        <label className="mt-6 flex items-start gap-3 border border-[#E5E7EB] bg-white p-5 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={deliverElsewhere}
+                                onChange={(e) => setDeliverElsewhere(e.target.checked)}
+                                data-testid="checkout-deliver-elsewhere"
+                                className="accent-[#002B5C] w-4 h-4 mt-0.5"
+                            />
+                            <span className="text-sm text-[#002B5C]">
+                                Deliver to a different address
+                                <span className="block text-[#4B5563] text-xs mt-1">
+                                    Sending a gift? The invoice still comes to you — no price goes in the box.
+                                </span>
+                            </span>
+                        </label>
+
+                        {deliverElsewhere && (
+                            <div data-testid="checkout-delivery-block" className="mt-4 border-l-2 border-[#F59E0B] pl-5">
+                                <div className="grid grid-cols-2 gap-x-5 gap-y-5">
+                                    {DELIVERY_FIELDS.map((f) => (
+                                        <div
+                                            key={f.name}
+                                            className={f.col === 2 ? "col-span-2" : "col-span-2 sm:col-span-1"}
+                                        >
+                                            <label className="overline !text-[10px] block mb-2">{f.label}</label>
+                                            <input
+                                                type={f.type}
+                                                name={f.name}
+                                                required={f.required && deliverElsewhere}
+                                                value={form[f.name]}
+                                                onChange={onChange}
+                                                data-testid={`checkout-${f.name.replace(/_/g, "-")}`}
+                                                className="w-full border border-[#E5E7EB] bg-white px-4 py-3 text-base md:text-sm outline-none focus:border-[#002B5C]"
+                                            />
+                                        </div>
+                                    ))}
+                                    <div className="col-span-2">
+                                        <label className="overline !text-[10px] block mb-2">
+                                            Message on the gift card (optional)
+                                        </label>
+                                        <textarea
+                                            name="gift_message"
+                                            rows={2}
+                                            maxLength={200}
+                                            value={form.gift_message}
+                                            onChange={onChange}
+                                            data-testid="checkout-gift-message"
+                                            placeholder="We write this by hand and put it in the box."
+                                            className="w-full border border-[#E5E7EB] bg-white px-4 py-3 text-base md:text-sm outline-none focus:border-[#002B5C] resize-none"
+                                        />
+                                        <div className="text-[11px] text-[#4B5563] mt-1">
+                                            {200 - (form.gift_message?.length || 0)} characters left
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </section>
+
+                    <section>
+                        <div className="overline">3 · Delivery Notes (optional)</div>
                         <textarea
                             name="notes"
                             value={form.notes}
@@ -292,7 +392,7 @@ export default function Checkout() {
                     </section>
 
                     <section>
-                        <div className="overline">3 · Payment</div>
+                        <div className="overline">4 · Payment</div>
                         <div className="mt-6 border border-[#E5E7EB] bg-white p-6 flex items-start gap-3">
                             <CheckCircle2
                                 size={20}

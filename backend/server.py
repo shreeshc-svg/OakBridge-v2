@@ -42,6 +42,11 @@ from extensions import (
 )
 
 # Features (coupons, ebooks, inventory, submissions)
+from hampers import (
+    public_router as hampers_public_router,
+    admin_router as hampers_admin_router,
+)
+
 from features import (
     public_router as features_public_router,
     customer_router as features_customer_router,
@@ -54,9 +59,19 @@ from features import (
 
 
 def _decorate_book(doc: dict) -> dict:
-    """Annotate raw book doc with has_ebook based on presence of ebook_path."""
+    """Annotate raw book doc with has_ebook based on presence of ebook_path.
+
+    Also fills a hamper's editable copy from the defaults. Done here because
+    this is the one function every book response already passes through --
+    /books, /books/{id} and all three carousels -- so the product page cannot
+    receive a hamper with half its labels missing.
+    """
     if doc is not None:
         doc["has_ebook"] = bool(doc.get("ebook_path"))
+        if doc.get("product_type") == "hamper":
+            from hampers import merge_copy
+
+            doc["hamper_copy"] = merge_copy(doc.get("hamper_copy"))
     return doc
 
 
@@ -167,6 +182,15 @@ class Book(BaseModel):
     order_by: Optional[str] = None
     gift_message_enabled: bool = True
     bulk_enquiry: bool = True
+    # Every visible string on the hamper page, admin-editable. Defaults live in
+    # hampers.py and are merged in by _decorate_book on the way out, so there is
+    # one source of truth rather than a second copy in the frontend.
+    hamper_copy: dict = Field(default_factory=dict)
+    gallery: list = Field(default_factory=list)
+    # Books have no on/off switch; a seasonal hamper needs one, and needs to keep
+    # its place in the row when it comes back.
+    enabled: bool = True
+    order: int = 0
 
 
 class Category(BaseModel):
@@ -240,6 +264,27 @@ class OrderCreate(BaseModel):
     coupon_code: Optional[str] = None
     discount: Optional[float] = 0
 
+    # ---- Gift delivery ------------------------------------------------------
+    #
+    # Until now an order had exactly one address, so a gift could only ever be
+    # sent to the person paying for it. A hamper bought for a sibling in another
+    # city was not expressible.
+    #
+    # The fields above stay the BILLING identity -- who paid, where the invoice
+    # goes. These are where the parcel goes. When deliver_elsewhere is false they
+    # are ignored entirely and shipping_address() falls back, so every existing
+    # order and every caller that never sets them behaves exactly as before.
+    deliver_elsewhere: bool = False
+    delivery_name: Optional[str] = ""
+    delivery_phone: Optional[str] = ""
+    delivery_address_line1: Optional[str] = ""
+    delivery_address_line2: Optional[str] = ""
+    delivery_city: Optional[str] = ""
+    delivery_state: Optional[str] = ""
+    delivery_pincode: Optional[str] = ""
+    gift_message: Optional[str] = ""
+    gift_recipient: Optional[str] = ""
+
 
 class Order(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -262,6 +307,19 @@ class Order(BaseModel):
     notes: str = ""
     coupon_code: Optional[str] = None
     discount: float = 0
+    # Where the parcel goes, when that is not where the invoice goes. Declared
+    # here or response_model=Order drops it and the packing slip silently ships
+    # a gift back to the buyer.
+    deliver_elsewhere: bool = False
+    delivery_name: str = ""
+    delivery_phone: str = ""
+    delivery_address_line1: str = ""
+    delivery_address_line2: str = ""
+    delivery_city: str = ""
+    delivery_state: str = ""
+    delivery_pincode: str = ""
+    gift_message: str = ""
+    gift_recipient: str = ""
     status: str = "pending"
     payment_status: str = "pending"  # pending | paid | failed
     payment_provider: Optional[str] = None
@@ -1232,6 +1290,19 @@ async def create_order(payload: OrderCreate, user: Optional[dict] = Depends(get_
         coupon_code=coupon_code,
         discount=discount,
         notes=payload.notes or "",
+        # Only carried when the box actually goes somewhere else. Storing a
+        # half-filled delivery address on every ordinary order would leave the
+        # packing slip guessing which of two addresses it should trust.
+        deliver_elsewhere=bool(payload.deliver_elsewhere and (payload.delivery_address_line1 or "").strip()),
+        delivery_name=(payload.delivery_name or "").strip(),
+        delivery_phone=(payload.delivery_phone or "").strip(),
+        delivery_address_line1=(payload.delivery_address_line1 or "").strip(),
+        delivery_address_line2=(payload.delivery_address_line2 or "").strip(),
+        delivery_city=(payload.delivery_city or "").strip(),
+        delivery_state=(payload.delivery_state or "").strip(),
+        delivery_pincode=(payload.delivery_pincode or "").strip(),
+        gift_message=(payload.gift_message or "").strip()[:200],
+        gift_recipient=(payload.gift_recipient or "").strip()[:120],
         created_at=datetime.now(timezone.utc).isoformat(),
     )
     doc = order.model_dump()
@@ -1268,6 +1339,8 @@ app.include_router(webhooks_router, prefix="/api")
 app.include_router(payment_tasks_router, prefix="/api")
 app.include_router(features_admin_router)
 app.include_router(features_tasks_router)
+app.include_router(hampers_public_router)
+app.include_router(hampers_admin_router)
 from inventory_sync import inventory_router  # noqa: E402
 app.include_router(inventory_router)
 

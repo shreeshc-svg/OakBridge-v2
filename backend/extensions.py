@@ -1960,6 +1960,12 @@ async def admin_export_orders():
             "order_number", "placed", "status", "payment_status", "total",
             "captured", "customer", "email", "phone",
             "address_1", "address_2", "city", "state", "pincode",
+            # These must stay in step with the row below. A header shorter than
+            # its row does not error — it silently slides every later column one
+            # place left, and the first person to notice is the courier.
+            "is_gift", "deliver_name", "deliver_phone",
+            "deliver_address_1", "deliver_address_2", "deliver_city",
+            "deliver_state", "deliver_pincode", "gift_message",
             "courier", "tracking_id", "items",
         ],
         [
@@ -1972,6 +1978,13 @@ async def admin_export_orders():
                 o.get("full_name"), o.get("email"), o.get("phone"),
                 o.get("address_line1"), o.get("address_line2"), o.get("city"),
                 o.get("state"), o.get("pincode"),
+                # Where it actually ships, kept as its own columns so a courier
+                # upload can use them without anyone re-deriving the fallback.
+                "yes" if o.get("deliver_elsewhere") else "",
+                o.get("delivery_name", ""), o.get("delivery_phone", ""),
+                o.get("delivery_address_line1", ""), o.get("delivery_address_line2", ""),
+                o.get("delivery_city", ""), o.get("delivery_state", ""),
+                o.get("delivery_pincode", ""), o.get("gift_message", ""),
                 o.get("courier"), o.get("tracking_id"),
                 flatten_items(o.get("items")),
             ]

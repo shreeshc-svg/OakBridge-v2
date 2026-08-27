@@ -153,12 +153,13 @@ def _order_items_rows(items: list) -> str:
 
 def render_order_receipt_html(order: dict) -> str:
     """Branded HTML receipt for a paid order. `order` is the dict from db.orders."""
+    # The customer's own receipt shows where the parcel is going, not where the
+    # invoice is addressed -- on a gift order those differ, and "is it going to
+    # the right house?" is the one thing the buyer wants to check.
+    _a = shipping_address(order)
     addr_parts = [
-        order.get("address_line1"),
-        order.get("address_line2"),
-        order.get("city"),
-        order.get("state"),
-        order.get("pincode"),
+        _a["name"] if _a["is_gift"] else "",
+        _a["line1"], _a["line2"], _a["city"], _a["state"], _a["pincode"],
     ]
     address = "<br>".join(p for p in addr_parts if p)
     rzp_id = order.get("rzp_payment_id", "—")
@@ -456,17 +457,68 @@ def _order_titles(order: dict) -> str:
     return "<br>".join(rows) or "—"
 
 
+def shipping_address(order: dict) -> dict:
+    """Where the parcel goes — the gift address when there is one, else billing.
+
+    One function, because the alternative is every consumer (this email, the
+    invoice, Admin → Orders, the courier export) deciding for itself, and the
+    one that forgets posts somebody's Rakhi gift back to the person who bought
+    it. Falls through cleanly for the ~every order that has no gift address.
+    """
+    if order.get("deliver_elsewhere") and (order.get("delivery_address_line1") or "").strip():
+        return {
+            "name": order.get("delivery_name") or order.get("gift_recipient") or order.get("full_name", ""),
+            "phone": order.get("delivery_phone") or order.get("phone", ""),
+            "line1": order.get("delivery_address_line1", ""),
+            "line2": order.get("delivery_address_line2", ""),
+            "city": order.get("delivery_city", ""),
+            "state": order.get("delivery_state", ""),
+            "pincode": order.get("delivery_pincode", ""),
+            "is_gift": True,
+        }
+    return {
+        "name": order.get("full_name", ""),
+        "phone": order.get("phone", ""),
+        "line1": order.get("address_line1", ""),
+        "line2": order.get("address_line2", ""),
+        "city": order.get("city", ""),
+        "state": order.get("state", ""),
+        "pincode": order.get("pincode", ""),
+        "is_gift": False,
+    }
+
+
 def _ship_to(order: dict) -> str:
     """Full delivery address (was city/state/pincode only, which is not postable)."""
     import html as _html
 
+    a = shipping_address(order)
     parts = [
-        order.get("address_line1", ""),
-        order.get("address_line2", ""),
-        ", ".join(x for x in [order.get("city", ""), order.get("state", "")] if x),
-        order.get("pincode", ""),
+        a["name"],
+        a["line1"],
+        a["line2"],
+        ", ".join(x for x in [a["city"], a["state"]] if x),
+        a["pincode"],
+        f"Tel {a['phone']}" if a["phone"] else "",
     ]
-    return "<br>".join(_html.escape(str(p)) for p in parts if str(p).strip()) or "—"
+    body = "<br>".join(_html.escape(str(p)) for p in parts if str(p).strip()) or "—"
+    if a["is_gift"]:
+        # Said loudly on purpose: whoever packs this must not put an invoice in
+        # the box, and must not read the buyer's address off the top of the page.
+        note = (
+            f'<div style="margin-top:8px;padding:8px 10px;border:1px solid {BRAND_RED};'
+            f'color:{BRAND_RED};font-size:12px;">GIFT — do not enclose the invoice. '
+            f'Billed to {_html.escape(order.get("full_name", ""))}.</div>'
+        )
+        msg = (order.get("gift_message") or "").strip()
+        if msg:
+            note += (
+                f'<div style="margin-top:6px;padding:8px 10px;background:#FFFBEB;'
+                f'border:1px dashed {BRAND_AMBER};font-size:12px;">'
+                f'<b>Card message:</b> {_html.escape(msg)}</div>'
+            )
+        return body + note
+    return body
 
 
 async def send_admin_paid_order(order: dict) -> bool:

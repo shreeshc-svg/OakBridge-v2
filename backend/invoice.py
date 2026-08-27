@@ -274,14 +274,32 @@ def build_invoice_pdf(order: dict, isbn_map: dict | None = None) -> bytes:
     ]
     addr_lines = [x for x in addr_lines if x and x.strip(" -")]
 
-    def _party(title):
-        cell = [Paragraph(title, p_small), Paragraph(order.get("full_name", ""), p_bold)]
-        for ln in addr_lines:
+    # Consignee is only the buyer when the parcel is going to the buyer. On a
+    # gift order the two genuinely differ, and printing the buyer in both boxes
+    # is how a courier delivers a present back to the person who sent it.
+    from emailer import shipping_address
+
+    _ship = shipping_address(order)
+    ship_lines = [
+        _ship["line1"],
+        _ship["line2"],
+        f"{_ship['city']} - {_ship['pincode']}",
+        f"Tel: {_ship['phone']}" if _ship["phone"] else "",
+        f"State Name: {_ship['state']}",
+    ]
+    ship_lines = [x for x in ship_lines if x and x.strip(" -")]
+
+    def _party(title, name=None, lines=None):
+        cell = [Paragraph(title, p_small),
+                Paragraph(name if name is not None else order.get("full_name", ""), p_bold)]
+        for ln in (lines if lines is not None else addr_lines):
             cell.append(Paragraph(ln, p_small))
         return cell
 
-    parties = Table([[_party("Buyer (Bill to)"), _party("Consignee (Ship to)")]],
-                    colWidths=[W * 0.5, W * 0.5])
+    parties = Table([[
+        _party("Buyer (Bill to)"),
+        _party("Consignee (Ship to)", _ship["name"], ship_lines),
+    ]], colWidths=[W * 0.5, W * 0.5])
     parties.setStyle(TableStyle([
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ("BOX", (0, 0), (-1, -1), 0.5, LINE),
