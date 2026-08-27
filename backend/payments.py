@@ -311,11 +311,30 @@ async def _apply_stock_decrement(order_id: str) -> None:
     code = order.get("coupon_code")
     if code:
         await db.coupons.update_one({"code": code}, {"$inc": {"used_count": 1}})
+    # A hamper holds real copies of real titles. Selling one has to take those
+    # copies off the catalogue too, or the same physical book is sold twice --
+    # once inside a box and once on its own page -- and nobody finds out until
+    # packing. Expanded here rather than at add-to-cart because this is the
+    # single point that already runs exactly once per paid order, guarded by the
+    # stock_decremented claim above; doing it earlier would decrement on carts
+    # that are never paid for.
+    lines: list = []
     for it in order.get("items", []):
         bid = it.get("book_id")
         qty = int(it.get("quantity", 0) or 0)
         if not bid or qty <= 0:
             continue
+        lines.append((bid, qty))
+        hamper = await db.books.find_one(
+            {"id": bid, "product_type": "hamper"}, {"_id": 0, "hamper_items": 1}
+        )
+        for comp in (hamper or {}).get("hamper_items", []):
+            cid = comp.get("book_id")
+            if not cid:
+                continue  # a bookmark or a carry bag: no catalogue stock to move
+            lines.append((cid, qty * int(comp.get("qty", 1) or 1)))
+
+    for bid, qty in lines:
         res = await db.books.update_one(
             {"id": bid, "stock": {"$gte": qty}},
             {"$inc": {"stock": -qty}},

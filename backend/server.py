@@ -67,10 +67,13 @@ class Book(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     title: str
     subtitle: Optional[str] = None
-    author: str
+    author: str = ""
     author_bio: Optional[str] = None
     author_photo: Optional[str] = None
-    isbn: str
+    # Defaulted, not Optional: a hamper has no ISBN, and every consumer of
+    # this field (packing email, order-line join, admin table) prints it raw.
+    # "" formats; None would make each of them learn a new case.
+    isbn: str = ""
     category: str  # school | higher-ed | professional | test-prep | children
     subject: str
     grade: Optional[str] = None
@@ -81,7 +84,7 @@ class Book(BaseModel):
     price: float
     original_price: Optional[float] = None
     cover_image: str
-    pages: int
+    pages: int = 0
     language: str = "English"
     publisher: str = "Oakbridge Publishing"
     # Tolerate a missing/null year in the DB rather than 500-ing the whole
@@ -137,6 +140,33 @@ class Book(BaseModel):
     launch_at: Optional[str] = None
     coming_soon_label: Optional[str] = None
     variants: list = Field(default_factory=list)  # [{binding,size,price,mrp?,stock?}]
+
+    # ---- Gift hampers -------------------------------------------------------
+    #
+    # A hamper is a book document with product_type="hamper", not a collection of
+    # its own. Everything that makes a sale work -- cart, Razorpay, orders, stock,
+    # invoices, coupons, packing emails, Admin -> Orders -- is keyed off
+    # db.books. A second collection would mean reimplementing every one of those
+    # on a live store, and every feature written afterwards would have to
+    # remember both. The cost of this flag is a few branches in display code.
+    #
+    # Same rule as every field above: declared here or response_model=Book drops
+    # it, the admin ticks a box, Mongo stores it, and the site never sees it.
+    product_type: str = "book"  # book | hamper
+    # Hampers have no ISBN. `isbn` stays a str rather than becoming Optional so
+    # nothing downstream has to learn to format None -- the packing email and
+    # the order line join both print it raw.
+    sku: Optional[str] = None
+    # [{book_id?, label, note, image, value, qty}] -- an entry either points at a
+    # catalogue title, in which case cover/author/price are read live so they
+    # cannot drift, or it is a free-text good (bookmarks, carry bag, the card).
+    hamper_items: list = Field(default_factory=list)
+    occasion: Optional[str] = None          # "Raksha Bandhan"
+    # The order-by date, ISO. Held per hamper rather than in a global setting
+    # because two hampers can run to different festivals at once.
+    order_by: Optional[str] = None
+    gift_message_enabled: bool = True
+    bulk_enquiry: bool = True
 
 
 class Category(BaseModel):
@@ -518,7 +548,7 @@ async def list_categories():
     cats = await db.categories.find({}, {"_id": 0}).to_list(100)
     # Compute book counts
     for c in cats:
-        c["book_count"] = await db.books.count_documents({"category": c["id"]})
+        c["book_count"] = await db.books.count_documents({**NOT_A_HAMPER, "category": c["id"]})
     return cats
 
 
@@ -762,7 +792,7 @@ async def list_books(
     # Clauses are collected and combined with $and, because several of them below
     # are themselves $or expressions (search, bestseller, new_release). Assigning
     # query["$or"] more than once would silently drop all but the last.
-    query: dict = {}
+    query: dict = dict(NOT_A_HAMPER)
     clauses: List[dict] = []
     if category:
         query["category"] = category
@@ -876,9 +906,17 @@ async def list_books(
     return [_decorate_book(d) for d in docs]
 
 
+# A hamper lives in db.books so it can be sold, but it is not a book and must
+# not turn up in the bookstore grid, the homepage rows, category counts or
+# search. Every listing query is filtered through this; the hamper's own pages
+# ask for it explicitly. Written as $ne so the ~200 existing documents, which
+# have no product_type at all, still count as books.
+NOT_A_HAMPER = {"product_type": {"$ne": "hamper"}}
+
+
 @api_router.get("/books/featured", response_model=List[Book])
 async def featured_books(limit: int = 8):
-    cursor = db.books.find({"bestseller": True}, {"_id": 0}).limit(limit)
+    cursor = db.books.find({**NOT_A_HAMPER, "bestseller": True}, {"_id": 0}).limit(limit)
     docs = await cursor.to_list(limit)
     return [_decorate_book(d) for d in docs]
 
@@ -896,7 +934,7 @@ async def new_release_books(limit: int = 8):
     """
     cursor = (
         db.books.find(
-            {"$or": [
+            {**NOT_A_HAMPER, "$or": [
                 {"new_release": True},
                 {"release_rank": {"$lte": NEW_RELEASE_TOP_N}},
             ]},
@@ -946,7 +984,7 @@ async def bestseller_books(limit: int = 12, days: int = 90):
     # Cold-start / top-up fallback.
     if len(ordered) < limit:
         fillers = await db.books.find(
-            {"id": {"$nin": list(seen | excluded)}}, {"_id": 0, "id": 1}
+            {**NOT_A_HAMPER, "id": {"$nin": list(seen | excluded)}}, {"_id": 0, "id": 1}
         ).sort([("bestseller", -1), ("new_release", -1), ("rating", -1)]).limit(limit * 3).to_list(limit * 3)
         for f in fillers:
             if len(ordered) >= limit:
@@ -956,7 +994,9 @@ async def bestseller_books(limit: int = 12, days: int = 90):
                 ordered.append(f["id"])
 
     ordered = ordered[:limit]
-    docs = await db.books.find({"id": {"$in": ordered}}, {"_id": 0}).to_list(len(ordered) or 1)
+    docs = await db.books.find(
+        {**NOT_A_HAMPER, "id": {"$in": ordered}}, {"_id": 0}
+    ).to_list(len(ordered) or 1)
     by_id = {d["id"]: d for d in docs}
     return [_decorate_book(by_id[i]) for i in ordered if i in by_id]
 
