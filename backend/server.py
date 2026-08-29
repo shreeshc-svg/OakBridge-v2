@@ -856,6 +856,7 @@ async def list_books(
     search: Optional[str] = None,
     bestseller: Optional[bool] = None,
     new_release: Optional[bool] = None,
+    ebook: Optional[bool] = None,
     min_price: Optional[float] = None,
     max_price: Optional[float] = None,
     sort: Optional[str] = Query("featured", description="featured | price_asc | price_desc | title | rating_desc | newest"),
@@ -886,6 +887,16 @@ async def list_books(
             )
         else:
             query["bestseller"] = False
+
+    if ebook is not None:
+        # The presence of a LINK, not the has_ebook flag.
+        #
+        # has_ebook means "a PDF is attached to this record here" and drives the
+        # gated download. ebook_url is the link out to the eReader, and that is
+        # what somebody browsing for eBooks actually wants. Conflating the two
+        # would list titles with nowhere to go and hide titles that are there.
+        has_link = {"ebook_url": {"$nin": [None, ""]}}
+        clauses.append(has_link if ebook else {"$nor": [has_link]})
 
     if new_release is not None:
         if new_release:

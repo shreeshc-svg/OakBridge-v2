@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Star, Truck, BookOpen, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { formatINR, notifyBackInStock, mediaUrl } from "../lib/api";
+import { track } from "../lib/analytics";
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
 import { ebookEdition, printOutOffer } from "../lib/ebook";
@@ -10,8 +11,48 @@ import { preorderState, useCountdown } from "../lib/preorder";
 
 const LOW_STOCK = 5;
 
-export default function BookCard({ book, index = 0, compact = false }) {
+export default function BookCard({ book, index = 0, compact = false, toEbook = false }) {
     const { addItem, settings, site } = useCart();
+
+    /*
+     * Where the cover and title lead.
+     *
+     * Normally the product page here. When the shelf is filtered to eBooks the
+     * customer has already said what they want, so the card goes straight to
+     * the eReader — which means LEAVING this site, and means the sale will not
+     * appear in these orders. That is a deliberate choice, so the exit is
+     * counted the same way every other eBook exit is, and the card says out
+     * loud that it opens elsewhere rather than surprising anyone.
+     *
+     * `toEbook` alone is not enough: a title in that filter with no link would
+     * otherwise render an anchor to nowhere, so the href has to exist too.
+     */
+    const ebookExit = toEbook ? (book?.ebook_url || "").trim() : "";
+    const CardLink = ({ children, className }) =>
+        ebookExit ? (
+            <a
+                href={ebookExit}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={className}
+                data-testid={`ebook-exit-${book.id}`}
+                onClick={() =>
+                    track("ebook_cta_clicked", {
+                        placement: "plp",
+                        variant: "card",
+                        url: ebookExit,
+                        book_id: book.id,
+                        title: book.title,
+                    })
+                }
+            >
+                {children}
+            </a>
+        ) : (
+            <Link to={`/books/${book.id}`} className={className}>
+                {children}
+            </Link>
+        );
     /*
      * Read from the same admin setting the product page uses, not hardcoded.
      *
@@ -213,7 +254,7 @@ export default function BookCard({ book, index = 0, compact = false }) {
              *
              * Nothing in this card should ever shrink: the slack is absorbed by
              * mt-auto on the block below, as margin, not by squeezing content. */}
-            <Link to={`/books/${book.id}`} className="block flex-shrink-0">
+            <CardLink className="block flex-shrink-0">
                 <div className="relative aspect-[2/3] overflow-hidden bg-white border border-[#E5E7EB]">
                     {hasCover ? (
                         <img
@@ -284,7 +325,7 @@ export default function BookCard({ book, index = 0, compact = false }) {
                         {book.author}
                     </p>
                 </div>
-            </Link>
+            </CardLink>
 
             {/*
              * Everything below the cover is ONE mt-auto block, not three siblings.

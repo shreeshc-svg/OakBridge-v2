@@ -195,7 +195,27 @@ const DEFAULT_SORTS = [
 const DEFAULT_FILTERS = [
     { key: "bestseller", label: "Bestsellers", enabled: true },
     { key: "new_release", label: "New Releases", enabled: true },
+    /*
+     * eBooks is a filter, not a category.
+     *
+     * A title is Law AND available as an eBook — the two are different
+     * questions. Putting it in the category list would have one book in two
+     * categories and stop the counts beside Academic and Professional adding
+     * up, which is the kind of arithmetic customers notice.
+     *
+     * It disappears entirely when eBooks are switched off in Admin → E-Books;
+     * see EBOOK_FILTER_KEY below.
+     */
+    { key: "ebook", label: "Available as eBook", enabled: true },
 ];
+
+/**
+ * The filter above is gated on the same master switch as every other eBook
+ * surface, so one toggle governs all of them rather than this screen keeping
+ * its own opinion and drifting from the CTA and the product page.
+ */
+const EBOOK_FILTER_KEY = "ebook";
+const ebooksOn = (site) => String(site?.ebook_enabled ?? "on").toLowerCase() !== "off";
 
 export default function Catalog() {
     const [sp, setSp] = useSearchParams();
@@ -228,7 +248,12 @@ export default function Catalog() {
             : DEFAULT_SORTS;
     const enabledFilters = (
         Array.isArray(settings?.plp_filters) ? settings.plp_filters : DEFAULT_FILTERS
-    ).filter((f) => f && f.key && f.enabled !== false);
+    )
+        .filter((f) => f && f.key && f.enabled !== false)
+        // Dropped here rather than hidden in the markup, so the key is also
+        // absent from the request params and the active-filter chips — a filter
+        // that is off should leave no trace, not just no checkbox.
+        .filter((f) => f.key !== EBOOK_FILTER_KEY || ebooksOn(site));
 
     // First landing on the bookstore defaults to the Professional category
     // (fresh mount, no category/search already in the URL). Users can still
@@ -939,7 +964,15 @@ export default function Catalog() {
                     </h2>
                     <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-10">
                         {books.map((b, i) => (
-                            <BookCard key={b.id} book={b} index={i} />
+                            <BookCard
+                                key={b.id}
+                                book={b}
+                                index={i}
+                                /* Only while the eBook filter is on. Off it,
+                                   these are ordinary cards going to ordinary
+                                   product pages. */
+                                toEbook={sp.get(EBOOK_FILTER_KEY) === "true" && ebooksOn(site)}
+                            />
                         ))}
                     </div>
 
