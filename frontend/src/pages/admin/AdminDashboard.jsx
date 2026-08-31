@@ -1,8 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { BookOpen, ShoppingBag, Users, TrendingUp, FileText, Inbox, AlertTriangle, Sparkles, Search as SearchIcon } from "lucide-react";
+import { BookOpen, ShoppingBag, Users, TrendingUp, FileText, Inbox, AlertTriangle, GripVertical, Search as SearchIcon } from "lucide-react";
 import { adminStats, adminRunCartReminders, formatINR, adminSearchLogs } from "../../lib/api";
 import PaymentBadge from "../../components/admin/PaymentBadge";
+import { RANGE_PRESETS, resolveRange, rangeLabel } from "../../lib/dateRange";
+import { readTileOrder, writeTileOrder, clearTileOrder, moveTile } from "../../lib/tileOrder";
 import { toast } from "sonner";
 
 /**
@@ -53,13 +55,14 @@ function SearchList({ title, rows, empty, hint, tone, showCategories }) {
     );
 }
 
-function Stat({ label, value, icon: Icon, accent, hint }) {
+function Stat({ label, value, icon: Icon, accent, hint, scope, dragProps }) {
     return (
         <div
             /* Slug on alphanumerics only. Labels carry "·" and "(7d)", and
                previously those went straight into the attribute. */
             data-testid={`stat-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`}
-            className="bg-white border border-[#E5E7EB] p-6"
+            className="group relative bg-white border border-[#E5E7EB] p-6 cursor-grab active:cursor-grabbing"
+            {...dragProps}
         >
             <div className="flex items-center justify-between">
                 <div className="overline !text-[10px]">{label}</div>
@@ -73,19 +76,138 @@ function Stat({ label, value, icon: Icon, accent, hint }) {
                     {hint}
                 </div>
             )}
+            {/*
+             * Every tile says which period it covers. This is the whole reason a
+             * range control is safe to add: once some numbers move with the
+             * range and some cannot, a grid that does not label the difference
+             * is a grid that invites you to compare July's revenue against the
+             * current stock level and draw a conclusion.
+             */}
+            {scope && (
+                <div className="mt-3 font-mono text-[9px] uppercase tracking-[0.14em] text-[#9CA3AF]">
+                    {scope}
+                </div>
+            )}
+            <GripVertical
+                size={13}
+                strokeWidth={1.5}
+                aria-hidden="true"
+                className="absolute right-2 top-2 text-[#C9CFD8] opacity-0 group-hover:opacity-100 transition-opacity"
+            />
         </div>
     );
 }
+
+/*
+ * The tiles, as data.
+ *
+ * They used to be six hand-written <Stat> elements. Drag-to-reorder needs a
+ * keyed list — you cannot splice JSX — and having one anyway means the scope
+ * label and the value are declared together, so a tile cannot end up claiming a
+ * period it does not follow.
+ *
+ * `scoped` is the honest flag: true means this number answers to the date
+ * range, false means it is a state that only has a "right now".
+ */
+const TILE_DEFS = {
+    revenue: {
+        scoped: true,
+        label: "Revenue · paid",
+        icon: TrendingUp,
+        accent: "text-[#CC0033]",
+        value: (s) => formatINR(s.revenue || 0),
+        hint: (s) => `${s.paid_orders ?? 0} paid order${(s.paid_orders ?? 0) === 1 ? "" : "s"}`,
+    },
+    not_collected: {
+        scoped: true,
+        label: "Not collected",
+        icon: AlertTriangle,
+        accent: (s) => (s.pending_orders ? "text-[#F59E0B]" : undefined),
+        value: (s) => formatINR(s.pending_revenue || 0),
+        hint: (s) => `${s.pending_orders ?? 0} unpaid · ${s.failed_orders ?? 0} failed`,
+    },
+    orders: {
+        scoped: true,
+        label: "Orders",
+        icon: ShoppingBag,
+        value: (s) => s.orders ?? "—",
+        hint: () => "paid and unpaid",
+    },
+    customers: {
+        scoped: true,
+        label: "New customers",
+        icon: Users,
+        value: (s) => s.new_customers ?? "—",
+        // The all-time total rides along so the tile never loses the number you
+        // already know by heart when a range is applied.
+        hint: (s) => `${s.customers ?? 0} all time`,
+    },
+    books: {
+        scoped: false,
+        label: "Books",
+        icon: BookOpen,
+        value: (s) => s.books ?? "—",
+        hint: () => "titles on sale",
+    },
+    waitlist: {
+        scoped: true,
+        label: "Waitlist",
+        icon: Inbox,
+        accent: "text-[#F59E0B]",
+        value: (s) => s.waitlist_signups ?? "—",
+        hint: () => "stock + newsletter sign-ups",
+    },
+    submissions: {
+        scoped: true,
+        label: "Submissions",
+        icon: FileText,
+        value: (s) => s.submissions ?? "—",
+        hint: () => "manuscripts received",
+    },
+};
+
+const TILE_ORDER_DEFAULT = [
+    "revenue", "not_collected", "orders", "customers", "books", "waitlist", "submissions",
+];
 
 export default function AdminDashboard() {
     const [stats, setStats] = useState(null);
     const [reminding, setReminding] = useState(false);
     const [searchInsight, setSearchInsight] = useState(null);
 
+    const [preset, setPreset] = useState("all");
+    const [customFrom, setCustomFrom] = useState("");
+    const [customTo, setCustomTo] = useState("");
+    const [order, setOrder] = useState(() => readTileOrder(TILE_ORDER_DEFAULT));
+    const dragKey = useRef(null);
+
+    const range = useMemo(
+        () => resolveRange(preset, { from: customFrom, to: customTo }),
+        [preset, customFrom, customTo],
+    );
+
     useEffect(() => {
-        adminStats().then(setStats).catch(() => {});
+        /*
+         * Refetch on every range change. The window is resolved in the admin's
+         * own timezone here and sent as two instants, so the backend never has
+         * to guess what "this month" meant to the person who clicked it.
+         */
+        adminStats(range).then(setStats).catch(() => {});
+    }, [range]);
+
+    useEffect(() => {
         adminSearchLogs(30).then(setSearchInsight).catch(() => {});
     }, []);
+
+    const applyOrder = (next) => {
+        setOrder(next);
+        writeTileOrder(next);
+    };
+
+    const resetOrder = () => {
+        clearTileOrder();
+        setOrder(TILE_ORDER_DEFAULT);
+    };
 
     const runReminders = async () => {
         setReminding(true);
@@ -119,115 +241,137 @@ export default function AdminDashboard() {
                 </button>
             </div>
 
-            {/* This block is ALL TIME; the block below it is the last 7 days.
-                Without a header saying so, two revenue figures differing by
-                ₹920 read as a contradiction rather than as two periods. The
-                7-day block has always had a header — this one needs the
-                matching one, or neither is self-explanatory. */}
-            <div className="mt-12 overline">All time</div>
-
-            {/* Money first, catalogue second. Revenue and the amount never
-                collected sit side by side deliberately: the second number is
-                only legible next to the first. */}
-            <div className="mt-4 grid grid-cols-2 lg:grid-cols-3 gap-4">
-                <Stat
-                    label="Revenue · paid"
-                    value={stats ? formatINR(stats.revenue) : "—"}
-                    icon={TrendingUp}
-                    accent="text-[#CC0033]"
-                    hint={
-                        stats
-                            ? `${stats.paid_orders ?? 0} paid order${(stats.paid_orders ?? 0) === 1 ? "" : "s"}`
-                            : null
-                    }
-                />
-                <Stat
-                    label="Not collected"
-                    value={stats ? formatINR(stats.pending_revenue || 0) : "—"}
-                    icon={AlertTriangle}
-                    accent={stats?.pending_orders ? "text-[#F59E0B]" : undefined}
-                    hint={
-                        stats
-                            ? `${stats.pending_orders ?? 0} unpaid · ${stats.failed_orders ?? 0} failed`
-                            : null
-                    }
-                />
-                <Stat
-                    label="Orders"
-                    value={stats?.orders ?? "—"}
-                    icon={ShoppingBag}
-                    hint={stats ? "paid and unpaid" : null}
-                />
-                <Stat label="Books" value={stats?.books ?? "—"} icon={BookOpen} />
-                <Stat label="Customers" value={stats?.customers ?? "—"} icon={Users} />
+            {/*
+              THE RANGE BAR.
+              Sits directly above the tiles because it governs them, and states
+              the resolved window in words underneath — the buttons say what you
+              asked for, the line says what you got. Those differ whenever a
+              custom range is only half filled in.
+            */}
+            <div
+                data-testid="dashboard-range"
+                className="mt-10 flex flex-col gap-3 border-b border-[#E5E7EB] pb-4 lg:flex-row lg:items-center lg:justify-between"
+            >
+                <div className="flex flex-wrap items-center gap-3">
+                    <div className="inline-flex border border-[#E5E7EB] bg-white">
+                        {RANGE_PRESETS.map((p, i) => (
+                            <button
+                                key={p.key}
+                                type="button"
+                                onClick={() => setPreset(p.key)}
+                                aria-pressed={preset === p.key}
+                                data-testid={`range-${p.key}`}
+                                className={`text-xs px-3 h-9 whitespace-nowrap ${i > 0 ? "border-l border-[#E5E7EB]" : ""} ${
+                                    preset === p.key
+                                        ? "bg-[#002B5C] text-white font-semibold"
+                                        : "text-[#4B5563] hover:bg-[#F5F7FA]"
+                                }`}
+                            >
+                                {p.label}
+                            </button>
+                        ))}
+                    </div>
+                    {preset === "custom" && (
+                        <div className="flex items-center gap-2 text-xs text-[#4B5563]">
+                            <input
+                                type="date"
+                                value={customFrom}
+                                onChange={(e) => setCustomFrom(e.target.value)}
+                                aria-label="Range start"
+                                data-testid="range-from"
+                                className="border border-[#E5E7EB] px-2 h-9 text-sm text-[#002B5C]"
+                            />
+                            <span>to</span>
+                            <input
+                                type="date"
+                                value={customTo}
+                                onChange={(e) => setCustomTo(e.target.value)}
+                                aria-label="Range end"
+                                data-testid="range-to"
+                                className="border border-[#E5E7EB] px-2 h-9 text-sm text-[#002B5C]"
+                            />
+                        </div>
+                    )}
+                </div>
+                <div
+                    data-testid="range-label"
+                    className="font-mono text-[10px] uppercase tracking-widest text-[#4B5563]"
+                >
+                    {rangeLabel(preset, range)}
+                </div>
             </div>
 
-            <section className="mt-12">
-                <div className="flex items-end justify-between">
-                    <div>
-                        <div className="overline">Last 7 days</div>
-                        <h2 className="font-serif text-3xl mt-2 text-[#002B5C]">
-                            This week at a glance
-                        </h2>
-                    </div>
-                    <div className="inline-flex items-center gap-2 text-xs font-mono uppercase tracking-widest text-[#4B5563]">
-                        <Sparkles size={12} strokeWidth={1.5} className="text-[#F59E0B]" />
-                        Live
-                    </div>
-                </div>
-                <div className="mt-6 grid grid-cols-2 lg:grid-cols-4 gap-4">
-                    <Stat
-                        label="Revenue (7d) · paid"
-                        value={stats ? formatINR(stats.last_7_days?.revenue || 0) : "—"}
-                        icon={TrendingUp}
-                        accent="text-[#CC0033]"
-                        hint={
-                            /* new_orders minus paid_orders is the week's drop-off
-                               at the payment step — the number worth watching. */
-                            stats?.last_7_days
-                                ? `${Math.max(0, (stats.last_7_days.new_orders || 0) - (stats.last_7_days.paid_orders || 0))} unpaid this week`
-                                : null
-                        }
-                    />
-                    <Stat
-                        label="Paid orders (7d)"
-                        value={stats?.last_7_days?.paid_orders ?? "—"}
-                        icon={ShoppingBag}
-                    />
-                    <Stat
-                        label="Waitlist (7d)"
-                        value={stats?.last_7_days?.waitlist_signups ?? "—"}
-                        icon={Inbox}
-                        accent="text-[#F59E0B]"
-                    />
-                    <Stat
-                        label="Submissions (7d)"
-                        value={stats?.last_7_days?.submissions ?? "—"}
-                        icon={FileText}
-                    />
-                </div>
+            {/*
+              THE TILES, in whatever order this browser last left them.
+              Native HTML5 drag, the same mechanism as the section reorder in
+              Admin -> Pages, so there is one drag idiom in this codebase rather
+              than two. Order is saved on drop; there is no Save button to
+              forget to press.
+            */}
+            <div className="mt-6 grid grid-cols-2 lg:grid-cols-3 gap-4">
+                {order.map((key) => {
+                    const def = TILE_DEFS[key];
+                    if (!def) return null;
+                    const s = stats || {};
+                    const accent = typeof def.accent === "function" ? def.accent(s) : def.accent;
+                    return (
+                        <Stat
+                            key={key}
+                            label={def.label}
+                            icon={def.icon}
+                            accent={accent}
+                            value={stats ? def.value(s) : "—"}
+                            hint={stats ? def.hint(s) : null}
+                            scope={def.scoped ? (range ? "selected range" : "all time") : "all time"}
+                            dragProps={{
+                                draggable: true,
+                                onDragStart: () => { dragKey.current = key; },
+                                onDragOver: (e) => e.preventDefault(),
+                                onDrop: (e) => {
+                                    e.preventDefault();
+                                    if (dragKey.current) applyOrder(moveTile(order, dragKey.current, key));
+                                    dragKey.current = null;
+                                },
+                                onDragEnd: () => { dragKey.current = null; },
+                            }}
+                        />
+                    );
+                })}
+            </div>
 
-                {/* Inventory alerts row */}
-                {stats?.last_7_days && (stats.last_7_days.low_stock_books > 0 || stats.last_7_days.out_of_stock_books > 0) && (
-                    <div
-                        data-testid="inventory-alert-strip"
-                        className="mt-6 border border-[#F59E0B]/40 bg-[#FFFBEB] px-5 py-4 flex items-start gap-3"
-                    >
-                        <AlertTriangle size={18} strokeWidth={1.5} className="text-[#F59E0B] mt-0.5" />
-                        <div className="flex-1 text-sm text-[#002B5C]">
-                            <strong>Inventory needs attention:</strong>{" "}
-                            <span data-testid="low-stock-count">{stats.last_7_days.low_stock_books}</span> low-stock and{" "}
-                            <span data-testid="out-of-stock-count">{stats.last_7_days.out_of_stock_books}</span> out-of-stock titles.
-                        </div>
-                        <Link
-                            to="/admin/inventory"
-                            className="text-xs font-medium border-b border-[#002B5C] pb-0.5 hover:text-[#CC0033] hover:border-[#CC0033]"
-                        >
-                            Open inventory →
-                        </Link>
+            <div className="mt-3 font-mono text-[10px] uppercase tracking-widest text-[#9CA3AF]">
+                Drag a tile to reorder · saved on this browser ·{" "}
+                <button
+                    type="button"
+                    onClick={resetOrder}
+                    data-testid="reset-tile-order"
+                    className="uppercase tracking-widest text-[#CC0033] underline"
+                >
+                    Reset layout
+                </button>
+            </div>
+
+            {/* Inventory alerts row. Stock is a state, so it sits outside the
+                range entirely and says so. */}
+            {stats && (stats.low_stock_books > 0 || stats.out_of_stock_books > 0) && (
+                <div
+                    data-testid="inventory-alert-strip"
+                    className="mt-8 border border-[#F59E0B]/40 bg-[#FFFBEB] px-5 py-4 flex items-start gap-3"
+                >
+                    <AlertTriangle size={18} strokeWidth={1.5} className="text-[#F59E0B] mt-0.5" />
+                    <div className="flex-1 text-sm text-[#002B5C]">
+                        <strong>Inventory needs attention:</strong>{" "}
+                        <span data-testid="low-stock-count">{stats.low_stock_books}</span> low-stock and{" "}
+                        <span data-testid="out-of-stock-count">{stats.out_of_stock_books}</span> out-of-stock titles.
                     </div>
-                )}
-            </section>
+                    <Link
+                        to="/admin/inventory"
+                        className="text-xs font-medium border-b border-[#002B5C] pb-0.5 hover:text-[#CC0033] hover:border-[#CC0033]"
+                    >
+                        Open inventory →
+                    </Link>
+                </div>
+            )}
 
             <section className="mt-12">
                 <div className="flex justify-between items-end">

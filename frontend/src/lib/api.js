@@ -194,7 +194,13 @@ export const adminSaveLegal = (slug, content) =>
     api.put(`/admin/legal/${slug}`, { content }).then((r) => r.data);
 
 // Admin
-export const adminStats = () => api.get("/admin/stats").then((r) => r.data);
+// `range` is {from, to} ISO instants from lib/dateRange, or null for all time.
+// Sent as query params rather than a body because it is a GET, and omitted
+// entirely when null so the request is byte-identical to the old one.
+export const adminStats = (range) =>
+    api
+        .get("/admin/stats", { params: range ? { from: range.from, to: range.to } : {} })
+        .then((r) => r.data);
 export const adminDeleteUser = (id) =>
     api.delete(`/admin/users/${id}`).then((r) => r.data);
 export const adminDeleteSubmission = (id) =>

@@ -22,7 +22,7 @@ import bcrypt
 import jwt
 import rbac
 from csv_export import csv_response, flatten_items
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.security.utils import get_authorization_scheme_param
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
@@ -1096,11 +1096,70 @@ async def admin_reconcile_payment(order_id: str):
     return await reconcile_order(order, source="admin")
 
 
+def _range_window(frm: str | None, to: str | None) -> dict:
+    """Turn two ISO strings from the dashboard into a `created_at` filter.
+
+    THE FORMAT HAS TO MATCH THE WRITE, not merely parse. Every `created_at` in
+    this database is a STRING produced by `datetime.now(timezone.utc).isoformat()`
+    -- "2026-08-31T07:40:36.373000+00:00" -- and Mongo compares strings
+    lexicographically, with no idea they are dates. A bound built any other way
+    still compares, it just compares wrong: "...Z" sorts after "...+00:00" at an
+    identical instant, and a naive local-time bound is off by the offset. So the
+    incoming value is parsed and re-emitted through the same call the writer
+    uses, and the comparison is then plain text against plain text.
+
+    The browser sends real instants, converted from the admin's own clock, which
+    is what makes "this month" mean the month they are living in rather than the
+    month in UTC -- a distinction that matters at 3am in Gurugram, where the
+    date has already turned but UTC still says yesterday.
+
+    An unparseable bound is dropped rather than raising. A dashboard that 500s
+    because a date input was mid-edit is worse than one showing all time.
+    """
+    window: dict = {}
+    for key, raw in (("$gte", frm), ("$lte", to)):
+        if not raw:
+            continue
+        try:
+            parsed = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+        except (ValueError, TypeError):
+            continue
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        window[key] = parsed.astimezone(timezone.utc).isoformat()
+    return window
+
+
 @admin_router.get("/stats")
-async def admin_stats():
-    books = await db.books.count_documents({})
-    orders = await db.orders.count_documents({})
+async def admin_stats(
+    frm: str | None = Query(None, alias="from"),
+    to: str | None = Query(None),
+):
+    """Dashboard numbers, optionally narrowed to a date range.
+
+    WHAT THE RANGE DOES AND DOES NOT TOUCH is the whole design. Money and events
+    -- orders, revenue, new customers, sign-ups, submissions -- are things that
+    HAPPENED, so they answer to a range. Titles on sale and stock levels are
+    things that ARE TRUE NOW; asking how many books you sold in July is a
+    question, asking how many books you had in July is a different and much
+    harder one that this endpoint does not pretend to answer. Those come back
+    unscoped, and the UI labels them ALL TIME so the two kinds of number can
+    never be read as the same kind.
+
+    Without `from`/`to` the window is empty and every figure is all-time, which
+    is exactly the behaviour this endpoint had before ranges existed.
+    """
+    window = _range_window(frm, to)
+    in_range = {"created_at": window} if window else {}
+
+    # Books is the catalogue, not a sales figure, so it ignores the range --
+    # and it excludes hampers, which live in db.books so they can be sold
+    # through the same cart but are not titles. Counting them here was why this
+    # tile said 195 while the bookstore's categories added up to 194.
+    books = await db.books.count_documents({"product_type": {"$ne": "hamper"}})
+    orders = await db.orders.count_documents(in_range)
     customers = await db.users.count_documents({"role": "customer"})
+    new_customers = await db.users.count_documents({"role": "customer", **in_range})
     recent = await db.orders.find({}, {"_id": 0}).sort([("created_at", -1)]).limit(5).to_list(5)
 
     # ===== Revenue is money RECEIVED =====
@@ -1122,6 +1181,7 @@ async def admin_stats():
     # defaulted to "pending" since server.py:183, so this should never fire — but
     # if it ever did, the safe place for an unknown order is unpaid, not revenue.
     by_state = await db.orders.aggregate([
+        *([{"$match": in_range}] if in_range else []),
         {"$group": {
             "_id": {"$ifNull": ["$payment_status", "pending"]},
             "total": {"$sum": "$total"},
@@ -1149,43 +1209,39 @@ async def admin_stats():
     pending_orders = _sum("pending", "count")
     failed_orders = _sum("failed", "count")
 
-    # ===== "Last 7 days" activity snapshot =====
-    from datetime import datetime as _dt, timedelta as _td, timezone as _tz
-    week_ago = (_dt.now(_tz.utc) - _td(days=7)).isoformat()
-
-    new_orders_7d = await db.orders.count_documents({"created_at": {"$gte": week_ago}})
-    paid_orders_7d = await db.orders.count_documents({
-        "created_at": {"$gte": week_ago},
-        "payment_status": "paid",
-    })
-    rev_agg = await db.orders.aggregate([
-        {"$match": {"created_at": {"$gte": week_ago}, "payment_status": "paid"}},
-        {"$group": {"_id": None, "revenue": {"$sum": "$total"}}},
-    ]).to_list(1)
-    revenue_7d = rev_agg[0]["revenue"] if rev_agg else 0
-    waitlist_7d = await db.newsletter.count_documents({"created_at": {"$gte": week_ago}})
-    submissions_7d = await db.submissions.count_documents({"created_at": {"$gte": week_ago}})
+    # Sign-ups and submissions are events, so they follow the range. Stock is a
+    # state, so it does not: "how many titles are low right now" is the only
+    # question the books collection can actually answer, since it keeps no
+    # history of what the stock level used to be.
+    waitlist_signups = await db.newsletter.count_documents(in_range)
+    submissions = await db.submissions.count_documents(in_range)
     low_stock_count = await db.books.count_documents({"stock": {"$lte": 5, "$gt": 0}})
     out_of_stock_count = await db.books.count_documents({"stock": {"$lte": 0}})
 
     return {
-        "books": books,
+        # --- scoped by the range (all-time when none was sent) ---
         "orders": orders,
-        "customers": customers,
         "revenue": revenue,              # paid only — see the aggregation above
         "paid_orders": paid_orders,
         "pending_orders": pending_orders,
         "pending_revenue": pending_revenue,
         "failed_orders": failed_orders,
+        "new_customers": new_customers,
+        "waitlist_signups": waitlist_signups,
+        "submissions": submissions,
+        # --- never scoped: these are states, not events ---
+        "books": books,
+        "customers": customers,          # all-time total, for context under new_customers
+        "low_stock_books": low_stock_count,
+        "out_of_stock_books": out_of_stock_count,
         "recent_orders": recent,
-        "last_7_days": {
-            "new_orders": new_orders_7d,
-            "paid_orders": paid_orders_7d,
-            "revenue": revenue_7d,
-            "waitlist_signups": waitlist_7d,
-            "submissions": submissions_7d,
-            "low_stock_books": low_stock_count,
-            "out_of_stock_books": out_of_stock_count,
+        # The window actually applied, echoed back so the dashboard labels what
+        # it is showing rather than what it asked for. They differ whenever a
+        # bound failed to parse and was dropped.
+        "range": {
+            "from": window.get("$gte"),
+            "to": window.get("$lte"),
+            "applied": bool(window),
         },
     }
 
