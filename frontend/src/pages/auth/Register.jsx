@@ -43,7 +43,7 @@ export default function Register() {
                         Join the library.
                     </h1>
                     <p className="text-sm text-[#4B5563] mt-4">
-                        One account for orders, reviews and
+                        One account for orders, reviews and stock
                         requests.
                     </p>
 

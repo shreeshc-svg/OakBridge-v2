@@ -201,9 +201,9 @@ const DEFAULT_FILTERS = [
      * eBooks is a filter, not a category.
      *
      * A title is Law AND available as an eBook — the two are different
-     * questions. Putting it in the category list would have one book in two
-     * categories and stop the counts beside Academic and Professional adding
-     * up, which is the kind of arithmetic customers notice.
+     * questions. Putting it in the category row would have one book in two
+     * categories and stop the counts beside Law and Academic adding up, which
+     * is the kind of arithmetic customers notice.
      *
      * It disappears entirely when eBooks are switched off in Admin → E-Books;
      * see EBOOK_FILTER_KEY below.
@@ -267,6 +267,10 @@ export default function Catalog() {
      * which is what its canonical URL, its prerendered HTML and its title have
      * always claimed. See isDefaultView below, which used to carry a special
      * case for exactly this.
+     *
+     * There is deliberately no effect here any more. The one that used to
+     * follow this comment is what applied the default; the next effect down is
+     * unrelated.
      */
 
     useEffect(() => {
@@ -513,9 +517,7 @@ export default function Catalog() {
                 }
             />
             {/*
-              * When the Professional filter was applied automatically on
-              * landing — not chosen by the visitor — this page IS the bookstore
-              * and must say so.
+              * Bare /books IS the bookstore, and must say so.
               *
               * It once took its identity from whatever category happened to be
               * in the URL, so /books described itself as "Professional" and set
@@ -534,7 +536,19 @@ export default function Catalog() {
                         ? "Browse Oakbridge Publishing's full catalogue — law, tax, business, academic, reference, children's and test-prep titles."
                         : activeCat.description
                 }
-                path={category ? `/books?category=${category}` : "/books"}
+                /*
+                 * Keyed on activeCat, NOT on the raw `category` string, and the
+                 * difference is a live regression waiting to happen.
+                 * ?category=professional is still published on the homepage
+                 * imprint tile; `professional` is no longer a category, so
+                 * `category` is truthy while activeCat is undefined. Keyed on the
+                 * string, this page would title itself "Bookstore" (isDefaultView
+                 * is true) but canonicalise to /books?category=professional --
+                 * disagreeing with the prerendered build/books/index.html that
+                 * Vercel serves for that URL, so React appends a second canonical
+                 * and Google discards both. An unresolved category is not a view.
+                 */
+                path={activeCat ? `/books?category=${category}` : "/books"}
                 /*
                  * An ItemList of what is actually rendered, in the order it is
                  * rendered, plus the trail. Books load in pages, so this
@@ -549,7 +563,7 @@ export default function Catalog() {
                                   name: isDefaultView
                                       ? "Oakbridge Publishing — Bookstore"
                                       : activeCat.name,
-                                  path: category ? `/books?category=${category}` : "/books",
+                                  path: activeCat ? `/books?category=${category}` : "/books",
                               }),
                           ]
                         : []),

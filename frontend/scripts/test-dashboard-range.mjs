@@ -133,8 +133,21 @@ check(api.includes("params: range ? { from: range.from, to: range.to } : {}"),
 check(dash.includes("}, [range]);"), "the dashboard refetches when the range changes");
 check(ext.includes('frm: str | None = Query(None, alias="from")'),
       "the endpoint accepts from/to ('from' is a Python keyword, hence the alias)");
-check(ext.includes("*([{\"$match\": in_range}] if in_range else [])"),
+check(ext.includes('*([{"$match": {"_when": window}}] if window else [])'),
       "and the revenue aggregation gains a $match only when a range was sent");
+
+console.log("\n-- money is windowed on when it ARRIVED --");
+check(ext.includes('{"$addFields": {"_when": {"$ifNull": ["$paid_at", "$created_at"]}}}'),
+      "paid_at drives the window, falling back to created_at for anything unpaid");
+check((ext.match(/\$ifNull": \["\$paid_at"/g) || []).length === 2,
+      "and the Orders count uses the same effective date, so the two tiles can never "
+      + "describe different sets of orders");
+check(ext.includes('not_hamper = {"product_type": {"$ne": "hamper"}}'),
+      "the stock counts exclude hampers too — the inventory strip must not warn about a "
+      + "'title' the Books tile refuses to count");
+check(dash.includes("stats?.range?.applied ? stats.range : range"),
+      "and the label reads the window the SERVER applied, which differs from the buttons "
+      + "whenever a bound failed to parse");
 
 console.log("\n-- scope labels: the range must not appear to move a number it cannot --");
 check(/books: \{\s*\n\s*scoped: false/.test(dash), "Books is declared unscoped");

@@ -1470,7 +1470,7 @@ SAMPLE_ROW = {
     "author_bio": "CA Kiran Shah has 18 years of indirect-tax practice and advises Fortune-500 firms on GST compliance and litigation. She lectures at NLSIU Bangalore and writes for The Hindu BusinessLine.",
     "author_photo": "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=600&q=80",
     "isbn": "978-81-9400-01-1",
-    "category": "professional",
+    "category": "tax",
     "subject": "GST",
     "description": "Comprehensive practitioner reference for Indian GST.",
     "price": 1995,
@@ -3062,9 +3062,21 @@ async def _chat_system_prompt(orders_ctx: str = "", books_ctx: str = "") -> str:
     docs = await db.settings.find({}, {"_id": 0}).to_list(200)
     s = {**SETTINGS_DEFAULTS, **{d["key"]: d["value"] for d in docs}}
     try:
-        cats = await db.categories.find({}, {"_id": 0, "id": 1, "name": 1}).to_list(50)
-        cat_names = ", ".join(c.get("name", "") for c in cats if c.get("name"))
-        cat_map = "; ".join(f"{c.get('id')}={c.get('name')}" for c in cats if c.get("id"))
+        cats = await db.categories.find({}, {"_id": 0, "id": 1, "name": 1}).sort(
+            [("order", 1), ("id", 1)]
+        ).to_list(50)
+        # Only categories that actually have titles. The bookstore hides an empty
+        # category from its row for a reason, and the chatbot must not be the one
+        # surface that still offers to send someone to an empty shelf -- Coffee
+        # Table and Bespoke exist before they have stock.
+        stocked = []
+        for c in cats:
+            if await db.books.count_documents(
+                {"product_type": {"$ne": "hamper"}, "category": c.get("id")}
+            ):
+                stocked.append(c)
+        cat_names = ", ".join(c.get("name", "") for c in stocked if c.get("name"))
+        cat_map = "; ".join(f"{c.get('id')}={c.get('name')}" for c in stocked if c.get("id"))
     except Exception:  # noqa: BLE001
         cat_names, cat_map = "", ""
     cat_names = cat_names or "law, tax, business, academic, reference and general titles"

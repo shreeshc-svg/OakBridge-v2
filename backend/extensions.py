@@ -1150,6 +1150,9 @@ async def admin_stats(
     is exactly the behaviour this endpoint had before ranges existed.
     """
     window = _range_window(frm, to)
+    # For records whose only date IS their creation -- a sign-up, a submission,
+    # a customer account. Orders use `_when` below instead, because an order has
+    # two dates and the interesting one is when the money moved.
     in_range = {"created_at": window} if window else {}
 
     # Books is the catalogue, not a sales figure, so it ignores the range --
@@ -1157,7 +1160,14 @@ async def admin_stats(
     # through the same cart but are not titles. Counting them here was why this
     # tile said 195 while the bookstore's categories added up to 194.
     books = await db.books.count_documents({"product_type": {"$ne": "hamper"}})
-    orders = await db.orders.count_documents(in_range)
+    # Counted over the same effective date as the money, so the Orders tile and
+    # the Revenue tile can never describe different sets of orders.
+    orders_agg = await db.orders.aggregate([
+        {"$addFields": {"_when": {"$ifNull": ["$paid_at", "$created_at"]}}},
+        *([{"$match": {"_when": window}}] if window else []),
+        {"$count": "n"},
+    ]).to_list(1)
+    orders = orders_agg[0]["n"] if orders_agg else 0
     customers = await db.users.count_documents({"role": "customer"})
     new_customers = await db.users.count_documents({"role": "customer", **in_range})
     recent = await db.orders.find({}, {"_id": 0}).sort([("created_at", -1)]).limit(5).to_list(5)
@@ -1180,8 +1190,15 @@ async def admin_stats(
     # $ifNull guards documents predating the field. Order.payment_status has
     # defaulted to "pending" since server.py:183, so this should never fire — but
     # if it ever did, the safe place for an unknown order is unpaid, not revenue.
+    #
+    # THE WINDOW IS APPLIED TO WHEN THE MONEY MOVED, not when the order was
+    # created. An order placed on 31 July and paid on 2 August is August's
+    # revenue -- that is what a bank statement will say, and this is the tile
+    # someone reconciles against one. `paid_at` is null on anything unpaid, so
+    # those fall back to created_at, which is the only date they have.
     by_state = await db.orders.aggregate([
-        *([{"$match": in_range}] if in_range else []),
+        {"$addFields": {"_when": {"$ifNull": ["$paid_at", "$created_at"]}}},
+        *([{"$match": {"_when": window}}] if window else []),
         {"$group": {
             "_id": {"$ifNull": ["$payment_status", "pending"]},
             "total": {"$sum": "$total"},
@@ -1215,8 +1232,11 @@ async def admin_stats(
     # history of what the stock level used to be.
     waitlist_signups = await db.newsletter.count_documents(in_range)
     submissions = await db.submissions.count_documents(in_range)
-    low_stock_count = await db.books.count_documents({"stock": {"$lte": 5, "$gt": 0}})
-    out_of_stock_count = await db.books.count_documents({"stock": {"$lte": 0}})
+    # Hampers excluded here too, or the inventory strip can warn about a
+    # low-stock "title" that the Books tile refuses to count.
+    not_hamper = {"product_type": {"$ne": "hamper"}}
+    low_stock_count = await db.books.count_documents({**not_hamper, "stock": {"$lte": 5, "$gt": 0}})
+    out_of_stock_count = await db.books.count_documents({**not_hamper, "stock": {"$lte": 0}})
 
     return {
         # --- scoped by the range (all-time when none was sent) ---
@@ -1235,9 +1255,10 @@ async def admin_stats(
         "low_stock_books": low_stock_count,
         "out_of_stock_books": out_of_stock_count,
         "recent_orders": recent,
-        # The window actually applied, echoed back so the dashboard labels what
-        # it is showing rather than what it asked for. They differ whenever a
-        # bound failed to parse and was dropped.
+        # The window ACTUALLY applied. The dashboard labels itself from this
+        # rather than from the buttons, because the two differ whenever a bound
+        # failed to parse and was silently dropped -- and a label that says
+        # "01 Aug - 31 Aug" over all-time numbers is worse than no label.
         "range": {
             "from": window.get("$gte"),
             "to": window.get("$lte"),

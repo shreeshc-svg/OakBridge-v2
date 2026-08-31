@@ -437,6 +437,13 @@ def _cover(i: int) -> str:
     return BOOK_COVERS[i % len(BOOK_COVERS)]
 
 
+# Demo titles, inserted ONLY into an empty books collection -- so this runs on a
+# fresh local database and never on production. It still has to use live category
+# ids: seed_data() deletes stale categories a few lines before it inserts these,
+# so a book seeded under a dead id would land unreachable from every filter and
+# every count on boot #1, and be silently rescued into the wrong shelf on boot #2.
+# `professional`, `business`, `general-reference`, `test-prep` and `children` were
+# all still here after the Law/Tax split; they are mapped onto the live six.
 BOOKS_SEED = [
     # Academic
     {"title": "Principles of Economics", "subtitle": "An Indian Perspective", "author": "Prof. Kaushik Banerjee", "category": "academic", "subject": "Economics", "description": "A rigorous introduction to micro and macroeconomics calibrated for Indian undergraduate programmes, with case studies from Indian policy.", "price": 895, "original_price": 1050, "pages": 624, "bestseller": True},
@@ -462,40 +469,40 @@ BOOKS_SEED = [
     {"title": "Customs Law & Procedures", "author": "Shri P. K. Mohanty (IRS Retd.)", "category": "tax", "subject": "Customs", "description": "Practical guide to the Customs Act, valuation, classification and SEZ/EOU schemes.", "price": 1595, "pages": 860},
 
     # Business
-    {"title": "Financial Accounting for Managers", "author": "CA Rohit Malhotra", "category": "business", "subject": "Finance", "description": "Practical accounting for non-accountants — written for MBA students and professionals stepping into leadership roles.", "price": 1150, "original_price": 1350, "pages": 544, "bestseller": True},
-    {"title": "Strategic Marketing", "subtitle": "Indian Case Studies", "author": "Prof. Ishan Dutta", "category": "business", "subject": "Marketing", "description": "20+ original Indian case studies alongside frameworks for brand, channel and digital strategy.", "price": 1095, "pages": 488, "new_release": True},
-    {"title": "Project Management Playbook", "author": "Dr. Aarti Nair", "category": "business", "subject": "Management", "description": "Agile, waterfall and hybrid methodologies — distilled into actionable playbooks for delivery managers.", "price": 999, "pages": 420},
-    {"title": "Founder's Guide to Scale", "author": "Nikhil Shetty", "category": "business", "subject": "Entrepreneurship", "description": "From seed to Series B — how Indian founders have built category-defining businesses. 30 practitioner interviews.", "price": 849, "pages": 360, "bestseller": True},
-    {"title": "Leadership in Turbulent Times", "author": "Dr. Vandana Murthy", "category": "business", "subject": "Leadership", "description": "Evidence-based playbooks for leaders navigating transformation, layoffs and cultural change.", "price": 895, "pages": 312, "new_release": True},
+    {"title": "Financial Accounting for Managers", "author": "CA Rohit Malhotra", "category": "bgr", "subject": "Finance", "description": "Practical accounting for non-accountants — written for MBA students and professionals stepping into leadership roles.", "price": 1150, "original_price": 1350, "pages": 544, "bestseller": True},
+    {"title": "Strategic Marketing", "subtitle": "Indian Case Studies", "author": "Prof. Ishan Dutta", "category": "bgr", "subject": "Marketing", "description": "20+ original Indian case studies alongside frameworks for brand, channel and digital strategy.", "price": 1095, "pages": 488, "new_release": True},
+    {"title": "Project Management Playbook", "author": "Dr. Aarti Nair", "category": "bgr", "subject": "Management", "description": "Agile, waterfall and hybrid methodologies — distilled into actionable playbooks for delivery managers.", "price": 999, "pages": 420},
+    {"title": "Founder's Guide to Scale", "author": "Nikhil Shetty", "category": "bgr", "subject": "Entrepreneurship", "description": "From seed to Series B — how Indian founders have built category-defining businesses. 30 practitioner interviews.", "price": 849, "pages": 360, "bestseller": True},
+    {"title": "Leadership in Turbulent Times", "author": "Dr. Vandana Murthy", "category": "bgr", "subject": "Leadership", "description": "Evidence-based playbooks for leaders navigating transformation, layoffs and cultural change.", "price": 895, "pages": 312, "new_release": True},
 
     # General & Reference
-    {"title": "Oakbridge Concise Encyclopedia", "author": "Editorial Board", "category": "general-reference", "subject": "Encyclopedia", "description": "A single-volume, India-first encyclopedia with 12,000+ entries across arts, sciences, biography and history.", "price": 2495, "pages": 1680, "bestseller": True},
-    {"title": "English Dictionary & Thesaurus", "author": "Editorial Board", "category": "general-reference", "subject": "Dictionary", "description": "Over 70,000 headwords with pronunciation, etymology and usage notes calibrated for Indian English.", "price": 795, "original_price": 895, "pages": 1280},
-    {"title": "Oakbridge World Atlas", "subtitle": "Premium Edition", "author": "Cartographic Team", "category": "general-reference", "subject": "Atlas", "description": "200+ full-colour maps of countries, regions and thematic topics — updated political boundaries and climate data.", "price": 1195, "pages": 320, "new_release": True},
-    {"title": "Yearbook of India 2026", "author": "Research Staff", "category": "general-reference", "subject": "Yearbook", "description": "Statistics, profiles and developments across government, economy, sports and culture for the past year.", "price": 595, "pages": 680},
-    {"title": "Oxford-style Scientific Terms", "author": "Dr. S. Bhattacharya", "category": "general-reference", "subject": "Reference", "description": "An A-to-Z reference of 15,000 scientific terms across physics, chemistry, biology and earth sciences.", "price": 995, "pages": 780},
+    {"title": "Oakbridge Concise Encyclopedia", "author": "Editorial Board", "category": "bgr", "subject": "Encyclopedia", "description": "A single-volume, India-first encyclopedia with 12,000+ entries across arts, sciences, biography and history.", "price": 2495, "pages": 1680, "bestseller": True},
+    {"title": "English Dictionary & Thesaurus", "author": "Editorial Board", "category": "bgr", "subject": "Dictionary", "description": "Over 70,000 headwords with pronunciation, etymology and usage notes calibrated for Indian English.", "price": 795, "original_price": 895, "pages": 1280},
+    {"title": "Oakbridge World Atlas", "subtitle": "Premium Edition", "author": "Cartographic Team", "category": "bgr", "subject": "Atlas", "description": "200+ full-colour maps of countries, regions and thematic topics — updated political boundaries and climate data.", "price": 1195, "pages": 320, "new_release": True},
+    {"title": "Yearbook of India 2026", "author": "Research Staff", "category": "bgr", "subject": "Yearbook", "description": "Statistics, profiles and developments across government, economy, sports and culture for the past year.", "price": 595, "pages": 680},
+    {"title": "Oxford-style Scientific Terms", "author": "Dr. S. Bhattacharya", "category": "bgr", "subject": "Reference", "description": "An A-to-Z reference of 15,000 scientific terms across physics, chemistry, biology and earth sciences.", "price": 995, "pages": 780},
 
     # Professional
-    {"title": "Clinical Pharmacology Handbook", "author": "Dr. Vivek Rao, MD", "category": "professional", "subject": "Medical", "description": "A bedside reference for practising clinicians. Drug interactions, dosing guides and differential decision trees.", "price": 1750, "pages": 864},
-    {"title": "Machine Learning Engineering", "author": "Abhishek Verma", "category": "professional", "subject": "Technology", "description": "A practitioner's guide to deploying, monitoring and scaling ML systems in production environments.", "price": 1499, "original_price": 1799, "pages": 576, "bestseller": True},
-    {"title": "HVAC Systems Design", "author": "Er. Sunil Phadke", "category": "professional", "subject": "Engineering", "description": "A design-first reference for mechanical engineers working on commercial HVAC and refrigeration systems.", "price": 1895, "pages": 720},
-    {"title": "Clinical Research in India", "author": "Dr. Nandita Kapoor", "category": "professional", "subject": "Medical", "description": "Regulatory landscape, trial design and site operations for clinical research professionals.", "price": 1395, "pages": 540, "new_release": True},
+    {"title": "Clinical Pharmacology Handbook", "author": "Dr. Vivek Rao, MD", "category": "bgr", "subject": "Medical", "description": "A bedside reference for practising clinicians. Drug interactions, dosing guides and differential decision trees.", "price": 1750, "pages": 864},
+    {"title": "Machine Learning Engineering", "author": "Abhishek Verma", "category": "bgr", "subject": "Technology", "description": "A practitioner's guide to deploying, monitoring and scaling ML systems in production environments.", "price": 1499, "original_price": 1799, "pages": 576, "bestseller": True},
+    {"title": "HVAC Systems Design", "author": "Er. Sunil Phadke", "category": "bgr", "subject": "Engineering", "description": "A design-first reference for mechanical engineers working on commercial HVAC and refrigeration systems.", "price": 1895, "pages": 720},
+    {"title": "Clinical Research in India", "author": "Dr. Nandita Kapoor", "category": "bgr", "subject": "Medical", "description": "Regulatory landscape, trial design and site operations for clinical research professionals.", "price": 1395, "pages": 540, "new_release": True},
 
     # Test Prep
-    {"title": "JEE Advanced Physics", "subtitle": "Complete Reference", "author": "HC Mathur & Team", "category": "test-prep", "subject": "Physics", "description": "The definitive JEE Advanced physics reference with 3000+ problems, previous-year solutions and conceptual masterclasses.", "price": 899, "original_price": 1099, "pages": 1024, "bestseller": True},
-    {"title": "NEET Biology Master", "author": "Dr. Sunita Rao", "category": "test-prep", "subject": "Biology", "description": "Chapter-wise theory, NCERT mapping and 5000+ NEET-style MCQs with detailed explanations.", "price": 799, "pages": 896, "bestseller": True},
-    {"title": "CAT Quantitative Aptitude", "author": "Arun Sharma (Oakbridge ed.)", "category": "test-prep", "subject": "Quantitative", "description": "Structured 12-week CAT preparation across arithmetic, algebra, geometry and modern math.", "price": 725, "pages": 612},
-    {"title": "UPSC General Studies Vol. I", "author": "Dr. Rajiv Menon", "category": "test-prep", "subject": "General Studies", "description": "Indian history, geography, polity and economy — curated for UPSC Prelims and Mains aspirants.", "price": 650, "original_price": 799, "pages": 720, "new_release": True},
-    {"title": "GRE Verbal Reasoning", "author": "Oakbridge Test Prep", "category": "test-prep", "subject": "Verbal", "description": "A strategy-first approach to GRE Verbal, including reading comprehension drills and a 2000-word high-frequency list.", "price": 599, "pages": 384},
-    {"title": "GMAT Focus Edition Guide", "author": "Oakbridge Test Prep", "category": "test-prep", "subject": "GMAT", "description": "Aligned with the GMAT Focus format — quantitative, verbal and data insights — with four full-length practice tests.", "price": 849, "pages": 520, "new_release": True},
+    {"title": "JEE Advanced Physics", "subtitle": "Complete Reference", "author": "HC Mathur & Team", "category": "academic", "subject": "Physics", "description": "The definitive JEE Advanced physics reference with 3000+ problems, previous-year solutions and conceptual masterclasses.", "price": 899, "original_price": 1099, "pages": 1024, "bestseller": True},
+    {"title": "NEET Biology Master", "author": "Dr. Sunita Rao", "category": "academic", "subject": "Biology", "description": "Chapter-wise theory, NCERT mapping and 5000+ NEET-style MCQs with detailed explanations.", "price": 799, "pages": 896, "bestseller": True},
+    {"title": "CAT Quantitative Aptitude", "author": "Arun Sharma (Oakbridge ed.)", "category": "academic", "subject": "Quantitative", "description": "Structured 12-week CAT preparation across arithmetic, algebra, geometry and modern math.", "price": 725, "pages": 612},
+    {"title": "UPSC General Studies Vol. I", "author": "Dr. Rajiv Menon", "category": "academic", "subject": "General Studies", "description": "Indian history, geography, polity and economy — curated for UPSC Prelims and Mains aspirants.", "price": 650, "original_price": 799, "pages": 720, "new_release": True},
+    {"title": "GRE Verbal Reasoning", "author": "Oakbridge Test Prep", "category": "academic", "subject": "Verbal", "description": "A strategy-first approach to GRE Verbal, including reading comprehension drills and a 2000-word high-frequency list.", "price": 599, "pages": 384},
+    {"title": "GMAT Focus Edition Guide", "author": "Oakbridge Test Prep", "category": "academic", "subject": "GMAT", "description": "Aligned with the GMAT Focus format — quantitative, verbal and data insights — with four full-length practice tests.", "price": 849, "pages": 520, "new_release": True},
 
     # Children's
-    {"title": "The Moonlit Owl", "subtitle": "A Forest Story", "author": "Tara Banerjee", "category": "children", "subject": "Picture Book", "grade": "Ages 4-7", "description": "A lyrical picture book about a curious owlet who discovers the magic of asking questions.", "price": 299, "pages": 32, "bestseller": True},
-    {"title": "Maya and the Monsoon", "author": "Rohan Kapoor", "category": "children", "subject": "Early Reader", "grade": "Ages 6-9", "description": "A chapter book about a little girl in Kerala who befriends a cloud during the monsoon.", "price": 349, "original_price": 425, "pages": 96, "new_release": True},
-    {"title": "Illustrated Indian Folktales", "author": "Various", "category": "children", "subject": "Folklore", "grade": "Ages 8-12", "description": "Twenty richly illustrated folktales from across India — from Panchatantra to lesser-known regional stories.", "price": 499, "pages": 184, "bestseller": True},
-    {"title": "Numbers & Patterns", "subtitle": "Kindergarten Workbook", "author": "Oakbridge Early Learning", "category": "children", "subject": "Mathematics", "grade": "Kindergarten", "description": "A playful workbook with 120 activities to build early numeracy and pattern recognition.", "price": 225, "pages": 108},
-    {"title": "My First Atlas", "author": "Dr. Shalini Bose", "category": "children", "subject": "Geography", "grade": "Ages 7-10", "description": "A beautifully illustrated atlas of the world tailored for young readers with cultural highlights from every continent.", "price": 549, "original_price": 649, "pages": 80, "new_release": True},
-    {"title": "The Science Detective", "author": "Vikas Naidu", "category": "children", "subject": "Science", "grade": "Ages 9-12", "description": "Puzzle-driven stories that teach children the scientific method through everyday mysteries.", "price": 375, "pages": 156},
+    {"title": "The Moonlit Owl", "subtitle": "A Forest Story", "author": "Tara Banerjee", "category": "bgr", "subject": "Picture Book", "grade": "Ages 4-7", "description": "A lyrical picture book about a curious owlet who discovers the magic of asking questions.", "price": 299, "pages": 32, "bestseller": True},
+    {"title": "Maya and the Monsoon", "author": "Rohan Kapoor", "category": "bgr", "subject": "Early Reader", "grade": "Ages 6-9", "description": "A chapter book about a little girl in Kerala who befriends a cloud during the monsoon.", "price": 349, "original_price": 425, "pages": 96, "new_release": True},
+    {"title": "Illustrated Indian Folktales", "author": "Various", "category": "bgr", "subject": "Folklore", "grade": "Ages 8-12", "description": "Twenty richly illustrated folktales from across India — from Panchatantra to lesser-known regional stories.", "price": 499, "pages": 184, "bestseller": True},
+    {"title": "Numbers & Patterns", "subtitle": "Kindergarten Workbook", "author": "Oakbridge Early Learning", "category": "bgr", "subject": "Mathematics", "grade": "Kindergarten", "description": "A playful workbook with 120 activities to build early numeracy and pattern recognition.", "price": 225, "pages": 108},
+    {"title": "My First Atlas", "author": "Dr. Shalini Bose", "category": "bgr", "subject": "Geography", "grade": "Ages 7-10", "description": "A beautifully illustrated atlas of the world tailored for young readers with cultural highlights from every continent.", "price": 549, "original_price": 649, "pages": 80, "new_release": True},
+    {"title": "The Science Detective", "author": "Vikas Naidu", "category": "bgr", "subject": "Science", "grade": "Ages 9-12", "description": "Puzzle-driven stories that teach children the scientific method through everyday mysteries.", "price": 375, "pages": 156},
 ]
 
 
@@ -506,7 +513,7 @@ async def migrate_professional_split():
     reconcile deletes any category not in the seed, so `professional` is about
     to disappear; a book left pointing at it would vanish from every filter and
     every count at once, with no redirect and no error -- just a shelf that is
-    quietly 107 titles short.
+    quietly a hundred-odd titles short.
 
     Idempotent by construction: it only ever matches `category: "professional"`,
     and after the first run there is nothing left to match. Safe on a fresh
@@ -531,25 +538,28 @@ async def migrate_professional_split():
     # Whatever is left had a subject we did not plan for. It goes to the
     # fallback rather than staying on a category that is about to be deleted --
     # a wrong shelf is recoverable from the admin, an orphan is not.
-    stragglers = await db.books.find(
-        {"category": "professional"}, {"_id": 0, "title": 1, "subject": 1}
-    ).to_list(500)
-    if stragglers:
-        await db.books.update_many(
-            {"category": "professional"}, {"$set": {"category": PROFESSIONAL_FALLBACK}}
-        )
-        subjects = sorted({(s.get("subject") or "(blank)") for s in stragglers})
+    # Sampled for the log, but the update itself is unbounded -- reporting the
+    # length of a capped list would under-count the fallback past the cap, on
+    # exactly the number someone would act on.
+    sample = await db.books.find(
+        {"category": "professional"}, {"_id": 0, "subject": 1}
+    ).to_list(200)
+    fell_back = await db.books.update_many(
+        {"category": "professional"}, {"$set": {"category": PROFESSIONAL_FALLBACK}}
+    )
+    if fell_back.modified_count:
+        subjects = sorted({(row.get("subject") or "(blank)") for row in sample})
         logger.warning(
             "Professional split: %d title(s) had no Law/Tax subject and were filed "
             "under '%s'. Subjects seen: %s. Reassign in Admin -> Books if wrong.",
-            len(stragglers), PROFESSIONAL_FALLBACK, ", ".join(subjects),
+            fell_back.modified_count, PROFESSIONAL_FALLBACK, ", ".join(subjects),
         )
 
     logger.info(
         "Professional split: %d title(s) moved -> %s, %d by fallback",
         remaining,
-        ", ".join(f"{v} {k}" for k, v in moved.items()),
-        len(stragglers),
+        ", ".join(f"{count} {target}" for target, count in moved.items()),
+        fell_back.modified_count,
     )
 
 

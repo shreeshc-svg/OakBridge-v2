@@ -20,27 +20,21 @@ import React, { useEffect, useRef } from "react";
  * as a mess; one line that runs off the edge reads as navigation, which is what
  * this is.
  */
-export default function CategoryRow({ cats, active, onSelect, total }) {
-    const railRef = useRef(null);
-    const activeRef = useRef(null);
-
-    // Arriving on /books?category=bespoke with the tab off-screen looks like the
-    // tab is missing. Bring it into view — but only along the rail, never by
-    // scrolling the page, which would jump the visitor past the hero.
-    useEffect(() => {
-        const el = activeRef.current;
-        const rail = railRef.current;
-        if (!el || !rail) return;
-        const left = el.offsetLeft - rail.clientWidth / 2 + el.clientWidth / 2;
-        rail.scrollTo({ left: Math.max(0, left), behavior: "smooth" });
-    }, [active]);
-
-    const shown = (cats || []).filter((c) => (Number(c.book_count) || 0) > 0);
-
-    const Tab = ({ id, label, count, isOn }) => (
+/*
+ * Declared OUTSIDE CategoryRow on purpose.
+ *
+ * A component defined in a render body gets a new function identity every
+ * render, so React sees a changed element *type* and unmounts and remounts it
+ * rather than updating it. For a row of buttons that re-renders on every
+ * selection, that means the button a keyboard user just activated is destroyed
+ * underneath them: focus falls to document.body and they tab from the top of
+ * the page again. It also throws away the hover transition mid-animation.
+ */
+function Tab({ id, label, count, isOn, onSelect, innerRef }) {
+    return (
         <button
             type="button"
-            ref={isOn ? activeRef : null}
+            ref={innerRef}
             onClick={() => onSelect(id)}
             aria-current={isOn ? "true" : undefined}
             data-testid={`category-tab-${id || "all"}`}
@@ -56,6 +50,30 @@ export default function CategoryRow({ cats, active, onSelect, total }) {
             )}
         </button>
     );
+}
+
+export default function CategoryRow({ cats, active, onSelect, total }) {
+    const railRef = useRef(null);
+    const activeRef = useRef(null);
+
+    const shown = (cats || []).filter((c) => (Number(c.book_count) || 0) > 0);
+
+    // Arriving on /books?category=bespoke with the tab off-screen looks like the
+    // tab is missing. Bring it into view — but only along the rail, never by
+    // scrolling the page, which would jump the visitor past the hero.
+    //
+    // `shown.length` IS a dependency, not noise. On the first render cats is
+    // still empty, so no tab carries the ref and this returns early; the
+    // categories then arrive without `active` changing, and keyed on [active]
+    // alone the effect would never run again — missing the deep-link case that
+    // is the only reason it exists.
+    useEffect(() => {
+        const el = activeRef.current;
+        const rail = railRef.current;
+        if (!el || !rail) return;
+        const left = el.offsetLeft - rail.clientWidth / 2 + el.clientWidth / 2;
+        rail.scrollTo({ left: Math.max(0, left), behavior: "smooth" });
+    }, [active, shown.length]);
 
     return (
         <div className="relative border-b border-[#E5E7EB] mb-6" data-testid="category-row">
@@ -66,7 +84,20 @@ export default function CategoryRow({ cats, active, onSelect, total }) {
                 style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
                 className="flex gap-6 sm:gap-7 overflow-x-auto scrollbar-none"
             >
-                <Tab id="" label="All" count={total || null} isOn={!active} />
+                {/*
+                 * "All" lights up whenever nothing else can. A visitor sitting on
+                 * a category that has just been emptied — or on a retired id like
+                 * ?category=professional — has no tab of their own, and a row
+                 * with nothing highlighted reads as broken.
+                 */}
+                <Tab
+                    id=""
+                    label="All"
+                    count={total || null}
+                    isOn={!shown.some((c) => c.id === active)}
+                    onSelect={onSelect}
+                    innerRef={shown.some((c) => c.id === active) ? null : activeRef}
+                />
                 {shown.map((c) => (
                     <Tab
                         key={c.id}
@@ -74,6 +105,8 @@ export default function CategoryRow({ cats, active, onSelect, total }) {
                         label={c.name}
                         count={c.book_count}
                         isOn={active === c.id}
+                        onSelect={onSelect}
+                        innerRef={active === c.id ? activeRef : null}
                     />
                 ))}
             </div>

@@ -68,6 +68,34 @@ check(footer.includes('{ to: "/books?category=law", label: "Law" }') &&
 check(catalog.includes('if (key === "category") next.delete("subject");'),
       "picking a category still clears a leftover subject from an old-style link");
 
+console.log("\n-- the migration selects the category it is meant to --");
+// A bulk find/replace over BOOKS_SEED once rewrote these four selectors to
+// "bgr", which would have marched the entire Business & General shelf into Law
+// and Tax on the next boot. Nothing else in the suite would have caught it.
+const split = server.slice(
+    server.indexOf("async def migrate_professional_split"),
+    server.indexOf("async def seed_data"),
+);
+check((split.match(/"category": "professional"/g) || []).length === 4,
+      "all four selectors inside the migration read `professional`");
+check(!/"category": "(bgr|law|tax|academic)"/.test(split.replace(/\$set.*$/gm, "")),
+      "and none of them names a live category it would then move books OUT of");
+check(split.includes('{"$set": {"category": target}}') &&
+      split.includes('{"$set": {"category": PROFESSIONAL_FALLBACK}}'),
+      "the only writes are into law/tax and the fallback");
+check(split.includes("fell_back.modified_count"),
+      "the log reports the real fallback count, not the length of a capped sample");
+
+console.log("\n-- the demo seed uses live category ids --");
+// seed_data() deletes stale categories a few lines before inserting BOOKS_SEED,
+// so a demo book on a dead id lands unreachable on a fresh database.
+const bookSeed = server.slice(server.indexOf("BOOKS_SEED = ["),
+                              server.indexOf("async def migrate_professional_split"));
+const liveIds = new Set(["law", "tax", "academic", "bgr", "coffee-table", "bespoke"]);
+const seedIds = [...new Set([...bookSeed.matchAll(/"category": "([a-z-]+)"/g)].map((m) => m[1]))];
+check(seedIds.every((id) => liveIds.has(id)),
+      `every BOOKS_SEED category is a live one (saw: ${seedIds.join(", ")})`);
+
 console.log("\n-- the seed data moved with the taxonomy --");
 const counts = seed.reduce((m, b) => ({ ...m, [b.category]: (m[b.category] || 0) + 1 }), {});
 check(!counts.professional, "no seed book is still filed under professional");
@@ -79,7 +107,16 @@ check(seed.filter((b) => b.subject === "Law").length === 92,
 console.log("\n-- an empty category is not a tab --");
 check(row.includes("filter((c) => (Number(c.book_count) || 0) > 0)"),
       "categories with no titles are filtered out of the row");
-check(row.includes('<Tab id="" label="All"'), "All is exempt, because it is not a category");
+check(/<Tab\s+id=""\s+label="All"/.test(row), "All is exempt, because it is not a category");
+check(row.includes('isOn={!shown.some((c) => c.id === active)}'),
+      "and it lights up whenever no other tab can — a visitor on an emptied or retired "
+      + "category must not see a row with nothing selected");
+check(!/function CategoryRow[\s\S]*?\n\s+(const|function) Tab/.test(row),
+      "Tab is declared outside the component: defined inside, every render would be a new "
+      + "element type, remounting the button a keyboard user just pressed and dropping focus");
+check(row.includes("}, [active, shown.length]);"),
+      "and the scroll-into-view effect depends on the categories arriving, not only on the "
+      + "active id — a deep link renders once with no tabs at all");
 // Comments stripped first. The component's docstring names Coffee Table and
 // Bespoke as the motivating example, and an assertion that trips over prose
 // explaining the rule is testing the wrong thing.
@@ -98,8 +135,17 @@ check(!catalog.includes("DefaultFilterNotice"),
       "the notice explaining the default retires with the default it explained");
 check(catalog.includes("const isDefaultView = !activeCat;"),
       "bare /books is the unfiltered page, with no category special-cased into it");
-check(catalog.includes('path={category ? `/books?category=${category}` : "/books"}'),
+check(catalog.includes('path={activeCat ? `/books?category=${category}` : "/books"}'),
       "canonical follows: /books when unfiltered, ?category= when not");
+// ?category=professional is still on the homepage imprint tile. It makes
+// `category` truthy while activeCat is undefined, so a canonical keyed on the
+// raw string would emit /books?category=professional on a page that titles
+// itself "Bookstore" -- disagreeing with the prerendered file Vercel serves for
+// that URL, which makes React append a second canonical rather than replace it.
+check(!catalog.includes('path={category ?') && !catalog.includes("path: category ?"),
+      "a category that does not resolve canonicalises to /books, not to its own dead URL");
+check(catalog.includes('path: activeCat ? `/books?category=${category}` : "/books"'),
+      "and the JSON-LD ItemList path agrees with the canonical");
 check(catalog.includes("const heroCat = activeCat;"),
       "and every category gets its own hero, with no exception for the old default");
 check(!/category !== "professional"/.test(catalog),

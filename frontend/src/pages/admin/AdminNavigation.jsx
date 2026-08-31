@@ -30,8 +30,11 @@ const DEFAULT_FOOTER_COLUMNS = [
             { to: "/books?category=tax", label: "Taxation" },
             { to: "/books?category=academic", label: "Academic" },
             { to: "/books?category=bgr", label: "Business & General" },
-            { to: "/books?category=coffee-table", label: "Coffee Table" },
-            { to: "/books?category=bespoke", label: "Bespoke" },
+            // Coffee Table and Bespoke are deliberately absent: they are real
+            // categories with no titles yet, and a published footer link to an
+            // empty shelf is the one thing the category row is careful to avoid.
+            // Add them here once they have stock.
+            { to: "/books", label: "All Titles" },
         ],
     },
     {

@@ -297,7 +297,10 @@ export default function AdminDashboard() {
                     data-testid="range-label"
                     className="font-mono text-[10px] uppercase tracking-widest text-[#4B5563]"
                 >
-                    {rangeLabel(preset, range)}
+                    {/* The server's echo wins: it is the window that was
+                        actually applied, and it disagrees with ours whenever a
+                        bound failed to parse on the way over. */}
+                    {rangeLabel(preset, stats?.range?.applied ? stats.range : range)}
                 </div>
             </div>
 

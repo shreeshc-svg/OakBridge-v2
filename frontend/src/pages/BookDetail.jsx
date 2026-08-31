@@ -17,7 +17,6 @@ import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
 import { toast } from "sonner";
 import VerifyNotice from "../components/VerifyNotice";
-import { hiddenSet } from "../lib/sections";
 import { ebookEdition } from "../lib/ebook";
 import { metaDescription } from "../lib/schema";
 import { preorderState, useCountdown, formatLaunchDate } from "../lib/preorder";
@@ -80,7 +79,6 @@ export default function BookDetail() {
     const [settings, setSettings] = useState(null);
     // Same hidden_sections setting every other page uses; the book page simply
     // was never listed in SECTION_REGISTRY.
-    const hidden = hiddenSet(settings);
     const [binding, setBinding] = useState(null);
     const [size, setSize] = useState(null);
     // Author records behind this book. The book's own author_bio is a separate
