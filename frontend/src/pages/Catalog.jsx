@@ -6,8 +6,8 @@ import { Search, SlidersHorizontal, X, Clock, BookOpen } from "lucide-react";
 import BookCard from "../components/BookCard";
 import { fetchBooks, fetchBooksWithMeta, fetchCategories, fetchSiteContent, fetchSettings, mediaUrl, logSearch, fetchSuggestIndex } from "../lib/api";
 import EbookCta from "../components/EbookCta";
-import DefaultFilterNotice, { noticeDismissed } from "../components/DefaultFilterNotice";
-import { shouldShowFilterNotice, catalogueTotalFrom } from "../lib/filterNotice";
+import CategoryRow from "../components/CategoryRow";
+import { catalogueTotalFrom } from "../lib/catalogue";
 import { loadIndex, suggestFrom, readRecent, pushRecent } from "../components/SearchBox";
 import { fuzzySearch, didYouMean as didYouMeanTerm } from "../lib/fuzzy";
 import { responsiveImage } from "../lib/img";
@@ -239,10 +239,6 @@ export default function Catalog() {
     const search = sp.get("search") || "";
     const sort = sp.get("sort") || "featured";
 
-    // Sub-categories shown under a parent category (filter by the book `subject`).
-    // Professional splits into Law and Tax, per management.
-    const SUBCATEGORIES = { professional: ["Law", "Tax"] };
-
     // Admin-editable sort menu + filter toggles (fall back to defaults until loaded).
     const sortOptions =
         Array.isArray(settings?.plp_sort_options) && settings.plp_sort_options.length
@@ -257,31 +253,21 @@ export default function Catalog() {
         // that is off should leave no trace, not just no checkbox.
         .filter((f) => f.key !== EBOOK_FILTER_KEY || ebooksOn(site));
 
-    // First landing on the bookstore defaults to the Professional category
-    // (fresh mount, no category/search already in the URL). Users can still
-    // switch to "All Categories" afterwards without it snapping back.
-    const didDefaultCat = useRef(false);
     /*
-     * Records that the DEFAULT was applied by us, not chosen by the visitor.
-     * DefaultFilterNotice keys off this: someone who clicked Academic, or
-     * followed a filtered campaign link, must not be told about a decision they
-     * made themselves. The ref above only says "the effect has run once", which
-     * is a different question, so this needs its own flag — and it has to be
-     * state rather than a ref because the notice has to appear on that render.
+     * THE BOOKSTORE NO LONGER PRE-APPLIES A FILTER.
+     *
+     * /books used to quietly set category=professional on a fresh arrival. It
+     * was a merchandising choice made when the categories lived in a sidebar
+     * that a phone hides behind a Filters button — the default was the only way
+     * most visitors ever saw a category at all. The row above the grid does
+     * that job now, in the open, so the default has nothing left to buy and
+     * costs a first-time visitor two-thirds of the catalogue.
+     *
+     * Removing it also makes /books honest: bare /books is the whole shop,
+     * which is what its canonical URL, its prerendered HTML and its title have
+     * always claimed. See isDefaultView below, which used to carry a special
+     * case for exactly this.
      */
-    const [autoFiltered, setAutoFiltered] = useState(false);
-    useEffect(() => {
-        if (didDefaultCat.current) return;
-        didDefaultCat.current = true;
-        if (!sp.get("category") && !sp.get("search")) {
-            const next = new URLSearchParams(sp);
-            next.set("category", "professional");
-            setSp(next, { replace: true });
-            setAutoFiltered(true);
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
 
     useEffect(() => {
         fetchCategories().then(setCats).catch(() => {});
@@ -389,43 +375,36 @@ export default function Catalog() {
     const activeCat = cats.find((c) => c.id === category);
 
     /*
-     * Every title we sell, summed from the same counts the sidebar prints — so
-     * the notice can never disagree with the numbers next to it, and never
-     * needs editing when the catalogue grows. Zero until /categories answers,
-     * which the notice reads as "no figure available" rather than "none left".
+     * Every title we sell, summed from the same counts the category row prints —
+     * so the "All" tab can never disagree with the numbers beside it, and never
+     * needs editing when the catalogue grows.
      */
     const catalogueTotal = useMemo(() => catalogueTotalFrom(cats), [cats]);
-    // The Professional view is the default "Bookstore" landing, so it keeps the
-    // general all-imprint banner rather than a category-specific one. Other
-    // imprints (Academic, Business & General) still get their own hero.
-    const heroCat = category === "professional" ? null : activeCat;
+
+    // Bare /books gets the general all-imprint banner; every category gets its
+    // own. There is no longer an exception, because there is no longer a
+    // category masquerading as the landing page.
+    const heroCat = activeCat;
 
     /*
-     * Professional IS the bookstore's default view — /books auto-applies it on
-     * landing — so /books and /books?category=professional are the same page
-     * and must describe themselves identically. Same rule `heroCat` above
-     * already uses.
+     * Bare /books, with no category applied: the state the prerendered
+     * build/books/index.html was baked in.
      *
-     * Deriving this from the URL alone, rather than from "did we apply the
-     * filter or did the visitor?", matters more than it looks. The homepage
-     * imprint tile and two footer links point at /books?category=professional,
-     * and Vercel serves the prerendered build/books/index.html for it because
-     * the filesystem match ignores query strings. If that baked file said
-     * "Bookstore, canonical /books" while the hydrating app decided the same
-     * URL was "Professional, canonical ?category=professional", React would
-     * APPEND its versions instead of replacing them, and the page would ship
-     * two conflicting canonicals — which Google discards outright. Both URLs
-     * agreeing is what keeps hydration consistent.
+     * This used to also count ?category=professional, because /books
+     * auto-applied it and Vercel serves that same prerendered file for the
+     * filtered URL — the filesystem match ignores query strings. If the baked
+     * HTML said "Bookstore, canonical /books" while the hydrating app decided
+     * the same URL was "Professional, canonical ?category=professional", React
+     * would APPEND its versions rather than replace them and the page would
+     * ship two conflicting canonicals, which Google discards outright.
+     *
+     * With the default gone the special case goes too: bare /books really is
+     * the unfiltered shop, so the baked file and the app agree by construction
+     * instead of by a matching pair of ternaries.
      */
-    const isDefaultView = !activeCat || category === "professional";
+    const isDefaultView = !activeCat;
 
     const update = (key, value) => {
-        /*
-         * Any deliberate move off the landing state retires the notice for
-         * good. Without this, picking Academic and coming back to Professional
-         * would re-announce a filter the visitor has now chosen on purpose.
-         */
-        if (key === "category" || key === "search") setAutoFiltered(false);
         const next = new URLSearchParams(sp);
         if (!value) next.delete(key);
         else next.set(key, value);
@@ -434,11 +413,11 @@ export default function Catalog() {
         /*
          * SEARCHING CLEARS THE CATEGORY. It is not a convenience, it is a bug fix.
          *
-         * Landing on /books quietly sets category=professional (see the effect
-         * near the top of this component). Nobody chooses it — it exists so
-         * /books and /books?category=professional are one page for canonical
-         * purposes. But it stays on while you type, so a visitor searching for a
-         * book we sell can be told it does not exist.
+         * The bookstore no longer pre-applies a filter, so the original version
+         * of this bug is gone — but the shape of it is not. A visitor who taps
+         * Tax, then searches for a constitutional-law title, is asking for that
+         * title, not for that title within Tax, and an empty shelf is a wrong
+         * answer to the question they asked.
          *
          * The search log proved it: five terms, thirteen attempts, every one an
          * academic or exam-prep title hunted from inside Professional. Someone
@@ -538,16 +517,15 @@ export default function Catalog() {
               * landing — not chosen by the visitor — this page IS the bookstore
               * and must say so.
               *
-              * Previously it took its identity from whatever category happened
-              * to be in the URL, so /books described itself as "Professional"
-              * and set canonical to /books?category=professional. The main
-              * catalogue URL, the one submitted in the sitemap, was telling
-              * Google it was a duplicate of a filtered view of itself — and the
-              * only entry point anyone would search for ("Oakbridge bookstore")
-              * was titled after one category.
+              * It once took its identity from whatever category happened to be
+              * in the URL, so /books described itself as "Professional" and set
+              * canonical to /books?category=professional — the main catalogue
+              * URL, the one in the sitemap, telling Google it was a duplicate of
+              * a filtered view of itself.
               *
-              * The visible page is unchanged: the visitor still lands on
-              * Professional. Only what the page reports about itself differs.
+              * Now that /books applies no category, the unfiltered page and the
+              * unfiltered description are the same thing, and there is no
+              * category id to special-case out of the canonical.
               */}
             <Seo
                 title={isDefaultView ? (search ? `Search: ${search}` : "Bookstore") : activeCat.name}
@@ -556,7 +534,7 @@ export default function Catalog() {
                         ? "Browse Oakbridge Publishing's full catalogue — law, tax, business, academic, reference, children's and test-prep titles."
                         : activeCat.description
                 }
-                path={category && category !== "professional" ? `/books?category=${category}` : "/books"}
+                path={category ? `/books?category=${category}` : "/books"}
                 /*
                  * An ItemList of what is actually rendered, in the order it is
                  * rendered, plus the trail. Books load in pages, so this
@@ -571,10 +549,7 @@ export default function Catalog() {
                                   name: isDefaultView
                                       ? "Oakbridge Publishing — Bookstore"
                                       : activeCat.name,
-                                  path:
-                                      category && category !== "professional"
-                                          ? `/books?category=${category}`
-                                          : "/books",
+                                  path: category ? `/books?category=${category}` : "/books",
                               }),
                           ]
                         : []),
@@ -686,7 +661,20 @@ export default function Catalog() {
                 </div>
             </section>
 
-            <div className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-6 md:py-10 grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-10">
+            {/* ============ CATEGORY ROW ============
+                Full width, above the sidebar and the grid both, so it reads as
+                the shop's own shelves rather than as one more filter. Same
+                horizontal padding as the row below it. */}
+            <div className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 pt-6 md:pt-10">
+                <CategoryRow
+                    cats={cats}
+                    active={category}
+                    total={catalogueTotal || null}
+                    onSelect={(id) => update("category", id)}
+                />
+            </div>
+
+            <div className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 pb-6 md:pb-10 grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-10">
                 {/* ============ FILTERS SIDEBAR ============ */}
                 <aside
                     className={`lg:col-span-3 ${showFilters ? "block" : "hidden"} lg:block`}
@@ -708,58 +696,13 @@ export default function Catalog() {
                             <CatalogSearch value={search} onSearch={(v) => update("search", v)} />
                         </div>
 
-                        <div>
-                            <div className="overline">Category</div>
-                            <ul className="mt-4 space-y-2">
-                                <li>
-                                    <button
-                                        onClick={() => update("category", "")}
-                                        data-testid="filter-category-all"
-                                        className={`text-sm w-full text-left py-1 ${!category ? "text-[#002B5C] font-semibold" : "text-[#4B5563] hover:text-[#002B5C]"}`}
-                                    >
-                                        All Categories
-                                    </button>
-                                </li>
-                                {cats.map((c) => (
-                                    <li key={c.id}>
-                                        <button
-                                            onClick={() => update("category", c.id)}
-                                            data-testid={`filter-category-${c.id}`}
-                                            className={`text-sm w-full text-left py-1 flex justify-between ${category === c.id ? "text-[#002B5C] font-semibold" : "text-[#4B5563] hover:text-[#002B5C]"}`}
-                                        >
-                                            <span>{c.name}</span>
-                                            <span className="font-mono text-xs text-[#4B5563]/70">
-                                                {c.book_count}
-                                            </span>
-                                        </button>
-                                        {category === c.id && SUBCATEGORIES[c.id] && (
-                                            <ul className="mt-1 mb-1 ml-1 space-y-1 border-l border-[#E5E7EB] pl-3">
-                                                <li>
-                                                    <button
-                                                        onClick={() => update("subject", "")}
-                                                        data-testid="filter-subject-all"
-                                                        className={`text-sm w-full text-left py-0.5 ${!subject ? "text-[#CC0033] font-semibold" : "text-[#4B5563] hover:text-[#002B5C]"}`}
-                                                    >
-                                                        All {c.name}
-                                                    </button>
-                                                </li>
-                                                {SUBCATEGORIES[c.id].map((sub) => (
-                                                    <li key={sub}>
-                                                        <button
-                                                            onClick={() => update("subject", sub)}
-                                                            data-testid={`filter-subject-${sub}`}
-                                                            className={`text-sm w-full text-left py-0.5 ${subject === sub ? "text-[#CC0033] font-semibold" : "text-[#4B5563] hover:text-[#002B5C]"}`}
-                                                        >
-                                                            {sub}
-                                                        </button>
-                                                    </li>
-                                                ))}
-                                            </ul>
-                                        )}
-                                    </li>
-                                ))}
-                            </ul>
-                        </div>
+                        {/* The category list used to live here. It is a row above
+                            the grid now -- see CategoryRow -- because on a phone
+                            this sidebar is behind a Filters button most visitors
+                            never press, which made the shop's own shelves the
+                            hardest thing on the page to find. The Law/Tax
+                            sub-list went with it: both are top-level categories
+                            now, so there is nothing left to nest. */}
 
                         {enabledFilters.length > 0 && (
                             <div>
@@ -843,26 +786,6 @@ export default function Catalog() {
                     <div className="lg:hidden mb-4" data-testid="catalog-search-mobile">
                         <CatalogSearch value={search} onSearch={(v) => update("search", v)} />
                     </div>
-
-                    {/*
-                      Sits directly above the count row, sharing its left and
-                      right edges — the strip is part of the shelf, not a banner
-                      laid over it. It renders only on a fresh arrival that we
-                      filtered ourselves; see DefaultFilterNotice.
-                    */}
-                    {shouldShowFilterNotice({
-                        autoFiltered,
-                        activeCat,
-                        search,
-                        dismissed: noticeDismissed(),
-                    }) && (
-                        <DefaultFilterNotice
-                            categoryName={activeCat.name}
-                            shownCount={activeCat.book_count}
-                            totalCount={catalogueTotal}
-                            onClearFilter={() => update("category", "")}
-                        />
-                    )}
 
                     {/*
                       Phone: the count sits on its own line and the two controls

@@ -9,11 +9,16 @@ const DEFAULT_COLUMNS = [
     {
         title: "Shop",
         links: [
-            // Category ids must match the catalogue: academic | professional | bgr.
-            // "business" and "general-reference" were invented and returned an
-            // empty shelf on every click.
-            { to: "/books?category=professional&subject=Law", label: "Law" },
-            { to: "/books?category=professional&subject=Tax", label: "Taxation" },
+            // Category ids must match the catalogue: law | tax | academic | bgr |
+            // coffee-table | bespoke. "business" and "general-reference" were
+            // invented and returned an empty shelf on every click.
+            //
+            // Law and Tax were sub-filters of `professional` until they became
+            // categories of their own; these are the plain category links now,
+            // and the old ?category=professional&subject=Law form still resolves
+            // for anything published before the change.
+            { to: "/books?category=law", label: "Law" },
+            { to: "/books?category=tax", label: "Taxation" },
             { to: "/books?category=academic", label: "Academic" },
             { to: "/books?category=bgr", label: "Business & General" },
             { to: "/books", label: "All Titles" },

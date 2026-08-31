@@ -199,6 +199,9 @@ class Category(BaseModel):
     description: str
     image: str
     book_count: int = 0
+    # Declared, or response_model=Category drops it and the bookstore row falls
+    # back to alphabetical -- the trap documented at the top of this file.
+    order: int = 99
 
 
 class NewsletterSignup(BaseModel):
@@ -345,26 +348,74 @@ class Order(BaseModel):
 
 # ============== SEED DATA ==============
 
+# "Professional" is not how anyone shops. It was one shelf holding two trades
+# that never overlap -- a tax practitioner has no use for an arbitration
+# commentary -- and it forced Law and Tax to live as a sub-filter you could only
+# find after picking the parent. The footer had already given up on it and was
+# linking ?subject=Law directly. So Law and Tax are categories now, and
+# `professional` is retired: see PROFESSIONAL_SPLIT below for the migration, and
+# the alias in list_books() that keeps every published link working.
+#
+# `order` drives the row above the bookstore grid. Without it the endpoint
+# returned Mongo's natural order, which is insertion order, which is whatever
+# the last deploy happened to do.
 CATEGORIES_SEED = [
     {
+        "id": "law",
+        "order": 1,
+        "name": "Law",
+        "description": "Authoritative commentaries, treatises and practitioner guides across constitutional, corporate, IP, arbitration and general law.",
+        "image": "https://images.unsplash.com/photo-1589994965851-a8f479c573a9?auto=format&fit=crop&w=1200&q=85",
+    },
+    {
+        "id": "tax",
+        "order": 2,
+        "name": "Tax",
+        "description": "Direct and indirect taxation — GST, income tax and international tax, from ready reckoners to section-wise commentaries.",
+        "image": "https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=1200&q=85",
+    },
+    {
         "id": "academic",
+        "order": 3,
         "name": "Academic",
         "description": "Scholarly textbooks and reference works for Civil Services, UPSC and university programmes — economics, psychology, history, geography, general studies and more.",
         "image": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=1200&q=85",
     },
     {
-        "id": "professional",
-        "name": "Professional",
-        "description": "Authoritative law and tax titles — commentaries, treatises and practitioner guides across constitutional, corporate, IP, arbitration and taxation law.",
-        "image": "https://images.unsplash.com/photo-1589994965851-a8f479c573a9?auto=format&fit=crop&w=1200&q=85",
-    },
-    {
         "id": "bgr",
+        "order": 4,
         "name": "Business & General",
         "description": "Business, governance, leadership and general-interest titles — from management and public policy to biographies and general reading.",
         "image": "https://images.unsplash.com/photo-1507842217343-583bb7270b66?auto=format&fit=crop&w=1200&q=85",
     },
+    # These two ship with no titles. The bookstore hides a category with an
+    # empty shelf, so neither appears in the row until a book is assigned to it
+    # in Admin -> Books -- at which point the tab turns up by itself, with no
+    # second deploy.
+    {
+        "id": "coffee-table",
+        "order": 5,
+        "name": "Coffee Table",
+        "description": "Large-format illustrated volumes — photography, art and heritage, made to be left out and picked up.",
+        "image": "",
+    },
+    {
+        "id": "bespoke",
+        "order": 6,
+        "name": "Bespoke",
+        "description": "Commissioned and curated works produced for institutions, firms and private collections.",
+        "image": "",
+    },
 ]
+
+# The old category, and where each of its books goes, decided by the `subject`
+# it already carries. Anything else that was filed under Professional lands in
+# `law`, which is the larger of the two and the safer guess for a legal
+# publisher -- and the migration logs exactly how many took that fallback, so a
+# surprise shows up in the deploy log instead of hiding in the shelf.
+PROFESSIONAL_SPLIT = {"Law": "law", "Tax": "tax"}
+PROFESSIONAL_FALLBACK = "law"
+RETIRED_CATEGORY = "professional"
 
 BOOK_COVERS = [
     "https://images.unsplash.com/photo-1544947950-fa07a98d237f?auto=format&fit=crop&w=600&q=80",
@@ -448,17 +499,75 @@ BOOKS_SEED = [
 ]
 
 
+async def migrate_professional_split():
+    """Move every book still filed under `professional` into Law or Tax.
+
+    RUNS BEFORE THE CATEGORY RECONCILE, and the order is not incidental. The
+    reconcile deletes any category not in the seed, so `professional` is about
+    to disappear; a book left pointing at it would vanish from every filter and
+    every count at once, with no redirect and no error -- just a shelf that is
+    quietly 107 titles short.
+
+    Idempotent by construction: it only ever matches `category: "professional"`,
+    and after the first run there is nothing left to match. Safe on a fresh
+    database, safe on the fiftieth restart, safe to run while the shop is open.
+
+    `subject` is left exactly as it was. It is still searchable, still shown on
+    the book page, and still the field this split was derived from -- rewriting
+    it would destroy the evidence for a migration that has to be re-checkable.
+    """
+    remaining = await db.books.count_documents({"category": "professional"})
+    if not remaining:
+        return
+
+    moved = {}
+    for subject, target in PROFESSIONAL_SPLIT.items():
+        r = await db.books.update_many(
+            {"category": "professional", "subject": subject},
+            {"$set": {"category": target}},
+        )
+        moved[target] = r.modified_count
+
+    # Whatever is left had a subject we did not plan for. It goes to the
+    # fallback rather than staying on a category that is about to be deleted --
+    # a wrong shelf is recoverable from the admin, an orphan is not.
+    stragglers = await db.books.find(
+        {"category": "professional"}, {"_id": 0, "title": 1, "subject": 1}
+    ).to_list(500)
+    if stragglers:
+        await db.books.update_many(
+            {"category": "professional"}, {"$set": {"category": PROFESSIONAL_FALLBACK}}
+        )
+        subjects = sorted({(s.get("subject") or "(blank)") for s in stragglers})
+        logger.warning(
+            "Professional split: %d title(s) had no Law/Tax subject and were filed "
+            "under '%s'. Subjects seen: %s. Reassign in Admin -> Books if wrong.",
+            len(stragglers), PROFESSIONAL_FALLBACK, ", ".join(subjects),
+        )
+
+    logger.info(
+        "Professional split: %d title(s) moved -> %s, %d by fallback",
+        remaining,
+        ", ".join(f"{v} {k}" for k, v in moved.items()),
+        len(stragglers),
+    )
+
+
 async def seed_data():
     """Seed books if empty, and reconcile categories to the canonical set on every startup."""
+    # Books move off `professional` BEFORE the reconcile deletes that category.
+    await migrate_professional_split()
+
     # Reconcile categories: upsert the canonical set and remove any stale ones.
     # This self-heals databases seeded under an older category taxonomy.
     canonical_ids = [c["id"] for c in CATEGORIES_SEED]
     for c in CATEGORIES_SEED:
-        # Update name/description on every boot, but only seed the image on first
-        # insert so admin-set category images survive restarts.
+        # Update name/description/order on every boot, but only seed the image on
+        # first insert so admin-set category images survive restarts.
         await db.categories.update_one(
             {"id": c["id"]},
-            {"$set": {"id": c["id"], "name": c["name"], "description": c["description"]},
+            {"$set": {"id": c["id"], "name": c["name"], "description": c["description"],
+                      "order": c["order"]},
              "$setOnInsert": {"image": c["image"]}},
             upsert=True,
         )
@@ -618,8 +727,14 @@ async def sitemap():
 
 @api_router.get("/categories", response_model=List[Category])
 async def list_categories():
-    cats = await db.categories.find({}, {"_id": 0}).to_list(100)
-    # Compute book counts
+    # Sorted by the seed's `order`, not Mongo's natural order -- the bookstore
+    # renders this list straight into the row above the grid, so "whatever order
+    # the last deploy inserted them in" is not good enough. `id` breaks ties so
+    # the result is stable rather than merely usually right.
+    cats = await db.categories.find({}, {"_id": 0}).sort([("order", 1), ("id", 1)]).to_list(100)
+    # Compute book counts. The storefront hides a category with none, so this
+    # number is what makes Coffee Table and Bespoke appear the moment a title is
+    # assigned to them -- no deploy, no switch.
     for c in cats:
         c["book_count"] = await db.books.count_documents({**NOT_A_HAMPER, "category": c["id"]})
     return cats
@@ -869,7 +984,16 @@ async def list_books(
     query: dict = dict(NOT_A_HAMPER)
     clauses: List[dict] = []
     if category:
-        query["category"] = category
+        # `professional` was retired when Law and Tax became categories of their
+        # own, but it is still out there: on the homepage imprint tile, in the
+        # footer, in the chatbot's link vocabulary, and in whatever anyone has
+        # bookmarked or published. Resolving it to both halves means every one of
+        # those keeps returning the books it always did, instead of an empty
+        # shelf with a 200 and no clue what went wrong.
+        if category == RETIRED_CATEGORY:
+            query["category"] = {"$in": list(PROFESSIONAL_SPLIT.values())}
+        else:
+            query["category"] = category
     if subject:
         query["subject"] = subject
 

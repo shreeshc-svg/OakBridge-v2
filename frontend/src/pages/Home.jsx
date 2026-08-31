@@ -32,9 +32,18 @@ const HOT_OFF_PRESS_MAX = 24;
 // (name + image + link). Defaults below mirror what was live so nothing changes
 // visually until an admin overrides a field. Image slots read site content;
 // coffee_table/curated keep their original slot keys for backward-compat.
+//
+// Those two still point at the whole shop, not at ?category=coffee-table or
+// ?category=bespoke. The categories now exist, but they have no titles yet, and
+// the entire tile is a link -- so aiming it at its own category would land the
+// visitor on an empty shelf, which is the one thing the bookstore's category row
+// is careful never to do. When there is stock, point them at their categories
+// from Admin -> Pages: `home_imprint_coffee_table_link` overrides this value
+// without a deploy (see the `site[...] || imp.link` lookup below), and the
+// Explore label unhides itself once the link is no longer the bare shop.
 const IMPRINT_TILES = [
     { key: "academic", name: "Academic", link: "/books?category=academic", imgSlot: "home_imprint_academic_img", image: "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=800&q=80" },
-    { key: "professional", name: "Professional", link: "/books?category=professional", imgSlot: "home_imprint_professional_img", image: "https://images.unsplash.com/photo-1589994965851-a8f479c573a9?auto=format&fit=crop&w=800&q=80" },
+    { key: "professional", name: "Law & Tax", link: "/books?category=professional", imgSlot: "home_imprint_professional_img", image: "https://images.unsplash.com/photo-1589994965851-a8f479c573a9?auto=format&fit=crop&w=800&q=80" },
     { key: "bgr", name: "Business & General", link: "/books?category=bgr", imgSlot: "home_imprint_bgr_img", image: "https://images.unsplash.com/photo-1507842217343-583bb7270b66?auto=format&fit=crop&w=800&q=80" },
     { key: "coffee_table", name: "Coffee Table Books", link: "/books", imgSlot: "home_imprint_coffee_table", image: "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=800&q=80" },
     { key: "curated", name: "Bespoke and Curated Works", link: "/books", imgSlot: "home_imprint_curated", image: "https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&w=800&q=80" },
@@ -571,8 +580,14 @@ export default function Home() {
                                             {name}
                                         </h3>
                                         <div
-                                            aria-hidden={["coffee_table", "curated"].includes(imp.key)}
-                                            className={`mt-3 inline-flex items-center gap-1 text-[11px] font-mono uppercase tracking-widest border-b border-[#F59E0B] pb-0.5 text-[#F59E0B] ${["coffee_table", "curated"].includes(imp.key) ? "invisible" : ""}`}
+                                            /* Hidden while the tile has nowhere
+                                               of its own to go. Driven by the
+                                               resolved link rather than a list of
+                                               keys, so pointing Coffee Table at
+                                               its category from Admin reveals the
+                                               Explore label with no code change. */
+                                            aria-hidden={link === "/books"}
+                                            className={`mt-3 inline-flex items-center gap-1 text-[11px] font-mono uppercase tracking-widest border-b border-[#F59E0B] pb-0.5 text-[#F59E0B] ${link === "/books" ? "invisible" : ""}`}
                                         >
                                             Explore
                                             <ArrowUpRight size={11} strokeWidth={1.5} />

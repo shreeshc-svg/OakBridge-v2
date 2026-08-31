@@ -121,6 +121,16 @@ body {
     background: #94a3b8;
 }
 
+/* A rail that scrolls sideways but shows no bar. The global rule above gives
+   every scroller a 12px thumb, which under the bookstore's category row reads
+   as a rendering fault rather than an affordance — the fade at the right edge
+   is what signals "there is more". Firefox and IE want their own properties,
+   set inline on the element. */
+.scrollbar-none::-webkit-scrollbar {
+    display: none;
+    height: 0;
+}
+
 @layer base {
     :root {
         --background: 0 0% 100%;

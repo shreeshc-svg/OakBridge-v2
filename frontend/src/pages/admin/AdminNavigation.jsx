@@ -28,9 +28,10 @@ const DEFAULT_FOOTER_COLUMNS = [
         links: [
             { to: "/books?category=law", label: "Law" },
             { to: "/books?category=tax", label: "Taxation" },
-            { to: "/books?category=business", label: "Business & Management" },
             { to: "/books?category=academic", label: "Academic" },
-            { to: "/books?category=general-reference", label: "General & Reference" },
+            { to: "/books?category=bgr", label: "Business & General" },
+            { to: "/books?category=coffee-table", label: "Coffee Table" },
+            { to: "/books?category=bespoke", label: "Bespoke" },
         ],
     },
     {

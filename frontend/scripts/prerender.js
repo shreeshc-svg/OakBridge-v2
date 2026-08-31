@@ -208,8 +208,11 @@ const assertionsFor = (route) => [].concat(ROUTE_ASSERTIONS[route] || []);
  * live shop, with an error message about API data. An assertion that a
  * non-technical colleague can trip is a worse bug than the one it guards.
  *
- * Note also that "/books" mounts with category=professional applied, so this
- * asserts that one category is non-empty rather than the whole catalogue.
+ * "/books" used to mount with category=professional applied, so its card
+ * assertion only ever proved that ONE category was non-empty. The bookstore no
+ * longer pre-applies a filter, so the same assertion now covers the whole
+ * catalogue — and the canonical assertion below stopped being a coincidence:
+ * bare /books really is the unfiltered page it claims to be.
  */
 
 /*
