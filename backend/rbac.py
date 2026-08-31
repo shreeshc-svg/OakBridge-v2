@@ -45,7 +45,6 @@ SECTIONS: tuple[str, ...] = (
     "orders",
     "coupons",
     "messages",
-    "desk-copies",
     "submissions",
     "waitlists",
     "spam",
@@ -71,7 +70,6 @@ SECTION_LABELS: dict[str, str] = {
     "orders": "Orders",
     "coupons": "Coupons",
     "messages": "Messages",
-    "desk-copies": "Desk Copies",
     "submissions": "Submissions",
     "waitlists": "Waitlists",
     "spam": "Spam",
@@ -102,7 +100,6 @@ SECTION_PATHS: dict[str, set[str]] = {
     "orders": {"orders", "cart-reminders"},
     "coupons": {"coupons"},
     "messages": {"messages"},
-    "desk-copies": {"desk-copies"},
     "submissions": {"submissions"},
     "waitlists": {"waitlists"},
     # Sits with the other enquiry inboxes because it holds the same records —
@@ -174,7 +171,7 @@ ROLE_PRESETS: dict[str, tuple[str, ...]] = {
     ),
     "fulfilment": (
         "dashboard", "inventory", "orders", "coupons",
-        "messages", "desk-copies", "submissions", "waitlists",
+        "messages", "submissions", "waitlists",
     ),
 }
 

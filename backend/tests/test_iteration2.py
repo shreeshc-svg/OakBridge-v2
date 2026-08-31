@@ -1,6 +1,6 @@
 """
 Oakbridge Publishing — iteration 2 backend tests.
-Covers: JWT auth, admin routes, authors, desk-copies, reviews, my-orders.
+Covers: JWT auth, admin routes, authors, reviews, my-orders.
 """
 import os
 import uuid
@@ -106,7 +106,7 @@ class TestAdminACL:
         r = api.get(f"{API}/admin/stats", headers=H(admin_token))
         assert r.status_code == 200
         d = r.json()
-        for k in ["books", "orders", "customers", "desk_copies_pending", "revenue", "recent_orders"]:
+        for k in ["books", "orders", "customers", "revenue", "recent_orders"]:
             assert k in d
         assert isinstance(d["books"], int) and d["books"] > 0
 
@@ -201,51 +201,9 @@ class TestAuthors:
         assert isinstance(books, list)
 
 
-# ============== DESK COPIES ==============
-class TestDeskCopies:
-    def test_create_desk_copy_valid(self, api, admin_token):
-        # Get a real book id
-        bks = api.get(f"{API}/books").json()
-        bid = bks[0]["id"]
-        r = api.post(f"{API}/desk-copies", json={
-            "book_id": bid,
-            "name": "Prof Test",
-            "email": "TEST_dc@example.com",
-            "institution": "Test University",
-            "role": "professor",
-            "course": "Intro",
-            "enrolment": 50,
-        })
-        assert r.status_code == 200
-        body = r.json()
-        assert body["status"] == "pending"
-        assert body["book_id"] == bid
-        # admin can list it
-        la = api.get(f"{API}/admin/desk-copies", headers=H(admin_token))
-        assert la.status_code == 200
-        ids = [x["id"] for x in la.json()]
-        assert body["id"] in ids
-        # admin can update status
-        up = api.patch(f"{API}/admin/desk-copies/{body['id']}", json={"status": "approved"}, headers=H(admin_token))
-        assert up.status_code == 200 and up.json()["status"] == "approved"
-
-    def test_desk_copy_bad_book_404(self, api):
-        r = api.post(f"{API}/desk-copies", json={
-            "book_id": "no-such-book",
-            "name": "X", "email": "x@x.com", "institution": "X", "role": "teacher",
-        })
-        assert r.status_code == 404
-
-    def test_desk_copy_invalid_status_400(self, api, admin_token):
-        # Create one first
-        bks = api.get(f"{API}/books").json()
-        r = api.post(f"{API}/desk-copies", json={
-            "book_id": bks[0]["id"], "name": "X", "email": "x@x.com",
-            "institution": "X", "role": "teacher"
-        })
-        rid = r.json()["id"]
-        up = api.patch(f"{API}/admin/desk-copies/{rid}", json={"status": "weird"}, headers=H(admin_token))
-        assert up.status_code == 400
+# Desk copies were retired in August 2026 -- the public form, both admin routes
+# and the dashboard tile are gone. The tests that exercised them went with them;
+# the `desk_copies` collection is still in the database, just unreachable.
 
 
 # ============== REVIEWS ==============

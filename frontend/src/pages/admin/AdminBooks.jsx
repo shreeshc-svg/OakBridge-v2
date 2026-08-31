@@ -1608,7 +1608,7 @@ function DeleteAllDialog({ count, onClose, onDone }) {
 
                 <p className="mt-6 text-sm text-[#4B5563]">
                     This will permanently remove <strong>all {count} books</strong> from the catalogue.
-                    Orders, reviews and desk-copy records are <strong>not</strong> affected, but any
+                    Orders and reviews are <strong>not</strong> affected, but any
                     references to these books will become broken. This cannot be undone.
                 </p>
 

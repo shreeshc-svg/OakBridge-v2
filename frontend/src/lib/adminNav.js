@@ -46,7 +46,6 @@ export const ADMIN_NAV = [
     { to: "/admin/ebooks", label: "E-Books", icon: Tablet },
     { to: "/admin/careers", label: "Careers", icon: Briefcase },
     { to: "/admin/messages", label: "Messages", icon: Mail },
-    { to: "/admin/desk-copies", label: "Desk Copies", icon: Mail },
     { to: "/admin/submissions", label: "Submissions", icon: FileText },
     { to: "/admin/waitlists", label: "Waitlists", icon: Inbox },
     { to: "/admin/users", label: "Users", icon: Users },

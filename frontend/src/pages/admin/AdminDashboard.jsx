@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { BookOpen, ShoppingBag, Users, Mail, TrendingUp, FileText, Inbox, AlertTriangle, Sparkles, Search as SearchIcon } from "lucide-react";
+import { BookOpen, ShoppingBag, Users, TrendingUp, FileText, Inbox, AlertTriangle, Sparkles, Search as SearchIcon } from "lucide-react";
 import { adminStats, adminRunCartReminders, formatINR, adminSearchLogs } from "../../lib/api";
 import PaymentBadge from "../../components/admin/PaymentBadge";
 import { toast } from "sonner";
@@ -160,12 +160,6 @@ export default function AdminDashboard() {
                 />
                 <Stat label="Books" value={stats?.books ?? "—"} icon={BookOpen} />
                 <Stat label="Customers" value={stats?.customers ?? "—"} icon={Users} />
-                <Stat
-                    label="Desk Pending"
-                    value={stats?.desk_copies_pending ?? "—"}
-                    icon={Mail}
-                    accent="text-[#F59E0B]"
-                />
             </div>
 
             <section className="mt-12">

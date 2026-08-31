@@ -7,9 +7,8 @@ import Seo, { SITE } from "../components/Seo";
 import NoIndex from "../components/NoIndex";
 import EbookCta from "../components/EbookCta";
 import { Link, useParams, useNavigate } from "react-router-dom";
-import { Minus, Plus, ShoppingBag, ArrowLeft, Star, GraduationCap, ChevronLeft, ChevronRight, BookOpen, Truck, PackageCheck, RotateCcw, ShieldCheck, BadgeCheck, ExternalLink } from "lucide-react";
+import { Minus, Plus, ShoppingBag, ArrowLeft, Star, ChevronLeft, ChevronRight, BookOpen, Truck, PackageCheck, RotateCcw, ShieldCheck, BadgeCheck, ExternalLink } from "lucide-react";
 import BookCard from "../components/BookCard";
-import DeskCopyDialog from "../components/DeskCopyDialog";
 import ReviewsSection from "../components/ReviewsSection";
 import { fetchBook, fetchBooks, formatINR, notifyBackInStock, fetchSettings, mediaUrl,
     fetchBookPreview, fetchBookAuthors,
@@ -70,7 +69,6 @@ export default function BookDetail() {
     const [qty, setQty] = useState(1);
     const [loading, setLoading] = useState(true);
     const [tab, setTab] = useState("description");
-    const [deskCopyOpen, setDeskCopyOpen] = useState(false);
     // `site` for the eBook copy and toggles below — CartContext already fetches
     // site content once for the whole app, so this costs no extra request.
     const { addItem, setIsOpen, site } = useCart();
@@ -188,7 +186,7 @@ export default function BookDetail() {
      * A hamper is stored in db.books so it can be sold through the same cart and
      * checkout, which means it arrives at this route. It is not a book, though,
      * and everything below assumes one -- ISBN, pages, binding, related titles,
-     * desk copies, the eBook edition. Hand it over rather than adding a dozen
+     * the eBook edition. Hand it over rather than adding a dozen
      * conditionals to a page that is already long.
      *
      * Placed after the loading guard so `book` exists, and before the not-found
@@ -790,30 +788,6 @@ export default function BookDetail() {
 
                     <VerifyNotice className="mt-6 max-w-md" />
 
-                    {/* Educator CTA — hideable from Admin -> Pages -> Section
-                        visibility. Desk copies are free stock; a press that is
-                        not running the programme should not be advertising it on
-                        every title. */}
-                    {!hidden.has("book.desk_copy") && (
-                    <button
-                        onClick={() => setDeskCopyOpen(true)}
-                        data-testid="request-desk-copy-button"
-                        className="mt-6 group flex items-center gap-4 w-full text-left border border-[#F59E0B] bg-[#F59E0B]/10 p-4 hover:bg-[#F59E0B]/20 transition-colors"
-                    >
-                        <GraduationCap size={24} strokeWidth={1.5} className="text-[#CC0033]" />
-                        <div className="flex-1">
-                            <div className="font-serif text-base text-[#002B5C]">
-                                Are you an educator? <span className="text-[#CC0033]">Request a free desk copy.</span>
-                            </div>
-                            <div className="text-xs text-[#4B5563] mt-0.5">
-                                For teachers, professors and librarians evaluating this title for adoption.
-                            </div>
-                        </div>
-                        <span className="font-mono text-xs uppercase tracking-widest text-[#CC0033] border-b border-[#CC0033] pb-0.5 group-hover:border-[#002B5C] group-hover:text-[#002B5C]">
-                            Request →
-                        </span>
-                    </button>
-                    )}
 
                     {/*
                      * The eBook edition, for titles that have one.
@@ -1070,12 +1044,6 @@ export default function BookDetail() {
                     <ReviewsSection bookId={book.id} />
                 </div>
             </section>
-
-            <DeskCopyDialog
-                book={book}
-                open={deskCopyOpen && !hidden.has("book.desk_copy")}
-                onClose={() => setDeskCopyOpen(false)}
-            />
 
             {/* Related */}
             {related.length > 0 && (

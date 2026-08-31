@@ -28,7 +28,7 @@ Create the service from `render.yaml` (New → Blueprint). Then set these env va
 | `RESEND_API_KEY` | your Resend key (from the account where oakbridge.in is verified) |
 | `SENDER_EMAIL` | `noreply@oakbridge.in` (after domain verified; until then `onboarding@resend.dev`) |
 | `SENDER_NAME` | `Oakbridge Publishing` |
-| `ADMIN_NOTIFY_EMAIL` | `info@oakbridge.in` — **comma-separate for several inboxes**, e.g. `info@oakbridge.in,orders@oakbridge.in`. Receives new-paid-order, failed-payment, desk-copy and application alerts. If unset, those notifications are silently skipped. |
+| `ADMIN_NOTIFY_EMAIL` | `info@oakbridge.in` — **comma-separate for several inboxes**, e.g. `info@oakbridge.in,orders@oakbridge.in`. Receives new-paid-order, failed-payment and application alerts. If unset, those notifications are silently skipped. |
 | `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` | test keys now → live keys after KYC |
 | `RAZORPAY_WEBHOOK_SECRET` | from the Razorpay webhook you create (step 4) |
 | `STORAGE_DIR` | path to the mounted **persistent disk** (see §5c), e.g. `/var/data/storage` |

@@ -24,7 +24,6 @@ export const SECTIONS = [
     "orders",
     "coupons",
     "messages",
-    "desk-copies",
     "submissions",
     "waitlists",
     "spam",
@@ -50,7 +49,6 @@ export const SECTION_LABELS = {
     orders: "Orders",
     coupons: "Coupons",
     messages: "Messages",
-    "desk-copies": "Desk Copies",
     submissions: "Submissions",
     waitlists: "Waitlists",
     spam: "Spam",
@@ -67,7 +65,7 @@ export const SECTION_GROUPS = [
         sections: ["pages", "navigation", "media", "media-gallery", "careers", "page-bookstore", "page-book", "ebooks"],
     },
     { label: "Fulfilment", sections: ["orders", "coupons"] },
-    { label: "Enquiries", sections: ["messages", "desk-copies", "submissions", "waitlists", "spam"] },
+    { label: "Enquiries", sections: ["messages", "submissions", "waitlists", "spam"] },
     { label: "Governance", sections: ["users", "legal", "settings"] },
 ];
 
@@ -99,7 +97,7 @@ export const ROLE_PRESETS = {
     ],
     fulfilment: [
         "dashboard", "inventory", "orders", "coupons",
-        "messages", "desk-copies", "submissions", "waitlists",
+        "messages", "submissions", "waitlists",
     ],
 };
 

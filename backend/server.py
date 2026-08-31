@@ -29,7 +29,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Extensions (auth, admin, authors, desk-copies, reviews)
+# Extensions (auth, admin, authors, reviews)
 from extensions import (
     auth_router,
     admin_router,

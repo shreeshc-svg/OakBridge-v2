@@ -101,7 +101,7 @@ Legend: 🛒 storefront · 🔐 auth · 💳 payments · 📧 email · 🛠️ a
 - [ ] Coupons — create/edit; usage limit enforced.
 - [ ] **Legal** editor — Terms / Privacy / Refund / Shipping edit + save; live on `/terms` etc.
 - [ ] **Messages** (contact inquiries) inbox loads.
-- [ ] Desk copies, submissions, waitlists, users tabs load; users show phone.
+- [ ] Submissions, waitlists, users tabs load; users show phone.
 
 ## 9. SEO / meta
 - [ ] Page titles + meta descriptions per page; canonical URLs correct.

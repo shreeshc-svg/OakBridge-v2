@@ -9,7 +9,6 @@ const SUGGESTIONS = [
     "Take me to the bookstore",
     "What are your shipping charges?",
     "What's your return policy?",
-    "How do I request a desk copy?",
 ];
 
 // Only these destinations may be auto-navigated to.

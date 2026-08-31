@@ -53,11 +53,9 @@ export const SECTION_REGISTRY = [
         slug: "media",
         items: [{ key: "media.gallery", label: "Gallery grid" }],
     },
-    {
-        page: "Book Page",
-        slug: "book",
-        items: [{ key: "book.desk_copy", label: "‘Request a free desk copy’ CTA" }],
-    },
+    // "Book Page" used to live here. Its only hideable section was the desk-copy
+    // CTA, and desk copies were retired in August 2026, so the whole group went
+    // with it rather than leaving an empty page in the visibility panel.
     {
         page: "About",
         slug: "about",

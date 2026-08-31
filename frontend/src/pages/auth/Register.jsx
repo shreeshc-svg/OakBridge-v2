@@ -43,7 +43,7 @@ export default function Register() {
                         Join the library.
                     </h1>
                     <p className="text-sm text-[#4B5563] mt-4">
-                        One account for orders, reviews and desk copy
+                        One account for orders, reviews and
                         requests.
                     </p>
 
@@ -164,7 +164,6 @@ export default function Register() {
                     <ul className="font-serif text-2xl mt-6 space-y-3 leading-snug">
                         <li>— Order history and reorder with one click</li>
                         <li>— Write reviews, shape the catalogue</li>
-                        <li>— Request desk copies as an educator</li>
                         <li>— Early access to new releases</li>
                     </ul>
                 </div>

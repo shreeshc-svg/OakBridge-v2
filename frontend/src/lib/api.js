@@ -92,10 +92,6 @@ export const fetchBookAuthors = (id) =>
 export const fetchAuthorBooks = (id) =>
     api.get(`/authors/${id}/books`).then((r) => r.data);
 
-// Desk copies
-export const requestDeskCopy = (payload) =>
-    api.post("/desk-copies", payload).then((r) => r.data);
-
 // Reviews
 export const fetchReviews = (bookId) =>
     api.get(`/books/${bookId}/reviews`).then((r) => r.data);
@@ -301,10 +297,6 @@ export const adminBulkDraftAuthorBios = (overwrite = false) =>
     api
         .post(`/admin/books/bulk-draft-author-bios?overwrite=${overwrite}`, null, { timeout: 0 })
         .then((r) => r.data);
-export const adminListDeskCopies = () =>
-    api.get("/admin/desk-copies").then((r) => r.data);
-export const adminUpdateDeskCopy = (id, status) =>
-    api.patch(`/admin/desk-copies/${id}`, { status }).then((r) => r.data);
 export const adminCreateBook = (payload) =>
     api.post("/admin/books", payload).then((r) => r.data);
 export const adminUpdateBook = (id, payload) =>

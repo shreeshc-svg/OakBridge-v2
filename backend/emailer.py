@@ -386,8 +386,7 @@ async def send_waitlist_welcome(email: str, source: str) -> bool:
 
 # ====== Admin internal alerts ======
 
-# Internal inbox(es) notified about orders, failed payments, desk copies and
-# applications. Accepts SEVERAL addresses, comma-separated, e.g.
+# Internal inbox(es) notified about orders, failed payments and applications. Accepts SEVERAL addresses, comma-separated, e.g.
 #   ADMIN_NOTIFY_EMAIL=info@oakbridge.in,orders@oakbridge.in
 # Every listed inbox receives the same notification.
 ADMIN_NOTIFY_EMAIL = os.environ.get("ADMIN_NOTIFY_EMAIL")
@@ -1861,7 +1860,7 @@ def render_purchase_nudge_html(name: str, books: list, coupon: Optional[dict] = 
 
       <tr><td style="padding:18px 36px 34px;">
         <p style="margin:0;font-size:13px;line-height:1.6;color:{BRAND_GREY};">
-          Questions about a title, a bulk order for your firm, or a desk copy for your course?
+          Questions about a title, or a bulk order for your firm?
           Reply to this email — it reaches a person.
         </p>
       </td></tr>

@@ -151,7 +151,7 @@ Fiduciary, collects, uses, shares and protects your personal data when you use
   hashed form).
 - Orders: billing/shipping name, phone, delivery address, and order details.
 - Other interactions: manuscript submissions (name, contact, affiliation,
-  synopsis, bio), desk-copy requests, waitlist sign-ups, product reviews (shown
+  synopsis, bio), waitlist sign-ups, product reviews (shown
   publicly with your name), "notify me when in stock" requests, contact-form
   messages, and messages you send to our AI assistant.
 

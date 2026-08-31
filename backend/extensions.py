@@ -2,8 +2,8 @@
 Oakbridge Publishing — Extensions module.
 Bundles:
   - JWT auth (register/login/me/logout) with bcrypt + role-based access
-  - Admin router (books CRUD, orders, desk copies, dashboard stats)
-  - Public extras router (authors, desk-copy requests, reviews, my-orders)
+  - Admin router (books CRUD, orders, dashboard stats)
+  - Public extras router (authors, reviews, my-orders)
   - Seeders for admin user + authors
 """
 from __future__ import annotations
@@ -178,31 +178,12 @@ class BookAdminUpdate(BaseModel):
     variants: Optional[list] = None
 
 
-class DeskCopyCreate(BaseModel):
-    book_id: str
-    name: str
-    email: EmailStr
-    institution: str
-    role: str  # teacher | professor | librarian | admin
-    course: Optional[str] = ""
-    enrolment: Optional[int] = 0
-    message: Optional[str] = ""
-
-
-class DeskCopy(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-    id: str
-    book_id: str
-    book_title: str
-    name: str
-    email: str
-    institution: str
-    role: str
-    course: str = ""
-    enrolment: int = 0
-    message: str = ""
-    status: str = "pending"  # pending | approved | shipped | rejected
-    created_at: str
+# Desk copies -- free examination copies for educators -- were retired in
+# August 2026. The models, both routes, the dashboard tile, the book-page CTA
+# and the admin screen are all gone. The `desk_copies` COLLECTION is left in
+# place on purpose: deleting a customer's submitted enquiry to tidy up a
+# refactor is not ours to do, and the records cost nothing to keep. If the
+# programme ever comes back, the data is still there.
 
 
 class ReviewCreate(BaseModel):
@@ -442,7 +423,6 @@ async def seed_authors():
 async def ensure_indexes():
     await db.users.create_index("email", unique=True)
     await db.reviews.create_index("book_id")
-    await db.desk_copies.create_index("status")
 
 
 # ============== AUTH ROUTER ==============
@@ -911,28 +891,6 @@ async def author_books(author_id: str):
     return (await books_for_authors({author_id})).get(author_id, [])[:50]
 
 
-@extras_router.post("/desk-copies", response_model=DeskCopy)
-async def request_desk_copy(payload: DeskCopyCreate):
-    book = await db.books.find_one({"id": payload.book_id}, {"_id": 0})
-    if not book:
-        raise HTTPException(status_code=404, detail="Book not found")
-    doc = {
-        "id": str(uuid.uuid4()),
-        "book_id": payload.book_id,
-        "book_title": book["title"],
-        "name": payload.name.strip(),
-        "email": payload.email.lower(),
-        "institution": payload.institution.strip(),
-        "role": payload.role,
-        "course": (payload.course or "").strip(),
-        "enrolment": int(payload.enrolment or 0),
-        "message": (payload.message or "").strip(),
-        "status": "pending",
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }
-    await db.desk_copies.insert_one({**doc})
-    return DeskCopy(**doc)
-
 
 @extras_router.get("/books/{book_id}/reviews", response_model=List[Review])
 async def list_reviews(book_id: str):
@@ -1143,7 +1101,6 @@ async def admin_stats():
     books = await db.books.count_documents({})
     orders = await db.orders.count_documents({})
     customers = await db.users.count_documents({"role": "customer"})
-    desk_pending = await db.desk_copies.count_documents({"status": "pending"})
     recent = await db.orders.find({}, {"_id": 0}).sort([("created_at", -1)]).limit(5).to_list(5)
 
     # ===== Revenue is money RECEIVED =====
@@ -1215,7 +1172,6 @@ async def admin_stats():
         "books": books,
         "orders": orders,
         "customers": customers,
-        "desk_copies_pending": desk_pending,
         "revenue": revenue,              # paid only — see the aggregation above
         "paid_orders": paid_orders,
         "pending_orders": pending_orders,
@@ -1687,24 +1643,6 @@ async def admin_spam_purge(payload: SpamPurge):
     )
     res = await db[coll].delete_many({"id": {"$in": ids}})
     return {"deleted": res.deleted_count, "skipped": len(payload.ids) - res.deleted_count}
-
-
-@admin_router.get("/desk-copies")
-async def admin_list_desk_copies():
-    items = await db.desk_copies.find({}, {"_id": 0}).sort([("created_at", -1)]).to_list(500)
-    return items
-
-
-@admin_router.patch("/desk-copies/{req_id}")
-async def admin_update_desk_copy(req_id: str, payload: OrderStatusUpdate):
-    allowed = {"pending", "approved", "shipped", "rejected"}
-    if payload.status not in allowed:
-        raise HTTPException(status_code=400, detail=f"Invalid status. Use one of {sorted(allowed)}")
-    result = await db.desk_copies.update_one({"id": req_id}, {"$set": {"status": payload.status}})
-    if result.matched_count == 0:
-        raise HTTPException(status_code=404, detail="Desk copy request not found")
-    item = await db.desk_copies.find_one({"id": req_id}, {"_id": 0})
-    return item
 
 
 @admin_router.get("/users")

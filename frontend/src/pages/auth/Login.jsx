@@ -70,7 +70,7 @@ export default function Login() {
                         Welcome back.
                     </h1>
                     <p className="text-sm text-[#4B5563] mt-4">
-                        Access your orders, desk copy requests and reviews.
+                        Access your orders and reviews.
                     </p>
 
                     {expired && (

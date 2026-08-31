@@ -2729,7 +2729,7 @@ async def reset_test_data(
     """
     TEST_COLLECTIONS = [
         "orders", "carts", "newsletter", "stock_notifications", "search_logs",
-        "reviews", "contact_messages", "submissions", "desk_copies", "job_applications",
+        "reviews", "contact_messages", "submissions", "job_applications",
     ]
 
     counts = {}
@@ -3123,7 +3123,6 @@ async def _chat_system_prompt(orders_ctx: str = "", books_ctx: str = "") -> str:
         "- All sales are final — we do not offer cancellations or refunds except for damaged "
         "or defective items. Details on /shipping-policy.\n"
         "- A GST tax invoice (PDF) is emailed with every order confirmation.\n"
-        "- Educators can request a free desk copy from any book page.\n"
         "- Contact: info@oakbridge.in, phone +91 88003 37299, 934, Tower B3, Sohna–Gurgaon Rd, "
         "Sector 49, Spaze iTech Park, Gurugram, Haryana 122018.\n"
         f"- Category ids (for filter links): {cat_map}\n"
