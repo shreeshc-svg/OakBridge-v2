@@ -6,10 +6,20 @@ import { useAuth } from "../context/AuthContext";
 import CartSheet from "./CartSheet";
 import SearchBox from "./SearchBox";
 import { fetchCollection } from "../lib/api";
+import {
+    useGiftingFlyout,
+    GiftingTrigger,
+    GiftingPanel,
+    GiftingDrawerSection,
+} from "./GiftingFlyout";
 
 const DEFAULT_NAV = [
     { to: "/what-we-do", label: "What We Do" },
     { to: "/books", label: "Bookstore" },
+    // Carries the hamper flyout. In DEFAULT_NAV as well as the saved menu,
+    // because an install whose site_nav has no Gifting row would otherwise
+    // render the trigger, the panel and the drawer section nowhere at all.
+    { to: "/gifting", label: "Gifting", flyout: "hampers" },
     { to: "/events", label: "Events" },
     { to: "/academy", label: "Academy" },
     { to: "/digital-solutions", label: "Digital Solutions" },
@@ -25,6 +35,16 @@ export default function Header() {
     const [searchOpen, setSearchOpen] = useState(false);
     const [accountOpen, setAccountOpen] = useState(false);
     const [navItems, setNavItems] = useState(DEFAULT_NAV);
+    const fly = useGiftingFlyout();
+    /*
+     * Which nav link drops the hamper panel.
+     *
+     * The explicit `flyout` field is what Admin -> Navigation sets. The /gifting
+     * fallback is deliberate: adding the link is a one-row change an admin can
+     * make today, and it should work the moment they make it rather than
+     * needing a second, non-obvious setting turned on as well.
+     */
+    const hasGiftFlyout = (n) => n?.flyout === "hampers" || n?.to === "/gifting";
     const nav = useNavigate();
     const accountRef = useRef(null);
 
@@ -91,18 +111,22 @@ export default function Header() {
                         scrollbar was subtracted from the viewport — so the full nav
                         silently collapsed to the hamburger on common laptop screens. */}
                     <nav className="hidden lg:flex items-center gap-3 xl:gap-5">
-                        {navItems.map((n) => (
-                            <NavLink
-                                key={n.to}
-                                to={n.to}
-                                data-testid={`nav-${n.label.toLowerCase().replace(/\s+/g, "-")}`}
-                                className={({ isActive }) =>
-                                    `text-[13px] xl:text-sm font-medium whitespace-nowrap transition-colors ${isActive ? "text-[#002B5C]" : "text-[#4B5563] hover:text-[#002B5C]"}`
-                                }
-                            >
-                                {n.label}
-                            </NavLink>
-                        ))}
+                        {navItems.map((n) =>
+                            hasGiftFlyout(n) ? (
+                                <GiftingTrigger key={n.to} label={n.label} to={n.to} fly={fly} />
+                            ) : (
+                                <NavLink
+                                    key={n.to}
+                                    to={n.to}
+                                    data-testid={`nav-${n.label.toLowerCase().replace(/\s+/g, "-")}`}
+                                    className={({ isActive }) =>
+                                        `text-[13px] xl:text-sm font-medium whitespace-nowrap transition-colors ${isActive ? "text-[#002B5C]" : "text-[#4B5563] hover:text-[#002B5C]"}`
+                                    }
+                                >
+                                    {n.label}
+                                </NavLink>
+                            ),
+                        )}
                     </nav>
 
                     <div className="flex items-center gap-2 flex-shrink-0">
@@ -222,6 +246,18 @@ export default function Header() {
                     </div>
                 </div>
 
+                {/*
+                  * The panel is a child of <header>, NOT of <nav>.
+                  *
+                  * The header is `sticky`, which is a positioned value, so it is
+                  * the containing block for this absolute box and `left-0
+                  * right-0` resolves to the full page width. Putting it inside
+                  * the nav — next to the link it belongs to — would anchor it to
+                  * the 55px-wide word "Gifting" and every card would spill out.
+                  * That is the fault this placement exists to avoid.
+                  */}
+                <GiftingPanel fly={fly} />
+
                 {searchOpen && (
                     <div className="md:hidden border-t border-[#002B5C]/10 bg-white px-6 py-3" data-testid="mobile-search-row">
                         <SearchBox className="w-full" autoFocus onNavigate={() => setSearchOpen(false)} />
@@ -231,17 +267,27 @@ export default function Header() {
                 {mobileOpen && (
                     <div className="lg:hidden border-t border-[#002B5C]/10 bg-[#FFFFFF]">
                         <nav className="flex flex-col px-6 py-4 gap-3">
-                            {navItems.map((n) => (
-                                <NavLink
-                                    key={n.to}
-                                    to={n.to}
-                                    onClick={() => setMobileOpen(false)}
-                                    data-testid={`mobile-nav-${n.label.toLowerCase().replace(/\s+/g, "-")}`}
-                                    className="text-base font-medium text-[#002B5C] py-1.5"
-                                >
-                                    {n.label}
-                                </NavLink>
-                            ))}
+                            {navItems.map((n) =>
+                                hasGiftFlyout(n) ? (
+                                    <GiftingDrawerSection
+                                        key={n.to}
+                                        label={n.label}
+                                        to={n.to}
+                                        fly={fly}
+                                        onNavigate={() => setMobileOpen(false)}
+                                    />
+                                ) : (
+                                    <NavLink
+                                        key={n.to}
+                                        to={n.to}
+                                        onClick={() => setMobileOpen(false)}
+                                        data-testid={`mobile-nav-${n.label.toLowerCase().replace(/\s+/g, "-")}`}
+                                        className="text-base font-medium text-[#002B5C] py-1.5"
+                                    >
+                                        {n.label}
+                                    </NavLink>
+                                ),
+                            )}
                             {isAuthenticated ? (
                                 <>
                                     <NavLink

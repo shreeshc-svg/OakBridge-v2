@@ -100,7 +100,16 @@ function HeaderNavEditor() {
         setSaving(true);
         try {
             const payload = items
-                .map((it) => ({ label: (it.label || "").trim(), to: (it.to || "").trim(), hidden: !!it.hidden }))
+                .map((it) => ({
+                    label: (it.label || "").trim(),
+                    to: (it.to || "").trim(),
+                    hidden: !!it.hidden,
+                    // Carried through explicitly. Omitting it here does not just
+                    // fail to save a new choice -- it strips the field from every
+                    // row that already had one, the next time anybody touches
+                    // the menu for an unrelated reason.
+                    flyout: it.flyout || "",
+                }))
                 .filter((it) => it.label && it.to);
             await adminSaveCollection("site_nav", payload);
             toast.success("Header menu saved — live on the site.");
@@ -119,6 +128,11 @@ function HeaderNavEditor() {
                     <p className="text-[11px] text-[#4B5563] mt-1">
                         Rename, reorder, hide or add the links in the top menu. Use internal paths like{" "}
                         <span className="font-mono">/about</span>. Order here = order on the site.
+                        <br />
+                        <span className="text-[#4B5563]">
+                            Flyout adds a hover panel to a link. Gift hampers shows whatever is live in
+                            Admin → Gift Hampers, so there is no second list to keep in step.
+                        </span>
                     </p>
                 </div>
                 <div className="flex gap-2">
@@ -139,6 +153,16 @@ function HeaderNavEditor() {
                         </div>
                         <input value={it.label || ""} onChange={(e) => update(i, "label", e.target.value)} placeholder="Label" className="flex-1 min-w-0 border border-[#E5E7EB] bg-white px-2 py-1.5 text-sm outline-none focus:border-[#002B5C]" />
                         <input value={it.to || ""} onChange={(e) => update(i, "to", e.target.value)} placeholder="/path" className="flex-1 min-w-0 border border-[#E5E7EB] bg-white px-2 py-1.5 text-sm font-mono outline-none focus:border-[#002B5C]" />
+                        <select
+                            value={it.flyout || ""}
+                            onChange={(e) => update(i, "flyout", e.target.value)}
+                            title="What drops down from this link on hover"
+                            data-testid={`nav-flyout-${i}`}
+                            className="border border-[#E5E7EB] bg-white px-2 py-1.5 text-sm outline-none focus:border-[#002B5C]"
+                        >
+                            <option value="">No flyout</option>
+                            <option value="hampers">Gift hampers</option>
+                        </select>
                         <button type="button" onClick={() => update(i, "hidden", !it.hidden)} title={it.hidden ? "Hidden — click to show" : "Visible — click to hide"} className="border border-[#E5E7EB] p-1.5 hover:bg-[#F5F7FA]">
                             {it.hidden ? <EyeOff size={14} strokeWidth={1.5} className="text-[#4B5563]" /> : <Eye size={14} strokeWidth={1.5} className="text-[#002B5C]" />}
                         </button>
