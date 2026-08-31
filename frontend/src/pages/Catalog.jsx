@@ -6,6 +6,8 @@ import { Search, SlidersHorizontal, X, Clock, BookOpen } from "lucide-react";
 import BookCard from "../components/BookCard";
 import { fetchBooks, fetchBooksWithMeta, fetchCategories, fetchSiteContent, fetchSettings, mediaUrl, logSearch, fetchSuggestIndex } from "../lib/api";
 import EbookCta from "../components/EbookCta";
+import DefaultFilterNotice, { noticeDismissed } from "../components/DefaultFilterNotice";
+import { shouldShowFilterNotice, catalogueTotalFrom } from "../lib/filterNotice";
 import { loadIndex, suggestFrom, readRecent, pushRecent } from "../components/SearchBox";
 import { fuzzySearch, didYouMean as didYouMeanTerm } from "../lib/fuzzy";
 import { responsiveImage } from "../lib/img";
@@ -259,6 +261,15 @@ export default function Catalog() {
     // (fresh mount, no category/search already in the URL). Users can still
     // switch to "All Categories" afterwards without it snapping back.
     const didDefaultCat = useRef(false);
+    /*
+     * Records that the DEFAULT was applied by us, not chosen by the visitor.
+     * DefaultFilterNotice keys off this: someone who clicked Academic, or
+     * followed a filtered campaign link, must not be told about a decision they
+     * made themselves. The ref above only says "the effect has run once", which
+     * is a different question, so this needs its own flag — and it has to be
+     * state rather than a ref because the notice has to appear on that render.
+     */
+    const [autoFiltered, setAutoFiltered] = useState(false);
     useEffect(() => {
         if (didDefaultCat.current) return;
         didDefaultCat.current = true;
@@ -266,6 +277,7 @@ export default function Catalog() {
             const next = new URLSearchParams(sp);
             next.set("category", "professional");
             setSp(next, { replace: true });
+            setAutoFiltered(true);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
@@ -375,6 +387,14 @@ export default function Catalog() {
     }, [loadMore]);
 
     const activeCat = cats.find((c) => c.id === category);
+
+    /*
+     * Every title we sell, summed from the same counts the sidebar prints — so
+     * the notice can never disagree with the numbers next to it, and never
+     * needs editing when the catalogue grows. Zero until /categories answers,
+     * which the notice reads as "no figure available" rather than "none left".
+     */
+    const catalogueTotal = useMemo(() => catalogueTotalFrom(cats), [cats]);
     // The Professional view is the default "Bookstore" landing, so it keeps the
     // general all-imprint banner rather than a category-specific one. Other
     // imprints (Academic, Business & General) still get their own hero.
@@ -400,6 +420,12 @@ export default function Catalog() {
     const isDefaultView = !activeCat || category === "professional";
 
     const update = (key, value) => {
+        /*
+         * Any deliberate move off the landing state retires the notice for
+         * good. Without this, picking Academic and coming back to Professional
+         * would re-announce a filter the visitor has now chosen on purpose.
+         */
+        if (key === "category" || key === "search") setAutoFiltered(false);
         const next = new URLSearchParams(sp);
         if (!value) next.delete(key);
         else next.set(key, value);
@@ -817,6 +843,26 @@ export default function Catalog() {
                     <div className="lg:hidden mb-4" data-testid="catalog-search-mobile">
                         <CatalogSearch value={search} onSearch={(v) => update("search", v)} />
                     </div>
+
+                    {/*
+                      Sits directly above the count row, sharing its left and
+                      right edges — the strip is part of the shelf, not a banner
+                      laid over it. It renders only on a fresh arrival that we
+                      filtered ourselves; see DefaultFilterNotice.
+                    */}
+                    {shouldShowFilterNotice({
+                        autoFiltered,
+                        activeCat,
+                        search,
+                        dismissed: noticeDismissed(),
+                    }) && (
+                        <DefaultFilterNotice
+                            categoryName={activeCat.name}
+                            shownCount={activeCat.book_count}
+                            totalCount={catalogueTotal}
+                            onClearFilter={() => update("category", "")}
+                        />
+                    )}
 
                     {/*
                       Phone: the count sits on its own line and the two controls
