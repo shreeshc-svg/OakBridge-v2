@@ -88,15 +88,24 @@ function PriceListUpload() {
 
     return (
         <section className="border border-[#E5E7EB] bg-white p-5" data-testid="ebook-price-list">
-            <h2 className="font-serif text-xl text-[#002B5C]">Upload a price list</h2>
+            {/* Titled for links FIRST, and renamed from "Upload a price list"
+                for a reason: linking a title is what makes its eBook button
+                appear at all, and this is the only way to do it for more than a
+                handful. Filed under a price heading, the one tool that turns the
+                feature on for the whole catalogue read as optional pricing
+                admin, and titles went unlinked because nobody knew it was
+                here. */}
+            <h2 className="font-serif text-xl text-[#002B5C]">Link titles to the eReader, in bulk</h2>
             <p className="text-[11px] text-[#4B5563] mt-1 mb-4 max-w-2xl">
-                A .csv or .xlsx with an <code className="font-mono">isbn</code> column, plus{" "}
-                <code className="font-mono">ebook_price</code>,{" "}
-                <code className="font-mono">ebook_url</code>, or both. ISBNs match with or without
-                hyphens. Prices go in <strong>before GST</strong> — the rate above is added when
-                they are shown. A blank cell leaves that title's existing value alone; put{" "}
-                <code className="font-mono">-</code> in it to clear one. Existing titles are updated
-                and none are created.
+                <strong>This is what makes the eBook button appear on a title.</strong> A .csv or
+                .xlsx with an <code className="font-mono">isbn</code> column, plus{" "}
+                <code className="font-mono">ebook_url</code>,{" "}
+                <code className="font-mono">ebook_price</code>, or both — a title needs the URL to
+                show the button at all, and the price only adds the figure beside it. ISBNs match
+                with or without hyphens. Prices go in <strong>before GST</strong> — the rate above
+                is added when they are shown. A blank cell leaves that title's existing value
+                alone; put <code className="font-mono">-</code> in it to clear one. Existing titles
+                are updated and none are created.
             </p>
 
             <div className="flex flex-wrap items-center gap-3">
