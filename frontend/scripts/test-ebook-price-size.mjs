@@ -80,12 +80,27 @@ for (const [v, pad] of [["full", PAD["pt-2"]], ["compact", PAD["pt-1.5"]]]) {
           `${v}: min-h is ${declared[v]}px for a ${ebook[v].line}px line + ${UNDERLINE}px underline + ${pad}px padding = ${need}px`);
 }
 
+console.log("\n-- an out-of-stock card shows the eBook price ONCE --");
+/*
+ * The combination that shipped a duplicate: stock 0, plus an eBook that is both
+ * linked AND priced. printOutOffer returns "ebook" only when both are true, so
+ * this branch had never rendered on the live site -- every title was missing one
+ * or the other. The moment 89 titles gained a link and a price in a single
+ * upload, the first out-of-stock one among them printed Rs1,871 twice: in the
+ * PRINT/EBOOK block, and again in the footnote row inches below it.
+ */
+check(card.includes("{ebookOnPlp && !oos && ("),
+      "the footnote link is suppressed on an out-of-stock card — the block above already " +
+      "shows the eBook price and a Read eBook button");
+check(card.includes('!(ebookOnPlp && !oos) && <span aria-hidden="true">&nbsp;</span>'),
+      "and the blank filler agrees with it, so the row gets one or the other, never neither");
+check(card.includes('data-testid={`oos-prices-${book.id}`}'),
+      "the out-of-stock block that owns the eBook pitch is still there");
+
 console.log("\n-- and the reasons the row exists at all still hold --");
-check(card.includes('!ebookOnPlp && <span aria-hidden="true">&nbsp;</span>'),
-      "a card with no eBook and no delivery line still renders the row");
 check(/min-h-\[[\d.]+rem\]/.test(rowCls),
       "the floor is on the row itself, not on the link — the link is absent on most cards");
-check(card.includes("ebookOnPlp && ("),
+check(card.includes("ebookOnPlp"),
       "the link still appears only for titles that actually have an eBook");
 
 console.log(failed ? `\n${failed} failed` : "\nall passed");

@@ -530,7 +530,7 @@ export default function BookCard({ book, index = 0, compact = false, toEbook = f
                             {deliveryShort}
                         </span>
                     ) : (
-                        !ebookOnPlp && <span aria-hidden="true">&nbsp;</span>
+                        !(ebookOnPlp && !oos) && <span aria-hidden="true">&nbsp;</span>
                     )}
 
                     {/*
@@ -548,7 +548,24 @@ export default function BookCard({ book, index = 0, compact = false, toEbook = f
                      * turning the feature on reveals nothing until books are
                      * actually linked.
                      */}
-                    {ebookOnPlp && (
+                    {/*
+                     * NOT on an out-of-stock card. When the print run is out,
+                     * the block above is already the eBook pitch -- "PRINT
+                     * <struck> / EBOOK Rs1,871" with a Read eBook button -- and
+                     * this footnote repeats the same price a second time,
+                     * inches below it.
+                     *
+                     * This could not happen until the day 89 titles were linked
+                     * AND priced in one upload: printOutOffer only returns
+                     * "ebook" when both are true, so the branch had never once
+                     * rendered on the live site. The first out-of-stock title
+                     * among them showed its eBook price twice.
+                     *
+                     * The "soon" case is excluded for the same reason and a
+                     * worse one: that block says "eBook Coming soon" while this
+                     * link would offer to go and read it.
+                     */}
+                    {ebookOnPlp && !oos && (
                         <>
                             {/* Separator only when there is something on the
                                 left to separate from — with the delivery line
