@@ -484,20 +484,23 @@ export default function BookCard({ book, index = 0, compact = false, toEbook = f
                  *
                  * The floor is the link's MEASURED box plus this row's own top
                  * padding, and the measuring matters: the line box is only part
-                 * of it. text-xl is 20px over a 28px line, and the underline
-                 * adds pb-px and a 1px border on top of that, so the anchor is
-                 * 30px, not 28. Reserving 28+8 left exactly 2px of drift in a
-                 * row holding one card with an eBook and one without — which is
-                 * what a browser reported before this number was corrected.
+                 * of it. The underline adds pb-px and a 1px border BELOW the
+                 * line, so the anchor is two pixels taller than its
+                 * line-height. Reserving the line-height alone left exactly 2px
+                 * of drift in a row holding one card with an eBook and one
+                 * without — which is what a browser reported before this number
+                 * was corrected.
                  *
-                 *   full     30px link + 8px pt-2   = 38px = 2.375rem
-                 *   compact  26px link + 6px pt-1.5 = 32px = 2rem
+                 *   full     24px line + 2px underline + 8px pt-2   = 34px
+                 *   compact  20px line + 2px underline + 6px pt-1.5 = 28px
                  *
                  * Change the eBook link's size, its underline, or this padding,
-                 * and these have to move with them.
+                 * and these have to move with them. test-ebook-price-size.mjs
+                 * recomputes both from the link's own classes and fails if they
+                 * drift apart.
                  */}
                 <div
-                    className={`flex items-center gap-2 ${compact ? "pt-1.5 text-[10px] min-h-[2rem]" : "pt-2 text-[11px] min-h-[2.375rem]"}`}
+                    className={`flex items-center gap-2 ${compact ? "pt-1.5 text-[10px] min-h-[1.75rem]" : "pt-2 text-[11px] min-h-[2.125rem]"}`}
                 >
                     {preorder.active ? (
                         /*
@@ -569,25 +572,32 @@ export default function BookCard({ book, index = 0, compact = false, toEbook = f
                                 className="flex items-center gap-1.5 text-[#0A7D55] hover:text-[#002B5C] transition-colors"
                             >
                                 {/*
-                                 * Set in the print price's face and size, not
-                                 * in the row's 11px. ₹555 for the eBook is a
-                                 * price a customer is choosing BETWEEN, against
-                                 * ₹636 for the paperback — and a real choice
-                                 * cannot be offered in a footnote half the size
-                                 * of the alternative. The icon scales with it so
-                                 * the mark still reads as one unit rather than a
-                                 * small glyph beside a large number.
+                                 * A shade under the print price, not level with
+                                 * it: 17px against 20px, 13px against 16px on
+                                 * compact cards.
                                  *
-                                 * The row above reserves this height on every
-                                 * card, including the ones with no eBook.
+                                 * ₹555 for the eBook is a price a customer is
+                                 * choosing BETWEEN, against ₹636 for the
+                                 * paperback, so it cannot sit in the row's 11px
+                                 * and read as a footnote. But set level with the
+                                 * print price it read as the headline — two
+                                 * numbers of equal weight on one card, with the
+                                 * cheaper one underlined in green and pulling
+                                 * the eye off the thing the Add button buys.
+                                 * Three pixels down is enough to rank them
+                                 * without demoting either.
+                                 *
+                                 * The line-height is explicit because an
+                                 * arbitrary font size inherits the row's, and
+                                 * the min-height above is computed from it.
                                  */}
                                 <BookOpen
-                                    size={compact ? 14 : 17}
+                                    size={compact ? 12 : 15}
                                     strokeWidth={1.5}
                                     className="flex-shrink-0"
                                 />
                                 <span
-                                    className={`font-serif border-b border-[#0A7D55]/40 pb-px ${compact ? "text-base" : "text-xl"}`}
+                                    className={`font-serif border-b border-[#0A7D55]/40 pb-px ${compact ? "text-[13px] leading-[20px]" : "text-[17px] leading-[24px]"}`}
                                 >
                                     {ebookLabel}
                                 </span>
