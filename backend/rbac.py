@@ -48,6 +48,7 @@ SECTIONS: tuple[str, ...] = (
     "submissions",
     "waitlists",
     "spam",
+    "audit",
     "users",
     "legal",
     "settings",
@@ -73,6 +74,7 @@ SECTION_LABELS: dict[str, str] = {
     "submissions": "Submissions",
     "waitlists": "Waitlists",
     "spam": "Spam",
+    "audit": "Audit Logs",
     "users": "Users",
     "legal": "Legal",
     "settings": "Settings",
@@ -108,6 +110,7 @@ SECTION_PATHS: dict[str, set[str]] = {
     # fails closed for everyone but a superadmin, and the section could never be
     # granted to anybody.
     "spam": {"spam"},
+    "audit": {"audit"},
     "careers": {"job-applications", "collections"},
     "media": {"media", "uploads"},
     "media-gallery": {"collections", "media", "uploads"},
@@ -140,6 +143,10 @@ SUPERADMIN_ONLY_PATHS = frozenset(
         # Mails real people. A staff account with Users access should be able to
         # read the list without being able to broadcast to it.
         "send-purchase-nudge",
+        # Carries customer email addresses and every sign-in. Enforced by
+        # require_superadmin on the endpoint too -- this entry is what keeps the
+        # link out of a staff account's sidebar in the first place.
+        "audit",
     }
 )
 

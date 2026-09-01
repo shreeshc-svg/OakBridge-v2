@@ -21,6 +21,7 @@ from typing import List, Optional
 import bcrypt
 import jwt
 import rbac
+from audit import audit_log, LOGIN, LOGIN_FAILED, LOGOUT, REGISTER, USER_DELETED, SPAM_PURGED
 from csv_export import csv_response, flatten_items
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.security.utils import get_authorization_scheme_param
@@ -485,6 +486,10 @@ async def register(payload: UserCreate, request: Request):
         "otp_attempts": 0,
     }
     await db.users.insert_one({**doc})
+    # Logged right after the insert, before the OTP and welcome mail: those are
+    # best-effort and swallow their own failures, so hanging the audit line off
+    # them would lose the record of accounts that were genuinely created.
+    await audit_log(db, REGISTER, email=email, role="customer", meta={"name": doc["name"]})
     try:
         from sms import send_otp_sms, sms_configured
         if sms_configured():
@@ -511,8 +516,14 @@ async def login(payload: UserLogin):
     email = payload.email.lower()
     user = await db.users.find_one({"email": email})
     if not user or not verify_password(payload.password, user["password_hash"]):
+        # Deliberately does NOT record whether the address exists. A failure row
+        # that distinguished "no such user" from "wrong password" would turn the
+        # audit trail into an account-enumeration oracle for anyone reading it.
+        await audit_log(db, LOGIN_FAILED, email=email, meta={"reason": "invalid credentials"})
         raise HTTPException(status_code=401, detail="Invalid email or password")
-    token = create_access_token(user["id"], user["email"], user.get("role", "customer"))
+    role = user.get("role", "customer")
+    await audit_log(db, LOGIN, email=user["email"], role=role, meta={"role": role})
+    token = create_access_token(user["id"], user["email"], role)
     return AuthResponse(
         user=UserPublic(
             id=user["id"],
@@ -533,8 +544,15 @@ async def me(user: dict = Depends(get_current_user)):
 
 
 @auth_router.post("/logout")
-async def logout():
-    # Client-side token removal is sufficient for bearer tokens
+async def logout(user: Optional[dict] = Depends(get_current_user_optional)):
+    """Client-side token removal is what actually ends a bearer session.
+
+    The dependency is OPTIONAL on purpose: a client clearing an already-expired
+    token still gets a 200 and still logs out cleanly. Requiring a valid token
+    would fail exactly the people whose session has gone stale.
+    """
+    if user:
+        await audit_log(db, LOGOUT, email=user.get("email", ""), role=user.get("role", ""))
     return {"ok": True}
 
 
@@ -1688,7 +1706,7 @@ async def admin_spam_review(days: int = 30, limit: int = 200):
 
 
 @admin_router.post("/spam/purge")
-async def admin_spam_purge(payload: SpamPurge):
+async def admin_spam_purge(payload: SpamPurge, actor: dict = Depends(get_current_user)):
     """Delete the rows an admin explicitly selected. Nothing else.
 
     Takes ids, never a query. Every deletion is recorded first, so there is at
@@ -1719,6 +1737,11 @@ async def admin_spam_purge(payload: SpamPurge):
         }
     )
     res = await db[coll].delete_many({"id": {"$in": ids}})
+    await audit_log(
+        db, SPAM_PURGED,
+        email=actor.get("email", ""), role=actor.get("role", ""),
+        meta={"collection": coll, "deleted": res.deleted_count},
+    )
     return {"deleted": res.deleted_count, "skipped": len(payload.ids) - res.deleted_count}
 
 
@@ -1835,6 +1858,13 @@ async def admin_delete_user(user_id: str, actor: dict = Depends(require_superadm
         }
     )
     await db.users.delete_one({"id": user_id})
+    await audit_log(
+        db, USER_DELETED,
+        email=actor.get("email", ""), role=actor.get("role", ""),
+        # The deleted account's address is the point of the record; the row
+        # itself is already preserved in deleted_users.
+        meta={"deleted_email": doc.get("email"), "orders_kept": orders},
+    )
     return {"deleted": True, "email": doc.get("email"), "orders_kept": orders}
 
 

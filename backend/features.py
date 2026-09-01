@@ -21,6 +21,9 @@ from datetime import datetime, timezone, timedelta
 from typing import Any, List, Optional
 
 import requests
+from audit import (
+    AUDIT_EVENTS, SUBMISSION_DELETED, audit_log, payment_event_to_row, period_start,
+)
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Header, Request, UploadFile
 from fastapi.responses import Response, StreamingResponse
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -33,7 +36,8 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from antispam import normalise_email
 from hampers import BANNER_DEFAULTS
 from extensions import (AUTHOR_ALIASES, author_match_key, db, get_current_user,
-                        get_current_user_optional, require_admin)
+                        get_current_user_optional, require_admin,
+                        require_superadmin)
 
 log = logging.getLogger(__name__)
 
@@ -780,6 +784,102 @@ _ISBN_RE = re.compile(r"^(?:97[89])?\d{9}[\dxX]$")
 def _is_isbn(q: str) -> bool:
     digits = re.sub(r"[^0-9Xx]", "", q or "")
     return bool(_ISBN_RE.match(digits)) and len(digits) in (10, 13)
+
+
+@admin_router.get("/audit")
+async def admin_audit(
+    period: str = "all",
+    page: int = 1,
+    per_page: int = 25,
+    action: str = "",
+    actor: dict = Depends(require_superadmin),
+):
+    """System audit and activity log. Superadmin only.
+
+    SUPERADMIN, NOT ADMIN, and enforced twice. The dependency here is the real
+    gate; `audit` is also listed in rbac's SUPERADMIN_ONLY_PATHS so the sidebar
+    never offers the link to a staff account. The rows carry customer email
+    addresses -- an editor who can write a book description has no business
+    reading who signed in this morning.
+
+    TWO COLLECTIONS, MERGED AT READ TIME. Payments have been recorded in
+    `payment_events` since long before this screen existed, with their own field
+    names and real history behind them. Migrating that into a common shape would
+    mean rewriting the only record of what was actually collected, to no benefit
+    -- so both are read, normalised, and interleaved by timestamp. It is also
+    the reason this screen has something to show on the day it ships rather than
+    being empty until somebody logs in.
+
+    Sorted and paginated in Python rather than Mongo because the merge happens
+    after the two queries. Each side is capped so a pathological page number
+    cannot ask the database for everything.
+    """
+    since = period_start(period)
+    q: dict = {}
+    if since:
+        q["at"] = {"$gte": since}
+    if action:
+        q["action"] = action.upper()
+
+    # Capped well above any page a person will actually reach. Without a cap the
+    # merge would pull the whole history into memory once the log is a year old.
+    CAP = 2000
+    rows = await db[AUDIT_EVENTS].find(q, {"_id": 0}).sort("at", -1).limit(CAP).to_list(CAP)
+
+    pay_q = {"at": {"$gte": since}} if since else {}
+    pay = await db["payment_events"].find(pay_q, {"_id": 0}).sort("at", -1).limit(CAP).to_list(CAP)
+    pay_rows = [payment_event_to_row(d) for d in pay]
+    if action:
+        pay_rows = [r for r in pay_rows if r["action"] == action.upper()]
+
+    merged = sorted(rows + pay_rows, key=lambda r: r.get("at") or "", reverse=True)
+
+    page = max(1, int(page or 1))
+    per_page = min(100, max(1, int(per_page or 25)))
+    start = (page - 1) * per_page
+    window = merged[start:start + per_page]
+
+    return {
+        "items": window,
+        "total": len(merged),
+        "page": page,
+        "per_page": per_page,
+        "pages": max(1, (len(merged) + per_page - 1) // per_page),
+        "period": period,
+        # True when the cap bit, so the UI can say the count is a floor rather
+        # than quietly presenting a truncated total as the whole history.
+        "capped": len(rows) >= CAP or len(pay) >= CAP,
+        "actions": sorted({r.get("action", "") for r in merged if r.get("action")}),
+    }
+
+
+@admin_router.delete("/audit")
+async def admin_audit_purge(
+    before: str = "",
+    actor: dict = Depends(require_superadmin),
+):
+    """Delete audit rows older than an ISO date. Superadmin only.
+
+    The retention answer was 'keep everything', so nothing expires on its own --
+    but a log with no way to prune it is a decision you can never revisit, and
+    it holds personal data under DPDP. `before` is required: a purge with no
+    boundary would be a way to erase this morning by accident.
+
+    Payment events are NOT touched. They are the record of money and are not
+    this screen's to delete.
+    """
+    if not before:
+        raise HTTPException(
+            status_code=400,
+            detail="Pass ?before=YYYY-MM-DD. Refusing to purge without a cut-off date.",
+        )
+    res = await db[AUDIT_EVENTS].delete_many({"at": {"$lt": before}})
+    await audit_log(
+        db, "AUDIT_PURGED",
+        email=actor.get("email", ""), role=actor.get("role", ""),
+        meta={"before": before, "deleted": res.deleted_count},
+    )
+    return {"deleted": res.deleted_count, "before": before}
 
 
 @admin_router.get("/search-logs")
@@ -1966,7 +2066,7 @@ async def admin_export_submissions():
 
 
 @admin_router.delete("/submissions/{sub_id}")
-async def admin_delete_submission(sub_id: str):
+async def admin_delete_submission(sub_id: str, actor: dict = Depends(get_current_user)):
     """Remove a manuscript submission.
 
     Copied into deleted_submissions first. A proposal is somebody's work and
@@ -1981,6 +2081,11 @@ async def admin_delete_submission(sub_id: str):
         {"at": datetime.now(timezone.utc).isoformat(), "row": doc}
     )
     await db.submissions.delete_one({"id": sub_id})
+    await audit_log(
+        db, SUBMISSION_DELETED,
+        email=actor.get("email", ""), role=actor.get("role", ""),
+        meta={"submission_from": doc.get("email"), "title": doc.get("title") or doc.get("name")},
+    )
     return {"deleted": True, "email": doc.get("email")}
 
 

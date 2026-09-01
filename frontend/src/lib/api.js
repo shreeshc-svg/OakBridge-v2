@@ -197,6 +197,12 @@ export const adminSaveLegal = (slug, content) =>
 // `range` is {from, to} ISO instants from lib/dateRange, or null for all time.
 // Sent as query params rather than a body because it is a GET, and omitted
 // entirely when null so the request is byte-identical to the old one.
+// The audit log. `period` is all|today|week|month; the server merges the
+// audit collection with the payment history and paginates the result.
+export const adminAudit = ({ period = "all", page = 1, action = "" } = {}) =>
+    api.get("/admin/audit", { params: { period, page, ...(action ? { action } : {}) } })
+       .then((r) => r.data);
+
 export const adminStats = (range) =>
     api
         .get("/admin/stats", { params: range ? { from: range.from, to: range.to } : {} })

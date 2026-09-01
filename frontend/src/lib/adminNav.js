@@ -1,5 +1,6 @@
 import {
     LayoutDashboard,
+    ScrollText,
     BookOpen,
     Gift,
     ShoppingBag,
@@ -50,6 +51,7 @@ export const ADMIN_NAV = [
     { to: "/admin/waitlists", label: "Waitlists", icon: Inbox },
     { to: "/admin/users", label: "Users", icon: Users },
     { to: "/admin/spam", label: "Spam", icon: ShieldAlert },
+    { to: "/admin/audit", label: "Audit Logs", icon: ScrollText },
     { to: "/admin/legal", label: "Legal", icon: Scale },
     { to: "/admin/settings", label: "Settings", icon: Settings },
 ];

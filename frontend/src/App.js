@@ -34,6 +34,7 @@ import AdminCoupons from "@/pages/admin/AdminCoupons";
 import AdminInventory from "@/pages/admin/AdminInventory";
 import AdminSubmissions from "@/pages/admin/AdminSubmissions";
 import AdminSpam from "@/pages/admin/AdminSpam";
+import AdminAudit from "@/pages/admin/AdminAudit";
 import AdminMedia from "@/pages/admin/AdminMedia";
 import AdminPages from "@/pages/admin/AdminPages";
 import AdminNavigation from "@/pages/admin/AdminNavigation";
@@ -224,6 +225,7 @@ function App() {
                                 <Route path="inventory" element={<AdminInventory />} />
                                 <Route path="submissions" element={<AdminSubmissions />} />
                                 <Route path="spam" element={<AdminSpam />} />
+                                <Route path="audit" element={<AdminAudit />} />
                                 <Route path="pages" element={<AdminPages />} />
                                 <Route path="navigation" element={<AdminNavigation />} />
                                 <Route path="media" element={<AdminMedia />} />

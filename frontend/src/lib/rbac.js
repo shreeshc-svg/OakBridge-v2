@@ -27,6 +27,7 @@ export const SECTIONS = [
     "submissions",
     "waitlists",
     "spam",
+    "audit",
     "users",
     "legal",
     "settings",
@@ -52,6 +53,7 @@ export const SECTION_LABELS = {
     submissions: "Submissions",
     waitlists: "Waitlists",
     spam: "Spam",
+    audit: "Audit Logs",
     users: "Users",
     legal: "Legal",
     settings: "Settings",
@@ -66,7 +68,7 @@ export const SECTION_GROUPS = [
     },
     { label: "Fulfilment", sections: ["orders", "coupons"] },
     { label: "Enquiries", sections: ["messages", "submissions", "waitlists", "spam"] },
-    { label: "Governance", sections: ["users", "legal", "settings"] },
+    { label: "Governance", sections: ["users", "audit", "legal", "settings"] },
 ];
 
 /**
