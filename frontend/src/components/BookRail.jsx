@@ -82,7 +82,28 @@ export default function BookRail({ books = [], compact = true, label = "Books" }
                 /* Cards are reachable by keyboard through their own links, and
                    the browser scrolls a focused card into view, so the rail
                    needs no tab stop of its own. */
-                className="flex gap-4 md:gap-5 overflow-x-auto snap-x scroll-smooth pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                /*
+                 * pt-6/-mt-6 and px-2/-mx-2 ARE FOR THE STAR TITLE FRAME, not
+                 * for spacing. Every pair cancels out, so nothing moves.
+                 *
+                 * overflow-x-auto clips the OTHER axis too — CSS promotes
+                 * overflow-y to auto the moment overflow-x is anything but
+                 * visible, and there is no way to split them. A starred tile
+                 * hangs its gold frame 8px outside its box on all four sides and
+                 * its ribbon 21px above the top edge, none of which is layout,
+                 * all of which lands outside the padding box this rail clips at.
+                 * So the ribbon was sliced off along the top and a starred book
+                 * at either end lost the side of its frame.
+                 *
+                 * Padding moves the clip edge outward; the matching negative
+                 * margin pulls the box back so the cards, the section's spacing
+                 * and the absolutely-positioned arrows all stay exactly where
+                 * they were. The bestseller marquee (pt-4) and the related-titles
+                 * rail (pt-6) fix the same trap with bare padding — they can
+                 * afford the extra height because neither has an arrow pinned to
+                 * a percentage of this box.
+                 */
+                className="flex gap-4 md:gap-5 overflow-x-auto snap-x scroll-smooth pt-6 -mt-6 px-2 -mx-2 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             >
                 {books.map((b, i) => (
                     <div

@@ -1068,8 +1068,11 @@ export default function BookDetail() {
                         21px above a full-size tile. overflow-x-auto forces the
                         other axis to auto too, so without it a starred book's
                         ribbon is clipped here — same trap as the bestseller
-                        marquee. */}
-                    <div ref={relatedRef} className="flex gap-6 md:gap-8 overflow-x-auto scroll-smooth snap-x pt-6 pb-2 -mx-1 px-1">
+                        marquee.
+                        px-2, not px-1: the gold frame bleeds 8px sideways, so
+                        4px left a starred book at either end of the rail with
+                        half its frame edge shaved off. */}
+                    <div ref={relatedRef} className="flex gap-6 md:gap-8 overflow-x-auto scroll-smooth snap-x pt-6 pb-2 -mx-2 px-2">
                         {related.map((b, i) => (
                             <div key={b.id} className="flex-none w-[46%] sm:w-[30%] md:w-[23%] lg:w-[18.5%] snap-start">
                                 <BookCard book={b} index={i} />
