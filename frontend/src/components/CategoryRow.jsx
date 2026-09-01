@@ -30,6 +30,20 @@ import React, { useEffect, useRef } from "react";
  * underneath them: focus falls to document.body and they tab from the top of
  * the page again. It also throws away the hover transition mid-animation.
  */
+/*
+ * Bordered buttons, in the shape the rest of the shop already uses.
+ *
+ * These were an underlined tab strip, which is a navigation idiom — it says
+ * "you are on this page" rather than "press this". They are filters, and the
+ * two controls sitting a few pixels below them, Filters and Sort, are both
+ * bordered boxes at h-11/sm:h-9. Matching those makes the row read as part of
+ * the same set of controls instead of a separate mechanism.
+ *
+ * Palette is the site's, not a new one: #E5E7EB hairline on white, #4B5563
+ * label, #002B5C for the selected state and every hover. Square corners,
+ * because nothing on this site is rounded — not the cards, not the badges, not
+ * the buttons — and a radius here would read as a stray widget.
+ */
 function Tab({ id, label, count, isOn, onSelect, innerRef }) {
     return (
         <button
@@ -38,15 +52,24 @@ function Tab({ id, label, count, isOn, onSelect, innerRef }) {
             onClick={() => onSelect(id)}
             aria-current={isOn ? "true" : undefined}
             data-testid={`category-tab-${id || "all"}`}
-            className={`flex-shrink-0 flex items-center gap-2 whitespace-nowrap border-b-2 pb-3 pt-1 min-h-[44px] sm:min-h-0 text-sm transition-colors ${
+            /* h-11 on touch, h-9 from sm — the same pair the Filters button and
+               the Sort select use, so the three line up at every width. */
+            className={`flex-shrink-0 inline-flex items-center gap-2 whitespace-nowrap border px-3.5 h-11 sm:h-9 text-sm transition-colors ${
                 isOn
-                    ? "border-[#002B5C] text-[#002B5C] font-semibold"
-                    : "border-transparent text-[#4B5563] hover:text-[#002B5C]"
+                    ? "border-[#002B5C] bg-[#002B5C] text-white font-semibold"
+                    : "border-[#E5E7EB] bg-white text-[#4B5563] hover:border-[#002B5C] hover:text-[#002B5C]"
             }`}
         >
             {label}
             {count != null && (
-                <span className="font-mono text-[10px] text-[#9CA3AF]">{count}</span>
+                /* Dimmed against whichever background it lands on. At full
+                   strength on navy the count competes with the label; at
+                   #9CA3AF on navy it is barely legible. */
+                <span
+                    className={`font-mono text-[10px] ${isOn ? "text-white/70" : "text-[#9CA3AF]"}`}
+                >
+                    {count}
+                </span>
             )}
         </button>
     );
@@ -75,14 +98,23 @@ export default function CategoryRow({ cats, active, onSelect, total }) {
         rail.scrollTo({ left: Math.max(0, left), behavior: "smooth" });
     }, [active, shown.length]);
 
+    // The hairline under this row is gone with the underlined tabs it used to be
+    // the track for. A rule directly beneath a row of bordered buttons is two
+    // separations doing one job, and the count row below already carries its own.
     return (
-        <div className="relative border-b border-[#E5E7EB] mb-6" data-testid="category-row">
+        <div className="relative mb-6 md:mb-8" data-testid="category-row">
             <div
                 ref={railRef}
                 // `.scrollbar-none` is defined in index.css for WebKit; these two
                 // are the Firefox and IE equivalents, which have no class form.
                 style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-                className="flex gap-6 sm:gap-7 overflow-x-auto scrollbar-none"
+                /* p-1/-m-1 cancel out; they exist so the clip box is 4px larger
+                   than the buttons on every side. overflow-x-auto clips BOTH
+                   axes — CSS promotes overflow-y the moment overflow-x is not
+                   visible — so without it a focus ring on the first or last
+                   button is shaved off against the edge. Same trap that ate the
+                   Star Title ribbon on the homepage rail. */
+                className="flex gap-2 overflow-x-auto scrollbar-none p-1 -m-1"
             >
                 {/*
                  * "All" lights up whenever nothing else can. A visitor sitting on
@@ -110,9 +142,11 @@ export default function CategoryRow({ cats, active, onSelect, total }) {
                     />
                 ))}
             </div>
-            {/* Fades the last tab out rather than clipping it, so it is obvious
-                the row continues. Hidden from lg up, where everything fits. */}
-            <div className="pointer-events-none absolute right-0 top-0 bottom-px w-10 bg-gradient-to-r from-transparent to-white lg:hidden" />
+            {/* Fades the last button out rather than cutting it off square, so
+                it is obvious the row continues. bottom-0 now, not bottom-px:
+                there is no hairline left to sit above. Hidden from lg up, where
+                everything fits. */}
+            <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-10 bg-gradient-to-r from-transparent to-white lg:hidden" />
         </div>
     );
 }

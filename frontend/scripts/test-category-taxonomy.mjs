@@ -123,7 +123,19 @@ check(row.includes("}, [active, shown.length]);"),
 const rowCode = row.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
 check(!/coffee|bespoke/i.test(rowCode),
       "the rule is the count, not a hardcoded list of the two that happen to be empty today");
-check(row.includes("min-h-[44px]"), "44px tap targets on touch");
+check(row.includes("h-11 sm:h-9"),
+      "44px tap target on touch, 36px once there is a mouse — the same pair the Filters "
+      + "button and the Sort select use, so the three line up");
+check(/border px-3\.5 h-11/.test(row) && row.includes('border-[#E5E7EB] bg-white'),
+      "the tabs are bordered buttons, not an underlined tab strip: they are filters, and "
+      + "they sit beside two other bordered controls");
+check(row.includes('bg-[#002B5C] text-white'),
+      "the selected one fills navy, the site's own primary");
+check(!/rounded/.test(rowCode),
+      "square corners — checked against the code, not the comment that explains why");
+check(row.includes("p-1 -m-1"),
+      "and the rail's clip box is 4px larger than the buttons, so a focus ring on the "
+      + "first or last one is not shaved off — the trap that ate the Star Title ribbon");
 check(row.includes("overflow-x-auto"), "the row scrolls sideways rather than wrapping to two ragged lines");
 check(row.includes("scrollTo({ left:"),
       "and an active tab off-screen is scrolled into view, so it never looks missing");
