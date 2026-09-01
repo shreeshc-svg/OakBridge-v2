@@ -469,8 +469,35 @@ export default function BookCard({ book, index = 0, compact = false, toEbook = f
                  * neighbours'. Hence the non-breaking space: one blank line,
                  * no reserved width, and nothing for a screen reader to read.
                  */}
+                {/*
+                 * THE MIN-HEIGHT IS LOAD-BEARING, and it is what lets the eBook
+                 * price below be set in the print price's size.
+                 *
+                 * This row's height has to be the same on every card in a row,
+                 * for the reason spelled out above: it is the bottom of the
+                 * mt-auto cluster, so a taller row on some cards lifts their
+                 * price out of step with their neighbours'. The eBook link is
+                 * now 20px where the delivery estimate is 11px, and only some
+                 * titles carry an eBook — so without a floor, the ~110 titles
+                 * that have one would each sit a few pixels off the ~84 that do
+                 * not, and the whole grid would look subtly crooked.
+                 *
+                 * The floor is the link's MEASURED box plus this row's own top
+                 * padding, and the measuring matters: the line box is only part
+                 * of it. text-xl is 20px over a 28px line, and the underline
+                 * adds pb-px and a 1px border on top of that, so the anchor is
+                 * 30px, not 28. Reserving 28+8 left exactly 2px of drift in a
+                 * row holding one card with an eBook and one without — which is
+                 * what a browser reported before this number was corrected.
+                 *
+                 *   full     30px link + 8px pt-2   = 38px = 2.375rem
+                 *   compact  26px link + 6px pt-1.5 = 32px = 2rem
+                 *
+                 * Change the eBook link's size, its underline, or this padding,
+                 * and these have to move with them.
+                 */}
                 <div
-                    className={`flex items-center gap-2 ${compact ? "pt-1.5 text-[10px]" : "pt-2 text-[11px]"}`}
+                    className={`flex items-center gap-2 ${compact ? "pt-1.5 text-[10px] min-h-[2rem]" : "pt-2 text-[11px] min-h-[2.375rem]"}`}
                 >
                     {preorder.active ? (
                         /*
@@ -541,12 +568,27 @@ export default function BookCard({ book, index = 0, compact = false, toEbook = f
                                 }
                                 className="flex items-center gap-1.5 text-[#0A7D55] hover:text-[#002B5C] transition-colors"
                             >
+                                {/*
+                                 * Set in the print price's face and size, not
+                                 * in the row's 11px. ₹555 for the eBook is a
+                                 * price a customer is choosing BETWEEN, against
+                                 * ₹636 for the paperback — and a real choice
+                                 * cannot be offered in a footnote half the size
+                                 * of the alternative. The icon scales with it so
+                                 * the mark still reads as one unit rather than a
+                                 * small glyph beside a large number.
+                                 *
+                                 * The row above reserves this height on every
+                                 * card, including the ones with no eBook.
+                                 */}
                                 <BookOpen
-                                    size={compact ? 11 : 12}
+                                    size={compact ? 14 : 17}
                                     strokeWidth={1.5}
                                     className="flex-shrink-0"
                                 />
-                                <span className="border-b border-[#0A7D55]/40 pb-px">
+                                <span
+                                    className={`font-serif border-b border-[#0A7D55]/40 pb-px ${compact ? "text-base" : "text-xl"}`}
+                                >
                                     {ebookLabel}
                                 </span>
                             </a>
