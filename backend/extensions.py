@@ -2058,6 +2058,61 @@ async def admin_export_orders():
     )
 
 
+# The bulk-import template's columns, in its order. Exporting in exactly this
+# shape means a row can be copied out, edited in Excel and pasted back into an
+# import file without renaming anything -- which is the only reason to prefer a
+# CSV over a database dump.
+_BOOK_EXPORT_IMPORTABLE = [
+    "title", "subtitle", "author", "author_bio", "author_photo", "isbn",
+    "category", "subject", "description", "price", "original_price",
+    "cover_image", "pages", "stock", "bestseller", "new_release", "star_title",
+    "ebook_url", "ebook_price", "coming_soon", "launch_at", "grade", "language",
+    "publisher", "publication_year", "rating",
+]
+
+# Everything else worth having in a backup. The importer builds its document
+# from an explicit list of keys, so these extra columns are ignored on the way
+# back in rather than causing an error.
+_BOOK_EXPORT_REFERENCE = [
+    "id", "edition", "binding", "size", "sku", "enabled", "has_ebook", "order",
+]
+
+# CSV has no null. A blank cell and the string "None" are worlds apart when the
+# file goes back through the importer, and `str(None)` is how a backup quietly
+# becomes 194 books whose subtitle is the word None.
+def _book_cell(b: dict, key: str):
+    v = b.get(key)
+    if v is None:
+        return ""
+    if isinstance(v, bool):
+        # _csv_bool() accepts true/yes/1; TRUE is what the template documents.
+        return "TRUE" if v else "FALSE"
+    return v
+
+
+@admin_router.get("/books/export.csv")
+async def admin_export_books():
+    """Every book with its data, in the bulk-import column order.
+
+    HAMPERS ARE EXCLUDED, matching what the Books tab actually lists. They live
+    in db.books so they can be sold through the same cart, but they are managed
+    on their own screen and a hamper row in a book export is a row somebody has
+    to notice and delete.
+
+    Sorted by title rather than by insertion order, because the useful thing to
+    do with this file is compare it against last month's.
+    """
+    rows = await db.books.find(
+        {"product_type": {"$ne": "hamper"}}, {"_id": 0}
+    ).sort([("title", 1)]).to_list(20000)
+    cols = _BOOK_EXPORT_IMPORTABLE + _BOOK_EXPORT_REFERENCE
+    return csv_response(
+        "oakbridge-books",
+        cols,
+        [[_book_cell(b, c) for c in cols] for b in rows],
+    )
+
+
 @admin_router.get("/inventory/export.csv")
 async def admin_export_inventory():
     rows = await db.books.find({}, {"_id": 0}).sort([("title", 1)]).to_list(20000)

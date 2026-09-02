@@ -27,6 +27,7 @@ import {
 import { toast } from "sonner";
 import { useAuth } from "../../context/AuthContext";
 import { canDelete } from "../../lib/rbac";
+import ExportButton from "../../components/admin/ExportButton";
 
 const BLANK = {
     title: "",
@@ -1362,6 +1363,15 @@ export default function AdminBooks() {
                         <option value="price_desc">Price: high → low</option>
                         <option value="stock">Stock: low → high</option>
                     </select>
+                    {/* Sits beside Import, because they are two halves of one
+                        job: the export comes out in the import template's column
+                        order, so a row can be edited in Excel and pasted back
+                        into an import file without renaming a thing. */}
+                    <ExportButton
+                        path="/admin/books/export.csv"
+                        label="Export CSV"
+                        count={books.length}
+                    />
                     <button
                         onClick={() => setCsvOpen(true)}
                         data-testid="admin-import-csv-button"
