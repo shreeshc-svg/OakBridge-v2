@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Download, Users } from "lucide-react";
+import { Download, Users, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { adminListWaitlists, API, formatApiError } from "../../lib/api";
+import { adminListWaitlists, adminDeleteWaitlistEntry, API, formatApiError } from "../../lib/api";
+import { canDelete } from "../../lib/rbac";
+import { useAuth } from "../../context/AuthContext";
 import AdminToolbar from "../../components/AdminToolbar";
 
 const PRESETS = [
@@ -32,6 +34,39 @@ export default function AdminWaitlists() {
     const [loading, setLoading] = useState(true);
     const [q, setQ] = useState("");
     const [sort, setSort] = useState("newest");
+    const [busyId, setBusyId] = useState("");
+    const { user: me } = useAuth();
+    const mayDelete = canDelete(me);
+
+    /*
+     * Removing a signup is what an unsubscribe request looks like from this
+     * side, so it is a real delete with no tombstone. The confirmation names
+     * the address because the rows are otherwise near-identical and a misclick
+     * on the wrong line is invisible afterwards.
+     */
+    const removeEntry = async (e) => {
+        if (!window.confirm(`Remove ${e.email} from the signup list?\n\nThis cannot be undone.`)) return;
+        setBusyId(e.id);
+        try {
+            await adminDeleteWaitlistEntry(e.id);
+            setData((cur) => ({
+                ...cur,
+                entries: (cur.entries || []).filter((x) => x.id !== e.id),
+                // The source counts sit above the table; leaving them stale
+                // would show 42 beside a list of 41.
+                summary: (cur.summary || []).map((sm) =>
+                    sm.source === (e.source || "newsletter")
+                        ? { ...sm, count: Math.max(0, sm.count - 1) }
+                        : sm,
+                ),
+            }));
+            toast.success("Signup removed.");
+        } catch (err) {
+            toast.error(formatApiError(err));
+        } finally {
+            setBusyId("");
+        }
+    };
 
     const entries = useMemo(() => {
         const needle = q.trim().toLowerCase();
@@ -157,19 +192,20 @@ export default function AdminWaitlists() {
                             <th className="text-left px-4 py-3">Email</th>
                             <th className="text-left px-4 py-3">Source</th>
                             <th className="text-left px-4 py-3">Joined</th>
+                            {mayDelete && <th className="text-right px-4 py-3">Remove</th>}
                         </tr>
                     </thead>
                     <tbody>
                         {loading && (
                             <tr>
-                                <td colSpan={3} className="px-4 py-10 text-center text-[#4B5563]">
+                                <td colSpan={mayDelete ? 4 : 3} className="px-4 py-10 text-center text-[#4B5563]">
                                     Loading…
                                 </td>
                             </tr>
                         )}
                         {!loading && entries.length === 0 && (
                             <tr>
-                                <td colSpan={3} className="px-4 py-16 text-center text-[#4B5563]">
+                                <td colSpan={mayDelete ? 4 : 3} className="px-4 py-16 text-center text-[#4B5563]">
                                     <Users size={24} strokeWidth={1.5} className="mx-auto text-[#E5E7EB]" />
                                     <div className="mt-2 text-sm">No signups yet.</div>
                                 </td>
@@ -192,6 +228,21 @@ export default function AdminWaitlists() {
                                 <td className="px-4 py-3 text-[#4B5563] text-xs">
                                     {fmt(e.created_at)}
                                 </td>
+                                {mayDelete && (
+                                    <td className="px-4 py-3 text-right">
+                                        <button
+                                            type="button"
+                                            onClick={() => removeEntry(e)}
+                                            disabled={busyId === e.id}
+                                            data-testid={`delete-waitlist-${e.id}`}
+                                            title="Remove this signup"
+                                            className="inline-flex items-center gap-1.5 text-xs font-mono uppercase tracking-widest text-[#CC0033] border-b border-[#CC0033] pb-0.5 hover:text-[#002B5C] hover:border-[#002B5C] disabled:opacity-40"
+                                        >
+                                            <Trash2 size={13} strokeWidth={1.5} />
+                                            {busyId === e.id ? "Removing…" : "Remove"}
+                                        </button>
+                                    </td>
+                                )}
                             </tr>
                         ))}
                     </tbody>

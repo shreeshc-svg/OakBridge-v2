@@ -299,6 +299,8 @@ export const adminDownloadInvoice = async (id, orderNumber) => {
     a.remove();
     window.URL.revokeObjectURL(url);
 };
+export const adminDeleteWaitlistEntry = (id) =>
+    api.delete(`/admin/waitlists/${id}`).then((r) => r.data);
 export const adminListWaitlists = (source) => {
     const q = source ? `?source=${encodeURIComponent(source)}` : "";
     return api.get(`/admin/waitlists${q}`).then((r) => r.data);
@@ -361,6 +363,10 @@ export const applyForJob = ({ name, phone, email, role, cv }) => {
 };
 export const adminListJobApplications = () =>
     api.get("/admin/job-applications").then((r) => r.data);
+// Removes the CV from the object store as well as the row. Superadmin only,
+// and there is no undo — see the endpoint for why there is no tombstone.
+export const adminDeleteJobApplication = (id) =>
+    api.delete(`/admin/job-applications/${id}`).then((r) => r.data);
 
 // ---- Authors admin ----
 export const adminListAuthors = () => api.get("/admin/authors").then((r) => r.data);

@@ -124,6 +124,48 @@ def put_object(path: str, data: bytes, content_type: str) -> dict:
     return {"url": f"/api/files/{path}", "path": path, "size": len(data), "content_type": content_type}
 
 
+def delete_object(path: str) -> bool:
+    """Remove a stored file. Returns whether anything was actually deleted.
+
+    THE POINT OF THIS FUNCTION IS THAT DELETING A ROW IS NOT DELETING A FILE.
+    A CV lives in the bucket, not in Mongo; removing the application record
+    while leaving the PDF behind leaves somebody's name, phone number and work
+    history sitting at a URL that still resolves. Under DPDP that is not a
+    deletion, it is a broken index.
+
+    Never raises. A file that is already gone, or a bucket that is briefly
+    unreachable, must not block the database row from being removed -- the row
+    is the thing the admin asked to delete, and a stranded object is a smaller
+    problem than a record that refuses to die.
+    """
+    if not path:
+        return False
+    try:
+        if _s3_enabled():
+            _s3().delete_object(Bucket=S3_BUCKET, Key=_safe_key(path))
+            return True
+        full = _resolve(path)
+        if os.path.exists(full):
+            os.remove(full)
+            return True
+        return False
+    except Exception:  # noqa: BLE001
+        log.exception("Could not delete stored object %s", path)
+        return False
+
+
+def storage_path_from_url(url: str) -> str:
+    """Turn a stored `/api/files/<path>` URL back into its object path.
+
+    The database holds the URL, not the key, because that is what the page
+    renders. Deleting needs the key, and reconstructing it by string surgery at
+    each call site is how one of them ends up subtly different.
+    """
+    s = (url or "").strip()
+    marker = "/api/files/"
+    return s.split(marker, 1)[1] if marker in s else ""
+
+
 # S3 hands back whatever ContentType the object was written with, and
 # put_object falls back to "application/octet-stream" when the uploader did not
 # supply one. A browser sniffs past that; Gmail's image proxy does not — it
@@ -626,6 +668,72 @@ admin_router = APIRouter(
 async def admin_list_job_applications():
     cursor = db.job_applications.find({}, {"_id": 0}).sort([("created_at", -1)])
     return await cursor.to_list(1000)
+
+
+@admin_router.delete("/job-applications/{app_id}")
+async def admin_delete_job_application(
+    app_id: str, actor: dict = Depends(require_superadmin)
+):
+    """Delete an application AND the CV file behind it.
+
+    THE FILE IS THE WHOLE POINT. A CV sits in the object store, not in Mongo, at
+    a /api/files/ URL that keeps resolving after the row is gone. Deleting only
+    the record would leave a stranger's name, phone number and work history
+    downloadable by anyone holding the link -- which under DPDP is not deletion,
+    it is a broken index. So the object goes first and the row goes second.
+
+    NO TOMBSTONE, DELIBERATELY, and this differs from how users and submissions
+    are removed elsewhere in this file. Those are copied into a `deleted_*`
+    collection so a mistake is recoverable. A CV is the most sensitive document
+    a stranger ever hands this company, and the usual reason to delete one is
+    that they asked or that the vacancy is closed. Copying it sideways to make
+    an admin's misclick recoverable would defeat the request and keep the data
+    anyway. Accountability comes from the audit trail instead: who deleted what,
+    when -- without keeping the document.
+
+    Superadmin only, matching canDelete() on the front end.
+    """
+    doc = await db.job_applications.find_one({"id": app_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Application not found")
+
+    file_removed = delete_object(storage_path_from_url(doc.get("cv_url", "")))
+    await db.job_applications.delete_one({"id": app_id})
+    await audit_log(
+        db, "JOB_APPLICATION_DELETED",
+        email=actor.get("email", ""), role=actor.get("role", ""),
+        meta={
+            "applicant": doc.get("email"),
+            "role_applied": doc.get("role"),
+            # Recorded because the two can diverge: a bucket hiccup leaves the
+            # row deleted and the PDF stranded, and that is worth knowing later.
+            "cv_file_removed": file_removed,
+        },
+    )
+    return {"deleted": True, "cv_file_removed": file_removed, "email": doc.get("email")}
+
+
+@admin_router.delete("/waitlists/{entry_id}")
+async def admin_delete_waitlist_entry(
+    entry_id: str, actor: dict = Depends(require_superadmin)
+):
+    """Remove one waitlist or newsletter signup.
+
+    These rows are an email address and the page it was given on -- nothing
+    else, and nothing stored outside Mongo, so there is no file to chase. Also
+    no tombstone: retaining an address after being asked to remove it is the
+    exact thing an unsubscribe is supposed to prevent.
+    """
+    doc = await db.newsletter.find_one({"id": entry_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    await db.newsletter.delete_one({"id": entry_id})
+    await audit_log(
+        db, "WAITLIST_ENTRY_DELETED",
+        email=actor.get("email", ""), role=actor.get("role", ""),
+        meta={"entry_email": doc.get("email"), "source": doc.get("source") or "newsletter"},
+    )
+    return {"deleted": True, "email": doc.get("email")}
 
 
 @admin_router.post("/coupons", response_model=Coupon)

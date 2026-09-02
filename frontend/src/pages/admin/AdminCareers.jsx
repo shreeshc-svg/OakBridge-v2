@@ -1,7 +1,10 @@
 import React, { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Eye, EyeOff, Trash2, Plus, Download, Bold, List, Heading, Minus as Rule } from "lucide-react";
-import { fetchCollection, adminSaveCollection, adminListJobApplications, mediaUrl } from "../../lib/api";
+import { fetchCollection, adminSaveCollection, adminListJobApplications,
+         adminDeleteJobApplication, formatApiError, mediaUrl } from "../../lib/api";
+import { canDelete } from "../../lib/rbac";
+import { useAuth } from "../../context/AuthContext";
 import RichText from "../../components/RichText";
 
 const slug = (s) =>
@@ -133,6 +136,10 @@ export default function AdminCareers() {
     const [jobs, setJobs] = useState(null);
     const [apps, setApps] = useState([]);
     const [saving, setSaving] = useState(false);
+    const [busyId, setBusyId] = useState("");
+    // Deletion is superadmin-only across this admin; the endpoint enforces it too.
+    const { user: me } = useAuth();
+    const mayDelete = canDelete(me);
 
     useEffect(() => {
         fetchCollection("careers_jobs").then((d) => setJobs(d?.items || [])).catch(() => setJobs([]));
@@ -140,6 +147,29 @@ export default function AdminCareers() {
     }, []);
 
     if (!jobs) return <div className="font-mono text-xs text-[#4B5563]">Loading…</div>;
+
+    /*
+     * Deleting an application deletes the CV from the object store too, and
+     * there is no undo -- so the confirmation names the person and says what
+     * else goes. A dialog that only says "are you sure?" is one someone clicks
+     * through; one that says whose CV is about to be destroyed is not.
+     */
+    const removeApp = async (a) => {
+        if (!window.confirm(
+            `Delete ${a.name}'s application?\n\n` +
+            `This also permanently deletes their CV file. It cannot be undone.`
+        )) return;
+        setBusyId(a.id);
+        try {
+            await adminDeleteJobApplication(a.id);
+            setApps((cur) => cur.filter((x) => x.id !== a.id));
+            toast.success("Application and CV deleted.");
+        } catch (e) {
+            toast.error(formatApiError(e));
+        } finally {
+            setBusyId("");
+        }
+    };
 
     const upd = (i, k, v) => setJobs((cur) => cur.map((j, idx) => (idx === i ? { ...j, [k]: v } : j)));
     const add = () => setJobs((cur) => [...cur, { id: `job-${Date.now()}`, title: "", location: "", type: "Full-time", department: "", description: "", enabled: true }]);
@@ -225,6 +255,19 @@ export default function AdminCareers() {
                                 <a href={mediaUrl(a.cv_url) || a.cv_url} target="_blank" rel="noreferrer" className="flex-shrink-0 inline-flex items-center gap-1.5 text-xs font-mono uppercase tracking-widest text-[#002B5C] border-b border-[#002B5C] pb-0.5 hover:text-[#CC0033] hover:border-[#CC0033]">
                                     <Download size={13} strokeWidth={1.5} /> CV
                                 </a>
+                                {mayDelete && (
+                                    <button
+                                        type="button"
+                                        onClick={() => removeApp(a)}
+                                        disabled={busyId === a.id}
+                                        data-testid={`delete-application-${a.id}`}
+                                        title="Delete this application and its CV file"
+                                        className="flex-shrink-0 inline-flex items-center gap-1.5 text-xs font-mono uppercase tracking-widest text-[#CC0033] border-b border-[#CC0033] pb-0.5 hover:text-[#002B5C] hover:border-[#002B5C] disabled:opacity-40"
+                                    >
+                                        <Trash2 size={13} strokeWidth={1.5} />
+                                        {busyId === a.id ? "Deleting…" : "Delete"}
+                                    </button>
+                                )}
                             </div>
                         ))}
                     </div>
