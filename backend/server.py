@@ -563,10 +563,57 @@ async def migrate_professional_split():
     )
 
 
+async def migrate_drop_desk_copy_settings():
+    """Remove the settings keys left behind when desk copies were retired.
+
+    Three rows in `settings` still referred to a feature that no longer exists:
+    "book.desk_copy" inside hidden_sections, a book_section_order whose only
+    member was "desk_copy", and "/admin/desk-copies" inside admin_nav_order.
+
+    NONE OF THEM DID ANY HARM -- the code that read them is gone, so they were
+    inert. They could not be cleared from the Admin screens either: the section
+    registry no longer lists the Book Page group, so there was no checkbox left
+    to untick. Orphaned rows that the UI cannot reach are exactly what a
+    migration is for.
+
+    Idempotent: each branch only writes when the stale value is actually
+    present, so the second boot is a no-op and the tenth is too.
+    """
+    changed = []
+
+    doc = await db.settings.find_one({"key": "hidden_sections"}, {"_id": 0, "value": 1})
+    hidden = (doc or {}).get("value")
+    if isinstance(hidden, list) and "book.desk_copy" in hidden:
+        await db.settings.update_one(
+            {"key": "hidden_sections"},
+            {"$set": {"value": [h for h in hidden if h != "book.desk_copy"]}},
+        )
+        changed.append("hidden_sections")
+
+    # The whole key goes, not just its contents: the Book Page group had exactly
+    # one hideable section, so an empty order for it means nothing to anyone.
+    res = await db.settings.delete_one({"key": "book_section_order"})
+    if res.deleted_count:
+        changed.append("book_section_order")
+
+    doc = await db.settings.find_one({"key": "admin_nav_order"}, {"_id": 0, "value": 1})
+    nav = (doc or {}).get("value")
+    if isinstance(nav, list) and "/admin/desk-copies" in nav:
+        await db.settings.update_one(
+            {"key": "admin_nav_order"},
+            {"$set": {"value": [n for n in nav if n != "/admin/desk-copies"]}},
+        )
+        changed.append("admin_nav_order")
+
+    if changed:
+        logger.info("Desk-copy settings cleanup: cleared %s", ", ".join(changed))
+
+
 async def seed_data():
     """Seed books if empty, and reconcile categories to the canonical set on every startup."""
     # Books move off `professional` BEFORE the reconcile deletes that category.
     await migrate_professional_split()
+    await migrate_drop_desk_copy_settings()
 
     # Reconcile categories: upsert the canonical set and remove any stale ones.
     # This self-heals databases seeded under an older category taxonomy.

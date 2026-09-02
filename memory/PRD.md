@@ -27,12 +27,12 @@ Website for Oakbridge Publishing (similar to mheducation.co.in) + integrated boo
 - JWT auth (bcrypt + PyJWT bearer). Routes: /api/auth/{register,login,me,logout}
 - Admin role + seeded admin (admin@oakbridge.in / Oakbridge@2026)
 - 6 seeded authors with bios + affiliations
-- Admin API: /api/admin/{stats,books,orders,desk-copies,users} with full CRUD where applicable
+- Admin API: /api/admin/{stats,books,orders,users,audit} with full CRUD where applicable
 - Customer API: /api/my/orders, /api/books/{id}/reviews (POST requires auth)
-- Public API: /api/authors, /api/authors/{id}, /api/authors/{id}/books, /api/desk-copies
+- Public API: /api/authors, /api/authors/{id}, /api/authors/{id}/books
 - Orders optionally linked to user via user_id
-- Frontend pages: /login, /register, /account (my orders), /authors, /authors/:id, /admin (dashboard), /admin/books, /admin/orders, /admin/desk-copies, /admin/users
-- Book Detail: Request-a-Desk-Copy dialog + Reviews section
+- Frontend pages: /login, /register, /account (my orders), /authors, /authors/:id, /admin (dashboard), /admin/books, /admin/orders, /admin/users, /admin/audit
+- Book Detail: Reviews section  (the Request-a-Desk-Copy dialog was retired in Aug 2026)
 - Header: auth-aware account dropdown with admin link for admins
 - 28/28 backend tests passing; all critical frontend flows verified
 
@@ -110,7 +110,7 @@ Website for Oakbridge Publishing (similar to mheducation.co.in) + integrated boo
 ## Prioritized Backlog (resume here)
 - P0: Verify CSV bulk-import + cover drag-drop E2E via testing_agent_v3_fork
 - P0: Razorpay payment gateway integration (deferred by user; test keys in pod env)
-- P1: Email notifications (order confirmation, desk-copy request) — provider TBD (Resend/SendGrid/Gmail)
+- P1: Email notifications (order confirmation) — provider TBD (Resend/SendGrid/Gmail)
 - P2: Dedicated /events page wired to Events vertical on Home
 - P2: Refactor AdminBooks.jsx (>400 lines) into BookTable/BookForm/EbookManager/CoverUploader/CsvImportDialog
 - P3: Migrate auth token from localStorage → HTTP-only cookies
