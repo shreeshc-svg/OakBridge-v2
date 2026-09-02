@@ -2114,9 +2114,26 @@ async def admin_upload_ebook_price_list(file: UploadFile = File(...), dry_run: b
     }
 
 
+async def _low_stock_threshold(explicit: Optional[int] = None) -> int:
+    """The configured low-stock threshold, or an explicit override.
+
+    Read from settings rather than defaulted in each signature: two functions
+    with the same default is one edit away from two different numbers, which is
+    exactly how the dashboard and the Inventory page came to disagree.
+    """
+    if explicit is not None:
+        return max(0, int(explicit))
+    doc = await db.settings.find_one({"key": "low_stock_threshold"}, {"_id": 0, "value": 1})
+    try:
+        return max(0, int((doc or {}).get("value", SETTINGS_DEFAULTS["low_stock_threshold"])))
+    except (TypeError, ValueError):
+        return int(SETTINGS_DEFAULTS["low_stock_threshold"])
+
+
 @admin_router.get("/inventory")
-async def admin_inventory(threshold: int = 10):
+async def admin_inventory(threshold: Optional[int] = None):
     """Full inventory: every title with its stock, plus summary counts."""
+    threshold = await _low_stock_threshold(threshold)
     books = await db.books.find(
         {},
         {"_id": 0, "id": 1, "title": 1, "author": 1, "isbn": 1,
@@ -2136,7 +2153,8 @@ async def admin_inventory(threshold: int = 10):
 
 
 @admin_router.get("/inventory/low-stock")
-async def admin_low_stock(threshold: int = 10):
+async def admin_low_stock(threshold: Optional[int] = None):
+    threshold = await _low_stock_threshold(threshold)
     low = await db.books.find(
         {"stock": {"$lte": threshold, "$gt": 0}}, {"_id": 0}
     ).sort([("stock", 1)]).to_list(200)
@@ -2991,6 +3009,11 @@ async def reset_test_data(
 
 SETTINGS_DEFAULTS = {
     "tax_percent": 5,
+    # ONE low-stock threshold, read by the Inventory screen AND the dashboard's
+    # alert strip. It used to live in two places -- component state on Inventory
+    # (10) and a literal 5 buried in the stats query -- so the same catalogue
+    # reported 17 low-stock titles on one screen and 13 on the other.
+    "low_stock_threshold": 10,
     "free_ship_threshold": 0,   # 0 = free shipping on all orders
     "ship_flat": 0,
     "pdp_shipping": "Free shipping on all orders",

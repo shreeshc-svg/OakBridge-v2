@@ -142,9 +142,15 @@ check(ext.includes('{"$addFields": {"_when": {"$ifNull": ["$paid_at", "$created_
 check((ext.match(/\$ifNull": \["\$paid_at"/g) || []).length === 2,
       "and the Orders count uses the same effective date, so the two tiles can never "
       + "describe different sets of orders");
-check(ext.includes('not_hamper = {"product_type": {"$ne": "hamper"}}'),
-      "the stock counts exclude hampers too — the inventory strip must not warn about a "
-      + "'title' the Books tile refuses to count");
+/*
+ * This used to assert the OPPOSITE, and it was wrong. Excluding hampers from
+ * the stock counts was copied from the Books tile without asking whether it
+ * belonged, and it made the dashboard strip disagree with the Inventory screen
+ * it links to. Stock is not the same question as catalogue size: a hamper is
+ * physical, shippable and can sell out. See test-inventory-parity.mjs.
+ */
+check(ext.includes('db.books.count_documents({"stock": {"$lte": threshold, "$gt": 0}})'),
+      "the stock counts include hampers, matching the Inventory screen");
 check(dash.includes("stats?.range?.applied ? stats.range : range"),
       "and the label reads the window the SERVER applied, which differs from the buttons "
       + "whenever a bound failed to parse");

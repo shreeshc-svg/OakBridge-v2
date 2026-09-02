@@ -1250,11 +1250,23 @@ async def admin_stats(
     # history of what the stock level used to be.
     waitlist_signups = await db.newsletter.count_documents(in_range)
     submissions = await db.submissions.count_documents(in_range)
-    # Hampers excluded here too, or the inventory strip can warn about a
-    # low-stock "title" that the Books tile refuses to count.
-    not_hamper = {"product_type": {"$ne": "hamper"}}
-    low_stock_count = await db.books.count_documents({**not_hamper, "stock": {"$lte": 5, "$gt": 0}})
-    out_of_stock_count = await db.books.count_documents({**not_hamper, "stock": {"$lte": 0}})
+    # THESE MUST MATCH THE INVENTORY SCREEN, and twice they did not.
+    #
+    # The threshold was a literal 5 here while Inventory used 10, so the same
+    # catalogue reported 13 low-stock items on the dashboard and 17 on the page
+    # the strip links to. It now comes from the shared `low_stock_threshold`
+    # setting that both read.
+    #
+    # And hampers are counted, where they were previously excluded. That
+    # exclusion was borrowed from the Books tile, which is right there: Books
+    # means titles on sale. Stock is a different question -- a hamper is
+    # physical, shippable and can sell out, Inventory has always listed it, and
+    # a restock warning that silently ignores one of the things you stock is
+    # worse than one that counts it.
+    from features import _low_stock_threshold  # late import avoids a cycle
+    threshold = await _low_stock_threshold()
+    low_stock_count = await db.books.count_documents({"stock": {"$lte": threshold, "$gt": 0}})
+    out_of_stock_count = await db.books.count_documents({"stock": {"$lte": 0}})
 
     return {
         # --- scoped by the range (all-time when none was sent) ---
@@ -1271,6 +1283,9 @@ async def admin_stats(
         "books": books,
         "customers": customers,          # all-time total, for context under new_customers
         "low_stock_books": low_stock_count,
+        # Echoed so the alert strip can name the threshold it used rather than
+        # printing a count whose meaning lives on another screen.
+        "low_stock_threshold": threshold,
         "out_of_stock_books": out_of_stock_count,
         "recent_orders": recent,
         # The window ACTUALLY applied. The dashboard labels itself from this

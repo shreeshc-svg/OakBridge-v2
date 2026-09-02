@@ -364,8 +364,10 @@ export default function AdminDashboard() {
                     <AlertTriangle size={18} strokeWidth={1.5} className="text-[#F59E0B] mt-0.5" />
                     <div className="flex-1 text-sm text-[#002B5C]">
                         <strong>Inventory needs attention:</strong>{" "}
-                        <span data-testid="low-stock-count">{stats.low_stock_books}</span> low-stock and{" "}
-                        <span data-testid="out-of-stock-count">{stats.out_of_stock_books}</span> out-of-stock titles.
+                        <span data-testid="low-stock-count">{stats.low_stock_books}</span> low-stock
+                        {stats.low_stock_threshold ? ` (≤ ${stats.low_stock_threshold})` : ""} and{" "}
+                        <span data-testid="out-of-stock-count">{stats.out_of_stock_books}</span> out-of-stock
+                        {" "}items.
                     </div>
                     <Link
                         to="/admin/inventory"

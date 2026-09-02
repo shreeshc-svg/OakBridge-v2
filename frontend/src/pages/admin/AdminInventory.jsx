@@ -1,13 +1,19 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { AlertTriangle, PackageX, Search } from "lucide-react";
-import { adminLowStock, fetchBooks, adminUpdateBook, formatINR, mediaUrl, syncInventoryFromSheet } from "../../lib/api";
+import { adminLowStock, fetchBooks, adminUpdateBook, formatINR, mediaUrl,
+         syncInventoryFromSheet, fetchSettings, adminSetSetting } from "../../lib/api";
 import { toast } from "sonner";
 import ExportButton from "../../components/admin/ExportButton";
 
 export default function AdminInventory() {
     const [data, setData] = useState({ low_stock: [], out_of_stock: [], threshold: 10 });
-    const [threshold, setThreshold] = useState(10);
+    /*
+     * null until the saved threshold arrives, so the first fetch is not fired
+     * with a guessed 10 and then again with the real value — that flicker is
+     * what let this screen and the dashboard disagree without anyone noticing.
+     */
+    const [threshold, setThreshold] = useState(null);
     const [loading, setLoading] = useState(true);
 
     const [books, setBooks] = useState([]);
@@ -18,10 +24,27 @@ export default function AdminInventory() {
     const [syncResult, setSyncResult] = useState(null);
 
     const loadAlerts = () => {
+        if (threshold == null) return;   // wait for the saved value
         setLoading(true);
         adminLowStock(threshold)
             .then(setData)
             .finally(() => setLoading(false));
+    };
+
+    // The threshold is a SETTING, not a local preference: the dashboard's alert
+    // strip reads the same key, so changing it here moves both numbers together.
+    useEffect(() => {
+        fetchSettings()
+            .then((s) => setThreshold(Number(s?.low_stock_threshold ?? 10) || 10))
+            .catch(() => setThreshold(10));
+    }, []);
+
+    const saveThreshold = (v) => {
+        const n = Math.max(0, Number(v) || 0);
+        setThreshold(n);
+        adminSetSetting("low_stock_threshold", n).catch(() =>
+            toast.error("Could not save the threshold — the dashboard may still show the old one."),
+        );
     };
     const loadBooks = () => {
         setBooksLoading(true);
@@ -102,8 +125,12 @@ export default function AdminInventory() {
                         <input
                             type="number"
                             min={1}
-                            value={threshold}
-                            onChange={(e) => setThreshold(Number(e.target.value) || 1)}
+                            value={threshold ?? ""}
+                            /* Saved on change, not on blur: this now moves the
+                               dashboard's alert strip too, and a value that
+                               looks applied here but was never persisted is the
+                               precise bug this replaced. */
+                            onChange={(e) => saveThreshold(e.target.value)}
                             data-testid="inventory-threshold"
                             className="w-20 border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none focus:border-[#002B5C]"
                         />
