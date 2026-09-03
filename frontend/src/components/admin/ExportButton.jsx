@@ -1,16 +1,27 @@
 import React from "react";
 import { Download } from "lucide-react";
 import { toast } from "sonner";
-import { API } from "../../lib/api";
+import { api, downloadBlob } from "../../lib/api";
 
 /**
  * Download an admin CSV.
  *
  * WHY NOT JUST AN <a href>
  *
- * These endpoints sit behind the admin bearer token, which lives in
- * localStorage and cannot be attached to a plain link. So the file is fetched
- * with the header, turned into a blob and handed to a synthetic anchor.
+ * These endpoints sit behind the admin bearer token, which cannot be attached
+ * to a plain link. So the file is fetched with the header, turned into a blob
+ * and handed to a synthetic anchor.
+ *
+ * WHY THE SHARED `api` CLIENT AND NOT `fetch`
+ *
+ * This component used to call fetch() and build the Authorization header
+ * itself, reading localStorage.getItem("token") -- but the app stores the token
+ * under "oakbridge_token". It therefore sent `Bearer null` and every export on
+ * every screen returned 401. Nothing looked broken until someone pressed one.
+ *
+ * The axios instance already carries the token, via one interceptor that knows
+ * the key. Going through it means there is exactly one place in the codebase
+ * that knows how auth works, and this cannot happen again.
  *
  * WHY NOT BUILD THE CSV IN THE BROWSER
  *
@@ -25,26 +36,14 @@ export default function ExportButton({ path, label = "Export CSV", count, classN
     const download = async () => {
         setBusy(true);
         try {
-            const res = await fetch(`${API}${path}`, {
-                headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-            });
-            if (!res.ok) throw new Error(`Export failed (${res.status})`);
-
-            // Honour the filename the server chose — it carries the date, so
-            // two downloads a week apart do not overwrite each other.
-            const disp = res.headers.get("content-disposition") || "";
-            const match = disp.match(/filename="?([^"]+)"?/);
-            const blob = await res.blob();
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = match ? match[1] : "oakbridge-export.csv";
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-            URL.revokeObjectURL(url);
+            const res = await api.get(path, { responseType: "blob" });
+            downloadBlob(res, "oakbridge-export.csv");
         } catch (e) {
-            toast.error(e.message || "Could not download the export.");
+            toast.error(
+                e?.response?.status === 401
+                    ? "Your session has expired. Sign in again and retry."
+                    : "Could not download the export.",
+            );
         } finally {
             setBusy(false);
         }

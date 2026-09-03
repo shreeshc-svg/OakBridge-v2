@@ -453,6 +453,30 @@ export const shippingPromise = (settings, { short = false } = {}) => {
         : `Free shipping on orders over ${formatINR(thr)}.`;
 };
 
+/**
+ * Save an axios blob response as a file.
+ *
+ * Honours the filename the SERVER chose. Those names carry a date, so two
+ * downloads a week apart do not overwrite each other in the Downloads folder --
+ * and the alternative is every screen inventing its own name.
+ *
+ * The object URL is revoked immediately after the click. It is not optional:
+ * each one pins the whole blob in memory for the life of the document, and an
+ * admin who exports the catalogue a few times is holding several copies of it.
+ */
+export const downloadBlob = (res, fallbackName = "download") => {
+    const disp = res?.headers?.["content-disposition"] || "";
+    const match = disp.match(/filename="?([^";]+)"?/);
+    const url = URL.createObjectURL(res.data);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = match ? match[1] : fallbackName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+};
+
 export const formatApiError = (err) => {
     const d = err?.response?.data?.detail;
     if (!d) return err?.message || "Something went wrong.";

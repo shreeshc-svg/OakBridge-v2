@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Download, Users, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { adminListWaitlists, adminDeleteWaitlistEntry, API, formatApiError } from "../../lib/api";
+import { adminListWaitlists, adminDeleteWaitlistEntry, api, downloadBlob, formatApiError } from "../../lib/api";
 import { canDelete } from "../../lib/rbac";
 import { useAuth } from "../../context/AuthContext";
 import AdminToolbar from "../../components/AdminToolbar";
@@ -99,25 +99,12 @@ export default function AdminWaitlists() {
     }, [load]);
 
     const downloadCsv = () => {
-        const token = localStorage.getItem("oakbridge_token");
         const q = filter ? `?source=${encodeURIComponent(filter)}` : "";
-        // Use fetch so we can attach auth header, then trigger download from blob
-        fetch(`${API}/admin/waitlists/export.csv${q}`, {
-            headers: { Authorization: `Bearer ${token}` },
-        })
-            .then((r) => {
-                if (!r.ok) throw new Error("Export failed");
-                return r.blob();
-            })
-            .then((blob) => {
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = `oakbridge-waitlist-${filter || "all"}.csv`;
-                a.click();
-                URL.revokeObjectURL(url);
-            })
-            .catch((err) => toast.error(err.message || "Export failed"));
+        // Through the shared client, which carries the token. Hand-rolling the
+        // header here is what left ExportButton sending `Bearer null`.
+        api.get(`/admin/waitlists/export.csv${q}`, { responseType: "blob" })
+            .then((r) => downloadBlob(r, `oakbridge-waitlist-${filter || "all"}.csv`))
+            .catch((err) => toast.error(formatApiError(err)));
     };
 
     return (

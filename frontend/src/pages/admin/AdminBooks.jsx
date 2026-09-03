@@ -19,6 +19,8 @@ import {
     adminUploadCover,
     adminUploadEbook,
     API,
+    api,
+    downloadBlob,
     fetchBooks,
     fetchCategories,
     formatApiError,
@@ -417,20 +419,12 @@ function CsvImportDialog({ onClose, onDone }) {
 
     const downloadTemplate = async () => {
         try {
-            const token = localStorage.getItem("oakbridge_token");
-            const res = await fetch(`${API}/admin/books/import-template`, {
-                headers: { Authorization: `Bearer ${token}` },
-            });
-            if (!res.ok) throw new Error("Could not download template");
-            const blob = await res.blob();
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = "oakbridge-books-template.xlsx";
-            a.click();
-            URL.revokeObjectURL(url);
+            // Through the shared client for the same reason as every other
+            // download: one place knows the token key.
+            const res = await api.get("/admin/books/import-template", { responseType: "blob" });
+            downloadBlob(res, "oakbridge-books-template.xlsx");
         } catch (err) {
-            toast.error(err.message || "Template download failed");
+            toast.error(formatApiError(err));
         }
     };
 
