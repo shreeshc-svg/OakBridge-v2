@@ -274,6 +274,15 @@ export const adminReconcilePayment = (id) =>
     api.post(`/admin/orders/${id}/reconcile-payment`).then((r) => r.data);
 export const adminListOrders = () =>
     api.get("/admin/orders").then((r) => r.data);
+/*
+ * Accept that a bounced order's money is never arriving, or take that back.
+ *
+ * Nothing is deleted: the order keeps its row, its invoice number and its place
+ * in the CSV, and only leaves the Not collected total. Superadmin only, and the
+ * backend refuses it on anything that is paid or not already bounced.
+ */
+export const adminWriteOffOrder = (id, { written_off = true, note = "" } = {}) =>
+    api.post(`/admin/orders/${id}/write-off`, { written_off, note }).then((r) => r.data);
 export const adminUpdateOrder = (id, status, opts = {}) =>
     api
         .patch(`/admin/orders/${id}`, {

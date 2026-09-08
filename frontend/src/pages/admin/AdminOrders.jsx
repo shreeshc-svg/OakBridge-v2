@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { MailCheck, FileDown, Send, Truck, SearchCheck } from "lucide-react";
+import { MailCheck, FileDown, Send, Truck, SearchCheck, BanknoteX, Undo2 } from "lucide-react";
 import PaymentBadge from "../../components/admin/PaymentBadge";
 import StatusChangeDialog from "../../components/admin/StatusChangeDialog";
 import TrackingDialog from "../../components/admin/TrackingDialog";
+import WriteOffDialog from "../../components/admin/WriteOffDialog";
 import {
     adminListOrders,
     adminResendReceipt,
@@ -11,10 +12,13 @@ import {
     adminSetTracking,
     adminDownloadInvoice,
     adminUpdateOrder,
+    adminWriteOffOrder,
     formatApiError,
     formatINR,
 } from "../../lib/api";
 import { toast } from "sonner";
+import { useAuth } from "../../context/AuthContext";
+import { canDelete } from "../../lib/rbac";
 import AdminToolbar from "../../components/AdminToolbar";
 import ExportButton from "../../components/admin/ExportButton";
 
@@ -45,16 +49,48 @@ export default function AdminOrders() {
     const [savingStatus, setSavingStatus] = useState(false);
     const [trackingFor, setTrackingFor] = useState(null);
     const [savingTracking, setSavingTracking] = useState(false);
+    const [writeOffFor, setWriteOffFor] = useState(null);
+    const [savingWriteOff, setSavingWriteOff] = useState(false);
     const [downloading, setDownloading] = useState(null);
     const [q, setQ] = useState("");
     const [status, setStatus] = useState("all");
     const [sort, setSort] = useState("newest");
+
+    const { user: me } = useAuth();
+    // Same gate the backend enforces. canDelete is superadmin-only and is
+    // already how every other destructive-looking action is hidden, so the
+    // permission story stays in one place rather than growing a second rule.
+    const mayWriteOff = canDelete(me);
 
     const load = () => {
         setLoading(true);
         adminListOrders()
             .then(setOrders)
             .finally(() => setLoading(false));
+    };
+
+    const applyWriteOff = async ({ written_off, note }) => {
+        const order = writeOffFor;
+        setSavingWriteOff(true);
+        try {
+            const res = await adminWriteOffOrder(order.id, { written_off, note });
+            // Patch the one row rather than refetching all 500: the list is
+            // client-side filtered and sorted, and a reload would throw away
+            // whatever the admin was looking at mid-task.
+            setOrders((all) =>
+                all.map((o) => (o.id === order.id ? { ...o, ...(res.order || {}) } : o)),
+            );
+            toast.success(
+                written_off
+                    ? `${formatINR(order.total)} written off — it has left Not collected.`
+                    : `${formatINR(order.total)} is back in Not collected.`,
+            );
+            setWriteOffFor(null);
+        } catch (e) {
+            toast.error(formatApiError(e, "Could not update this order."));
+        } finally {
+            setSavingWriteOff(false);
+        }
     };
 
     useEffect(() => {
@@ -242,6 +278,18 @@ export default function AdminOrders() {
                     onCancel={() => !savingTracking && setTrackingFor(null)}
                 />
             )}
+            {writeOffFor && (
+                <WriteOffDialog
+                    /* Keyed on both id and current state so the copy flips
+                       between "write off" and "put it back" instead of the
+                       instance being reused with stale wording. */
+                    key={`${writeOffFor.id}:${writeOffFor.written_off ? "on" : "off"}`}
+                    order={writeOffFor}
+                    busy={savingWriteOff}
+                    onConfirm={applyWriteOff}
+                    onCancel={() => !savingWriteOff && setWriteOffFor(null)}
+                />
+            )}
             {pendingChange && (
                 <StatusChangeDialog
                     /* Keyed per change: without it React reuses the instance,
@@ -327,6 +375,24 @@ export default function AdminOrders() {
                                     <div className="mt-1.5">
                                         <PaymentBadge status={o.payment_status} />
                                     </div>
+                                    {/* The row still shows the full amount in
+                                        the Total column, because that is what
+                                        the customer owes. This says the
+                                        dashboard has stopped counting it, so
+                                        the two cannot look like a discrepancy. */}
+                                    {o.written_off && (
+                                        <div
+                                            data-testid={`order-written-off-${o.id}`}
+                                            className="mt-1 inline-block font-mono text-[10px] uppercase tracking-widest text-[#5F5E5A] bg-[#F1EFE8] px-1.5 py-0.5"
+                                            title={
+                                                o.written_off_by
+                                                    ? `Written off by ${o.written_off_by}`
+                                                    : "Written off"
+                                            }
+                                        >
+                                            Written off
+                                        </div>
+                                    )}
                                     {o.tracking_id && (
                                         <div className="mt-1 font-mono text-[10px] text-[#4B5563] break-all">
                                             {o.courier ? `${o.courier} ` : ""}
@@ -473,6 +539,36 @@ export default function AdminOrders() {
                                             <MailCheck size={12} strokeWidth={1.5} />
                                             {resending === o.id ? "Sending…" : "Resend"}
                                         </button>
+                                        {/* Superadmin only, bounced only, unpaid
+                                            only — the same three conditions the
+                                            endpoint enforces. Shown as "Put
+                                            back" once written off, so there is
+                                            always a way out of it. */}
+                                        {mayWriteOff &&
+                                            o.status === "bounced" &&
+                                            o.payment_status !== "paid" && (
+                                                <button
+                                                    onClick={() => setWriteOffFor(o)}
+                                                    data-testid={`order-write-off-${o.id}`}
+                                                    title={
+                                                        o.written_off
+                                                            ? "Put this amount back into Not collected"
+                                                            : "Stop counting this amount as money you are waiting for. Nothing is deleted."
+                                                    }
+                                                    className={
+                                                        o.written_off
+                                                            ? "inline-flex items-center gap-1.5 border border-[#E5E7EB] hover:border-[#002B5C] text-[#4B5563] px-2.5 py-1 text-xs font-medium transition-colors"
+                                                            : "inline-flex items-center gap-1.5 border border-[#CC0033] text-[#CC0033] hover:bg-[#CC0033]/5 px-2.5 py-1 text-xs font-medium transition-colors"
+                                                    }
+                                                >
+                                                    {o.written_off ? (
+                                                        <Undo2 size={12} strokeWidth={1.5} />
+                                                    ) : (
+                                                        <BanknoteX size={12} strokeWidth={1.5} />
+                                                    )}
+                                                    {o.written_off ? "Put back" : "Write off"}
+                                                </button>
+                                            )}
                                         <button
                                             onClick={() => onDownload(o.id, o.order_number)}
                                             disabled={downloading === o.id}

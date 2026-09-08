@@ -250,6 +250,17 @@ class OrderStatusUpdate(BaseModel):
     tracking_id: Optional[str] = None
 
 
+class WriteOffUpdate(BaseModel):
+    """Accept that a bounced order's money is never arriving — or take it back.
+
+    `written_off: False` restores the order to Not collected, so a write-off
+    made in error is a second click rather than a database repair.
+    """
+
+    written_off: bool = True
+    note: Optional[str] = ""
+
+
 class TrackingUpdate(BaseModel):
     courier: Optional[str] = ""
     tracking_id: str = Field(min_length=1, max_length=64)
@@ -1218,11 +1229,19 @@ async def admin_stats(
         {"$addFields": {"_when": {"$ifNull": ["$paid_at", "$created_at"]}}},
         *([{"$match": {"_when": window}}] if window else []),
         {"$group": {
-            "_id": {"$ifNull": ["$payment_status", "pending"]},
+            # Grouped by payment state AND by whether the amount has been
+            # written off, so the two can be reported apart in ONE pass. A
+            # second aggregation would need its own `_when` expression, and the
+            # moment there are two copies of that expression they can drift —
+            # which is the whole reason the Orders tile shares this one.
+            "_id": {
+                "state": {"$ifNull": ["$payment_status", "pending"]},
+                "written_off": {"$eq": [{"$ifNull": ["$written_off", False]}, True]},
+            },
             "total": {"$sum": "$total"},
             "count": {"$sum": 1},
         }},
-    ]).to_list(20)
+    ]).to_list(40)
     # Accumulate rather than assign. Mongo groups case-sensitively, so "Paid" and
     # "paid" would arrive as two rows; a dict comprehension keyed on the lowercased
     # status would silently keep only the last one and drop the other bucket's
@@ -1230,10 +1249,29 @@ async def admin_stats(
     # mode is an understated revenue figure with no error, on the very tile this
     # change exists to make trustworthy.
     totals: dict = {}
+    written_off_total = 0
+    written_off_count = 0
     for r in by_state:
-        acc = totals.setdefault(str(r["_id"] or "pending").lower(), {"total": 0, "count": 0})
-        acc["total"] += r.get("total") or 0
-        acc["count"] += r.get("count") or 0
+        key = r["_id"] if isinstance(r["_id"], dict) else {"state": r["_id"]}
+        state = str(key.get("state") or "pending").lower()
+        amount = r.get("total") or 0
+        count = r.get("count") or 0
+        # A written-off amount is one the team has accepted is never arriving.
+        # It is reported on its own rather than folded into Not collected.
+        #
+        # The `state != "paid"` guard is deliberate and defensive. Writing off a
+        # paid order is refused by the endpoint, and a later capture clears the
+        # flag — so this cannot happen. But if it ever did, the failure mode of
+        # trusting the flag would be an UNDERSTATED revenue figure with no
+        # error, on the tile the business is run from. Money that Razorpay says
+        # was captured is revenue, whatever any flag says.
+        if key.get("written_off") and state != "paid":
+            written_off_total += amount
+            written_off_count += count
+            continue
+        acc = totals.setdefault(state, {"total": 0, "count": 0})
+        acc["total"] += amount
+        acc["count"] += count
 
     def _sum(state: str, field: str) -> int:
         return (totals.get(state) or {}).get(field, 0) or 0
@@ -1276,6 +1314,11 @@ async def admin_stats(
         "pending_orders": pending_orders,
         "pending_revenue": pending_revenue,
         "failed_orders": failed_orders,
+        # Amounts a superadmin has written off as never arriving. Excluded from
+        # pending_revenue above, and reported here so the Not collected tile can
+        # say where the money went instead of appearing to lose it.
+        "written_off_revenue": written_off_total,
+        "written_off_orders": written_off_count,
         "new_customers": new_customers,
         "waitlist_signups": waitlist_signups,
         "submissions": submissions,
@@ -1573,6 +1616,119 @@ async def admin_update_order(order_id: str, payload: OrderStatusUpdate):
     # Not persisted — lets the admin toast say what actually happened.
     order["email_sent"] = bool(sent)
     return order
+
+
+@admin_router.post("/orders/{order_id}/write-off")
+async def admin_write_off_order(
+    order_id: str,
+    payload: WriteOffUpdate,
+    actor: dict = Depends(require_superadmin),
+):
+    """Take a dead order's money out of Not collected, without deleting anything.
+
+    WHY NOT A DELETE
+
+    An order is a financial record. This codebase already reached that
+    conclusion once, in the account-deletion path, which keeps a customer's
+    orders after erasing the customer. There is a second, sharper reason here:
+    `invoice_no` is a statutorily sequential GST series allocated per financial
+    year, and it is allocated as a side effect of *viewing* an invoice or
+    resending a receipt — with no paid check, so a pending order can already
+    carry one. Deleting such an order would leave an unexplained gap in that
+    series. So the row stays, in the list and in the CSV, and only the money
+    moves.
+
+    WHY SUPERADMIN, EXPLICITLY
+
+    `require_admin` promotes to superadmin automatically for DELETE requests
+    only. This is a POST, so without this dependency it would be reachable by
+    the fulfilment role — who can already edit tracking numbers, and should not
+    also be able to move money off the dashboard. `SUPERADMIN_ONLY_PATHS` cannot
+    fence it either: that matches on the first path segment, which here is
+    `orders`, and fencing that would take the whole Orders screen with it.
+
+    WHY IT MUST ALREADY BE BOUNCED
+
+    Two steps, two judgements. Somebody decides the order is dead and marks it
+    bounced — which chases the customer with a payment link first. Only then can
+    the amount be written off. One misclick cannot do both.
+    """
+    order = await db.orders.find_one(
+        {"id": order_id},
+        {"_id": 0, "id": 1, "order_number": 1, "status": 1, "payment_status": 1,
+         "total": 1, "written_off": 1, "invoice_no": 1, "email": 1},
+    )
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    note = (payload.note or "").strip()
+    now = datetime.now(timezone.utc).isoformat()
+
+    if payload.written_off:
+        if order.get("payment_status") == "paid":
+            raise HTTPException(
+                status_code=400,
+                detail="This order is paid — there is nothing uncollected to write off.",
+            )
+        if order.get("status") != "bounced":
+            raise HTTPException(
+                status_code=400,
+                detail="Only a bounced order can be written off. Mark it bounced first — "
+                "that also sends the customer one last payment link.",
+            )
+        if order.get("written_off"):
+            # Idempotent on purpose: a double-click, or a retry after a timeout,
+            # should not raise and must not write a second audit line claiming
+            # the money was written off twice.
+            return {"ok": True, "written_off": True, "already": True}
+        updates = {
+            "written_off": True,
+            "written_off_at": now,
+            "written_off_by": actor.get("email", ""),
+            "written_off_note": note,
+        }
+    else:
+        if not order.get("written_off"):
+            return {"ok": True, "written_off": False, "already": True}
+        updates = {
+            "written_off": False,
+            "written_off_at": None,
+            "written_off_by": None,
+            "written_off_note": note,
+        }
+
+    await db.orders.update_one({"id": order_id}, {"$set": updates})
+
+    # Recorded on the order as well as in the audit log. The audit log answers
+    # "who did this?" across the whole site; status_history answers "what
+    # happened to THIS order?" and is the thing anyone opening the order will
+    # actually read.
+    await db.orders.update_one(
+        {"id": order_id},
+        {"$push": {"status_history": {
+            "status": "written_off" if payload.written_off else "write_off_reversed",
+            "note": note,
+            "notify_requested": False,
+            "notified": False,
+            "at": now,
+        }}},
+    )
+
+    await audit_log(
+        db,
+        "ORDER_WRITTEN_OFF" if payload.written_off else "ORDER_WRITE_OFF_REVERSED",
+        email=actor.get("email", ""),
+        role=actor.get("role", ""),
+        meta={
+            "order_number": order.get("order_number"),
+            "amount": order.get("total"),
+            "invoice_no": order.get("invoice_no"),
+            "note": note,
+        },
+    )
+
+    fresh = await db.orders.find_one({"id": order_id}, {"_id": 0})
+    return {"ok": True, "written_off": bool(payload.written_off), "order": fresh}
 
 
 @admin_router.post("/orders/{order_id}/tracking")

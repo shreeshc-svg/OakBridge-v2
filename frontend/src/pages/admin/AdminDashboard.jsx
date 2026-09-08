@@ -124,7 +124,24 @@ const TILE_DEFS = {
         icon: AlertTriangle,
         accent: (s) => (s.pending_orders ? "text-[#F59E0B]" : undefined),
         value: (s) => formatINR(s.pending_revenue || 0),
-        hint: (s) => `${s.pending_orders ?? 0} unpaid · ${s.failed_orders ?? 0} failed`,
+        /*
+         * Written-off amounts are named rather than silently dropped.
+         *
+         * The figure above excludes them, so without this the total would fall
+         * with nothing on the dashboard to explain where it went — and the only
+         * thing worse than a number that is wrong is one that moved for reasons
+         * nobody can see. The clause appears only once there is something to
+         * report, so a site that has never written anything off reads exactly
+         * as it did before.
+         */
+        hint: (s) =>
+            [
+                `${s.pending_orders ?? 0} unpaid`,
+                `${s.failed_orders ?? 0} failed`,
+                s.written_off_orders ? `${formatINR(s.written_off_revenue || 0)} written off` : null,
+            ]
+                .filter(Boolean)
+                .join(" · "),
     },
     orders: {
         scoped: true,

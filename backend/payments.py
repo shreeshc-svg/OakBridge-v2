@@ -197,6 +197,14 @@ async def _settle_capture(
         "payment_status": "paid",
         "payment_provider": "razorpay",
         "payment_source": source,
+        # A write-off is a prediction that the money will never arrive. It just
+        # arrived, so the prediction was wrong and the flag comes off — the
+        # amount belongs in revenue, not in a written-off bucket. Cleared here,
+        # in the one place a capture is recorded, rather than left to the
+        # reconcile sweep: a customer paying from the payment link they were
+        # chased with is exactly the case this has to survive.
+        "written_off": False,
+        "written_off_at": None,
     }
     if payment_id:
         money["rzp_payment_id"] = payment_id
