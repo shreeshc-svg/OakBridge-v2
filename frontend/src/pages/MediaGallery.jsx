@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
 import { ChevronLeft, ChevronRight, Play, X, Download, ArrowUpRight } from "lucide-react";
 import Seo from "../components/Seo";
+import HeroCarousel from "../components/HeroCarousel";
+import SmartLink from "../components/SmartLink";
 import { fetchSiteContent, fetchCollection, fetchSettings, fetchAlbumPhotos, mediaUrl } from "../lib/api";
 import { hiddenSet } from "../lib/sections";
 
@@ -29,21 +30,6 @@ const renderRich = (text, color = "#F59E0B") =>
 
 const on = (items) => (Array.isArray(items) ? items.filter((i) => i && i.enabled !== false) : []);
 
-/**
- * Admin-entered links may be internal ("/events") or external ("https://…").
- * React Router's Link treats an absolute URL as a relative path and mangles it,
- * so anything with a scheme gets a plain anchor instead.
- */
-function SmartLink({ to, children, className }) {
-    if (!to) return null;
-    const external = /^(https?:|mailto:|tel:)/i.test(to);
-    return external ? (
-        <a href={to} target="_blank" rel="noopener noreferrer" className={className}>{children}</a>
-    ) : (
-        <Link to={to} className={className}>{children}</Link>
-    );
-}
-
 /** YouTube/Vimeo → embed URL + poster fallback. */
 function videoEmbed(url) {
     const u = String(url || "");
@@ -52,91 +38,6 @@ function videoEmbed(url) {
     m = u.match(/vimeo\.com\/(?:video\/)?(\d+)/);
     if (m) return { embed: `https://player.vimeo.com/video/${m[1]}?autoplay=1`, thumb: null };
     return { embed: null, thumb: null };
-}
-
-/* ------------------------------------------------------------------ hero -- */
-function HeroCarousel({ slides, site }) {
-    const [i, setI] = useState(0);
-    const n = slides.length;
-    const touch = useRef(null);
-    const reduce = useRef(
-        typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches,
-    );
-
-    useEffect(() => {
-        if (n <= 1 || reduce.current) return undefined;
-        const t = setInterval(() => setI((k) => (k + 1) % n), 6000);
-        return () => clearInterval(t);
-    }, [n]);
-
-    return (
-        <section
-            data-testid="media-hero"
-            className="relative bg-[#0d2340] overflow-hidden"
-            onTouchStart={(e) => { touch.current = e.touches[0].clientX; }}
-            onTouchEnd={(e) => {
-                if (touch.current == null || n <= 1) return;
-                const dx = e.changedTouches[0].clientX - touch.current;
-                if (Math.abs(dx) > 45) setI((k) => (k + (dx < 0 ? 1 : -1) + n) % n);
-                touch.current = null;
-            }}
-        >
-            <div
-                className="flex transition-transform duration-500 ease-out"
-                style={{ transform: `translateX(-${i * 100}%)` }}
-            >
-                {(n ? slides : [{ id: "fallback" }]).map((s, k) => (
-                    <div key={s.id || k} className="flex-[0_0_100%] min-w-full">
-                        {s.image ? (
-                            /* `fit: "contain"` shows a designed banner whole (nothing cropped);
-                               the default fills the frame, which suits photographs. */
-                            <img
-                                src={mediaUrl(s.image) || s.image}
-                                alt={s.alt || ""}
-                                loading={k === 0 ? "eager" : "lazy"}
-                                className={`w-full h-[300px] sm:h-[420px] lg:h-[520px] ${s.fit === "contain" ? "object-contain" : "object-cover"}`}
-                            />
-                        ) : (
-                            <div className="w-full h-[300px] sm:h-[420px] lg:h-[520px] bg-[#0d2340]" />
-                        )}
-                    </div>
-                ))}
-            </div>
-
-            <div className="absolute inset-0 pointer-events-none bg-gradient-to-t from-[#002B5C]/95 via-[#002B5C]/30 to-transparent" />
-
-            <div className="absolute left-0 right-0 bottom-0 px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 pb-16 md:pb-20">
-                <div className="overline !text-white/60">{site.media_overline || "Media & Gallery"}</div>
-                <h1 className="font-serif text-3xl md:text-5xl lg:text-6xl text-white mt-3 leading-tight max-w-[16ch] whitespace-pre-line">
-                    {renderRich(site.media_title || "Capturing stories\nbeyond the *page.*")}
-                </h1>
-                {site.media_body && (
-                    <p className="hidden md:block text-white/75 max-w-2xl mt-5 leading-relaxed">
-                        {site.media_body}
-                    </p>
-                )}
-            </div>
-
-            {n > 1 && (
-                <>
-                    <button onClick={() => setI((k) => (k - 1 + n) % n)} aria-label="Previous banner"
-                        className="hidden md:flex absolute left-4 top-1/2 -translate-y-1/2 w-11 h-11 items-center justify-center border border-white/40 bg-white/15 text-white hover:bg-white/30">
-                        <ChevronLeft size={20} strokeWidth={1.5} />
-                    </button>
-                    <button onClick={() => setI((k) => (k + 1) % n)} aria-label="Next banner"
-                        className="hidden md:flex absolute right-4 top-1/2 -translate-y-1/2 w-11 h-11 items-center justify-center border border-white/40 bg-white/15 text-white hover:bg-white/30">
-                        <ChevronRight size={20} strokeWidth={1.5} />
-                    </button>
-                    <div className="absolute bottom-5 left-0 right-0 flex justify-center gap-2">
-                        {slides.map((s, k) => (
-                            <button key={s.id || k} onClick={() => setI(k)} aria-label={`Banner ${k + 1}`}
-                                className={`h-[3px] w-7 ${k === i ? "bg-[#F59E0B]" : "bg-white/35"}`} />
-                        ))}
-                    </div>
-                </>
-            )}
-        </section>
-    );
 }
 
 /* ------------------------------------------------------------------ rail -- */
@@ -287,7 +188,21 @@ export default function MediaGallery() {
                 path="/media"
             />
 
-            <HeroCarousel slides={hero} site={site} />
+            {/* The page headline lives OVER the banners rather than beside them,
+                so it is passed as children and painted after the scrim. */}
+            <HeroCarousel slides={hero} testId="media-hero" overlay priority>
+                <div className="absolute left-0 right-0 bottom-0 px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 pb-16 md:pb-20">
+                    <div className="overline !text-white/60">{site.media_overline || "Media & Gallery"}</div>
+                    <h1 className="font-serif text-3xl md:text-5xl lg:text-6xl text-white mt-3 leading-tight max-w-[16ch] whitespace-pre-line">
+                        {renderRich(site.media_title || "Capturing stories\nbeyond the *page.*")}
+                    </h1>
+                    {site.media_body && (
+                        <p className="hidden md:block text-white/75 max-w-2xl mt-5 leading-relaxed">
+                            {site.media_body}
+                        </p>
+                    )}
+                </div>
+            </HeroCarousel>
 
             {/* ---------- upcoming + recent ---------- */}
             {show("upcoming") && (hasUpcoming || recent.length > 0) && (

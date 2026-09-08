@@ -16,13 +16,10 @@ import {
     mediaUrl,
 } from "../lib/api";
 import { responsiveImage } from "../lib/img";
-import { hiddenSet, resolveSectionOrder } from "../lib/sections";
+import { hiddenSet, resolveSectionOrder, HOME_DEFAULT_ORDER } from "../lib/sections";
 import EbookCta from "../components/EbookCta";
+import HeroCarousel from "../components/HeroCarousel";
 import MarketingPopup from "../components/MarketingPopup";
-
-// Default top-to-bottom order of the reorderable homepage sections. Admin can
-// override via Admin → Pages → Section order & visibility (home_section_order).
-const HOME_DEFAULT_ORDER = ["businesses", "gifting_banner", "imprints", "hot_off_press", "solutions", "bestsellers", "testimonials", "manifesto"];
 
 // How many titles the "Hot Off the Press" rail will hold. The API is asked for
 // the same number, so raising one without the other quietly does nothing.
@@ -193,6 +190,7 @@ export default function Home() {
     const [site, setSite] = useState({});
     const [settings, setSettings] = useState(null);
     const [testimonials, setTestimonials] = useState([]);
+    const [heroSlides, setHeroSlides] = useState([]);
     /*
      * Which business descriptions are expanded, on mobile only.
      *
@@ -210,6 +208,9 @@ export default function Home() {
         fetchBestsellers(12).then(setBestsellers).catch(() => {});
         fetchSettings().then(setSettings).catch(() => {});
         fetchCollection("home_testimonials").then((d) => setTestimonials((d?.items || []).filter((t) => t && t.enabled !== false && t.quote))).catch(() => {});
+        // A slide with no image would render an empty coloured frame at the very
+        // top of the site, so an unfinished row is dropped rather than reserved.
+        fetchCollection("home_hero_slides").then((d) => setHeroSlides((d?.items || []).filter((s) => s && s.enabled !== false && s.image))).catch(() => {});
         // Fallback feed in case bestseller / new-release flags are sparse (also the pool for the curated carousel)
         fetchBooks({ sort: "featured", limit: 100 }).then(setFallback).catch(() => {});
     }, []);
@@ -230,6 +231,19 @@ export default function Home() {
     const hidden = hiddenSet(settings); // admin section show/hide
     const homeOrder = resolveSectionOrder(HOME_DEFAULT_ORDER, settings?.home_section_order);
     const homeOrd = (k) => { const i = homeOrder.indexOf(k); return i === -1 ? 99 : i; };
+
+    /*
+     * The hero carousel is the one orderable section that can outrank the hero.
+     *
+     * homeOrd() only ever returns 0 or more, and the hero is pinned at -1, so a
+     * normally-ordered section can never reach the top of the page. Dragged to
+     * first place the carousel therefore renders at -3 — ahead of the gift
+     * hamper banner's "above hero" -2 and the hero's -1 — and anywhere else it
+     * behaves like every other section and slots in below the hero. That is the
+     * behaviour the admin help text describes.
+     */
+    const heroCarouselOrd = homeOrder[0] === "hero_carousel" ? -3 : homeOrd("hero_carousel");
+    const showHeroCarousel = !hidden.has("home.hero_carousel") && heroSlides.length > 0;
 
     // "Hot Off the Press" = strictly the most recently PUBLISHED titles, in
     // publication-date order (the API sorts by release_rank, rank 1 = newest).
@@ -267,6 +281,18 @@ export default function Home() {
                 description="Independent Indian publisher of authoritative law, tax, business and academic titles — with events, training and AI-powered research tools."
                 path="/"
             />
+            {/* ============== HERO BANNER CAROUSEL ==============
+                Admin-managed promotional banners (collection `home_hero_slides`,
+                edited in Admin → Pages → Homepage). Renders nothing at all until
+                a slide with an image exists, so the page is unchanged until the
+                team uploads one. Placed first in the DOM as well as by `order`
+                so that ties break in its favour. */}
+            {showHeroCarousel && (
+                <section style={{ order: heroCarouselOrd }} data-testid="home-hero-carousel">
+                    <HeroCarousel slides={heroSlides} testId="home-hero-carousel-frame" priority />
+                </section>
+            )}
+
             {/* ============== HERO ============== */}
             <section style={{ order: -1 }} className="relative overflow-hidden border-b border-[#002B5C]/10">
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-0">
@@ -349,7 +375,19 @@ export default function Home() {
                                  * exactly.
                                  */
                                 "(min-width: 1024px) 42vw, 60vw",
-                                true,
+                                /*
+                                 * Priority only while this really is the LCP.
+                                 *
+                                 * When the banner carousel is switched on it
+                                 * sits above the hero, and its first slide
+                                 * becomes the largest thing in the first
+                                 * viewport. Two images both declaring
+                                 * fetchpriority="high" make the browser split
+                                 * bandwidth between them and neither arrives
+                                 * first, so this one steps down to normal
+                                 * priority whenever the carousel is showing.
+                                 */
+                                !showHeroCarousel,
                             )}
                             /* Decorative: a mood image behind a gradient, with the
                                headline beside it carrying the actual meaning. An

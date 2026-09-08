@@ -4,9 +4,16 @@ export const SECTION_REGISTRY = [
     {
         page: "Homepage",
         slug: "home",
+        // This list must stay in the same order as HOME_DEFAULT_ORDER, just
+        // below. It is what the admin panel shows on a site that has never
+        // saved an order, and the storefront reads the other one — so when they
+        // disagree, the panel lies about the live page. They disagreed until
+        // September 2026: the registry led with the gift hamper banner and the
+        // page led with Our Businesses. test-section-order.mjs now asserts it.
         items: [
-            { key: "home.gifting_banner", label: "Gift Hamper Banner" },
+            { key: "home.hero_carousel", label: "Hero banner carousel" },
             { key: "home.businesses", label: "Our Businesses" },
+            { key: "home.gifting_banner", label: "Gift Hamper Banner" },
             { key: "home.imprints", label: "Imprints (Five Imprints)" },
             { key: "home.hot_off_press", label: "Hot Off the Press" },
             { key: "home.solutions", label: "Solutions" },
@@ -61,6 +68,28 @@ export const SECTION_REGISTRY = [
         slug: "about",
         items: [{ key: "about.timeline", label: "Timeline (the mountain road)" }],
     },
+];
+
+/*
+ * Default top-to-bottom order of the reorderable homepage sections. Admin can
+ * override it via Admin → Pages → Section order & visibility, which saves
+ * `home_section_order`.
+ *
+ * This used to live in Home.jsx, with a third hand-copied duplicate inside
+ * test-section-order.mjs — so the test that was meant to prove the registry and
+ * the page agree was really comparing the registry against a copy of itself.
+ * One exported constant, imported by all three.
+ */
+export const HOME_DEFAULT_ORDER = [
+    "hero_carousel",
+    "businesses",
+    "gifting_banner",
+    "imprints",
+    "hot_off_press",
+    "solutions",
+    "bestsellers",
+    "testimonials",
+    "manifesto",
 ];
 
 // Resolve a page's section order for the storefront. `saved` is the page's

@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from "react";
 import { Link } from "react-router-dom";
 import { UploadCloud, ArrowUp, ArrowDown, X, Plus, Eye, EyeOff, GripVertical } from "lucide-react";
 import { toast } from "sonner";
-import { SECTION_REGISTRY } from "../../lib/sections";
+import { SECTION_REGISTRY, resolveSectionOrder } from "../../lib/sections";
 import {
     fetchSiteContent,
     adminSetSiteContent,
@@ -26,6 +26,7 @@ import {
     ListEditor,
     CollectionEditor,
 } from "../../components/admin/ContentEditors";
+import MediaListEditor from "../../components/admin/MediaListEditor";
 
 // Tab bar targets — label shown, title must match the PageGroup title exactly.
 const PAGE_TABS = [
@@ -179,6 +180,37 @@ export default function AdminPages() {
                         </p>
                     </div>
 
+                    <div className="overline !text-[10px] mt-6 mb-2">Hero banner carousel</div>
+                    <MediaListEditor
+                        collectionKey="home_hero_slides"
+                        addLabel="Add banner"
+                        max={6}
+                        help={
+                            "Full-width banners at the very top of the homepage, above the main hero. " +
+                            "They rotate every 6 seconds, swipe on a phone, and hold still for anyone who has " +
+                            "asked their device to reduce motion. Wide artwork around 2000×900 works best. " +
+                            "The carousel stays off the site until at least one banner has an image, and it can " +
+                            "be hidden or dragged lower in “Section order & visibility” — drag it below another " +
+                            "section and it moves under the main hero instead of above it."
+                        }
+                        fields={[
+                            { key: "image", label: "Banner image (wide, about 2000×900)", type: "image" },
+                            { key: "image_mobile", label: "Phone image (optional — a wide banner crops badly on a phone)", type: "image" },
+                            { key: "alt", label: "Alt text (what the banner says, for screen readers)" },
+                            { key: "link", label: "Opens (e.g. /books?category=law, or a full https:// address). Leave blank for a banner that isn’t clickable" },
+                            {
+                                key: "fit",
+                                label: "How it fills the frame",
+                                type: "select",
+                                options: [
+                                    { value: "cover", label: "Fill the frame — may crop (photos)" },
+                                    { value: "contain", label: "Show the whole image (designed banners)" },
+                                ],
+                            },
+                        ]}
+                    />
+
+                    <div className="overline !text-[10px] mt-6 mb-2">Main hero</div>
                     <SlotRow label="Hero image" value={site.home_hero} onSave={(v) => saveSite("home_hero", v)} />
                     <div className="overline !text-[10px] mt-6 mb-2">Hero text</div>
                     <div className="space-y-3">
@@ -615,15 +647,19 @@ function SectionVisibility() {
                     }
                 });
                 const savedRaw = Array.isArray(s[`${g.slug}_section_order`]) ? s[`${g.slug}_section_order`] : [];
-                const saved = savedRaw.flatMap((k) => (k === "flagship" ? flagKeys : [k]));
-                rows.sort((a, b) => {
-                    const ia = saved.indexOf(a.bare);
-                    const ib = saved.indexOf(b.bare);
-                    if (ia === -1 && ib === -1) return 0;
-                    if (ia === -1) return 1;
-                    if (ib === -1) return -1;
-                    return ia - ib;
-                });
+                /*
+                 * The SAME resolver the storefront uses, deliberately.
+                 *
+                 * This used to sort by index in the saved order and push
+                 * anything unknown to the bottom, while the live page inserts a
+                 * newly shipped section at its default position instead. So the
+                 * moment a section was added, the panel showed it last and the
+                 * site showed it where it belonged — and because Save writes
+                 * every row's position, the first Save after a release silently
+                 * dragged the new section to the bottom of the page.
+                 */
+                const resolved = resolveSectionOrder(rows.map((r) => r.bare), savedRaw, flagKeys);
+                rows.sort((a, b) => resolved.indexOf(a.bare) - resolved.indexOf(b.bare));
                 return { slug: g.slug, label: g.page, rows: rows.map((r) => ({ ...r, hidden: hidden.has(r.key) })) };
             });
             setPages(built);
