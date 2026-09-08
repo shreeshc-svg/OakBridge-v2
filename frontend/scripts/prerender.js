@@ -128,7 +128,7 @@ const MIME = {
 // whole problem this script exists to solve.
 const STATIC_ROUTES = [
     "/", "/books", "/authors", "/events", "/about", "/contact",
-    "/submissions", "/academy", "/digital-solutions", "/what-we-do",
+    "/submissions", "/academy", "/digital-solutions", "/what-we-do", "/ebooks",
     "/solutions", "/solutions/schools", "/solutions/higher-ed", "/solutions/educators",
     "/gifting",
     "/careers", "/media",

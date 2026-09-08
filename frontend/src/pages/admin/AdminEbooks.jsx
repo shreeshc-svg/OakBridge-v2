@@ -9,6 +9,7 @@ import {
     formatApiError,
 } from "../../lib/api";
 import { TextSlotRow } from "../../components/admin/ContentEditors";
+import MediaListEditor from "../../components/admin/MediaListEditor";
 import CONTENT_DEFAULTS from "../../lib/contentDefaults";
 
 /**
@@ -509,6 +510,60 @@ export default function AdminEbooks() {
                             Sits beside the format badge on every book page. Keep it short.
                         </p>
                         <TextSlotRow label="Button text" value={site.ebook_pdp_label} defaultValue={CONTENT_DEFAULTS.ebook_cta_label} onSave={(v) => saveSite("ebook_pdp_label", v)} />
+                    </section>
+
+                    <section>
+                        <h2 className="font-serif text-xl text-[#002B5C]">
+                            The eBooks page{" "}
+                            <Link
+                                to="/ebooks"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="font-mono text-[10px] uppercase tracking-widest text-[#CC0033] align-middle"
+                            >
+                                view ↗
+                            </Link>
+                        </h2>
+                        <p className="text-[11px] text-[#4B5563] mt-1 mb-3">
+                            The print-versus-eBook comparison at <code>/ebooks</code>, linked from the
+                            header. The bullet lists under each format are edited below.
+                        </p>
+                        <div className="space-y-3">
+                            <TextSlotRow label="Eyebrow" value={site.eb_eyebrow} defaultValue={CONTENT_DEFAULTS.eb_eyebrow} onSave={(v) => saveSite("eb_eyebrow", v)} />
+                            <TextSlotRow label="Headline (line breaks allowed)" value={site.eb_headline} defaultValue={CONTENT_DEFAULTS.eb_headline} onSave={(v) => saveSite("eb_headline", v)} multiline />
+                            <TextSlotRow label="Headline — the amber words at the end" value={site.eb_accent} defaultValue={CONTENT_DEFAULTS.eb_accent} onSave={(v) => saveSite("eb_accent", v)} />
+                            <TextSlotRow label="Intro paragraph" value={site.eb_body} defaultValue={CONTENT_DEFAULTS.eb_body} onSave={(v) => saveSite("eb_body", v)} multiline />
+                            <TextSlotRow label="Left column — heading" value={site.eb_print_title} defaultValue={CONTENT_DEFAULTS.eb_print_title} onSave={(v) => saveSite("eb_print_title", v)} />
+                            <TextSlotRow label="Left column — one-liner" value={site.eb_print_body} defaultValue={CONTENT_DEFAULTS.eb_print_body} onSave={(v) => saveSite("eb_print_body", v)} />
+                            <TextSlotRow label="Right column — heading" value={site.eb_ebook_title} defaultValue={CONTENT_DEFAULTS.eb_ebook_title} onSave={(v) => saveSite("eb_ebook_title", v)} />
+                            <TextSlotRow label="Right column — one-liner" value={site.eb_ebook_body} defaultValue={CONTENT_DEFAULTS.eb_ebook_body} onSave={(v) => saveSite("eb_ebook_body", v)} />
+                            <TextSlotRow label="Closing strip — kicker" value={site.eb_cta_kicker} defaultValue={CONTENT_DEFAULTS.eb_cta_kicker} onSave={(v) => saveSite("eb_cta_kicker", v)} />
+                            <TextSlotRow label="Closing strip — heading" value={site.eb_cta_headline} defaultValue={CONTENT_DEFAULTS.eb_cta_headline} onSave={(v) => saveSite("eb_cta_headline", v)} />
+                        </div>
+
+                        <div className="overline !text-[10px] mt-6 mb-2">Left column — printed book</div>
+                        <MediaListEditor
+                            collectionKey="page_eb_print"
+                            addLabel="Add point"
+                            max={7}
+                            help="Reasons to buy the printed edition. Order here is the order on the page. Clear the list entirely and the column's bullets disappear."
+                            fields={[
+                                { key: "title", label: "Point" },
+                                { key: "text", label: "Supporting line (optional)" },
+                            ]}
+                        />
+
+                        <div className="overline !text-[10px] mt-6 mb-2">Right column — eBook</div>
+                        <MediaListEditor
+                            collectionKey="page_eb_ebook"
+                            addLabel="Add point"
+                            max={7}
+                            help="Reasons to buy the eBook. Avoid stating a discount percentage here — the real number differs per title and is shown on each book's own page."
+                            fields={[
+                                { key: "title", label: "Point" },
+                                { key: "text", label: "Supporting line (optional)" },
+                            ]}
+                        />
                     </section>
                 </div>
             )}

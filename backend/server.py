@@ -705,7 +705,7 @@ SITE_URL = (os.environ.get("SITE_URL") or "https://www.oakbridge.in").rstrip("/"
 # /media and /cookie-policy were all live and all absent for exactly that reason.
 _SITEMAP_STATIC_PATHS = [
     "/", "/books", "/authors", "/events", "/about", "/contact",
-    "/submissions", "/academy", "/digital-solutions", "/what-we-do",
+    "/submissions", "/academy", "/digital-solutions", "/what-we-do", "/ebooks",
     # The three detail pages are listed one by one rather than derived: the
     # prerenderer keeps an identical hardcoded list and sanity-check #7 compares
     # the two, so a slug added in Admin needs adding in both places or it ships

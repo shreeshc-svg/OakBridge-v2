@@ -16,6 +16,9 @@ import {
 const DEFAULT_NAV = [
     { to: "/what-we-do", label: "What We Do" },
     { to: "/books", label: "Bookstore" },
+    // Directly after the Bookstore, because it is the same shelf in a different
+    // format — not a separate part of the business like Events or Academy.
+    { to: "/ebooks", label: "eBooks" },
     // Carries the hamper flyout. In DEFAULT_NAV as well as the saved menu,
     // because an install whose site_nav has no Gifting row would otherwise
     // render the trigger, the panel and the drawer section nowhere at all.

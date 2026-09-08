@@ -56,6 +56,7 @@ import LegalPage from "@/pages/LegalPage";
 import Events from "@/pages/Events";
 import DigitalSolutions from "@/pages/DigitalSolutions";
 import Academy from "@/pages/Academy";
+import Ebooks from "@/pages/Ebooks";
 import { CartProvider } from "@/context/CartContext";
 import { AuthProvider } from "@/context/AuthContext";
 
@@ -134,6 +135,7 @@ function App() {
                                 <Route path="/events" element={<Events />} />
                                 <Route path="/digital-solutions" element={<DigitalSolutions />} />
                                 <Route path="/academy" element={<Academy />} />
+                                <Route path="/ebooks" element={<Ebooks />} />
                                 <Route path="/terms" element={<LegalPage slug="terms" />} />
                                 <Route path="/privacy" element={<LegalPage slug="privacy" />} />
                                 <Route path="/refund-policy" element={<LegalPage slug="refund" />} />

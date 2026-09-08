@@ -11,7 +11,7 @@ const STATIC = [
   ["/", "weekly", "1.0"], ["/books", "daily", "0.9"], ["/authors", "weekly", "0.6"],
   ["/events", "weekly", "0.6"], ["/about", "monthly", "0.5"], ["/contact", "monthly", "0.5"],
   ["/submissions", "monthly", "0.5"], ["/academy", "monthly", "0.4"], ["/digital-solutions", "monthly", "0.4"],
-  ["/what-we-do", "monthly", "0.5"],
+  ["/what-we-do", "monthly", "0.5"], ["/ebooks", "monthly", "0.6"],
   ["/terms", "yearly", "0.3"], ["/privacy", "yearly", "0.3"],
   ["/refund-policy", "yearly", "0.3"], ["/shipping-policy", "yearly", "0.3"],
 ];

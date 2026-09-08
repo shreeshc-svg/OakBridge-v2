@@ -14,6 +14,7 @@ import { SOCIAL_PLATFORMS, socialIcon, DEFAULT_SOCIALS } from "../../lib/socials
 const DEFAULT_NAV = [
     { to: "/what-we-do", label: "What We Do", hidden: false },
     { to: "/books", label: "Bookstore", hidden: false },
+    { to: "/ebooks", label: "eBooks", hidden: false },
     { to: "/events", label: "Events", hidden: false },
     { to: "/academy", label: "Academy", hidden: false },
     { to: "/digital-solutions", label: "Digital Solutions", hidden: false },

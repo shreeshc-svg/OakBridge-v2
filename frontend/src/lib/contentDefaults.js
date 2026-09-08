@@ -76,6 +76,21 @@ const CONTENT_DEFAULTS = {
     // day someone answers at 7pm or nobody answers at 9am.
     contact_phone_hours: "Available during office hours",
     contact_reply_time: "We usually reply within 1–2 working days. Anything sent outside office hours is picked up the next working day.",
+    // The /ebooks comparison page. `eb_` is the page; `ebook_` above is the
+    // eReader integration that appears on every OTHER page. Two prefixes on
+    // purpose — they are edited in the same admin screen and would otherwise be
+    // impossible to tell apart in a settings dump.
+    eb_accent: "read it.",
+    eb_body:
+        "Every Oakbridge title is set for the page first. A growing number are set for the screen as well — the same text, the same edition, carried differently. Pick whichever suits how you actually read.",
+    eb_cta_headline: "Every book's own page lists both prices side by side.",
+    eb_cta_kicker: "Not sure which?",
+    eb_ebook_body: "Opens on the Oakbridge eReader, minutes after you buy it.",
+    eb_ebook_title: "eBook",
+    eb_eyebrow: "Oakbridge · eBooks",
+    eb_headline: "One book.\nTwo ways to",
+    eb_print_body: "Shipped to you, and yours afterwards.",
+    eb_print_title: "Printed book",
     ds_accent: "books you trust.",
     ds_body: "We're building a new line of digital products on top of Oakbridge's scholarly catalogue — semantic search, research copilots and licensed APIs for law firms, universities and Corporate & Judiciary. Launching soon.",
     ds_eyebrow: "Oakbridge · Digital Solutions",
