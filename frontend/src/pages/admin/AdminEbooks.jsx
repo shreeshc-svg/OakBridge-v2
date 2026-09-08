@@ -537,6 +537,9 @@ export default function AdminEbooks() {
                             <TextSlotRow label="Left column — one-liner" value={site.eb_print_body} defaultValue={CONTENT_DEFAULTS.eb_print_body} onSave={(v) => saveSite("eb_print_body", v)} />
                             <TextSlotRow label="Right column — heading" value={site.eb_ebook_title} defaultValue={CONTENT_DEFAULTS.eb_ebook_title} onSave={(v) => saveSite("eb_ebook_title", v)} />
                             <TextSlotRow label="Right column — one-liner" value={site.eb_ebook_body} defaultValue={CONTENT_DEFAULTS.eb_ebook_body} onSave={(v) => saveSite("eb_ebook_body", v)} />
+                            <TextSlotRow label="Cloud panel — kicker" value={site.eb_cloud_kicker} defaultValue={CONTENT_DEFAULTS.eb_cloud_kicker} onSave={(v) => saveSite("eb_cloud_kicker", v)} />
+                            <TextSlotRow label="Cloud panel — tagline" value={site.eb_cloud_tagline} defaultValue={CONTENT_DEFAULTS.eb_cloud_tagline} onSave={(v) => saveSite("eb_cloud_tagline", v)} />
+                            <TextSlotRow label="Cloud panel — supporting line" value={site.eb_cloud_body} defaultValue={CONTENT_DEFAULTS.eb_cloud_body} onSave={(v) => saveSite("eb_cloud_body", v)} multiline />
                             <TextSlotRow label="Closing strip — kicker" value={site.eb_cta_kicker} defaultValue={CONTENT_DEFAULTS.eb_cta_kicker} onSave={(v) => saveSite("eb_cta_kicker", v)} />
                             <TextSlotRow label="Closing strip — heading" value={site.eb_cta_headline} defaultValue={CONTENT_DEFAULTS.eb_cta_headline} onSave={(v) => saveSite("eb_cta_headline", v)} />
                         </div>

@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { ArrowUpRight, BookOpen, Tablet } from "lucide-react";
 import Seo from "../components/Seo";
 import FormatSplitGraphic from "../components/FormatSplitGraphic";
+import CloudSyncGraphic from "../components/CloudSyncGraphic";
 import { fetchSiteContent, fetchCollection, resolveCollection } from "../lib/api";
 import { metaDescription, breadcrumbLd } from "../lib/schema";
 import { track } from "../lib/analytics";
@@ -49,6 +50,10 @@ const DEFAULTS = {
     ebook_body: "Opens on the Oakbridge eReader, minutes after you buy it.",
     cta_kicker: "Not sure which?",
     cta_headline: "Every book's own page lists both prices side by side.",
+    cloud_kicker: "Anywhere you read",
+    cloud_tagline: "Oakbridge, now on the cloud.",
+    cloud_body:
+        "Buy the eBook once and your library, your highlights and your place in the book follow you — phone on the commute, laptop at the desk, tablet in chambers.",
 };
 
 const DEFAULT_PRINT = [
@@ -184,6 +189,25 @@ export default function Ebooks() {
                         on a desktop, where it is the shared spine. */}
                     <div className="lg:col-span-4 order-first lg:order-none">
                         <FormatSplitGraphic />
+
+                        {/* Two bullet columns are taller than one wide drawing,
+                            which left a long empty run down the middle of the
+                            page on desktop. This fills it with the half of the
+                            argument the columns only assert in words. */}
+                        <div className="mt-10 lg:mt-12">
+                            <CloudSyncGraphic />
+                            <div className="mt-5 text-center max-w-sm mx-auto">
+                                <div className="overline !text-[10px] !text-[#0A7D55]">
+                                    {txt("cloud_kicker")}
+                                </div>
+                                <p className="font-serif text-xl md:text-2xl text-[#002B5C] mt-2 leading-tight">
+                                    {txt("cloud_tagline")}
+                                </p>
+                                <p className="text-[13px] text-[#4B5563] mt-2.5 leading-relaxed">
+                                    {txt("cloud_body")}
+                                </p>
+                            </div>
+                        </div>
                     </div>
 
                     {/* ---- digital ---- */}

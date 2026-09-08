@@ -83,6 +83,10 @@ const CONTENT_DEFAULTS = {
     eb_accent: "read it.",
     eb_body:
         "Every Oakbridge title is set for the page first. A growing number are set for the screen as well — the same text, the same edition, carried differently. Pick whichever suits how you actually read.",
+    eb_cloud_body:
+        "Buy the eBook once and your library, your highlights and your place in the book follow you — phone on the commute, laptop at the desk, tablet in chambers.",
+    eb_cloud_kicker: "Anywhere you read",
+    eb_cloud_tagline: "Oakbridge, now on the cloud.",
     eb_cta_headline: "Every book's own page lists both prices side by side.",
     eb_cta_kicker: "Not sure which?",
     eb_ebook_body: "Opens on the Oakbridge eReader, minutes after you buy it.",

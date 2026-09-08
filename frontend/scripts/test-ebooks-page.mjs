@@ -45,6 +45,7 @@ const code = (abs) =>
 
 const page = code(join(SRC, "pages", "Ebooks.jsx"));
 const svg = code(join(SRC, "components", "FormatSplitGraphic.jsx"));
+const cloud = code(join(SRC, "components", "CloudSyncGraphic.jsx"));
 const app = code(join(SRC, "App.js"));
 const header = code(join(SRC, "components", "Header.jsx"));
 const adminNav = code(join(SRC, "pages", "admin", "AdminNavigation.jsx"));
@@ -103,7 +104,8 @@ check(page.includes("ebook_cta_clicked"),
 
 console.log("\n-- the copy is admin-editable --");
 for (const key of ["eb_eyebrow", "eb_headline", "eb_accent", "eb_body",
-                   "eb_print_title", "eb_ebook_title", "eb_cta_headline"]) {
+                   "eb_print_title", "eb_ebook_title", "eb_cta_headline",
+                   "eb_cloud_kicker", "eb_cloud_tagline", "eb_cloud_body"]) {
     check(typeof DEFAULTS[key] === "string" && DEFAULTS[key].length > 0,
           `${key} has a default, so an unset key never renders blank`);
     check(adminEbooks.includes(`"${key}"`), `${key} is editable in Admin -> E-Books`);
@@ -126,6 +128,15 @@ check(!/linearGradient|filter=|feDropShadow/.test(svg),
       "flat fills only, matching TimelineRoad — the only other real illustration here");
 check(/#002B5C/.test(svg) && /#CC0033/.test(svg) && /#F59E0B/.test(svg),
       "drawn in the brand palette rather than a new one");
+
+console.log("\n-- and neither can the cloud panel --");
+check(/viewBox="0 0 560 262"/.test(cloud), "the cloud graphic has a fixed viewBox too");
+check(!/<image|xlink:href|linearGradient|feDropShadow/.test(cloud),
+      "no fetched asset, no gradient, no shadow — same rules as the drawing above it");
+check(/role="img"/.test(cloud) && /aria-label=/.test(cloud), "and one aria-label rather than thirty silent rectangles");
+check(page.includes("<CloudSyncGraphic />"), "the page renders it");
+check(cloud.includes("DEVICES") && /cx=\{d\.cx\}/.test(cloud),
+      "the connector end points and the devices come from one list, so a nudge cannot leave a line pointing at nothing");
 
 console.log();
 if (failed) {
