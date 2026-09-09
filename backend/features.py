@@ -3345,7 +3345,7 @@ async def _chat_system_prompt(orders_ctx: str = "", books_ctx: str = "") -> str:
     books_block = ("\n\nRELEVANT BOOKS (real catalog matches for this query — use for summaries, "
                    "descriptions, prices and availability; do not invent beyond this):\n" + books_ctx + "\n") if books_ctx else ""
     return (
-        "You are \"Oaky\", the assistant on the Oakbridge Publishing website (oakbridge.in), a "
+        "You are \"Asterisk\", the assistant on the Oakbridge Publishing website (oakbridge.in), a "
         "law and academic publishing house in Gurugram, India.\n\n"
         "TONE: Always professional, friendly and cooperative. Warm and helpful, never curt.\n\n"
         "RULES:\n"
@@ -3493,7 +3493,7 @@ CHAT_REFUSAL = (
 
 DETERMINISTIC, BECAUSE THE PROMPT RULE IS NOT.
 
-The system prompt already tells Oaky to refuse these, but that is the model's
+The system prompt already tells Asterisk to refuse these, but that is the model's
 discretion and people defeat that for sport. Matching here settles it before a
 request is made: no model involved, no persuasion possible, and no LLM call
 billed for an attack.
@@ -3527,7 +3527,11 @@ _INJECTION_RE = re.compile("|".join(_INJECTION_PATTERNS), re.I)
 """Distinctive strings from the system prompt. If one comes back in a reply the
 model has quoted its instructions, whatever it was asked, and the reply is
 replaced rather than shown."""
-_PROMPT_LEAK_MARKERS = ("ANTI-MISUSE", "CUSTOMER ORDERS (", "RELEVANT BOOKS (", 'You are "Oaky"')
+# The last marker must quote the system prompt's opening EXACTLY. Renaming the
+# assistant without changing it here does not break anything loudly — the guard
+# simply stops recognising a leaked prompt, which is the failure you would never
+# notice. test-chat-guardrails.mjs asserts the two stay in step.
+_PROMPT_LEAK_MARKERS = ("ANTI-MISUSE", "CUSTOMER ORDERS (", "RELEVANT BOOKS (", 'You are "Asterisk"')
 
 
 @public_router.post("/chat")

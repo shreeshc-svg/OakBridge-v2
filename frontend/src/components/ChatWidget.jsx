@@ -4,7 +4,7 @@ import { MessageCircle, X, Send, ArrowRight } from "lucide-react";
 import { sendChat } from "../lib/api";
 
 const GREETING =
-    "Hi! I'm Oaky, the Oakbridge assistant. Ask me about ordering, shipping, returns, finding books — or say \"take me to the bookstore\" and I'll get you there.";
+    "Hi! I'm Asterisk, the Oakbridge AI assistant. Ask me about ordering, shipping, returns, finding books — or say \"take me to the bookstore\" and I'll get you there.";
 const SUGGESTIONS = [
     "Take me to the bookstore",
     "What are your shipping charges?",
@@ -44,7 +44,7 @@ const labelFor = (path) => ROUTES[path.split("?")[0]] || "the page";
 
 /*
  * First-visit nudge. Plenty of people never notice a floating chat button, so on
- * the first few homepage landings Oaky introduces itself in a small bubble beside
+ * the first few homepage landings Asterisk introduces itself in a small bubble beside
  * the launcher. Capped at NUDGE_LIMIT views and dismissed for good once the
  * visitor closes it or opens the chat — a greeting that keeps reappearing stops
  * being a welcome and starts being an irritation.
@@ -52,7 +52,7 @@ const labelFor = (path) => ROUTES[path.split("?")[0]] || "the page";
 const NUDGE_KEY = "oakbridge_oaky_nudges";
 const NUDGE_LIMIT = 5;
 const NUDGE_TEXT =
-    "Hi, I'm Oaky, your personal AI assistant. How can I help you today?";
+    "Hi, I'm Asterisk, your personal AI assistant. How can I help you today?";
 
 const readNudges = () => {
     try {
@@ -182,7 +182,7 @@ export default function ChatWidget() {
                     >
                         <X size={14} strokeWidth={1.75} />
                     </button>
-                    <div className="overline !text-[9px] !text-[#CC0033]">Oaky</div>
+                    <div className="overline !text-[9px] !text-[#CC0033]">Asterisk</div>
                     <p className="text-sm text-[#002B5C] mt-1.5 leading-snug pr-3">{NUDGE_TEXT}</p>
                     <button
                         onClick={() => setOpen(true)}

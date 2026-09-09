@@ -211,6 +211,24 @@ check(page.includes('<OrbitField className="hidden lg:block" />'),
 check(page.indexOf("<OrbitField") < page.indexOf("<FormatSplitGraphic"),
       "painted before its siblings, so it sits behind them without needing a stacking context");
 const orbitIds = [...orbit.matchAll(/id="([^"]+)"/g)].map((m) => m[1]);
+/* Same arithmetic as the artwork's washes, on the portal's own canvas. The
+   rims were enlarged to enclose both drawings, and an ellipse that runs past
+   the viewBox is sliced flat — the exact defect the artwork already shipped
+   once. */
+const [, obW, obH] = orbit.match(/viewBox="0 0 (\d+) (\d+)"/).map(Number);
+const [, obCx] = orbit.match(/const CX = (\d+);/).map(Number);
+const [, obCy] = orbit.match(/const CY = (\d+);/).map(Number);
+const obRadii = [
+    ...[...orbit.matchAll(/rx: (\d+), ry: (\d+)/g)].map((m) => [Number(m[1]), Number(m[2])]),
+    ...[...orbit.matchAll(/rx="(\d+)"\s*\n?\s*ry="(\d+)"/g)].map((m) => [Number(m[1]), Number(m[2])]),
+];
+check(obRadii.length >= 5, `every rim and glow was measured ${obRadii.length} found`);
+const obOut = obRadii.filter(([rx, ry]) => obCx + rx > obW || obCy + ry > obH || obCx - rx < 0 || obCy - ry < 0);
+check(obOut.length === 0,
+      `every portal ring finishes inside its ${obW}x${obH} canvas ${obOut.map((r) => r.join("/")).join(" | ")}`);
+check(obRadii.some(([, ry]) => ry >= obH * 0.45),
+      "and the outer rim reaches far enough out to enclose both drawings rather than cutting through them");
+
 check(orbitIds.every((id) => id.startsWith("fg-")),
       `its gradient ids are prefixed too ${orbitIds.join(", ")} — three SVGs share this page`);
 

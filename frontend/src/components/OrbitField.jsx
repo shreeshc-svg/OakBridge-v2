@@ -32,23 +32,36 @@ import React from "react";
  * device least able to afford them. Hidden below lg, where the layout stacks
  * and there is no room for a portal anyway.
  *
- * Decorative only: aria-hidden, pointer-events-none, and low enough in opacity
- * that it can never compete with the tagline sitting on top of it.
+ * HOW BIG, AND HOW LOUD
+ *
+ * The rims sit near the edge of the layer on purpose: at the original radii
+ * they cut straight through the book and the e-reader, which reads as a stray
+ * arc rather than as something enclosing them. They now clear both drawings and
+ * the tagline, and stop just inside the canvas — an ellipse that runs past the
+ * viewBox is sliced flat, which is the same defect the washes inside the
+ * artwork already had once.
+ *
+ * Opacity was raised to make it read at all. The reason that is safe is the
+ * donut: the glow lives on the rim and the centre is genuinely empty, so the
+ * copy sitting over the middle has nothing behind it. Turning up the CENTRE
+ * would not be safe, which is why there is nothing there to turn up.
+ *
+ * Decorative only: aria-hidden and pointer-events-none.
  */
 
 const GOLD = "#F59E0B";
 const BLUE = "#2F6FB5";
 const FACE = "Public Sans, ui-sans-serif, system-ui, sans-serif";
 
-const CX = 300;
-const CY = 410;
+const CX = 350;
+const CY = 495;
 
 /* Concentric rims. Dash lengths differ per ring so the travelling light never
    lines up into a single moving spoke. */
 const RINGS = [
-    { i: 0, rx: 250, ry: 340, dash: "3 13", colour: GOLD, opacity: 0.34, duration: 9, reverse: false },
-    { i: 1, rx: 272, ry: 370, dash: "2 17", colour: GOLD, opacity: 0.24, duration: 14, reverse: true },
-    { i: 2, rx: 291, ry: 396, dash: "4 21", colour: BLUE, opacity: 0.28, duration: 19, reverse: false },
+    { i: 0, rx: 300, ry: 420, dash: "3 13", colour: GOLD, opacity: 0.55, duration: 9, reverse: false },
+    { i: 1, rx: 325, ry: 455, dash: "2 17", colour: GOLD, opacity: 0.42, duration: 14, reverse: true },
+    { i: 2, rx: 345, ry: 482, dash: "4 21", colour: BLUE, opacity: 0.48, duration: 19, reverse: false },
 ];
 
 /* Two rings of bodies turning opposite ways. One ring reads as a carousel; two
@@ -60,21 +73,21 @@ const PARTICLES = ["§", "a", "¶", "e", "t", "§", "i", "m", "▪", "▪", "▪
         i,
         ch,
         isPixel,
-        radius: outer ? 262 + ((i * 13) % 26) : 196 + ((i * 17) % 30),
-        size: isPixel ? 6 + (i % 3) : 13 + ((i * 5) % 7),
+        radius: outer ? 300 + ((i * 13) % 26) : 232 + ((i * 17) % 30),
+        size: isPixel ? 7 + (i % 3) : 15 + ((i * 5) % 8),
         /* Spread around the ring by index, nudged so the two rings do not line
            up into spokes. */
         start: Math.round((i * 360) / 12 + (outer ? 0 : 17)),
         duration: outer ? 68 + (i % 4) * 6 : 48 + (i % 3) * 5,
         reverse: !outer,
-        opacity: outer ? 0.3 : 0.38,
+        opacity: outer ? 0.46 : 0.52,
     };
 });
 
 export default function OrbitField({ className = "" }) {
     return (
         <svg
-            viewBox="0 0 600 820"
+            viewBox="0 0 700 990"
             aria-hidden="true"
             focusable="false"
             className={`pointer-events-none absolute inset-0 h-full w-full ${className}`}
@@ -87,25 +100,25 @@ export default function OrbitField({ className = "" }) {
                 <radialGradient id="fg-portal-warm">
                     <stop offset="0%" stopColor={GOLD} stopOpacity="0" />
                     <stop offset="78%" stopColor={GOLD} stopOpacity="0" />
-                    <stop offset="91%" stopColor={GOLD} stopOpacity="0.13" />
+                    <stop offset="91%" stopColor={GOLD} stopOpacity="0.22" />
                     <stop offset="100%" stopColor={GOLD} stopOpacity="0" />
                 </radialGradient>
                 <radialGradient id="fg-portal-cool">
                     <stop offset="0%" stopColor={BLUE} stopOpacity="0" />
                     <stop offset="82%" stopColor={BLUE} stopOpacity="0" />
-                    <stop offset="94%" stopColor={BLUE} stopOpacity="0.12" />
+                    <stop offset="94%" stopColor={BLUE} stopOpacity="0.2" />
                     <stop offset="100%" stopColor={BLUE} stopOpacity="0" />
                 </radialGradient>
             </defs>
 
             {/* The rim glow, on the same heartbeat as the halos inside the
                 artwork, so the column pulses to one clock. */}
-            <ellipse cx={CX} cy={CY} rx="285" ry="388" fill="url(#fg-portal-warm)" className="fg-halo" />
+            <ellipse cx={CX} cy={CY} rx="338" ry="472" fill="url(#fg-portal-warm)" className="fg-halo" />
             <ellipse
                 cx={CX}
                 cy={CY}
-                rx="298"
-                ry="405"
+                rx="348"
+                ry="486"
                 fill="url(#fg-portal-cool)"
                 className="fg-halo"
                 style={{ animationDelay: "0.85s" }}
@@ -121,7 +134,7 @@ export default function OrbitField({ className = "" }) {
                     ry={r.ry}
                     fill="none"
                     stroke={r.colour}
-                    strokeWidth="1.5"
+                    strokeWidth="2"
                     strokeDasharray={r.dash}
                     strokeLinecap="round"
                     opacity={r.opacity}
