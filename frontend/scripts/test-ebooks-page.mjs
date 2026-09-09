@@ -22,7 +22,7 @@ const ROOT = join(HERE, "..", "..");
 const SRC = join(HERE, "..", "src");
 
 const DEFAULTS = (await import(pathToFileURL(join(SRC, "lib", "contentDefaults.js")).href)).default;
-const { portalFit, MIN_WIDTH, MAX_WIDTH, DEFAULT_WIDTH, LIST_COLUMN, CAPTION_WIDTH } =
+const { portalFit, MIN_WIDTH, MAX_WIDTH, DEFAULT_WIDTH, FLANK_CONTAINER, FLANK_GAP, FLANK_MIN_COLUMN } =
     await import(pathToFileURL(join(SRC, "lib", "portalFit.js")).href);
 
 let failed = 0;
@@ -264,12 +264,14 @@ check(/left: -insetX, right: -insetX, top: -insetY, bottom: -insetY/.test(orbit)
       + "is an admin setting, and a fixed class is right for exactly one width and wrong either side of it");
 check(page.includes("portalFit(site?.eb_art_width)"),
       "and the page derives both the artwork width and those insets from one setting");
-check(/<OrbitField className="hidden lg:block"/.test(page),
+check(/<OrbitField[\s\S]{0,80}className="hidden lg:block"/.test(page),
       "and it is desktop only: on a phone the artwork already fills the screen, so there are no margins for a portal to occupy");
 check(page.indexOf("<OrbitField") < page.indexOf("<FormatSplitGraphic"),
       "painted before its siblings, so it sits behind them without needing a stacking context");
-check(/md:grid-cols-2/.test(page) && page.indexOf("<FormatSplitGraphic") < page.indexOf("ebooks-browse-print"),
-      "the two format lists sit BELOW the artwork rather than flanking it — which is what empties the margins the portal needs");
+check(page.indexOf("fg-flank-art") < page.indexOf("fg-flank-print")
+      && page.indexOf("fg-flank-print") < page.indexOf("fg-flank-ebook"),
+      "source order is artwork, printed book, eBook — which is the phone reading order; the three-column arrangement is "
+      + "done with grid-column, so the markup never has to be written twice");
 /*
  * The lists are pulled UP into the white wedges either side of the circle's
  * bottom. Safe only because the portal is a donut: the glow is on the rim and
@@ -279,41 +281,44 @@ check(/md:grid-cols-2/.test(page) && page.indexOf("<FormatSplitGraphic") < page.
  * headings land outside the rim — x=310 against a circle starting at x=320 on a
  * 1900px viewport — and the dashes run straight through "Printed book".
  */
-check(/xl:-mt-\d+/.test(page) && !/lg:-mt-\d+/.test(page),
-      "the lists are pulled up at xl only — below 1280 there is not room for two columns AND the caption between them");
-check(/style=\{\{ maxWidth: fit\.listWidth \}\}/.test(page),
-      "their width is DERIVED from the portal, not a fixed class: the artwork size is an admin setting, so the rim "
-      + "moves, and a fixed full-width grid puts the headings 101px outside it once someone shrinks the artwork");
-check(/fit\.raised \? " xl:-mt-\d+" : ""/.test(page)
-      && /fit\.raised \? "xl:max-w-xs xl:justify-self-start"/.test(page),
-      "and the raised layout switches itself OFF when the circle is too small to hold two columns and the caption between them");
+check(/fg-flank/.test(page) && /fg-flank-print/.test(page) && /fg-flank-ebook/.test(page),
+      "one grid holds a list, the artwork and a list — not two layouts with the markup written twice");
+check(page.indexOf('"--fg-flank-col"') > -1 && css.includes("var(--fg-flank-col)"),
+      "the column width is computed and handed to the stylesheet, because it depends on the admin's artwork size");
+check(/fit\.flank\.fits \? "" : " fg-flank--stacked"/.test(page),
+      "and when there is no room beside the artwork the grid stays stacked rather than overlapping it");
+check(/grid-column: 2/.test(css) && /grid-template-columns: var\(--fg-flank-col\) var\(--fg-art\) var\(--fg-flank-col\)/.test(css),
+      "three columns at 1280 and up, with the artwork in the middle one");
+check(/\.fg-flank-art \{ order: 1;/.test(css),
+      "and on a phone the artwork comes FIRST, because it explains the page before any of the reading does");
 
 /*
- * The overlap this guards against was live: pulled up at full half-width, both
- * lists printed over "Oakbridge, now on the cloud." Now measured rather than
- * trusted, and across every artwork size an admin can set — not just the
- * default, because the circle moves with the artwork and the columns move with
- * the circle.
+ * THE COLUMNS MUST CLEAR THE CIRCLE, NOT THE RIM.
+ *
+ * A column starting inside the ring has dashes and glow behind it however
+ * faint, and this page has already shipped that twice. So the check is against
+ * the full circle diameter plus a gap of real air, at every artwork size an
+ * admin can set — the circle grows with the artwork, so a size that flanks
+ * comfortably at 280 has no room at all by 480.
  */
-const clash = [MIN_WIDTH, 400, 480, 560, DEFAULT_WIDTH, 800, MAX_WIDTH].flatMap((art) => {
+const overlaps = [MIN_WIDTH, 300, 320, 400, 480, DEFAULT_WIDTH, MAX_WIDTH].flatMap((art) => {
     const f = portalFit(art);
-    if (!f.raised) return [];            // stacked below the artwork; nothing to collide with
-    return [1280, 1440, 1920].flatMap((vw) => {
-        const container = Math.min(1280, vw - (vw >= 1536 ? 192 : 128));
-        const grid = Math.min(f.listWidth, container);
-        const gl = (vw - grid) / 2, gr = gl + grid;
-        const bad = [];
-        if (gl + LIST_COLUMN > vw / 2 - CAPTION_WIDTH / 2) bad.push(`art${art}@${vw}: left column over the caption`);
-        if (gr - LIST_COLUMN < vw / 2 + CAPTION_WIDTH / 2) bad.push(`art${art}@${vw}: right column over the caption`);
-        if (gl < vw / 2 - f.circle / 2 - 1) bad.push(`art${art}@${vw}: left heading outside the rim`);
-        if (gr > vw / 2 + f.circle / 2 + 1) bad.push(`art${art}@${vw}: right heading outside the rim`);
-        return bad;
-    });
+    if (!f.flank.fits) return [];              // stacked; nothing sits beside the circle
+    const half = FLANK_CONTAINER / 2;
+    const columnInnerEdge = half - f.flank.column - f.flank.gap;
+    const circleEdge = f.circle / 2;
+    return columnInnerEdge < circleEdge
+        ? [`art${art}: column reaches ${Math.round(columnInnerEdge)} but the circle ends at ${Math.round(circleEdge)}`]
+        : [];
 });
-check(clash.length === 0,
-      `at every artwork size and viewport, the raised lists clear the caption and stay inside the rim ${clash.join(" | ")}`);
-check(portalFit(480).raised === false && portalFit(DEFAULT_WIDTH).raised === true,
-      "a small artwork drops the pull-up rather than overlapping — plainer, but never broken");
+check(overlaps.length === 0,
+      `no text column touches the animation at any artwork size ${overlaps.join(" | ")}`);
+check(portalFit(MIN_WIDTH).flank.fits === true && portalFit(480).flank.fits === false,
+      `flanking works at ${MIN_WIDTH}px and gives up by 480px, where the circle leaves under ${FLANK_MIN_COLUMN}px a side`);
+check(portalFit(280).width === 280,
+      "280 is honoured rather than clamped up — the admin's number has to mean what it says");
+check(portalFit(MIN_WIDTH).flank.gap === FLANK_GAP && FLANK_GAP >= 24,
+      "and there is real air between the column and the ring, not a hairline");
 const orbitIds = [...orbit.matchAll(/id="([^"]+)"/g)].map((m) => m[1]);
 /* Same arithmetic as the artwork's washes, on the portal's own canvas. The
    rims were enlarged to enclose both drawings, and an ellipse that runs past

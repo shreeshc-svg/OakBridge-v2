@@ -68,11 +68,40 @@ export const LIST_MAX = 1280;
  * artwork drops the pull-up entirely and the lists sit under it, which is
  * plainer but never broken.
  */
+/*
+ * FLANKING: the two lists sitting either side of the orbit rather than under it.
+ *
+ * They must clear the CIRCLE, not merely the rim — a column that starts inside
+ * the ring has dashes and glow behind it however faint. So the space each side
+ * is (container - circle) / 2, and the column is what is left after a gap of
+ * real air.
+ *
+ * Below FLANK_MIN_COLUMN the sub-lines under each bullet stop fitting on two
+ * lines and the column reads as a broken list rather than a narrow one, so the
+ * layout stops flanking and stacks instead. That threshold is why this returns
+ * `fits` rather than just a width: a small container and a large artwork leave
+ * nowhere to put them, and the honest answer is to put them underneath.
+ */
+export const FLANK_GAP = 40;
+export const FLANK_MIN_COLUMN = 200;
+export const FLANK_CONTAINER = 1280;
+
+export function flankFit(circle, container = FLANK_CONTAINER) {
+    const free = (container - circle) / 2;
+    const column = Math.floor(free - FLANK_GAP);
+    return { fits: column >= FLANK_MIN_COLUMN, column: Math.max(0, column), gap: FLANK_GAP };
+}
+
 export const LIST_COLUMN = 320;
 export const CAPTION_WIDTH = 384;
 export const LIST_RAISED_MIN = LIST_COLUMN * 2 + CAPTION_WIDTH;
 
-export const MIN_WIDTH = 320;
+/*
+ * 280 because that is what the site is set to. It used to be 320, which meant a
+ * smaller entry was silently raised and the admin's number did not mean what it
+ * said — the worst kind of clamp, because nothing tells you it happened.
+ */
+export const MIN_WIDTH = 280;
 export const MAX_WIDTH = 1000;
 export const DEFAULT_WIDTH = 672;
 
@@ -114,5 +143,6 @@ export function portalFit(rawWidth) {
         circle: Math.round(circle),
         listWidth,
         raised: listWidth >= LIST_RAISED_MIN,
+        flank: flankFit(Math.round(circle)),
     };
 }

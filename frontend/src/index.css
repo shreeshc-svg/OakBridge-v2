@@ -355,6 +355,52 @@ body {
     }
 }
 
+/* ---------------------------------------------------------------------------
+   /ebooks — the two format lists flanking the orbit.
+
+   A grid rather than Tailwind classes because the column widths are computed:
+   they depend on the artwork size, which is an admin setting, and on the
+   circle that size produces. The page passes them in as custom properties.
+
+   Three states, and the order matters in each:
+     phone      one column — artwork first, because it explains the page
+     tablet     two columns — artwork full width, the lists side by side
+     desktop    three columns — a list, the artwork, a list
+   --------------------------------------------------------------------------- */
+.fg-flank {
+    display: grid;
+    grid-template-columns: 1fr;
+    justify-items: center;
+    gap: 3rem;
+}
+.fg-flank-art { order: 1; width: 100%; max-width: var(--fg-art, 672px); }
+.fg-flank-print { order: 2; width: 100%; }
+.fg-flank-ebook { order: 3; width: 100%; }
+
+@media (min-width: 768px) {
+    .fg-flank { grid-template-columns: 1fr 1fr; column-gap: 4rem; }
+    .fg-flank-art { grid-column: 1 / -1; }
+    .fg-flank-print,
+    .fg-flank-ebook { justify-self: stretch; max-width: 22rem; }
+}
+
+/* The flank itself. `--fg-flank-col` is what is left of the container after the
+   circle and a gap of real air either side, so the columns cannot sit on the
+   animation. `.fg-flank--stacked` is set by the page when that arithmetic says
+   there is no room — a large artwork on a small container — and it simply
+   keeps the tablet layout at every width. */
+@media (min-width: 1280px) {
+    .fg-flank:not(.fg-flank--stacked) {
+        grid-template-columns: var(--fg-flank-col) var(--fg-art) var(--fg-flank-col);
+        justify-content: center;
+        align-items: center;
+        column-gap: var(--fg-flank-gap, 40px);
+    }
+    .fg-flank:not(.fg-flank--stacked) .fg-flank-art { grid-column: 2; max-width: none; }
+    .fg-flank:not(.fg-flank--stacked) .fg-flank-print { grid-column: 1; max-width: none; }
+    .fg-flank:not(.fg-flank--stacked) .fg-flank-ebook { grid-column: 3; max-width: none; }
+}
+
 /* Buttons with McGraw-style boxy CTA — slight rounded edges */
 button,
 a {

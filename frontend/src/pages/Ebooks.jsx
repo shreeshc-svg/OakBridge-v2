@@ -7,7 +7,7 @@ import CloudSyncGraphic from "../components/CloudSyncGraphic";
 import OrbitField from "../components/OrbitField";
 import { fetchSiteContent, fetchCollection, resolveCollection } from "../lib/api";
 import { metaDescription, breadcrumbLd } from "../lib/schema";
-import { portalFit } from "../lib/portalFit";
+import { portalFit, FLANK_CONTAINER } from "../lib/portalFit";
 import { track } from "../lib/analytics";
 
 /**
@@ -142,6 +142,24 @@ export default function Ebooks() {
         "--fg-flight": secs(site?.eb_anim_flight, 5.2),
     };
 
+    /*
+     * Widths for the flanking layout, handed to the stylesheet as custom
+     * properties. The columns must clear the CIRCLE, not just its rim — a
+     * column starting inside the ring has dashes and glow behind it however
+     * faint — so `flank.column` is what is left of the container after the
+     * circle and a gap of real air either side.
+     *
+     * When that leaves too little to read, `fits` is false and the grid keeps
+     * its stacked layout at every width. A large artwork simply has no room
+     * beside it, and saying so is better than overlapping.
+     */
+    const layout = {
+        ...rhythm,
+        "--fg-art": `${fit.width}px`,
+        "--fg-flank-col": `${fit.flank.column}px`,
+        "--fg-flank-gap": `${fit.flank.gap}px`,
+    };
+
     const onLeave = () => track("ebook_cta_clicked", { placement: "ebooks_page", url: readerUrl });
 
     return (
@@ -190,82 +208,57 @@ export default function Ebooks() {
                 data-testid="ebooks-compare"
                 className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-16 md:py-24"
             >
-                {/* ---- the artwork, on its own, full width ----
+                {/* ---- one grid: a list, the artwork, a list ----
 
-                    The two lists used to flank it. That capped the drawing at a
-                    third to a half of the page AND meant the portal could only
-                    grow by running its rings behind live copy — measured at 107px
-                    of overhang each side to enclose the artwork, against a 32px
-                    gutter. Moving the lists below empties the margins, so the
-                    portal can be as wide as it needs and the drawings get the
-                    full column. */}
-                <div className="relative mx-auto w-full" style={{ ...rhythm, maxWidth: fit.width }}>
-                    {/* Painted before its siblings, so it sits behind them
-                        without needing a stacking context. Desktop only — on a
-                        phone there are no margins to spill into. */}
-                    {portal && <OrbitField className="hidden lg:block" insetX={fit.insetX} insetY={fit.insetY} />}
-                    <FormatSplitGraphic
-                        animate={animate}
-                        title={txt("art_title")}
-                        author={txt("art_author")}
-                        chapter={txt("art_chapter")}
-                        pages={txt("art_pages")}
-                    />
+                    Three columns at 1280 and up, two on a tablet with the
+                    artwork spanning both, one on a phone with the artwork
+                    first. Widths come from the stylesheet's custom properties
+                    because they are computed, not chosen: they depend on the
+                    admin's artwork size and the circle it produces.
 
-                    <div className="mt-10 lg:mt-12">
-                        <CloudSyncGraphic animate={animate} />
-                        <div className="mt-5 text-center max-w-sm mx-auto">
-                            <div className="overline !text-[10px] !text-[#0A7D55]">
-                                {txt("cloud_kicker")}
+                    The lists clear the whole circle, not just its rim. Anything
+                    starting inside the ring picks up dashes and glow, and this
+                    page has already shipped that defect twice. */}
+                <div
+                    className={`fg-flank mx-auto${fit.flank.fits ? "" : " fg-flank--stacked"}`}
+                    style={{ ...layout, maxWidth: FLANK_CONTAINER }}
+                >
+                    <div className="fg-flank-art relative">
+                        {/* Painted before its siblings, so it sits behind them
+                            without needing a stacking context. Desktop only —
+                            on a phone the artwork already fills the screen. */}
+                        {portal && (
+                            <OrbitField
+                                className="hidden lg:block"
+                                insetX={fit.insetX}
+                                insetY={fit.insetY}
+                            />
+                        )}
+                        <FormatSplitGraphic
+                            animate={animate}
+                            title={txt("art_title")}
+                            author={txt("art_author")}
+                            chapter={txt("art_chapter")}
+                            pages={txt("art_pages")}
+                        />
+
+                        <div className="mt-10 lg:mt-12">
+                            <CloudSyncGraphic animate={animate} />
+                            <div className="mt-5 text-center max-w-sm mx-auto">
+                                <div className="overline !text-[10px] !text-[#0A7D55]">
+                                    {txt("cloud_kicker")}
+                                </div>
+                                <p className="font-serif text-xl md:text-2xl text-[#002B5C] mt-2 leading-tight">
+                                    {txt("cloud_tagline")}
+                                </p>
+                                <p className="text-[13px] text-[#4B5563] mt-2.5 leading-relaxed">
+                                    {txt("cloud_body")}
+                                </p>
                             </div>
-                            <p className="font-serif text-xl md:text-2xl text-[#002B5C] mt-2 leading-tight">
-                                {txt("cloud_tagline")}
-                            </p>
-                            <p className="text-[13px] text-[#4B5563] mt-2.5 leading-relaxed">
-                                {txt("cloud_body")}
-                            </p>
                         </div>
                     </div>
-                </div>
 
-                {/* ---- and the two formats, tucked into the portal's lower flanks ----
-
-                    Pulled UP on large screens and spread WIDER, so they sit in
-                    the white wedges either side of the circle's bottom instead
-                    of starting below all of it. The negative margin is the whole
-                    trick and it is safe for one reason: the portal is a donut.
-                    Its glow is on the rim and its middle is genuinely empty, so
-                    copy that sits INSIDE the circle has nothing behind it —
-                    only copy crossing the rim would pick up rings.
-
-                    THREE THINGS HOLD IT TOGETHER, and dropping any one of them
-                    put the lists on top of the cloud caption:
-
-                    The columns are narrow and pinned OUTWARD. Full-width halves
-                    reach the middle of the page, which is exactly where the
-                    caption is — 320px pinned to each edge leaves the centre
-                    clear at every width from 1280 to 1920.
-
-                    The grid is capped at 6xl, not run to the container edge.
-                    Wider and the headings start outside the rim, where the
-                    dashes would cross them.
-
-                    And the pull-up is xl only. Below 1280 there is not enough
-                    width for two columns AND the caption between them, so the
-                    lists simply sit under the artwork as before.
-
-                    The width is derived, not a fixed class: it tracks the
-                    portal's circle so the columns sit as far out as the rim
-                    allows and no further. A fixed full-width grid is fine at the
-                    default artwork size and puts the headings 101px outside the
-                    rim once someone shrinks it. */}
-                <div
-                    className={`mt-14 md:mt-16 grid grid-cols-1 md:grid-cols-2 gap-12 md:gap-20 mx-auto${
-                        fit.raised ? " xl:-mt-28" : ""
-                    }`}
-                    style={{ maxWidth: fit.listWidth }}
-                >
-                    <div className={fit.raised ? "xl:max-w-xs xl:justify-self-start" : undefined}>
+                    <div className="fg-flank-print">
                         <div className="flex items-center gap-2.5">
                             <BookOpen size={18} strokeWidth={1.5} className="text-[#CC0033]" />
                             <h2 className="font-serif text-2xl md:text-3xl text-[#002B5C]">
@@ -290,7 +283,7 @@ export default function Ebooks() {
                         </div>
                     </div>
 
-                    <div className={fit.raised ? "xl:max-w-xs xl:justify-self-end" : undefined}>
+                    <div className="fg-flank-ebook">
                         <div className="flex items-center gap-2.5">
                             <Tablet size={18} strokeWidth={1.5} className="text-[#0A7D55]" />
                             <h2 className="font-serif text-2xl md:text-3xl text-[#002B5C]">
