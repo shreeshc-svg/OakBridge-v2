@@ -126,6 +126,24 @@ check(!/<image|xlink:href|url\(['"]?https?:/.test(svg),
 check(/role="img"/.test(svg) && /aria-label=/.test(svg),
       "and it is announced to a screen reader as one picture rather than read out as forty rectangles");
 
+/*
+ * Every soft wash must finish inside the viewBox.
+ *
+ * SVG clips to the viewBox, and a radial gradient is only transparent at its
+ * OWN outer edge — so a wash whose ellipse extends past the canvas gets sliced
+ * part way down its falloff and leaves a dead straight line on the page. The
+ * blue wash shipped that way: it ran to x=705 against a 660 canvas and cut at
+ * about 5% opacity down the right-hand side, which is visible against white.
+ * Arithmetic catches it; eyes did not, twice.
+ */
+const [, vbW, vbH] = svg.match(/viewBox="0 0 (\d+) (\d+)"/).map(Number);
+const outside = [...svg.matchAll(/<ellipse cx="(\d+)" cy="(\d+)" rx="(\d+)" ry="(\d+)"/g)]
+    .map((m) => m.slice(1).map(Number))
+    .filter(([cx, cy, rx, ry]) => cx - rx < 0 || cx + rx > vbW || cy - ry < 0 || cy + ry > vbH)
+    .map(([cx, cy, rx, ry]) => `cx${cx} cy${cy} rx${rx} ry${ry}`);
+check(outside.length === 0,
+      `every wash ellipse finishes inside the ${vbW}x${vbH} canvas ${outside.join(" | ")}`);
+
 console.log("\n-- the rich treatment is scoped to this one drawing --");
 /*
  * This is the ONLY illustration on the site allowed gradients, a drop shadow

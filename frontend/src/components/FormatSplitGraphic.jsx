@@ -235,29 +235,47 @@ export default function FormatSplitGraphic({
                 </linearGradient>
                 {/* Warm where the paper is, cool where the screen is. These two
                     washes replace the reference's black vignette, which cannot
-                    meet a white page without a hard edge. */}
+                    meet a white page without a hard edge.
+
+                    The extra stop at 86% is not decoration. A radial gradient
+                    is only transparent at its own outer edge, so a wash whose
+                    ellipse extends past the viewBox gets sliced off part way
+                    down its falloff and leaves a visible straight line — which
+                    is exactly what the blue one did, cut at roughly 5% opacity
+                    down the right-hand side. Reaching zero early means even a
+                    clipped wash meets the edge at nothing. */}
                 <radialGradient id="fg-warm">
                     <stop offset="0%" stopColor={GOLD} stopOpacity="0.22" />
+                    <stop offset="60%" stopColor={GOLD} stopOpacity="0.08" />
+                    <stop offset="86%" stopColor={GOLD} stopOpacity="0.01" />
                     <stop offset="100%" stopColor={GOLD} stopOpacity="0" />
                 </radialGradient>
                 <radialGradient id="fg-cool">
                     <stop offset="0%" stopColor={BLUE} stopOpacity="0.2" />
+                    <stop offset="60%" stopColor={BLUE} stopOpacity="0.07" />
+                    <stop offset="86%" stopColor={BLUE} stopOpacity="0.01" />
                     <stop offset="100%" stopColor={BLUE} stopOpacity="0" />
                 </radialGradient>
                 <radialGradient id="fg-cast">
                     <stop offset="0%" stopColor={INK} stopOpacity="0.26" />
                     <stop offset="100%" stopColor={INK} stopOpacity="0" />
                 </radialGradient>
+                {/* dy + 3×stdDeviation is how far the shadow actually reaches.
+                    At 12 and 14 the device's shadow landed on y=420, the bottom
+                    of the canvas, and was cut flat. 10 and 11 finishes at 409. */}
                 <filter id="fg-lift" x="-40%" y="-40%" width="200%" height="200%">
-                    <feDropShadow dx="0" dy="12" stdDeviation="14" floodColor={INK} floodOpacity="0.26" />
+                    <feDropShadow dx="0" dy="10" stdDeviation="11" floodColor={INK} floodOpacity="0.26" />
                 </filter>
                 <filter id="fg-soft" x="-90%" y="-90%" width="280%" height="280%">
                     <feGaussianBlur stdDeviation="5" />
                 </filter>
             </defs>
 
-            <ellipse cx="230" cy="238" rx="215" ry="185" fill="url(#fg-warm)" />
-            <ellipse cx="520" cy="228" rx="185" ry="175" fill="url(#fg-cool)" />
+            {/* Both washes are sized to finish INSIDE the viewBox — SVG clips
+                to it, and a gradient that ends outside is a straight edge. The
+                blue one used to run to x=705 against a 660 canvas. */}
+            <ellipse cx="228" cy="234" rx="208" ry="172" fill="url(#fg-warm)" />
+            <ellipse cx="498" cy="224" rx="152" ry="166" fill="url(#fg-cool)" />
             <ellipse cx="178" cy="366" rx="150" ry="24" fill="url(#fg-cast)" />
 
             {/* ---------------- the open book ---------------- */}
