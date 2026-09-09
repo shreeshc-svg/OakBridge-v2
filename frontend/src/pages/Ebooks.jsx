@@ -155,8 +155,13 @@ export default function Ebooks() {
                 className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-16 md:py-24"
             >
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-8 items-start max-w-7xl mx-auto">
-                    {/* ---- printed ---- */}
-                    <div className="lg:col-span-4 lg:pt-10">
+                    {/* ---- printed ----
+                        Three columns of four made the middle one too narrow for
+                        a book, a flight of type and a device to sit side by
+                        side at any readable size. The bullet lists are short
+                        phrases and lose nothing at a quarter of the width; the
+                        drawing gains half the page. */}
+                    <div className="lg:col-span-3 lg:pt-10">
                         <div className="flex items-center gap-2.5 lg:justify-end">
                             <BookOpen size={18} strokeWidth={1.5} className="text-[#CC0033] lg:order-2" />
                             <h2 className="font-serif text-2xl md:text-3xl text-[#002B5C] lg:order-1">
@@ -187,7 +192,7 @@ export default function Ebooks() {
                         First on a phone, where it is the thing that explains the
                         page before any of the reading does. Between the columns
                         on a desktop, where it is the shared spine. */}
-                    <div className="lg:col-span-4 order-first lg:order-none">
+                    <div className="lg:col-span-6 order-first lg:order-none">
                         <FormatSplitGraphic />
 
                         {/* Two bullet columns are taller than one wide drawing,
@@ -211,7 +216,7 @@ export default function Ebooks() {
                     </div>
 
                     {/* ---- digital ---- */}
-                    <div className="lg:col-span-4 lg:pt-10">
+                    <div className="lg:col-span-3 lg:pt-10">
                         <div className="flex items-center gap-2.5">
                             <Tablet size={18} strokeWidth={1.5} className="text-[#0A7D55]" />
                             <h2 className="font-serif text-2xl md:text-3xl text-[#002B5C]">

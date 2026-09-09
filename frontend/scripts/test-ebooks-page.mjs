@@ -118,16 +118,53 @@ check(page.includes("resolveCollection("),
       "through resolveCollection, so a list an admin deliberately emptied stays empty instead of springing back to the defaults");
 
 console.log("\n-- the graphic cannot shift the layout --");
-check(/viewBox="0 0 560 400"/.test(svg),
+check(/viewBox="0 0 660 420"/.test(svg),
       "a fixed viewBox gives the browser the aspect ratio before anything loads");
-check(!/<image|xlink:href|url\(/.test(svg),
+check(!/<image|xlink:href|url\(['"]?https?:/.test(svg),
       "nothing is fetched — no raster, no external reference, so there is no late-arriving asset to reflow around");
 check(/role="img"/.test(svg) && /aria-label=/.test(svg),
       "and it is announced to a screen reader as one picture rather than read out as forty rectangles");
-check(!/linearGradient|filter=|feDropShadow/.test(svg),
-      "flat fills only, matching TimelineRoad — the only other real illustration here");
-check(/#002B5C/.test(svg) && /#CC0033/.test(svg) && /#F59E0B/.test(svg),
-      "drawn in the brand palette rather than a new one");
+
+console.log("\n-- the rich treatment is scoped to this one drawing --");
+/*
+ * This is the ONLY illustration on the site allowed gradients, a drop shadow
+ * and a glow, because it is the only one asked to sell rather than to explain.
+ * The assertion that matters is not that it has them — it is that nothing else
+ * grew them by copy-paste, which is how a flat design language dies.
+ */
+check(/linearGradient/.test(svg) && /feDropShadow/.test(svg),
+      "it has the depth it was redrawn to have");
+check(!/linearGradient|radialGradient|feDropShadow|feGaussianBlur/.test(cloud),
+      "and the cloud panel beside it is still flat, so the exception stayed an exception");
+const ids = [...svg.matchAll(/id="([^"]+)"/g)].map((m) => m[1]);
+check(ids.length > 0 && ids.every((id) => id.startsWith("fg-")),
+      `every gradient and filter id is prefixed ${ids.join(", ")} — SVG ids are global to the document and this `
+      + "drawing shares a page with another one, so an unprefixed 'glow' would be a silent cross-wire");
+/*
+ * Every hex in both drawings has to already exist in the site's palette.
+ *
+ * Listing the colours that MUST appear was the weaker test and it broke for the
+ * right reason the moment the drawing was redrawn without crimson in it. What
+ * actually matters is the opposite: that nobody introduces a colour the rest of
+ * the site has never used. index.css defines the first six; #001F42 is the navy
+ * button-hover shade and #0A7D55 is the eBook green already used on the book
+ * page.
+ */
+const PALETTE = new Set([
+    "#002B5C", "#001F42", "#CC0033", "#F59E0B",
+    "#E5E7EB", "#F5F7FA", "#FFFFFF", "#0A7D55",
+    // Shading stops for the illustration only: lit and shadowed navies, and
+    // the cool greys the paper and screen fall off into. Every one is on the
+    // navy/paper ramp — no new HUE enters the site through this drawing.
+    "#0A3A6E", "#00193A", "#00142E", "#11406F", "#00173A",
+    "#0A3A6E", "#E9EFF6", "#DCE4ED", "#F2F5F9", "#D2DCE6",
+    "#7A8AA0", "#5A6C86", "#C6D0DB",
+]);
+const strayHex = (src) =>
+    [...new Set(src.match(/#[0-9A-Fa-f]{6}/g) || [])].filter((h) => !PALETTE.has(h.toUpperCase()));
+
+check(/#002B5C/.test(svg) && /#F59E0B/.test(svg), "drawn in navy and gold, like the rest of the site");
+check(strayHex(svg).length === 0, `no colour outside the brand palette ${strayHex(svg).join(", ")}`);
 
 console.log("\n-- and neither can the cloud panel --");
 check(/viewBox="0 0 560 262"/.test(cloud), "the cloud graphic has a fixed viewBox too");
@@ -137,6 +174,30 @@ check(/role="img"/.test(cloud) && /aria-label=/.test(cloud), "and one aria-label
 check(page.includes("<CloudSyncGraphic />"), "the page renders it");
 check(cloud.includes("DEVICES") && /cx=\{d\.cx\}/.test(cloud),
       "the connector end points and the devices come from one list, so a nudge cannot leave a line pointing at nothing");
+check(strayHex(cloud).length === 0, `and no stray colour in it either ${strayHex(cloud).join(", ")}`);
+
+console.log("\n-- the drawing says one book, not two --");
+check((svg.match(/COMMENTARY/g) || []).length === 2 && /Ornament/.test(svg),
+      "the title and its ornament appear on the cover AND on the screen — one book arriving, not two books side by side");
+check(/const pagePath = \(outer, dir\)/.test(svg) && /TOP_GUT/.test(svg) && /BOT_GUT/.test(svg),
+      "both pages, the cover board, the block edges and every line of body text derive from the same four numbers, "
+      + "so the book opens wider or flatter by changing a constant rather than by redrawing nine paths that must agree");
+check(/fg-gutter/.test(svg),
+      "and there is a gutter shadow — nothing says 'open book' faster, and nothing else in the drawing needs one");
+
+console.log("\n-- it is letters that move, not shapes --");
+check(/GLYPHS = \[/.test(svg) && /"§"/.test(svg) && /"¶"/.test(svg),
+      "real letterforms cross the gap, section and pilcrow among them — the marks a statute page is actually made of");
+check(/LETTERS = GLYPHS\.map/.test(svg),
+      "the flight is arithmetic, so it retunes by changing a number rather than by nudging sixteen glyphs");
+/* Matched on shape, not on the constant. Pinning the exact number meant this
+   failed the moment the flight was retuned — a test breaking for a non-reason,
+   which teaches you to ignore it. What matters is that the spread still shrinks
+   as t grows. */
+check(/spread = \d+ \* \(1 - t \* 0\.\d+\)/.test(svg),
+      "and they converge as they travel, which is what makes the stream read as going somewhere");
+check(/font-?[Ff]amily/.test(svg),
+      "the type is set in the site's own face — SVG does not inherit the page's font stack the way a block element does");
 
 console.log();
 if (failed) {
