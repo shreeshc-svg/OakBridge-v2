@@ -268,18 +268,7 @@ export default function Ebooks() {
                                 <Point key={item.id || i} item={item} align="left" />
                             ))}
                         </ul>
-                        <div className="mt-8 flex flex-col sm:flex-row lg:flex-col xl:flex-row gap-3 sm:items-start">
-                            {/* On-site first. The eReader is a different site
-                                with a different login, so the gentler step —
-                                seeing which titles are there — comes first. */}
-                            <Link
-                                to="/books?ebook=true"
-                                data-testid="ebooks-browse-ebook"
-                                className="inline-flex items-center gap-2 border border-[#002B5C] text-[#002B5C] px-6 py-3 text-sm font-medium hover:bg-[#F5F7FA] transition-colors"
-                            >
-                                Titles with an eBook
-                                <ArrowUpRight size={14} strokeWidth={1.5} />
-                            </Link>
+                        <div className="mt-8">
                             {canGoToReader ? (
                                 <a
                                     href={readerUrl}

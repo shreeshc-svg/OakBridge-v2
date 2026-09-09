@@ -288,12 +288,12 @@ export default function FormatSplitGraphic({
             {/* The cool halo beats a third of a cycle behind the warm one, so
                 the pulse reads as travelling from the page to the screen rather
                 than as the whole picture throbbing at once. */}
-            <ellipse cx="228" cy="234" rx="208" ry="172" fill="url(#fg-warm)" className={cls("fg-halo")} />
+            <ellipse cx="228" cy="234" rx="200" ry="166" fill="url(#fg-warm)" className={cls("fg-halo")} />
             <ellipse
                 cx="498"
                 cy="224"
-                rx="152"
-                ry="166"
+                rx="146"
+                ry="160"
                 fill="url(#fg-cool)"
                 className={cls("fg-halo")}
                 style={at_({ animationDelay: "0.85s" })}

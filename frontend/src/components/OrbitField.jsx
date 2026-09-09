@@ -41,10 +41,23 @@ import React from "react";
  * viewBox is sliced flat, which is the same defect the washes inside the
  * artwork already had once.
  *
+ * The glow ellipses are sized against the heartbeat's PEAK, not their resting
+ * size. `.fg-halo` scales to 1.04, and at 348 wide on a 700 canvas the outer
+ * glow reached 712 at the top of every beat — clipped flat, so a straight edge
+ * appeared and disappeared down the right-hand side once per pulse. Sized at
+ * rest it measured fine, which is exactly why the test now measures at peak.
+ *
  * Opacity was raised to make it read at all. The reason that is safe is the
  * donut: the glow lives on the rim and the centre is genuinely empty, so the
  * copy sitting over the middle has nothing behind it. Turning up the CENTRE
  * would not be safe, which is why there is nothing there to turn up.
+ *
+ * It is sized with NEGATIVE insets rather than inset-0, so the layer is wider
+ * and taller than the column and the rings can spill into the gutters either
+ * side. Held to the column exactly, the widest ring the canvas can carry is
+ * still only as wide as the artwork, which is not an enclosure — it is an
+ * outline. The viewBox ratio is tuned to roughly that enlarged box so the
+ * rings reach the edges instead of letterboxing inside it.
  *
  * Decorative only: aria-hidden and pointer-events-none.
  */
@@ -53,15 +66,15 @@ const GOLD = "#F59E0B";
 const BLUE = "#2F6FB5";
 const FACE = "Public Sans, ui-sans-serif, system-ui, sans-serif";
 
-const CX = 350;
-const CY = 495;
+const CX = 380;
+const CY = 480;
 
 /* Concentric rims. Dash lengths differ per ring so the travelling light never
    lines up into a single moving spoke. */
 const RINGS = [
-    { i: 0, rx: 300, ry: 420, dash: "3 13", colour: GOLD, opacity: 0.55, duration: 9, reverse: false },
-    { i: 1, rx: 325, ry: 455, dash: "2 17", colour: GOLD, opacity: 0.42, duration: 14, reverse: true },
-    { i: 2, rx: 345, ry: 482, dash: "4 21", colour: BLUE, opacity: 0.48, duration: 19, reverse: false },
+    { i: 0, rx: 315, ry: 400, dash: "3 13", colour: GOLD, opacity: 0.55, duration: 9, reverse: false },
+    { i: 1, rx: 340, ry: 430, dash: "2 17", colour: GOLD, opacity: 0.42, duration: 14, reverse: true },
+    { i: 2, rx: 362, ry: 455, dash: "4 21", colour: BLUE, opacity: 0.48, duration: 19, reverse: false },
 ];
 
 /* Two rings of bodies turning opposite ways. One ring reads as a carousel; two
@@ -73,7 +86,7 @@ const PARTICLES = ["§", "a", "¶", "e", "t", "§", "i", "m", "▪", "▪", "▪
         i,
         ch,
         isPixel,
-        radius: outer ? 300 + ((i * 13) % 26) : 232 + ((i * 17) % 30),
+        radius: outer ? 318 + ((i * 13) % 26) : 244 + ((i * 17) % 30),
         size: isPixel ? 7 + (i % 3) : 15 + ((i * 5) % 8),
         /* Spread around the ring by index, nudged so the two rings do not line
            up into spokes. */
@@ -87,10 +100,10 @@ const PARTICLES = ["§", "a", "¶", "e", "t", "§", "i", "m", "▪", "▪", "▪
 export default function OrbitField({ className = "" }) {
     return (
         <svg
-            viewBox="0 0 700 990"
+            viewBox="0 0 760 960"
             aria-hidden="true"
             focusable="false"
-            className={`pointer-events-none absolute inset-0 h-full w-full ${className}`}
+            className={`pointer-events-none absolute -inset-x-20 -inset-y-10 ${className}`}
             xmlns="http://www.w3.org/2000/svg"
         >
             <defs>
@@ -113,12 +126,12 @@ export default function OrbitField({ className = "" }) {
 
             {/* The rim glow, on the same heartbeat as the halos inside the
                 artwork, so the column pulses to one clock. */}
-            <ellipse cx={CX} cy={CY} rx="338" ry="472" fill="url(#fg-portal-warm)" className="fg-halo" />
+            <ellipse cx={CX} cy={CY} rx="348" ry="438" fill="url(#fg-portal-warm)" className="fg-halo" />
             <ellipse
                 cx={CX}
                 cy={CY}
-                rx="348"
-                ry="486"
+                rx="358"
+                ry="450"
                 fill="url(#fg-portal-cool)"
                 className="fg-halo"
                 style={{ animationDelay: "0.85s" }}

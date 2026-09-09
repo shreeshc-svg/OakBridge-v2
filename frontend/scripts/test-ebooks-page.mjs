@@ -54,6 +54,9 @@ const adminEbooks = code(join(SRC, "pages", "admin", "AdminEbooks.jsx"));
 const pre = code(join(HERE, "prerender.js"));
 const server = code(join(ROOT, "backend", "server.py"));
 const catalog = code(join(SRC, "pages", "Catalog.jsx"));
+/* Read raw, not through code(): the keyframes ARE the thing being measured and
+   stripping comments out of CSS would also strip the rules. */
+const css = readFileSync(join(SRC, "index.css"), "utf8");
 
 console.log("-- the route is registered everywhere it has to be --");
 check(/path="\/ebooks" element=\{<Ebooks \/>\}/.test(app), "App.js declares the route");
@@ -96,10 +99,15 @@ check(nums.length === 0,
       `no discount percentage in the copy ${nums.join(", ")} — there is no discount arithmetic anywhere in this `
       + "codebase, the print badge is derived per title from original_price and ebook_price is uploaded absolutely, "
       + "so a number written here would be a promise the code cannot keep");
-check(page.includes("/books?ebook=true"),
-      "the soft CTA goes to the real filtered catalogue, which reads ebook=true straight off the query string");
-check(catalog.includes('sp.get(EBOOK_FILTER_KEY) === "true"'),
-      "and the bookstore genuinely honours that parameter, so the link is not aspirational");
+/*
+ * The on-site "Titles with an eBook" button was removed on request, so every
+ * eBook call to action on this page now leaves for the eReader. That is a
+ * deliberate choice, not an oversight — asserted here so it stays one, and so
+ * that the tracking below stays the only thing standing between us and a
+ * visitor we cannot follow.
+ */
+check(!page.includes("/books?ebook=true"),
+      "the on-site filtered-catalogue button is gone, as asked");
 check(page.includes("ebook_cta_clicked"),
       "leaving for the eReader is tracked, because that click is the last thing we can see before the visitor is on another site");
 
@@ -137,16 +145,60 @@ check(/role="img"/.test(svg) && /aria-label=/.test(svg),
  * about 5% opacity down the right-hand side, which is visible against white.
  * Arithmetic catches it; eyes did not, twice.
  */
-const [, vbW, vbH] = svg.match(/viewBox="0 0 (\d+) (\d+)"/).map(Number);
-const outside = [...svg.matchAll(/<ellipse cx="(\d+)" cy="(\d+)" rx="(\d+)" ry="(\d+)"/g)]
-    .map((m) => m.slice(1).map(Number))
-    .filter(([cx, cy, rx, ry]) => cx - rx < 0 || cx + rx > vbW || cy - ry < 0 || cy + ry > vbH)
-    .map(([cx, cy, rx, ry]) => `cx${cx} cy${cy} rx${rx} ry${ry}`);
-check(outside.length === 0,
-      `every wash ellipse finishes inside the ${vbW}x${vbH} canvas ${outside.join(" | ")}`);
+/*
+ * MEASURED AT THE BEAT'S PEAK, NOT AT REST.
+ *
+ * The heartbeat scales, and the first version of this check measured resting
+ * geometry — so it passed while the portal's outer glow, 348 wide on a 700
+ * canvas, reached 712 at the top of every pulse and was sliced flat. A straight
+ * edge appeared and disappeared down the right-hand side once per beat, and the
+ * arithmetic said everything was fine.
+ *
+ * The peak is read out of the keyframes rather than hardcoded, so retuning the
+ * pulse retightens the margins automatically. Applied to every ellipse, not
+ * just the animated ones: a static ellipse simply gets more clearance, which
+ * is never the wrong answer.
+ */
+/* The peak of fgHeartbeat SPECIFICALLY — that is the keyframe `.fg-halo` runs.
+   Taking the max scale across all keyframes picked up fgPing's 1.5, which
+   belongs to three 4px dots in the cloud and has nothing to do with the washes. */
+const beat = css.match(/@keyframes fgHeartbeat\s*\{([\s\S]*?)\n\}/)[1];
+const PEAK = Math.max(...[...beat.matchAll(/scale\(([\d.]+)\)/g)].map((m) => Number(m[1])), 1);
+
+/* Flattened first: one of these ellipses is written across several lines, and a
+   single-line regex silently measured two of the three and reported success. */
+const flat = (src) => src.replace(/\s+/g, " ");
+const ellipses = (src) => {
+    const f = flat(src);
+    const cx = f.match(/const CX = (\d+);/);
+    const cy = f.match(/const CY = (\d+);/);
+    return [
+        ...[...f.matchAll(/<ellipse cx="(\d+)" cy="(\d+)" rx="(\d+)" ry="(\d+)"/g)]
+            .map((m) => m.slice(1).map(Number)),
+        ...(cx && cy
+            ? [
+                  ...[...f.matchAll(/<ellipse cx=\{CX\} cy=\{CY\} rx="(\d+)" ry="(\d+)"/g)]
+                      .map((m) => [Number(cx[1]), Number(cy[1]), Number(m[1]), Number(m[2])]),
+                  ...[...f.matchAll(/rx: (\d+), ry: (\d+)/g)]
+                      .map((m) => [Number(cx[1]), Number(cy[1]), Number(m[1]), Number(m[2])]),
+              ]
+            : []),
+    ];
+};
+const clipped = (src, label) => {
+    const [, w, h] = src.match(/viewBox="0 0 (\d+) (\d+)"/).map(Number);
+    return ellipses(src)
+        .filter(([cx, cy, rx, ry]) =>
+            cx - rx * PEAK < 0 || cx + rx * PEAK > w || cy - ry * PEAK < 0 || cy + ry * PEAK > h)
+        .map(([cx, , rx]) => `${label} rx${rx} reaches ${Math.round(cx + rx * PEAK)} of ${w}`);
+};
+check(PEAK > 1 && PEAK < 1.2, `the heartbeat's own peak scale was read from its keyframe (${PEAK})`);
+check(ellipses(svg).length === 3 && ellipses(orbit).length === 5,
+      `every ellipse was measured — artwork ${ellipses(svg).length} of 3, portal ${ellipses(orbit).length} of 5`);
+const clip = [...clipped(svg, "artwork"), ...clipped(orbit, "portal")];
+check(clip.length === 0, `nothing is clipped at the top of a beat ${clip.join(" | ")}`);
 
 console.log("\n-- the animation is composited, staggered and optional --");
-const css = readFileSync(join(SRC, "index.css"), "utf8");
 check(/@media \(prefers-reduced-motion: reduce\)[\s\S]{0,400}?\.fg-halo[\s\S]{0,300}?animation: none/.test(css),
       "every animated class is switched off for prefers-reduced-motion — a looping drawing is not optional for someone who gets motion sick from it");
 const drawings = `${svg}\n${cloud}\n${orbit}`;
@@ -205,7 +257,9 @@ check(/delay: `\$\{\(-\(t \* 5\.2\)\)/.test(svg) || /-\(t \* 5\.2\)/.test(svg),
 console.log("\n-- the portal is decorative and stays out of the way --");
 check(/aria-hidden="true"/.test(orbit) && /pointer-events-none/.test(orbit),
       "the portal is announced to nobody and catches no clicks — it is scenery, not content");
-check(orbit.includes("absolute inset-0"), "it spans the column rather than taking space of its own");
+check(/absolute -inset-x-\d+ -inset-y-\d+/.test(orbit),
+      "it is positioned out of flow and NEGATIVELY inset, so the rings spill into the gutters — held to the column "
+      + "exactly, the widest ring the canvas can carry is only as wide as the artwork, which is an outline rather than an enclosure");
 check(page.includes('<OrbitField className="hidden lg:block" />'),
       "and it is desktop only: on a phone the column is full width and the copy runs straight through it");
 check(page.indexOf("<OrbitField") < page.indexOf("<FormatSplitGraphic"),
@@ -215,17 +269,8 @@ const orbitIds = [...orbit.matchAll(/id="([^"]+)"/g)].map((m) => m[1]);
    rims were enlarged to enclose both drawings, and an ellipse that runs past
    the viewBox is sliced flat — the exact defect the artwork already shipped
    once. */
-const [, obW, obH] = orbit.match(/viewBox="0 0 (\d+) (\d+)"/).map(Number);
-const [, obCx] = orbit.match(/const CX = (\d+);/).map(Number);
-const [, obCy] = orbit.match(/const CY = (\d+);/).map(Number);
-const obRadii = [
-    ...[...orbit.matchAll(/rx: (\d+), ry: (\d+)/g)].map((m) => [Number(m[1]), Number(m[2])]),
-    ...[...orbit.matchAll(/rx="(\d+)"\s*\n?\s*ry="(\d+)"/g)].map((m) => [Number(m[1]), Number(m[2])]),
-];
-check(obRadii.length >= 5, `every rim and glow was measured ${obRadii.length} found`);
-const obOut = obRadii.filter(([rx, ry]) => obCx + rx > obW || obCy + ry > obH || obCx - rx < 0 || obCy - ry < 0);
-check(obOut.length === 0,
-      `every portal ring finishes inside its ${obW}x${obH} canvas ${obOut.map((r) => r.join("/")).join(" | ")}`);
+const obH = Number(orbit.match(/viewBox="0 0 \d+ (\d+)"/)[1]);
+const obRadii = [...orbit.matchAll(/rx: (\d+), ry: (\d+)/g)].map((m) => [Number(m[1]), Number(m[2])]);
 check(obRadii.some(([, ry]) => ry >= obH * 0.45),
       "and the outer rim reaches far enough out to enclose both drawings rather than cutting through them");
 
