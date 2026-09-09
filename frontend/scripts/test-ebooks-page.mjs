@@ -287,29 +287,59 @@ check(page.indexOf('"--fg-flank-col"') > -1 && css.includes("var(--fg-flank-col)
       "the column width is computed and handed to the stylesheet, because it depends on the admin's artwork size");
 check(/fit\.flank\.fits \? "" : " fg-flank--stacked"/.test(page),
       "and when there is no room beside the artwork the grid stays stacked rather than overlapping it");
-check(/grid-column: 2/.test(css) && /grid-template-columns: var\(--fg-flank-col\) var\(--fg-art\) var\(--fg-flank-col\)/.test(css),
+check(/grid-template-columns: var\(--fg-flank-col\) var\(--fg-art\) var\(--fg-flank-col\)/.test(css),
       "three columns at 1280 and up, with the artwork in the middle one");
+/*
+ * ROW as well as column, and this is the half that was missing.
+ *
+ * Grid auto-placement only moves forward. With the artwork placed in column 2
+ * of row 1, the print column could not go back to column 1 of that row, so it
+ * wrapped to row 2 — three columns wide, two rows tall, which on the live page
+ * looked exactly like the stacked layout it was meant to replace. Measured at
+ * 3840px: the lists sat 607px BELOW the artwork.
+ */
+const areas = (css.match(/\.fg-flank:not\(\.fg-flank--stacked\) \.fg-flank-\w+ \{ grid-area: 1 \/ \d/g) || []);
+check(areas.length === 3,
+      `all three tracks pin their ROW as well as their column ${areas.length} of 3 — without it the grid wraps and renders stacked`);
 check(/\.fg-flank-art \{ order: 1;/.test(css),
       "and on a phone the artwork comes FIRST, because it explains the page before any of the reading does");
 
 /*
- * THE COLUMNS MUST CLEAR THE CIRCLE, NOT THE RIM.
+ * THE COLUMNS MUST CLEAR THE CIRCLE, LAID OUT THE WAY THE GRID ACTUALLY LAYS
+ * THEM OUT.
  *
- * A column starting inside the ring has dashes and glow behind it however
- * faint, and this page has already shipped that twice. So the check is against
- * the full circle diameter plus a gap of real air, at every artwork size an
- * admin can set — the circle grows with the artwork, so a size that flanks
- * comfortably at 280 has no room at all by 480.
+ * The first version of this check modelled the columns as sitting at the edges
+ * of the container with the circle centred between them. The grid does not do
+ * that: it places each column beside the ARTWORK, and the circle is drawn
+ * around the artwork and overhangs it — 176px each side at a 280px artwork. So
+ * the check passed while the live page put the ring 151px into the Printed book
+ * column, measured in a browser at 2400px wide.
+ *
+ * This version reproduces the real track layout: column, gap, artwork, gap,
+ * column, all centred in the container, with the circle centred on the artwork.
  */
-const overlaps = [MIN_WIDTH, 300, 320, 400, 480, DEFAULT_WIDTH, MAX_WIDTH].flatMap((art) => {
+const flankGeometry = (art) => {
     const f = portalFit(art);
-    if (!f.flank.fits) return [];              // stacked; nothing sits beside the circle
     const half = FLANK_CONTAINER / 2;
-    const columnInnerEdge = half - f.flank.column - f.flank.gap;
-    const circleEdge = f.circle / 2;
-    return columnInnerEdge < circleEdge
-        ? [`art${art}: column reaches ${Math.round(columnInnerEdge)} but the circle ends at ${Math.round(circleEdge)}`]
-        : [];
+    return {
+        f,
+        total: 2 * f.flank.column + 2 * f.flank.gap + f.width,
+        columnEdge: half - f.width / 2 - f.flank.gap,   // inner edge of the left column
+        circleEdge: half - f.circle / 2,                 // left edge of the ring
+    };
+};
+const overlaps = [MIN_WIDTH, 300, 320, 400, 480, DEFAULT_WIDTH, MAX_WIDTH].flatMap((art) => {
+    const g = flankGeometry(art);
+    if (!g.f.flank.fits) return [];                      // stacked; nothing sits beside the ring
+    const clearance = g.circleEdge - g.columnEdge;
+    const bad = [];
+    if (clearance < FLANK_GAP - 1) {
+        bad.push(`art${art}: only ${Math.round(clearance)}px between the column and the ring`);
+    }
+    if (g.total > FLANK_CONTAINER) {
+        bad.push(`art${art}: the three tracks come to ${g.total}px in a ${FLANK_CONTAINER}px container`);
+    }
+    return bad;
 });
 check(overlaps.length === 0,
       `no text column touches the animation at any artwork size ${overlaps.join(" | ")}`);
@@ -317,8 +347,8 @@ check(portalFit(MIN_WIDTH).flank.fits === true && portalFit(480).flank.fits === 
       `flanking works at ${MIN_WIDTH}px and gives up by 480px, where the circle leaves under ${FLANK_MIN_COLUMN}px a side`);
 check(portalFit(280).width === 280,
       "280 is honoured rather than clamped up — the admin's number has to mean what it says");
-check(portalFit(MIN_WIDTH).flank.gap === FLANK_GAP && FLANK_GAP >= 24,
-      "and there is real air between the column and the ring, not a hairline");
+check(portalFit(MIN_WIDTH).flank.gap > portalFit(MIN_WIDTH).flank.overhang,
+      "the grid gap clears the circle's overhang and leaves air on top of it, rather than being the air alone");
 const orbitIds = [...orbit.matchAll(/id="([^"]+)"/g)].map((m) => m[1]);
 /* Same arithmetic as the artwork's washes, on the portal's own canvas. The
    rims were enlarged to enclose both drawings, and an ellipse that runs past

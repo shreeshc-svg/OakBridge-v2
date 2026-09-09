@@ -86,10 +86,32 @@ export const FLANK_GAP = 40;
 export const FLANK_MIN_COLUMN = 200;
 export const FLANK_CONTAINER = 1280;
 
-export function flankFit(circle, container = FLANK_CONTAINER) {
+export function flankFit(circle, artWidth, container = FLANK_CONTAINER) {
     const free = (container - circle) / 2;
     const column = Math.floor(free - FLANK_GAP);
-    return { fits: column >= FLANK_MIN_COLUMN, column: Math.max(0, column), gap: FLANK_GAP };
+
+    /*
+     * THE GAP IS NOT THE AIR.
+     *
+     * The grid lays the columns out beside the ARTWORK, but the circle is drawn
+     * around the artwork and overhangs it — at a 280px artwork the circle is
+     * 631px, so it sticks out about 176px on each side. Sizing the columns to
+     * clear a circle centred in the container and then spacing them 40px from
+     * the artwork put the ring 151px into the Printed book column, measured on
+     * the live page at 2400px wide.
+     *
+     * So the grid gap has to clear the overhang FIRST and leave the air on top
+     * of it. The three tracks plus these two gaps then come to exactly the
+     * container width, which is the arithmetic saying there is nothing spare.
+     */
+    const overhang = Math.max(0, (circle - artWidth) / 2);
+    return {
+        fits: column >= FLANK_MIN_COLUMN,
+        column: Math.max(0, column),
+        gap: Math.round(overhang + FLANK_GAP),
+        air: FLANK_GAP,
+        overhang: Math.round(overhang),
+    };
 }
 
 export const LIST_COLUMN = 320;
@@ -143,6 +165,6 @@ export function portalFit(rawWidth) {
         circle: Math.round(circle),
         listWidth,
         raised: listWidth >= LIST_RAISED_MIN,
-        flank: flankFit(Math.round(circle)),
+        flank: flankFit(Math.round(circle), Math.round(width)),
     };
 }

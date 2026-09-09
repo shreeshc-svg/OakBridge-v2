@@ -396,9 +396,15 @@ body {
         align-items: center;
         column-gap: var(--fg-flank-gap, 40px);
     }
-    .fg-flank:not(.fg-flank--stacked) .fg-flank-art { grid-column: 2; max-width: none; }
-    .fg-flank:not(.fg-flank--stacked) .fg-flank-print { grid-column: 1; max-width: none; }
-    .fg-flank:not(.fg-flank--stacked) .fg-flank-ebook { grid-column: 3; max-width: none; }
+    /* grid-ROW as well as grid-column, and this is the load-bearing half.
+       Auto-placement only moves forward: with the artwork placed in column 2 of
+       row 1, the print column cannot go back to column 1 of the same row, so it
+       wrapped to row 2 and the whole thing rendered stacked — three columns
+       wide, in two rows, which looked exactly like the layout it replaced.
+       Pinning the row is what puts them side by side. */
+    .fg-flank:not(.fg-flank--stacked) .fg-flank-art { grid-area: 1 / 2; max-width: none; }
+    .fg-flank:not(.fg-flank--stacked) .fg-flank-print { grid-area: 1 / 1; max-width: none; }
+    .fg-flank:not(.fg-flank--stacked) .fg-flank-ebook { grid-area: 1 / 3; max-width: none; }
 }
 
 /* Buttons with McGraw-style boxy CTA — slight rounded edges */
