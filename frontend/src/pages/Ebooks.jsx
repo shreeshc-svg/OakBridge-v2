@@ -228,8 +228,20 @@ export default function Ebooks() {
                     </div>
                 </div>
 
-                {/* ---- and the two formats beneath it ---- */}
-                <div className="mt-16 md:mt-24 grid grid-cols-1 md:grid-cols-2 gap-12 md:gap-16 max-w-4xl mx-auto">
+                {/* ---- and the two formats, tucked into the portal's lower flanks ----
+
+                    Pulled UP on large screens and spread WIDER, so they sit in
+                    the white wedges either side of the circle's bottom instead
+                    of starting below all of it. The negative margin is the whole
+                    trick and it is safe for one reason: the portal is a donut.
+                    Its glow is on the rim and its middle is genuinely empty, so
+                    copy that sits INSIDE the circle has nothing behind it —
+                    only copy crossing the rim would pick up rings.
+
+                    That is also why the grid is capped at 5xl rather than run to
+                    the container edge: wider than this and the headings start
+                    outside the rim, where the dashes would run through them. */}
+                <div className="mt-14 md:mt-16 lg:-mt-28 xl:-mt-36 grid grid-cols-1 md:grid-cols-2 gap-12 md:gap-20 max-w-5xl mx-auto">
                     <div>
                         <div className="flex items-center gap-2.5">
                             <BookOpen size={18} strokeWidth={1.5} className="text-[#CC0033]" />

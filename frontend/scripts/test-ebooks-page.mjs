@@ -270,6 +270,19 @@ check(page.indexOf("<OrbitField") < page.indexOf("<FormatSplitGraphic"),
       "painted before its siblings, so it sits behind them without needing a stacking context");
 check(/md:grid-cols-2/.test(page) && page.indexOf("<FormatSplitGraphic") < page.indexOf("ebooks-browse-print"),
       "the two format lists sit BELOW the artwork rather than flanking it — which is what empties the margins the portal needs");
+/*
+ * The lists are pulled UP into the white wedges either side of the circle's
+ * bottom. Safe only because the portal is a donut: the glow is on the rim and
+ * the middle is empty, so copy INSIDE the circle has nothing behind it.
+ *
+ * The 5xl cap is the load-bearing half of that. At the container edge the
+ * headings land outside the rim — x=310 against a circle starting at x=320 on a
+ * 1900px viewport — and the dashes run straight through "Printed book".
+ */
+check(/lg:-mt-\d+/.test(page),
+      "the lists are pulled up on large screens, into the space beside the portal's lower arc");
+check(/max-w-5xl mx-auto/.test(page) && !/lg:-mt-\d+[^"]*max-w-7xl/.test(page),
+      "and capped at 5xl, not run to the container edge, so both headings stay INSIDE the rim rather than under the dashes");
 const orbitIds = [...orbit.matchAll(/id="([^"]+)"/g)].map((m) => m[1]);
 /* Same arithmetic as the artwork's washes, on the portal's own canvas. The
    rims were enlarged to enclose both drawings, and an ellipse that runs past
