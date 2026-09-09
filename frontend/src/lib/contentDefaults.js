@@ -87,6 +87,14 @@ const CONTENT_DEFAULTS = {
     // an eBook edition — it is shown on the eBooks page, and a title with no
     // digital edition would be a quiet lie. Page count drives the reading
     // position and the percentage, so the three cannot contradict each other.
+    // Motion on the /ebooks page. Content, not code: a launch week may want the
+    // page still, and the rhythm is a taste call somebody should be able to make
+    // without a deploy. Seconds; blank or nonsense falls back to the design
+    // value rather than to zero, which would freeze every drawing.
+    eb_anim_beat: "2.6",
+    eb_anim_enabled: "on",
+    eb_anim_flight: "5.2",
+    eb_portal_enabled: "on",
     eb_art_author: "Sudhir Mishra",
     eb_art_chapter: "Chapter One",
     eb_art_pages: "231",

@@ -537,6 +537,10 @@ export default function AdminEbooks() {
                             <TextSlotRow label="Left column — one-liner" value={site.eb_print_body} defaultValue={CONTENT_DEFAULTS.eb_print_body} onSave={(v) => saveSite("eb_print_body", v)} />
                             <TextSlotRow label="Right column — heading" value={site.eb_ebook_title} defaultValue={CONTENT_DEFAULTS.eb_ebook_title} onSave={(v) => saveSite("eb_ebook_title", v)} />
                             <TextSlotRow label="Right column — one-liner" value={site.eb_ebook_body} defaultValue={CONTENT_DEFAULTS.eb_ebook_body} onSave={(v) => saveSite("eb_ebook_body", v)} />
+                            <TextSlotRow label="Motion — animate the illustrations (on / off)" value={site.eb_anim_enabled} defaultValue={CONTENT_DEFAULTS.eb_anim_enabled} onSave={(v) => saveSite("eb_anim_enabled", v)} />
+                            <TextSlotRow label="Motion — the portal ring behind the artwork (on / off, desktop only)" value={site.eb_portal_enabled} defaultValue={CONTENT_DEFAULTS.eb_portal_enabled} onSave={(v) => saveSite("eb_portal_enabled", v)} />
+                            <TextSlotRow label="Motion — heartbeat, seconds per pulse" value={site.eb_anim_beat} defaultValue={CONTENT_DEFAULTS.eb_anim_beat} onSave={(v) => saveSite("eb_anim_beat", v)} />
+                            <TextSlotRow label="Motion — how long a letter takes to cross, seconds" value={site.eb_anim_flight} defaultValue={CONTENT_DEFAULTS.eb_anim_flight} onSave={(v) => saveSite("eb_anim_flight", v)} />
                             <TextSlotRow label="Illustration — book title" value={site.eb_art_title} defaultValue={CONTENT_DEFAULTS.eb_art_title} onSave={(v) => saveSite("eb_art_title", v)} />
                             <TextSlotRow label="Illustration — author" value={site.eb_art_author} defaultValue={CONTENT_DEFAULTS.eb_art_author} onSave={(v) => saveSite("eb_art_author", v)} />
                             <TextSlotRow label="Illustration — chapter line" value={site.eb_art_chapter} defaultValue={CONTENT_DEFAULTS.eb_art_chapter} onSave={(v) => saveSite("eb_art_chapter", v)} />

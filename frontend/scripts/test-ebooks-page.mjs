@@ -46,6 +46,7 @@ const code = (abs) =>
 const page = code(join(SRC, "pages", "Ebooks.jsx"));
 const svg = code(join(SRC, "components", "FormatSplitGraphic.jsx"));
 const cloud = code(join(SRC, "components", "CloudSyncGraphic.jsx"));
+const orbit = code(join(SRC, "components", "OrbitField.jsx"));
 const app = code(join(SRC, "App.js"));
 const header = code(join(SRC, "components", "Header.jsx"));
 const adminNav = code(join(SRC, "pages", "admin", "AdminNavigation.jsx"));
@@ -148,9 +149,14 @@ console.log("\n-- the animation is composited, staggered and optional --");
 const css = readFileSync(join(SRC, "index.css"), "utf8");
 check(/@media \(prefers-reduced-motion: reduce\)[\s\S]{0,400}?\.fg-halo[\s\S]{0,300}?animation: none/.test(css),
       "every animated class is switched off for prefers-reduced-motion — a looping drawing is not optional for someone who gets motion sick from it");
-for (const cls of ["fg-halo", "fg-letter", "fg-pixel", "fg-scrap", "fg-leaf", "fg-book", "fg-line"]) {
-    check(css.includes(`.${cls} {`) && svg.includes(`"${cls}"`),
-          `${cls} is defined in CSS and used in the drawing`);
+const drawings = `${svg}\n${cloud}\n${orbit}`;
+for (const cls of ["fg-halo", "fg-letter", "fg-pixel", "fg-scrap", "fg-leaf", "fg-book",
+                   "fg-line", "fg-orbit", "fg-rim", "fg-cloud", "fg-flow", "fg-ping"]) {
+    check(css.includes(`.${cls} {`) && drawings.includes(`"${cls}"`),
+          `${cls} is defined in CSS and used in one of the drawings`);
+    check(new RegExp(`\\.${cls},?[\\s\\S]{0,600}?animation: none`).test(
+              css.slice(css.indexOf("@media (prefers-reduced-motion: reduce)"))),
+          `${cls} is switched off under prefers-reduced-motion`);
 }
 /*
  * Only transform and opacity may be animated. Those two the browser composites
@@ -164,8 +170,20 @@ for (const cls of ["fg-halo", "fg-letter", "fg-pixel", "fg-scrap", "fg-leaf", "f
 const fgBlock = css.slice(css.indexOf("@keyframes fgHeartbeat"), css.indexOf("Buttons with McGraw"));
 const animatedProps = [...fgBlock.matchAll(/@keyframes\s+fg\w+\s*\{([\s\S]*?)\n\}/g)]
     .flatMap((m) => [...m[1].matchAll(/([a-z-]+)\s*:/g)].map((p) => p[1]));
-const bad = [...new Set(animatedProps)].filter((p) => !["opacity", "transform"].includes(p));
-check(bad.length === 0, `only opacity and transform are animated ${bad.join(", ")}`);
+/*
+ * transform and opacity are free — the compositor handles them. stroke-dashoffset
+ * is not, and is allowed in exactly two keyframes: it is the only way to make
+ * light travel ALONG a path rather than move the path itself, and its paint cost
+ * is bounded to three 1.5px ellipse rims and three hairline cloud connectors.
+ * Six thin strokes, not the seventy-odd nodes the rest of these rules drive.
+ */
+const bad = [...new Set(animatedProps)].filter(
+    (prop) => !["opacity", "transform", "stroke-dashoffset"].includes(prop));
+check(bad.length === 0, `only opacity, transform and stroke-dashoffset are animated ${bad.join(", ")}`);
+const dashFrames = [...fgBlock.matchAll(/@keyframes\s+(fg\w+)\s*\{([\s\S]*?)\n\}/g)]
+    .filter((m) => m[2].includes("stroke-dashoffset")).map((m) => m[1]);
+check(dashFrames.length <= 2,
+      `stroke-dashoffset stays confined to the two rim/flow keyframes ${dashFrames.join(", ")}`);
 /*
  * Nothing that moves may be filtered.
  *
@@ -183,6 +201,31 @@ check(/transform-box: view-box/.test(css),
       "rotations use transform-box: view-box — without it transform-origin is measured from the element's own bounding box, so 'turn about the spine' becomes 'turn about the middle of this leaf'");
 check(/delay: `\$\{\(-\(t \* 5\.2\)\)/.test(svg) || /-\(t \* 5\.2\)/.test(svg),
       "letters carry NEGATIVE animation delays, so the stream is already mid-flight on the first frame rather than firing as one burst on load");
+
+console.log("\n-- the portal is decorative and stays out of the way --");
+check(/aria-hidden="true"/.test(orbit) && /pointer-events-none/.test(orbit),
+      "the portal is announced to nobody and catches no clicks — it is scenery, not content");
+check(orbit.includes("absolute inset-0"), "it spans the column rather than taking space of its own");
+check(page.includes('<OrbitField className="hidden lg:block" />'),
+      "and it is desktop only: on a phone the column is full width and the copy runs straight through it");
+check(page.indexOf("<OrbitField") < page.indexOf("<FormatSplitGraphic"),
+      "painted before its siblings, so it sits behind them without needing a stacking context");
+const orbitIds = [...orbit.matchAll(/id="([^"]+)"/g)].map((m) => m[1]);
+check(orbitIds.every((id) => id.startsWith("fg-")),
+      `its gradient ids are prefixed too ${orbitIds.join(", ")} — three SVGs share this page`);
+
+console.log("\n-- motion is admin-controlled --");
+for (const key of ["eb_anim_enabled", "eb_portal_enabled", "eb_anim_beat", "eb_anim_flight"]) {
+    check(typeof DEFAULTS[key] === "string" && DEFAULTS[key].length > 0, `${key} has a default`);
+    check(adminEbooks.includes(`"${key}"`), `${key} is editable in Admin -> E-Books`);
+}
+check(/const cls = \(name\) => \(animate \? name : undefined\)/.test(svg)
+      && /const cls = \(name\) => \(animate \? name : undefined\)/.test(cloud),
+      "with motion off the markup carries no animated class at all, rather than the keyframes being blanked — nothing to compute, and nothing a later stylesheet can reanimate by accident");
+check(/Number\.isFinite\(n\) && n > 0 \? n : fallback/.test(page),
+      "a blank or nonsense duration falls back to the design value, not to 0s, which would freeze every drawing on its first keyframe");
+check(/"--fg-beat"/.test(page) && /"--fg-flight"/.test(page) && /var\(--fg-beat, 2\.6s\)/.test(css),
+      "the rhythm reaches the CSS through custom properties, with the design values as the fallback");
 
 console.log("\n-- the rich treatment is scoped to this one drawing --");
 /*
@@ -247,8 +290,11 @@ const walk = (dir) =>
         const full = join(dir, d.name);
         return d.isDirectory() ? walk(full) : /\.(jsx?|css)$/.test(d.name) ? [full] : [];
     });
+/* Two files, not one: the portal is part of the same illustration and shares
+   its blue deliberately. Everything else on the site must still be without it. */
+const ART_FILES = ["FormatSplitGraphic.jsx", "OrbitField.jsx"];
 const leaked = walk(SRC)
-    .filter((f) => !f.endsWith("FormatSplitGraphic.jsx"))
+    .filter((f) => !ART_FILES.some((a) => f.endsWith(a)))
     .flatMap((f) => {
         const hits = [...new Set(readFileSync(f, "utf8").match(/#[0-9A-Fa-f]{6}/g) || [])]
             .filter((h) => ART_ONLY.has(h.toUpperCase()));
@@ -262,7 +308,7 @@ check(/viewBox="0 0 560 262"/.test(cloud), "the cloud graphic has a fixed viewBo
 check(!/<image|xlink:href|linearGradient|feDropShadow/.test(cloud),
       "no fetched asset, no gradient, no shadow — same rules as the drawing above it");
 check(/role="img"/.test(cloud) && /aria-label=/.test(cloud), "and one aria-label rather than thirty silent rectangles");
-check(page.includes("<CloudSyncGraphic />"), "the page renders it");
+check(/<CloudSyncGraphic animate=\{animate\} \/>/.test(page), "the page renders it, and hands it the motion switch");
 check(cloud.includes("DEVICES") && /cx=\{d\.cx\}/.test(cloud),
       "the connector end points and the devices come from one list, so a nudge cannot leave a line pointing at nothing");
 check(strayHex(cloud).length === 0, `and no stray colour in it either ${strayHex(cloud).join(", ")}`);

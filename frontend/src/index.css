@@ -239,7 +239,14 @@ body {
     33%      { opacity: 0.97; transform: scale(1.03); }
     58%      { opacity: 0.72; transform: scale(1); }
 }
-.fg-halo { animation: fgHeartbeat 2.6s ease-in-out infinite; transform-box: view-box; }
+/* Durations come from custom properties so Admin can retune the rhythm without
+   a deploy. The fallbacks are the design values; a missing or unparseable
+   setting falls back to them rather than to zero, which would freeze the
+   drawing on its first keyframe. */
+.fg-halo {
+    animation: fgHeartbeat var(--fg-beat, 2.6s) ease-in-out infinite;
+    transform-box: view-box;
+}
 
 /* The letters carry their own depth on the inner <text>; these wrappers only
    move them and fade them in and out, so the two multiply and the loop has no
@@ -250,7 +257,7 @@ body {
     72%  { opacity: 0.9;  }
     100% { opacity: 0;    transform: translate(36px, -12px); }
 }
-.fg-letter { animation: fgDrift 5.2s ease-in-out infinite; }
+.fg-letter { animation: fgDrift var(--fg-flight, 5.2s) ease-in-out infinite; }
 
 @keyframes fgPixelDrift {
     0%   { opacity: 0;   transform: translate(-9px, 5px); }
@@ -287,7 +294,49 @@ body {
     35%      { opacity: 1; }
     80%      { opacity: 0.85; }
 }
-.fg-line { animation: fgArrive 5.2s ease-in-out infinite; }
+.fg-line { animation: fgArrive var(--fg-flight, 5.2s) ease-in-out infinite; }
+
+/* ---- the portal ---- */
+
+/* Bodies in orbit. Duration and direction are set per particle inline. */
+@keyframes fgOrbit {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+}
+.fg-orbit { animation: fgOrbit 60s linear infinite; transform-box: view-box; }
+
+/*
+ * Light running round the rim.
+ *
+ * stroke-dashoffset is the one property here that is not transform or opacity,
+ * and it is used deliberately: it is the only way to make light travel ALONG a
+ * path rather than move the path itself. The paint cost is bounded to three
+ * 1.5px ellipse outlines and three hairline connectors in the cloud — not the
+ * seventy-odd nodes the rest of these rules drive.
+ */
+@keyframes fgRim {
+    to { stroke-dashoffset: -160; }
+}
+.fg-rim { animation: fgRim 12s linear infinite; }
+
+/* ---- the cloud panel ---- */
+
+@keyframes fgFloat {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-5px); }
+}
+.fg-cloud { animation: fgFloat 5.4s ease-in-out infinite; transform-box: view-box; }
+
+@keyframes fgFlow {
+    to { stroke-dashoffset: -36; }
+}
+.fg-flow { animation: fgFlow 1.9s linear infinite; }
+
+@keyframes fgPing {
+    0%, 100% { opacity: 0.35; transform: scale(1); }
+    45%      { opacity: 1;    transform: scale(1.5); }
+}
+.fg-ping { animation: fgPing 1.9s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
 
 @media (prefers-reduced-motion: reduce) {
     .fg-halo,
@@ -296,7 +345,12 @@ body {
     .fg-scrap,
     .fg-leaf,
     .fg-book,
-    .fg-line {
+    .fg-line,
+    .fg-orbit,
+    .fg-rim,
+    .fg-cloud,
+    .fg-flow,
+    .fg-ping {
         animation: none;
     }
 }

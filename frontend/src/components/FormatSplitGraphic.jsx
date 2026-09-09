@@ -186,8 +186,14 @@ export default function FormatSplitGraphic({
     author = "Sudhir Mishra",
     chapter = "Chapter One",
     pages = 231,
+    animate = true,
     className = "",
 }) {
+    /* Classes are added rather than the keyframes switched off, so with
+       animation disabled the markup carries no animated class at all — nothing
+       to compute, and nothing a future stylesheet can reanimate by accident. */
+    const cls = (name) => (animate ? name : undefined);
+    const at_ = (style) => (animate ? style : undefined);
     const lines = titleLines(title);
     /* Reading position, extent and percentage are derived from one number, so
        the three can never contradict each other on screen. */
@@ -282,20 +288,20 @@ export default function FormatSplitGraphic({
             {/* The cool halo beats a third of a cycle behind the warm one, so
                 the pulse reads as travelling from the page to the screen rather
                 than as the whole picture throbbing at once. */}
-            <ellipse cx="228" cy="234" rx="208" ry="172" fill="url(#fg-warm)" className="fg-halo" />
+            <ellipse cx="228" cy="234" rx="208" ry="172" fill="url(#fg-warm)" className={cls("fg-halo")} />
             <ellipse
                 cx="498"
                 cy="224"
                 rx="152"
                 ry="166"
                 fill="url(#fg-cool)"
-                className="fg-halo"
-                style={{ animationDelay: "0.85s" }}
+                className={cls("fg-halo")}
+                style={at_({ animationDelay: "0.85s" })}
             />
             <ellipse cx="178" cy="366" rx="150" ry="24" fill="url(#fg-cast)" />
 
             {/* ---------------- the open book ---------------- */}
-            <g className="fg-book" style={{ transformOrigin: "178px 254px" }}>
+            <g className={cls("fg-book")} style={{ transformOrigin: "178px 254px" }}>
                 <path d={COVER_PATH} fill="url(#fg-cover)" />
                 {BLOCK_EDGES.map((e) => (
                     <path key={e.key} d={e.d} fill="none" stroke="#CFC4AC" strokeWidth="0.8" />
@@ -310,13 +316,13 @@ export default function FormatSplitGraphic({
                         stroke="#DCD0B8"
                         strokeWidth="0.9"
                         opacity={leaf.opacity}
-                        className="fg-leaf"
+                        className={cls("fg-leaf")}
                         /* Pivot at the leaf's own root, near the spine, and
                            each one a beat behind the last so the fan ripples
                            instead of moving as a single slab. */
                         style={{
                             transformOrigin: `${leaf.rootX}px 250px`,
-                            animationDelay: `${(leaf.i * -0.6).toFixed(2)}s`,
+                            ...(animate ? { animationDelay: `${(leaf.i * -0.6).toFixed(2)}s` } : {}),
                         }}
                     />
                 ))}
@@ -367,8 +373,8 @@ export default function FormatSplitGraphic({
             {SCRAPS.map((s) => (
                 <g
                     key={`scrap-${s.i}`}
-                    className="fg-scrap"
-                    style={{ animationDelay: `${(-1.6 * s.i).toFixed(2)}s` }}
+                    className={cls("fg-scrap")}
+                    style={at_({ animationDelay: `${(-1.6 * s.i).toFixed(2)}s` })}
                 >
                     <g transform={`rotate(${s.rotate} ${s.x} ${s.y})`} opacity={s.opacity}>
                         <path
@@ -403,7 +409,7 @@ export default function FormatSplitGraphic({
                 mid-flight along its whole length rather than firing as one
                 burst the moment it renders. */}
             {LETTERS.filter((l) => l.i % 3 === 0).map((l) => (
-                <g key={`glow-${l.i}`} className="fg-letter" style={{ animationDelay: l.delay }}>
+                <g key={`glow-${l.i}`} className={cls("fg-letter")} style={at_({ animationDelay: l.delay })}>
                     <text
                         x={l.x}
                         y={l.y}
@@ -420,7 +426,7 @@ export default function FormatSplitGraphic({
                 </g>
             ))}
             {LETTERS.map((l) => (
-                <g key={`ltr-${l.i}`} className="fg-letter" style={{ animationDelay: l.delay }}>
+                <g key={`ltr-${l.i}`} className={cls("fg-letter")} style={at_({ animationDelay: l.delay })}>
                     <text
                         x={l.x}
                         y={l.y}
@@ -437,7 +443,7 @@ export default function FormatSplitGraphic({
                 </g>
             ))}
             {PIXELS.map((p) => (
-                <g key={`px-${p.i}`} className="fg-pixel" style={{ animationDelay: p.delay }}>
+                <g key={`px-${p.i}`} className={cls("fg-pixel")} style={at_({ animationDelay: p.delay })}>
                     <rect x={p.x} y={p.y} width={p.size} height={p.size} fill={BLUE} opacity={p.opacity} />
                 </g>
             ))}
@@ -490,8 +496,8 @@ export default function FormatSplitGraphic({
                             width={b.width}
                             height="3"
                             rx="1.5"
-                            className="fg-line"
-                            style={{ animationDelay: `${(i * 0.13).toFixed(2)}s` }}
+                            className={cls("fg-line")}
+                            style={at_({ animationDelay: `${(i * 0.13).toFixed(2)}s` })}
                         />
                     ))}
                 </g>

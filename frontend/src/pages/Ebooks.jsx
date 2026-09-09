@@ -4,6 +4,7 @@ import { ArrowUpRight, BookOpen, Tablet } from "lucide-react";
 import Seo from "../components/Seo";
 import FormatSplitGraphic from "../components/FormatSplitGraphic";
 import CloudSyncGraphic from "../components/CloudSyncGraphic";
+import OrbitField from "../components/OrbitField";
 import { fetchSiteContent, fetchCollection, resolveCollection } from "../lib/api";
 import { metaDescription, breadcrumbLd } from "../lib/schema";
 import { track } from "../lib/analytics";
@@ -113,6 +114,26 @@ export default function Ebooks() {
     const printPoints = resolveCollection(printData, DEFAULT_PRINT).filter((i) => i && i.title);
     const ebookPoints = resolveCollection(ebookData, DEFAULT_EBOOK).filter((i) => i && i.title);
 
+    /*
+     * Motion is a content decision, not a code one — a launch week may want the
+     * page still. `?? "on"` so an install that has never touched the switch
+     * behaves as designed rather than as switched off.
+     */
+    const isOn = (v, fallback = "on") => String(v ?? fallback).toLowerCase() !== "off";
+    const animate = isOn(site?.eb_anim_enabled);
+    const portal = animate && isOn(site?.eb_portal_enabled);
+    /* Seconds in, CSS time out. A blank or unparseable value falls back to the
+       design value rather than to 0s, which would freeze every drawing on its
+       first keyframe. */
+    const secs = (v, fallback) => {
+        const n = Number(String(v ?? "").trim());
+        return `${Number.isFinite(n) && n > 0 ? n : fallback}s`;
+    };
+    const rhythm = {
+        "--fg-beat": secs(site?.eb_anim_beat, 2.6),
+        "--fg-flight": secs(site?.eb_anim_flight, 5.2),
+    };
+
     const onLeave = () => track("ebook_cta_clicked", { placement: "ebooks_page", url: readerUrl });
 
     return (
@@ -199,8 +220,14 @@ export default function Ebooks() {
                         First on a phone, where it is the thing that explains the
                         page before any of the reading does. Between the columns
                         on a desktop, where it is the shared spine. */}
-                    <div className="lg:col-span-6 order-first lg:order-none">
+                    <div className="lg:col-span-6 order-first lg:order-none relative" style={rhythm}>
+                        {/* Painted before its siblings, so it sits behind them
+                            without needing a stacking context. Desktop only —
+                            on a phone this column is full width and the copy
+                            runs straight through the middle of it. */}
+                        {portal && <OrbitField className="hidden lg:block" />}
                         <FormatSplitGraphic
+                            animate={animate}
                             title={txt("art_title")}
                             author={txt("art_author")}
                             chapter={txt("art_chapter")}
@@ -212,7 +239,7 @@ export default function Ebooks() {
                             page on desktop. This fills it with the half of the
                             argument the columns only assert in words. */}
                         <div className="mt-10 lg:mt-12">
-                            <CloudSyncGraphic />
+                            <CloudSyncGraphic animate={animate} />
                             <div className="mt-5 text-center max-w-sm mx-auto">
                                 <div className="overline !text-[10px] !text-[#0A7D55]">
                                     {txt("cloud_kicker")}

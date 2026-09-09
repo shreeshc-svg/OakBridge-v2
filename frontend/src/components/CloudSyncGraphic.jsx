@@ -30,7 +30,12 @@ const DEVICES = [
     { key: "laptop", cx: 393, top: 166 },
 ];
 
-export default function CloudSyncGraphic({ className = "" }) {
+export default function CloudSyncGraphic({ className = "", animate = true }) {
+    /* Classes are added rather than the keyframes being switched off, so that
+       with animation disabled the markup carries no animated class at all —
+       nothing to compute, and nothing for a future stylesheet to reanimate by
+       accident. */
+    const cls = (name) => (animate ? name : undefined);
     return (
         <svg
             viewBox="0 0 560 262"
@@ -41,31 +46,55 @@ export default function CloudSyncGraphic({ className = "" }) {
         >
             {/* The links first, so the cloud and the devices paint over their
                 ends and no dash pokes out from under an edge. */}
+            {/* Light travelling down each link, one device after another, so it
+                reads as delivery rather than as three things blinking. */}
             <g stroke={GOLD} strokeWidth="2" fill="none" strokeDasharray="4 5" strokeLinecap="round">
-                <path d="M248 108 C 220 138, 200 144, 172 168" />
-                <path d="M282 112 L 282 160" />
-                <path d="M318 108 C 346 138, 366 144, 393 166" />
+                {[
+                    "M248 108 C 220 138, 200 144, 172 168",
+                    "M282 112 L 282 160",
+                    "M318 108 C 346 138, 366 144, 393 166",
+                ].map((d, i) => (
+                    <path
+                        key={`link-${i}`}
+                        d={d}
+                        className={cls("fg-flow")}
+                        style={animate ? { animationDelay: `${(i * 0.22).toFixed(2)}s` } : undefined}
+                    />
+                ))}
             </g>
-            {DEVICES.map((d) => (
-                <circle key={`node-${d.key}`} cx={d.cx} cy={d.top} r="3.5" fill={GOLD} />
+            {DEVICES.map((d, i) => (
+                <circle
+                    key={`node-${d.key}`}
+                    cx={d.cx}
+                    cy={d.top}
+                    r="3.5"
+                    fill={GOLD}
+                    className={cls("fg-ping")}
+                    /* Fires as the light down its own link arrives. */
+                    style={animate ? { animationDelay: `${(i * 0.22 + 0.5).toFixed(2)}s` } : undefined}
+                />
             ))}
 
             {/* ---------------- the cloud ---------------- */}
             {/* Four overlapping shapes in one flat fill. A single path would be
                 fewer nodes but impossible to nudge later without redrawing it. */}
-            <g fill={INK}>
-                <circle cx="232" cy="76" r="30" />
-                <circle cx="282" cy="58" r="42" />
-                <circle cx="332" cy="76" r="32" />
-                <rect x="202" y="76" width="162" height="34" rx="17" />
-            </g>
+            {/* Cloud AND its contents in one floating group. With the bars
+                outside it they stayed put while the cloud drifted off them. */}
+            <g className={cls("fg-cloud")}>
+                <g fill={INK}>
+                    <circle cx="232" cy="76" r="30" />
+                    <circle cx="282" cy="58" r="42" />
+                    <circle cx="332" cy="76" r="32" />
+                    <rect x="202" y="76" width="162" height="34" rx="17" />
+                </g>
 
             {/* What is being held up there: lines of a book. The top one is
                 amber because it is the only thing in the drawing a reader has
                 actually made — a highlight, carried up. */}
-            <rect x="258" y="48" width="48" height="5" rx="2.5" fill={GOLD} />
-            <rect x="258" y="60" width="38" height="5" rx="2.5" fill="#FFFFFF" opacity="0.55" />
-            <rect x="258" y="72" width="44" height="5" rx="2.5" fill="#FFFFFF" opacity="0.35" />
+                <rect x="258" y="48" width="48" height="5" rx="2.5" fill={GOLD} />
+                <rect x="258" y="60" width="38" height="5" rx="2.5" fill="#FFFFFF" opacity="0.55" />
+                <rect x="258" y="72" width="44" height="5" rx="2.5" fill="#FFFFFF" opacity="0.35" />
+            </g>
 
             {/* ---------------- the devices ---------------- */}
 
