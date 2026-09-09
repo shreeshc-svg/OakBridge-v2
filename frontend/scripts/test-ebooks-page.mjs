@@ -22,7 +22,7 @@ const ROOT = join(HERE, "..", "..");
 const SRC = join(HERE, "..", "src");
 
 const DEFAULTS = (await import(pathToFileURL(join(SRC, "lib", "contentDefaults.js")).href)).default;
-const { portalFit, MIN_WIDTH, MAX_WIDTH, DEFAULT_WIDTH } =
+const { portalFit, MIN_WIDTH, MAX_WIDTH, DEFAULT_WIDTH, LIST_COLUMN, CAPTION_WIDTH } =
     await import(pathToFileURL(join(SRC, "lib", "portalFit.js")).href);
 
 let failed = 0;
@@ -281,32 +281,39 @@ check(/md:grid-cols-2/.test(page) && page.indexOf("<FormatSplitGraphic") < page.
  */
 check(/xl:-mt-\d+/.test(page) && !/lg:-mt-\d+/.test(page),
       "the lists are pulled up at xl only — below 1280 there is not room for two columns AND the caption between them");
-check(/max-w-6xl mx-auto/.test(page),
-      "the grid is capped, not run to the container edge, so both headings stay INSIDE the rim rather than under the dashes");
-check(/xl:max-w-xs xl:justify-self-start/.test(page) && /xl:max-w-xs xl:justify-self-end/.test(page),
-      "and the columns are narrow and pinned outward — full-width halves reach the middle of the page, which is where the caption is");
+check(/style=\{\{ maxWidth: fit\.listWidth \}\}/.test(page),
+      "their width is DERIVED from the portal, not a fixed class: the artwork size is an admin setting, so the rim "
+      + "moves, and a fixed full-width grid puts the headings 101px outside it once someone shrinks the artwork");
+check(/fit\.raised \? " xl:-mt-\d+" : ""/.test(page)
+      && /fit\.raised \? "xl:max-w-xs xl:justify-self-start"/.test(page),
+      "and the raised layout switches itself OFF when the circle is too small to hold two columns and the caption between them");
 
 /*
- * The overlap this replaces was live: pulled up at full half-width, both lists
- * landed on top of "Oakbridge, now on the cloud." So the clearance is measured
- * rather than trusted. Tailwind sizes in px: 6xl 1152, xs 320, sm 384 (the
- * caption's max-w-sm), container max-w-7xl 1280 inside px-16 / 2xl:px-24.
+ * The overlap this guards against was live: pulled up at full half-width, both
+ * lists printed over "Oakbridge, now on the cloud." Now measured rather than
+ * trusted, and across every artwork size an admin can set — not just the
+ * default, because the circle moves with the artwork and the columns move with
+ * the circle.
  */
-const GRID = 1152, COL = 320, CAP = 384, CIRCLE = 1260;
-const clash = [1280, 1440, 1600, 1920].flatMap((vw) => {
-    const container = Math.min(1280, vw - (vw >= 1536 ? 192 : 128));
-    const grid = Math.min(GRID, container);
-    const gl = (vw - grid) / 2, gr = gl + grid;
-    const capL = vw / 2 - CAP / 2, capR = vw / 2 + CAP / 2;
-    const rimL = vw / 2 - CIRCLE / 2;
-    const bad = [];
-    if (gl + COL > capL) bad.push(`${vw}: left column overlaps the caption`);
-    if (gr - COL < capR) bad.push(`${vw}: right column overlaps the caption`);
-    if (gl <= rimL) bad.push(`${vw}: left heading sits outside the rim`);
-    return bad;
+const clash = [MIN_WIDTH, 400, 480, 560, DEFAULT_WIDTH, 800, MAX_WIDTH].flatMap((art) => {
+    const f = portalFit(art);
+    if (!f.raised) return [];            // stacked below the artwork; nothing to collide with
+    return [1280, 1440, 1920].flatMap((vw) => {
+        const container = Math.min(1280, vw - (vw >= 1536 ? 192 : 128));
+        const grid = Math.min(f.listWidth, container);
+        const gl = (vw - grid) / 2, gr = gl + grid;
+        const bad = [];
+        if (gl + LIST_COLUMN > vw / 2 - CAPTION_WIDTH / 2) bad.push(`art${art}@${vw}: left column over the caption`);
+        if (gr - LIST_COLUMN < vw / 2 + CAPTION_WIDTH / 2) bad.push(`art${art}@${vw}: right column over the caption`);
+        if (gl < vw / 2 - f.circle / 2 - 1) bad.push(`art${art}@${vw}: left heading outside the rim`);
+        if (gr > vw / 2 + f.circle / 2 + 1) bad.push(`art${art}@${vw}: right heading outside the rim`);
+        return bad;
+    });
 });
 check(clash.length === 0,
-      `the raised lists clear the cloud caption and stay inside the rim at every xl width ${clash.join(" | ")}`);
+      `at every artwork size and viewport, the raised lists clear the caption and stay inside the rim ${clash.join(" | ")}`);
+check(portalFit(480).raised === false && portalFit(DEFAULT_WIDTH).raised === true,
+      "a small artwork drops the pull-up rather than overlapping — plainer, but never broken");
 const orbitIds = [...orbit.matchAll(/id="([^"]+)"/g)].map((m) => m[1]);
 /* Same arithmetic as the artwork's washes, on the portal's own canvas. The
    rims were enlarged to enclose both drawings, and an ellipse that runs past

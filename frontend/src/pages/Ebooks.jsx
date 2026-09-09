@@ -252,9 +252,20 @@ export default function Ebooks() {
 
                     And the pull-up is xl only. Below 1280 there is not enough
                     width for two columns AND the caption between them, so the
-                    lists simply sit under the artwork as before. */}
-                <div className="mt-14 md:mt-16 xl:-mt-28 grid grid-cols-1 md:grid-cols-2 gap-12 md:gap-20 max-w-6xl mx-auto">
-                    <div className="xl:max-w-xs xl:justify-self-start">
+                    lists simply sit under the artwork as before.
+
+                    The width is derived, not a fixed class: it tracks the
+                    portal's circle so the columns sit as far out as the rim
+                    allows and no further. A fixed full-width grid is fine at the
+                    default artwork size and puts the headings 101px outside the
+                    rim once someone shrinks it. */}
+                <div
+                    className={`mt-14 md:mt-16 grid grid-cols-1 md:grid-cols-2 gap-12 md:gap-20 mx-auto${
+                        fit.raised ? " xl:-mt-28" : ""
+                    }`}
+                    style={{ maxWidth: fit.listWidth }}
+                >
+                    <div className={fit.raised ? "xl:max-w-xs xl:justify-self-start" : undefined}>
                         <div className="flex items-center gap-2.5">
                             <BookOpen size={18} strokeWidth={1.5} className="text-[#CC0033]" />
                             <h2 className="font-serif text-2xl md:text-3xl text-[#002B5C]">
@@ -279,7 +290,7 @@ export default function Ebooks() {
                         </div>
                     </div>
 
-                    <div className="xl:max-w-xs xl:justify-self-end">
+                    <div className={fit.raised ? "xl:max-w-xs xl:justify-self-end" : undefined}>
                         <div className="flex items-center gap-2.5">
                             <Tablet size={18} strokeWidth={1.5} className="text-[#0A7D55]" />
                             <h2 className="font-serif text-2xl md:text-3xl text-[#002B5C]">

@@ -43,6 +43,35 @@ export const MARGIN = 1.09;
 
 /* An artwork narrower than this is smaller than the caption beneath it; wider
    than this overflows the page's own container at common desktop widths. */
+/*
+ * How wide the two format lists may spread beneath the artwork.
+ *
+ * They are pinned to the outer edges of that grid, so its width IS how far
+ * right the eBook column sits. It cannot simply be the page container: the
+ * columns have to stay inside the portal's rim, or the dashes cross the
+ * headings — and since the artwork width is now an admin setting, the rim moves
+ * with it. Measured: at a 560px artwork the circle shrinks to 1079px, and a
+ * fixed full-width grid would put the headings 101px outside it.
+ *
+ * So the grid tracks the circle, clamped at both ends: never wider than the
+ * page container, never narrower than two readable columns and the gap between
+ * them.
+ */
+export const LIST_CLEARANCE = 12;
+export const LIST_MIN = 720;
+export const LIST_MAX = 1280;
+
+/*
+ * Two 320px columns with the 384px caption between them. Below this the raised
+ * layout cannot exist — there is nowhere for the lists to go that is not on top
+ * of the caption, which is exactly the overlap that shipped once. So a small
+ * artwork drops the pull-up entirely and the lists sit under it, which is
+ * plainer but never broken.
+ */
+export const LIST_COLUMN = 320;
+export const CAPTION_WIDTH = 384;
+export const LIST_RAISED_MIN = LIST_COLUMN * 2 + CAPTION_WIDTH;
+
 export const MIN_WIDTH = 320;
 export const MAX_WIDTH = 1000;
 export const DEFAULT_WIDTH = 672;
@@ -67,10 +96,23 @@ export function portalFit(rawWidth) {
        enough that the rim clears the stack's half-diagonal. */
     const side = (halfDiagonal / RIM_FRACTION) * MARGIN;
 
+    const insetX = Math.max(0, Math.round((side - width) / 2));
+    const insetY = Math.max(0, Math.round((side - height) / 2));
+
+    /* The rendered circle, from the layer the portal actually gets: its canvas
+       is square and scales with `meet`, so the shorter side of the layer wins. */
+    const circle = 2 * RIM_FRACTION * Math.min(width + 2 * insetX, height + 2 * insetY);
+    const listWidth = Math.round(
+        Math.min(LIST_MAX, Math.max(LIST_MIN, circle - 2 * LIST_CLEARANCE)),
+    );
+
     return {
         width: Math.round(width),
         height: Math.round(height),
-        insetX: Math.max(0, Math.round((side - width) / 2)),
-        insetY: Math.max(0, Math.round((side - height) / 2)),
+        insetX,
+        insetY,
+        circle: Math.round(circle),
+        listWidth,
+        raised: listWidth >= LIST_RAISED_MIN,
     };
 }
