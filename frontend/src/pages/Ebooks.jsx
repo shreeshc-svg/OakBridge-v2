@@ -82,10 +82,12 @@ const DEFAULT_EBOOK = [
 
 const EREADER_FALLBACK = "https://ebooks.oakbridge.in/";
 
-/** One row in a format column. `align` flips it for the left-hand column. */
-function Point({ item, align }) {
+/** One row in a format column. Both columns now read left-aligned: they sit
+    side by side beneath the artwork rather than facing each other across it,
+    so mirroring one of them would just make it harder to scan. */
+function Point({ item }) {
     return (
-        <li className={align === "right" ? "text-right" : "text-left"}>
+        <li>
             <div className="text-[15px] font-medium text-[#002B5C] leading-snug">{item.title}</div>
             {item.text && <div className="text-[13px] text-[#4B5563] mt-1 leading-relaxed">{item.text}</div>}
         </li>
@@ -182,29 +184,60 @@ export default function Ebooks() {
                 data-testid="ebooks-compare"
                 className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-16 md:py-24"
             >
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-8 items-start max-w-7xl mx-auto">
-                    {/* ---- printed ----
-                        Three columns of four made the middle one too narrow for
-                        a book, a flight of type and a device to sit side by
-                        side at any readable size. The bullet lists are short
-                        phrases and lose nothing at a quarter of the width; the
-                        drawing gains half the page. */}
-                    <div className="lg:col-span-3 lg:pt-10">
-                        <div className="flex items-center gap-2.5 lg:justify-end">
-                            <BookOpen size={18} strokeWidth={1.5} className="text-[#CC0033] lg:order-2" />
-                            <h2 className="font-serif text-2xl md:text-3xl text-[#002B5C] lg:order-1">
+                {/* ---- the artwork, on its own, full width ----
+
+                    The two lists used to flank it. That capped the drawing at a
+                    third to a half of the page AND meant the portal could only
+                    grow by running its rings behind live copy — measured at 107px
+                    of overhang each side to enclose the artwork, against a 32px
+                    gutter. Moving the lists below empties the margins, so the
+                    portal can be as wide as it needs and the drawings get the
+                    full column. */}
+                <div className="relative mx-auto max-w-2xl" style={rhythm}>
+                    {/* Painted before its siblings, so it sits behind them
+                        without needing a stacking context. Desktop only — on a
+                        phone there are no margins to spill into. */}
+                    {portal && <OrbitField className="hidden lg:block" />}
+                    <FormatSplitGraphic
+                        animate={animate}
+                        title={txt("art_title")}
+                        author={txt("art_author")}
+                        chapter={txt("art_chapter")}
+                        pages={txt("art_pages")}
+                    />
+
+                    <div className="mt-10 lg:mt-12">
+                        <CloudSyncGraphic animate={animate} />
+                        <div className="mt-5 text-center max-w-sm mx-auto">
+                            <div className="overline !text-[10px] !text-[#0A7D55]">
+                                {txt("cloud_kicker")}
+                            </div>
+                            <p className="font-serif text-xl md:text-2xl text-[#002B5C] mt-2 leading-tight">
+                                {txt("cloud_tagline")}
+                            </p>
+                            <p className="text-[13px] text-[#4B5563] mt-2.5 leading-relaxed">
+                                {txt("cloud_body")}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                {/* ---- and the two formats beneath it ---- */}
+                <div className="mt-16 md:mt-24 grid grid-cols-1 md:grid-cols-2 gap-12 md:gap-16 max-w-4xl mx-auto">
+                    <div>
+                        <div className="flex items-center gap-2.5">
+                            <BookOpen size={18} strokeWidth={1.5} className="text-[#CC0033]" />
+                            <h2 className="font-serif text-2xl md:text-3xl text-[#002B5C]">
                                 {txt("print_title")}
                             </h2>
                         </div>
-                        <p className="text-sm text-[#4B5563] mt-2 lg:text-right leading-relaxed">
-                            {txt("print_body")}
-                        </p>
+                        <p className="text-sm text-[#4B5563] mt-2 leading-relaxed">{txt("print_body")}</p>
                         <ul className="mt-7 space-y-5">
                             {printPoints.map((item, i) => (
-                                <Point key={item.id || i} item={item} align="right" />
+                                <Point key={item.id || i} item={item} />
                             ))}
                         </ul>
-                        <div className="mt-8 lg:flex lg:justify-end">
+                        <div className="mt-8">
                             <Link
                                 to="/books"
                                 data-testid="ebooks-browse-print"
@@ -216,46 +249,7 @@ export default function Ebooks() {
                         </div>
                     </div>
 
-                    {/* ---- the graphic ----
-                        First on a phone, where it is the thing that explains the
-                        page before any of the reading does. Between the columns
-                        on a desktop, where it is the shared spine. */}
-                    <div className="lg:col-span-6 order-first lg:order-none relative" style={rhythm}>
-                        {/* Painted before its siblings, so it sits behind them
-                            without needing a stacking context. Desktop only —
-                            on a phone this column is full width and the copy
-                            runs straight through the middle of it. */}
-                        {portal && <OrbitField className="hidden lg:block" />}
-                        <FormatSplitGraphic
-                            animate={animate}
-                            title={txt("art_title")}
-                            author={txt("art_author")}
-                            chapter={txt("art_chapter")}
-                            pages={txt("art_pages")}
-                        />
-
-                        {/* Two bullet columns are taller than one wide drawing,
-                            which left a long empty run down the middle of the
-                            page on desktop. This fills it with the half of the
-                            argument the columns only assert in words. */}
-                        <div className="mt-10 lg:mt-12">
-                            <CloudSyncGraphic animate={animate} />
-                            <div className="mt-5 text-center max-w-sm mx-auto">
-                                <div className="overline !text-[10px] !text-[#0A7D55]">
-                                    {txt("cloud_kicker")}
-                                </div>
-                                <p className="font-serif text-xl md:text-2xl text-[#002B5C] mt-2 leading-tight">
-                                    {txt("cloud_tagline")}
-                                </p>
-                                <p className="text-[13px] text-[#4B5563] mt-2.5 leading-relaxed">
-                                    {txt("cloud_body")}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* ---- digital ---- */}
-                    <div className="lg:col-span-3 lg:pt-10">
+                    <div>
                         <div className="flex items-center gap-2.5">
                             <Tablet size={18} strokeWidth={1.5} className="text-[#0A7D55]" />
                             <h2 className="font-serif text-2xl md:text-3xl text-[#002B5C]">
@@ -265,7 +259,7 @@ export default function Ebooks() {
                         <p className="text-sm text-[#4B5563] mt-2 leading-relaxed">{txt("ebook_body")}</p>
                         <ul className="mt-7 space-y-5">
                             {ebookPoints.map((item, i) => (
-                                <Point key={item.id || i} item={item} align="left" />
+                                <Point key={item.id || i} item={item} />
                             ))}
                         </ul>
                         <div className="mt-8">

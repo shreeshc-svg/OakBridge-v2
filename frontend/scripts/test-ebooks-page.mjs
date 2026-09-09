@@ -264,6 +264,8 @@ check(page.includes('<OrbitField className="hidden lg:block" />'),
       "and it is desktop only: on a phone the column is full width and the copy runs straight through it");
 check(page.indexOf("<OrbitField") < page.indexOf("<FormatSplitGraphic"),
       "painted before its siblings, so it sits behind them without needing a stacking context");
+check(/md:grid-cols-2/.test(page) && page.indexOf("<FormatSplitGraphic") < page.indexOf("ebooks-browse-print"),
+      "the two format lists sit BELOW the artwork rather than flanking it — which is what empties the margins the portal needs");
 const orbitIds = [...orbit.matchAll(/id="([^"]+)"/g)].map((m) => m[1]);
 /* Same arithmetic as the artwork's washes, on the portal's own canvas. The
    rims were enlarged to enclose both drawings, and an ellipse that runs past
@@ -271,8 +273,54 @@ const orbitIds = [...orbit.matchAll(/id="([^"]+)"/g)].map((m) => m[1]);
    once. */
 const obH = Number(orbit.match(/viewBox="0 0 \d+ (\d+)"/)[1]);
 const obRadii = [...orbit.matchAll(/rx: (\d+), ry: (\d+)/g)].map((m) => [Number(m[1]), Number(m[2])]);
-check(obRadii.some(([, ry]) => ry >= obH * 0.45),
-      "and the outer rim reaches far enough out to enclose both drawings rather than cutting through them");
+check(obRadii.every(([rx, ry]) => rx === ry),
+      `the rims are circles, not ellipses ${obRadii.map((r) => r.join("x")).join(" ")}`);
+
+/*
+ * DOES THE RIM ACTUALLY ENCLOSE THE ARTWORK?
+ *
+ * Twice it did not, and both times it looked plausible. An ellipse has to be
+ * about √2 bigger than the rectangle it contains, and the artwork spans the
+ * full width at the TOP of the stack, where an ellipse is narrowest — so
+ * measured against real ink the e-reader's top corner sat at 1.24 and the book
+ * cover's at 1.04, where 1.0 is the rim.
+ *
+ * This reproduces the layout arithmetic and measures the extreme INK points,
+ * not bounding-box corners: nothing is drawn at the artwork's top-left corner,
+ * so testing that would fail for no reason. Gaps are the page's own Tailwind
+ * spacing; the assertion carries enough margin that a few pixels either way
+ * cannot flip it.
+ */
+const num = (re, src) => Number(src.match(re)[1]);
+const R = Math.max(...obRadii.map(([rx]) => rx));
+const OB = num(/viewBox="0 0 (\d+) \d+"/, orbit);
+const IX = num(/-inset-x-(\d+)/, orbit) * 4; // tailwind spacing unit = 4px
+const IY = num(/-inset-y-(\d+)/, orbit) * 4;
+const artVb = [num(/viewBox="0 0 (\d+) \d+"/, svg), num(/viewBox="0 0 \d+ (\d+)"/, svg)];
+const cloudVb = [num(/viewBox="0 0 (\d+) \d+"/, cloud), num(/viewBox="0 0 \d+ (\d+)"/, cloud)];
+const GAP = 48, TAGLINE = 150;                       // mt-12, then the cloud caption
+const INK_ART = [[30, 150], [326, 150], [626, 78], [496, 78], [30, 358], [626, 366], [434, 86]];
+const INK_CLOUD = [[202, 16], [150, 246], [450, 246]];
+
+const encloses = (contentW) => {
+    const artH = (contentW * artVb[1]) / artVb[0];
+    const cloudH = (contentW * cloudVb[1]) / cloudVb[0];
+    const stackH = artH + GAP + cloudH + TAGLINE;
+    const boxW = contentW + 2 * IX, boxH = stackH + 2 * IY;
+    const k = Math.min(boxW / OB, boxH / OB);        // preserveAspectRatio meet, square canvas
+    const cx = (boxW - OB * k) / 2 + (OB / 2) * k - IX;
+    const cy = (boxH - OB * k) / 2 + (OB / 2) * k - IY;
+    const r = R * k;
+    const aS = contentW / artVb[0], cS = contentW / cloudVb[0], cTop = artH + GAP;
+    const pts = [
+        ...INK_ART.map(([x, y]) => [x * aS, y * aS]),
+        ...INK_CLOUD.map(([x, y]) => [x * cS, cTop + y * cS]),
+    ];
+    return Math.max(...pts.map(([x, y]) => Math.hypot(x - cx, y - cy) / r));
+};
+const fits = [560, 600, 672].map((w) => ({ w, v: encloses(w) }));
+check(fits.every((f) => f.v <= 0.95),
+      `the rim encloses every inked corner of both drawings — worst ${fits.map((f) => `${f.w}px:${f.v.toFixed(2)}`).join(" ")}`);
 
 check(orbitIds.every((id) => id.startsWith("fg-")),
       `its gradient ids are prefixed too ${orbitIds.join(", ")} — three SVGs share this page`);

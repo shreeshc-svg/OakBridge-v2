@@ -52,12 +52,18 @@ import React from "react";
  * copy sitting over the middle has nothing behind it. Turning up the CENTRE
  * would not be safe, which is why there is nothing there to turn up.
  *
- * It is sized with NEGATIVE insets rather than inset-0, so the layer is wider
- * and taller than the column and the rings can spill into the gutters either
- * side. Held to the column exactly, the widest ring the canvas can carry is
- * still only as wide as the artwork, which is not an enclosure — it is an
- * outline. The viewBox ratio is tuned to roughly that enlarged box so the
- * rings reach the edges instead of letterboxing inside it.
+ * ROUND, AND BIG ENOUGH TO ACTUALLY ENCLOSE
+ *
+ * The rims were ellipses squeezed into a column with body copy either side, and
+ * they did not enclose anything: measured against real ink, the e-reader's top
+ * corner sat at 1.24 and the book cover's at 1.04, where 1.0 is the rim. An
+ * ellipse has to be about √2 bigger than the rectangle it contains, and the
+ * artwork spanned the full column at the TOP, where an ellipse is narrowest.
+ *
+ * The two format lists now sit BELOW the artwork instead of flanking it, which
+ * empties the margins — so the rims can be true circles on a square canvas, and
+ * the layer can be inset far enough negatively that the circle clears the whole
+ * stack. Nothing is beside it to run through any more.
  *
  * Decorative only: aria-hidden and pointer-events-none.
  */
@@ -66,15 +72,15 @@ const GOLD = "#F59E0B";
 const BLUE = "#2F6FB5";
 const FACE = "Public Sans, ui-sans-serif, system-ui, sans-serif";
 
-const CX = 380;
-const CY = 480;
+const CX = 550;
+const CY = 550;
 
 /* Concentric rims. Dash lengths differ per ring so the travelling light never
    lines up into a single moving spoke. */
 const RINGS = [
-    { i: 0, rx: 315, ry: 400, dash: "3 13", colour: GOLD, opacity: 0.55, duration: 9, reverse: false },
-    { i: 1, rx: 340, ry: 430, dash: "2 17", colour: GOLD, opacity: 0.42, duration: 14, reverse: true },
-    { i: 2, rx: 362, ry: 455, dash: "4 21", colour: BLUE, opacity: 0.48, duration: 19, reverse: false },
+    { i: 0, rx: 470, ry: 470, dash: "3 13", colour: GOLD, opacity: 0.55, duration: 9, reverse: false },
+    { i: 1, rx: 500, ry: 500, dash: "2 17", colour: GOLD, opacity: 0.42, duration: 14, reverse: true },
+    { i: 2, rx: 525, ry: 525, dash: "4 21", colour: BLUE, opacity: 0.48, duration: 19, reverse: false },
 ];
 
 /* Two rings of bodies turning opposite ways. One ring reads as a carousel; two
@@ -86,7 +92,7 @@ const PARTICLES = ["§", "a", "¶", "e", "t", "§", "i", "m", "▪", "▪", "▪
         i,
         ch,
         isPixel,
-        radius: outer ? 318 + ((i * 13) % 26) : 244 + ((i * 17) % 30),
+        radius: outer ? 462 + ((i * 13) % 26) : 352 + ((i * 17) % 30),
         size: isPixel ? 7 + (i % 3) : 15 + ((i * 5) % 8),
         /* Spread around the ring by index, nudged so the two rings do not line
            up into spokes. */
@@ -100,10 +106,10 @@ const PARTICLES = ["§", "a", "¶", "e", "t", "§", "i", "m", "▪", "▪", "▪
 export default function OrbitField({ className = "" }) {
     return (
         <svg
-            viewBox="0 0 760 960"
+            viewBox="0 0 1100 1100"
             aria-hidden="true"
             focusable="false"
-            className={`pointer-events-none absolute -inset-x-20 -inset-y-10 ${className}`}
+            className={`pointer-events-none absolute -inset-x-72 -inset-y-36 ${className}`}
             xmlns="http://www.w3.org/2000/svg"
         >
             <defs>
@@ -126,12 +132,12 @@ export default function OrbitField({ className = "" }) {
 
             {/* The rim glow, on the same heartbeat as the halos inside the
                 artwork, so the column pulses to one clock. */}
-            <ellipse cx={CX} cy={CY} rx="348" ry="438" fill="url(#fg-portal-warm)" className="fg-halo" />
+            <ellipse cx={CX} cy={CY} rx="492" ry="492" fill="url(#fg-portal-warm)" className="fg-halo" />
             <ellipse
                 cx={CX}
                 cy={CY}
-                rx="358"
-                ry="450"
+                rx="514"
+                ry="514"
                 fill="url(#fg-portal-cool)"
                 className="fg-halo"
                 style={{ animationDelay: "0.85s" }}
