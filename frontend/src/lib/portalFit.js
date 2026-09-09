@@ -82,7 +82,14 @@ export const LIST_MAX = 1280;
  * `fits` rather than just a width: a small container and a large artwork leave
  * nowhere to put them, and the honest answer is to put them underneath.
  */
-export const FLANK_GAP = 40;
+/*
+ * 28, not 40. At a 320px artwork — which is what the site is actually set to —
+ * 40px of air left the columns at 189px, one pixel band under the 200px
+ * minimum, so the layout refused to flank and quietly stacked. The threshold
+ * was right and the air was too generous by about ten pixels; 28px still reads
+ * as clear separation and gets 320 over the line at 201px.
+ */
+export const FLANK_GAP = 28;
 export const FLANK_MIN_COLUMN = 200;
 
 /*
