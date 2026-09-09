@@ -144,6 +144,46 @@ const outside = [...svg.matchAll(/<ellipse cx="(\d+)" cy="(\d+)" rx="(\d+)" ry="
 check(outside.length === 0,
       `every wash ellipse finishes inside the ${vbW}x${vbH} canvas ${outside.join(" | ")}`);
 
+console.log("\n-- the animation is composited, staggered and optional --");
+const css = readFileSync(join(SRC, "index.css"), "utf8");
+check(/@media \(prefers-reduced-motion: reduce\)[\s\S]{0,400}?\.fg-halo[\s\S]{0,300}?animation: none/.test(css),
+      "every animated class is switched off for prefers-reduced-motion — a looping drawing is not optional for someone who gets motion sick from it");
+for (const cls of ["fg-halo", "fg-letter", "fg-pixel", "fg-scrap", "fg-leaf", "fg-book", "fg-line"]) {
+    check(css.includes(`.${cls} {`) && svg.includes(`"${cls}"`),
+          `${cls} is defined in CSS and used in the drawing`);
+}
+/*
+ * Only transform and opacity may be animated. Those two the browser composites
+ * on its own; anything else re-runs layout or paint every frame, and there are
+ * around fifty animated nodes in this drawing. On a mid-range Android that is
+ * the difference between a graphic and a stutter.
+ */
+/* Scan INSIDE the keyframe bodies only. Scanning the whole block also picks up
+   the `animation:` shorthand on the .fg-* rules, which is not an animated
+   property and made this fail on its first run. */
+const fgBlock = css.slice(css.indexOf("@keyframes fgHeartbeat"), css.indexOf("Buttons with McGraw"));
+const animatedProps = [...fgBlock.matchAll(/@keyframes\s+fg\w+\s*\{([\s\S]*?)\n\}/g)]
+    .flatMap((m) => [...m[1].matchAll(/([a-z-]+)\s*:/g)].map((p) => p[1]));
+const bad = [...new Set(animatedProps)].filter((p) => !["opacity", "transform"].includes(p));
+check(bad.length === 0, `only opacity and transform are animated ${bad.join(", ")}`);
+/*
+ * Nothing that moves may be filtered.
+ *
+ * A filtered region re-runs its filter on every frame. The glow used to be a
+ * feGaussianBlur over six animated letters, which had the browser recomputing a
+ * Gaussian across a 170x200 area sixty times a second. Replaced with a second
+ * text pass at 1.3x and low opacity, which the compositor draws for free.
+ */
+const filtered = [...svg.matchAll(/<g[^>]*filter="url\(#[^)]+\)"[^>]*>/g)].map((m) => m[0]);
+check(!filtered.some((g) => /className="fg-/.test(g)),
+      `no animated group carries a filter ${filtered.filter((g) => /className="fg-/.test(g)).join(" ")}`);
+check(!/feGaussianBlur/.test(svg),
+      "and the blur is gone entirely — the only filter left is the drop shadow on the device, which does not move");
+check(/transform-box: view-box/.test(css),
+      "rotations use transform-box: view-box — without it transform-origin is measured from the element's own bounding box, so 'turn about the spine' becomes 'turn about the middle of this leaf'");
+check(/delay: `\$\{\(-\(t \* 5\.2\)\)/.test(svg) || /-\(t \* 5\.2\)/.test(svg),
+      "letters carry NEGATIVE animation delays, so the stream is already mid-flight on the first frame rather than firing as one burst on load");
+
 console.log("\n-- the rich treatment is scoped to this one drawing --");
 /*
  * This is the ONLY illustration on the site allowed gradients, a drop shadow

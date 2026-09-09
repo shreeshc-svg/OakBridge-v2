@@ -83,6 +83,7 @@ const LEAVES = [0, 1, 2, 3, 4].map((i) => {
     const tipBottom = 316 - i * 5;
     return {
         i,
+        rootX: sx, // the pivot the flutter turns about
         d:
             `M ${sx} ${172 + i * 3} C ${sx + 26} ${162 - i * 8}, ${tipX - 22} ${tipTop - 6}, ${tipX} ${tipTop} ` +
             `C ${tipX + 11} ${(tipTop + tipBottom) / 2}, ${tipX - 6} ${tipBottom - 14}, ${tipX - 14} ${tipBottom} ` +
@@ -110,6 +111,9 @@ const LETTERS = GLYPHS.map((ch, i) => {
         rotate: Math.round(Math.sin(i * 2.4) * 28),
         opacity: Number((0.96 - t * 0.3).toFixed(2)),
         colour: t < 0.36 ? GOLD : t > 0.64 ? BLUE : i % 2 ? GOLD : BLUE,
+        /* Spread across the whole 5.2s cycle, and negative so every letter is
+           already part-way through it on the first frame. */
+        delay: `${(-(t * 5.2)).toFixed(2)}s`,
     };
 });
 
@@ -132,6 +136,7 @@ const PIXELS = Array.from({ length: 14 }, (_, i) => {
         y: 190 + ((i * 53) % 130),
         size: Math.max(3, 8 - Math.round(t * 4) + (i % 2)),
         opacity: Number((0.7 - t * 0.35).toFixed(2)),
+        delay: `${(-(t * 3.6)).toFixed(2)}s`,
     };
 });
 
@@ -266,20 +271,31 @@ export default function FormatSplitGraphic({
                 <filter id="fg-lift" x="-40%" y="-40%" width="200%" height="200%">
                     <feDropShadow dx="0" dy="10" stdDeviation="11" floodColor={INK} floodOpacity="0.26" />
                 </filter>
-                <filter id="fg-soft" x="-90%" y="-90%" width="280%" height="280%">
-                    <feGaussianBlur stdDeviation="5" />
-                </filter>
+                {/* fg-lift is the only filter left, and it is on the device,
+                    which does NOT animate — so its shadow is composited once
+                    and never recomputed. Nothing that moves is filtered. */}
             </defs>
 
             {/* Both washes are sized to finish INSIDE the viewBox — SVG clips
                 to it, and a gradient that ends outside is a straight edge. The
                 blue one used to run to x=705 against a 660 canvas. */}
-            <ellipse cx="228" cy="234" rx="208" ry="172" fill="url(#fg-warm)" />
-            <ellipse cx="498" cy="224" rx="152" ry="166" fill="url(#fg-cool)" />
+            {/* The cool halo beats a third of a cycle behind the warm one, so
+                the pulse reads as travelling from the page to the screen rather
+                than as the whole picture throbbing at once. */}
+            <ellipse cx="228" cy="234" rx="208" ry="172" fill="url(#fg-warm)" className="fg-halo" />
+            <ellipse
+                cx="498"
+                cy="224"
+                rx="152"
+                ry="166"
+                fill="url(#fg-cool)"
+                className="fg-halo"
+                style={{ animationDelay: "0.85s" }}
+            />
             <ellipse cx="178" cy="366" rx="150" ry="24" fill="url(#fg-cast)" />
 
             {/* ---------------- the open book ---------------- */}
-            <g>
+            <g className="fg-book" style={{ transformOrigin: "178px 254px" }}>
                 <path d={COVER_PATH} fill="url(#fg-cover)" />
                 {BLOCK_EDGES.map((e) => (
                     <path key={e.key} d={e.d} fill="none" stroke="#CFC4AC" strokeWidth="0.8" />
@@ -294,6 +310,14 @@ export default function FormatSplitGraphic({
                         stroke="#DCD0B8"
                         strokeWidth="0.9"
                         opacity={leaf.opacity}
+                        className="fg-leaf"
+                        /* Pivot at the leaf's own root, near the spine, and
+                           each one a beat behind the last so the fan ripples
+                           instead of moving as a single slab. */
+                        style={{
+                            transformOrigin: `${leaf.rootX}px 250px`,
+                            animationDelay: `${(leaf.i * -0.6).toFixed(2)}s`,
+                        }}
                     />
                 ))}
                 <path d={pagePath(OUT_L, 1)} fill="url(#fg-pl)" />
@@ -341,56 +365,81 @@ export default function FormatSplitGraphic({
 
             {/* ---------------- the flight ---------------- */}
             {SCRAPS.map((s) => (
-                <g key={`scrap-${s.i}`} transform={`rotate(${s.rotate} ${s.x} ${s.y})`} opacity={s.opacity}>
-                    <path
+                <g
+                    key={`scrap-${s.i}`}
+                    className="fg-scrap"
+                    style={{ animationDelay: `${(-1.6 * s.i).toFixed(2)}s` }}
+                >
+                    <g transform={`rotate(${s.rotate} ${s.x} ${s.y})`} opacity={s.opacity}>
+                        <path
                         d={
                             `M ${s.x - s.s} ${s.y - s.s} C ${s.x} ${s.y - s.s - 4}, ${s.x + s.s} ${s.y - s.s + 3}, ${s.x + s.s} ${s.y - s.s} ` +
                             `L ${s.x + s.s} ${s.y + s.s} C ${s.x} ${s.y + s.s + 4}, ${s.x - s.s} ${s.y + s.s - 3}, ${s.x - s.s} ${s.y + s.s} Z`
                         }
-                        fill="#FFFDF8"
-                        stroke="#DCD0B8"
-                        strokeWidth="0.7"
-                    />
+                            fill="#FFFDF8"
+                            stroke="#DCD0B8"
+                            strokeWidth="0.7"
+                        />
+                    </g>
                 </g>
             ))}
 
             {/* A blurred pass under every third letter, so the stream glows
                 without a filter over the whole group softening all of it. */}
-            <g filter="url(#fg-soft)" opacity="0.7">
-                {LETTERS.filter((l) => l.i % 3 === 0).map((l) => (
+            {/* THE BLOOM PASS — and why it is not a blur.
+
+                This used to be the same letters inside a feGaussianBlur, which
+                looks lovely and is the wrong thing to animate: a filtered
+                region re-runs its blur on every frame, so six moving letters
+                would have had the browser recomputing a Gaussian over a
+                170×200 area sixty times a second, on a page whose visitors are
+                largely on mid-range Android.
+
+                A second copy at 1.3× and low opacity gives most of the halo for
+                the cost of drawing text, which the compositor handles. Same
+                delay as its solid twin, so the two travel together.
+
+                Negative delays throughout, so on load the stream is already
+                mid-flight along its whole length rather than firing as one
+                burst the moment it renders. */}
+            {LETTERS.filter((l) => l.i % 3 === 0).map((l) => (
+                <g key={`glow-${l.i}`} className="fg-letter" style={{ animationDelay: l.delay }}>
                     <text
-                        key={`glow-${l.i}`}
                         x={l.x}
                         y={l.y}
                         fontFamily={FACE}
-                        fontSize={l.size}
+                        fontSize={Math.round(l.size * 1.3)}
                         fontWeight="700"
                         fill={l.colour}
+                        opacity="0.22"
                         textAnchor="middle"
                         transform={`rotate(${l.rotate} ${l.x} ${l.y})`}
                     >
                         {l.ch}
                     </text>
-                ))}
-            </g>
+                </g>
+            ))}
             {LETTERS.map((l) => (
-                <text
-                    key={`ltr-${l.i}`}
-                    x={l.x}
-                    y={l.y}
-                    fontFamily={FACE}
-                    fontSize={l.size}
-                    fontWeight={l.i % 3 === 0 ? 700 : 600}
-                    fill={l.colour}
-                    opacity={l.opacity}
-                    textAnchor="middle"
-                    transform={`rotate(${l.rotate} ${l.x} ${l.y})`}
-                >
-                    {l.ch}
-                </text>
+                <g key={`ltr-${l.i}`} className="fg-letter" style={{ animationDelay: l.delay }}>
+                    <text
+                        x={l.x}
+                        y={l.y}
+                        fontFamily={FACE}
+                        fontSize={l.size}
+                        fontWeight={l.i % 3 === 0 ? 700 : 600}
+                        fill={l.colour}
+                        opacity={l.opacity}
+                        textAnchor="middle"
+                        transform={`rotate(${l.rotate} ${l.x} ${l.y})`}
+                    >
+                        {l.ch}
+                    </text>
+                </g>
             ))}
             {PIXELS.map((p) => (
-                <rect key={`px-${p.i}`} x={p.x} y={p.y} width={p.size} height={p.size} fill={BLUE} opacity={p.opacity} />
+                <g key={`px-${p.i}`} className="fg-pixel" style={{ animationDelay: p.delay }}>
+                    <rect x={p.x} y={p.y} width={p.size} height={p.size} fill={BLUE} opacity={p.opacity} />
+                </g>
             ))}
 
             {/* ---------------- the e-reader ---------------- */}
@@ -428,9 +477,22 @@ export default function FormatSplitGraphic({
                 ))}
                 <Ornament cx={SCREEN_MID} cy={155 + lines.length * 16} reach={22} size={3.2} />
 
+                {/* Each line brightens a beat after the one above it, so the
+                    text appears to settle down the screen as the letters
+                    arrive. Staggered forwards, not backwards — this one is
+                    meant to be read as an event, not to be already running. */}
                 <g fill={INK} opacity="0.55">
                     {SCREEN_BODY.map((b, i) => (
-                        <rect key={`sb-${i}`} x="519" y={b.y} width={b.width} height="3" rx="1.5" />
+                        <rect
+                            key={`sb-${i}`}
+                            x="519"
+                            y={b.y}
+                            width={b.width}
+                            height="3"
+                            rx="1.5"
+                            className="fg-line"
+                            style={{ animationDelay: `${(i * 0.13).toFixed(2)}s` }}
+                        />
                     ))}
                 </g>
 

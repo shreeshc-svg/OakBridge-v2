@@ -212,6 +212,95 @@ body {
     animation: fadeUp 360ms ease both;
 }
 
+/* ---------------------------------------------------------------------------
+   The /ebooks illustration.
+
+   The only animated illustration on the site. It lives here rather than in a
+   <style> block inside the component because that is where every other
+   animation on this site lives, and because a style element inside JSX has to
+   be injected with dangerouslySetInnerHTML to avoid React escaping it.
+
+   Everything animates transform and opacity only — the two properties a
+   browser can composite without re-laying-out the page. No width, no top, no
+   filter. There are around fifty animated nodes in that drawing and any
+   layout-triggering property would be felt on a phone.
+
+   `transform-box: view-box` matters: without it an SVG element's
+   transform-origin is measured from its own bounding box, so "rotate about the
+   spine" silently becomes "rotate about the middle of this leaf".
+   --------------------------------------------------------------------------- */
+
+/* Two quick beats then rest, which is what makes it read as a pulse rather
+   than a throb. */
+@keyframes fgHeartbeat {
+    0%, 100% { opacity: 0.72; transform: scale(1); }
+    11%      { opacity: 1;    transform: scale(1.04); }
+    22%      { opacity: 0.8;  transform: scale(1.005); }
+    33%      { opacity: 0.97; transform: scale(1.03); }
+    58%      { opacity: 0.72; transform: scale(1); }
+}
+.fg-halo { animation: fgHeartbeat 2.6s ease-in-out infinite; transform-box: view-box; }
+
+/* The letters carry their own depth on the inner <text>; these wrappers only
+   move them and fade them in and out, so the two multiply and the loop has no
+   visible seam. */
+@keyframes fgDrift {
+    0%   { opacity: 0;    transform: translate(-16px, 8px); }
+    18%  { opacity: 1;    }
+    72%  { opacity: 0.9;  }
+    100% { opacity: 0;    transform: translate(36px, -12px); }
+}
+.fg-letter { animation: fgDrift 5.2s ease-in-out infinite; }
+
+@keyframes fgPixelDrift {
+    0%   { opacity: 0;   transform: translate(-9px, 5px); }
+    26%  { opacity: 1;   }
+    100% { opacity: 0;   transform: translate(24px, -7px); }
+}
+.fg-pixel { animation: fgPixelDrift 3.6s linear infinite; }
+
+@keyframes fgScrap {
+    0%   { opacity: 0;   transform: translate(-12px, 10px); }
+    22%  { opacity: 1;   }
+    100% { opacity: 0;   transform: translate(32px, -16px); }
+}
+.fg-scrap { animation: fgScrap 6.4s ease-in-out infinite; }
+
+/* Pages breathe about their root, near the spine — not about their own centre,
+   which would make them flap like a wing. */
+@keyframes fgFlutter {
+    0%, 100% { transform: rotate(0deg); }
+    50%      { transform: rotate(-1.5deg); }
+}
+.fg-leaf { animation: fgFlutter 4.8s ease-in-out infinite; transform-box: view-box; }
+
+@keyframes fgBreathe {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-2.5px); }
+}
+.fg-book { animation: fgBreathe 6s ease-in-out infinite; transform-box: view-box; }
+
+/* Text settling onto the screen as the letters arrive. It never reaches zero:
+   a screen that goes blank on every cycle reads as a fault, not as an effect. */
+@keyframes fgArrive {
+    0%, 100% { opacity: 0.3; }
+    35%      { opacity: 1; }
+    80%      { opacity: 0.85; }
+}
+.fg-line { animation: fgArrive 5.2s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+    .fg-halo,
+    .fg-letter,
+    .fg-pixel,
+    .fg-scrap,
+    .fg-leaf,
+    .fg-book,
+    .fg-line {
+        animation: none;
+    }
+}
+
 /* Buttons with McGraw-style boxy CTA — slight rounded edges */
 button,
 a {
