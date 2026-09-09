@@ -238,11 +238,23 @@ export default function Ebooks() {
                     copy that sits INSIDE the circle has nothing behind it —
                     only copy crossing the rim would pick up rings.
 
-                    That is also why the grid is capped at 5xl rather than run to
-                    the container edge: wider than this and the headings start
-                    outside the rim, where the dashes would run through them. */}
-                <div className="mt-14 md:mt-16 lg:-mt-28 xl:-mt-36 grid grid-cols-1 md:grid-cols-2 gap-12 md:gap-20 max-w-5xl mx-auto">
-                    <div>
+                    THREE THINGS HOLD IT TOGETHER, and dropping any one of them
+                    put the lists on top of the cloud caption:
+
+                    The columns are narrow and pinned OUTWARD. Full-width halves
+                    reach the middle of the page, which is exactly where the
+                    caption is — 320px pinned to each edge leaves the centre
+                    clear at every width from 1280 to 1920.
+
+                    The grid is capped at 6xl, not run to the container edge.
+                    Wider and the headings start outside the rim, where the
+                    dashes would cross them.
+
+                    And the pull-up is xl only. Below 1280 there is not enough
+                    width for two columns AND the caption between them, so the
+                    lists simply sit under the artwork as before. */}
+                <div className="mt-14 md:mt-16 xl:-mt-28 grid grid-cols-1 md:grid-cols-2 gap-12 md:gap-20 max-w-6xl mx-auto">
+                    <div className="xl:max-w-xs xl:justify-self-start">
                         <div className="flex items-center gap-2.5">
                             <BookOpen size={18} strokeWidth={1.5} className="text-[#CC0033]" />
                             <h2 className="font-serif text-2xl md:text-3xl text-[#002B5C]">
@@ -267,7 +279,7 @@ export default function Ebooks() {
                         </div>
                     </div>
 
-                    <div>
+                    <div className="xl:max-w-xs xl:justify-self-end">
                         <div className="flex items-center gap-2.5">
                             <Tablet size={18} strokeWidth={1.5} className="text-[#0A7D55]" />
                             <h2 className="font-serif text-2xl md:text-3xl text-[#002B5C]">

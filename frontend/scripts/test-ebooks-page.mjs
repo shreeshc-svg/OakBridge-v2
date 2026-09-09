@@ -279,10 +279,34 @@ check(/md:grid-cols-2/.test(page) && page.indexOf("<FormatSplitGraphic") < page.
  * headings land outside the rim — x=310 against a circle starting at x=320 on a
  * 1900px viewport — and the dashes run straight through "Printed book".
  */
-check(/lg:-mt-\d+/.test(page),
-      "the lists are pulled up on large screens, into the space beside the portal's lower arc");
-check(/max-w-5xl mx-auto/.test(page) && !/lg:-mt-\d+[^"]*max-w-7xl/.test(page),
-      "and capped at 5xl, not run to the container edge, so both headings stay INSIDE the rim rather than under the dashes");
+check(/xl:-mt-\d+/.test(page) && !/lg:-mt-\d+/.test(page),
+      "the lists are pulled up at xl only — below 1280 there is not room for two columns AND the caption between them");
+check(/max-w-6xl mx-auto/.test(page),
+      "the grid is capped, not run to the container edge, so both headings stay INSIDE the rim rather than under the dashes");
+check(/xl:max-w-xs xl:justify-self-start/.test(page) && /xl:max-w-xs xl:justify-self-end/.test(page),
+      "and the columns are narrow and pinned outward — full-width halves reach the middle of the page, which is where the caption is");
+
+/*
+ * The overlap this replaces was live: pulled up at full half-width, both lists
+ * landed on top of "Oakbridge, now on the cloud." So the clearance is measured
+ * rather than trusted. Tailwind sizes in px: 6xl 1152, xs 320, sm 384 (the
+ * caption's max-w-sm), container max-w-7xl 1280 inside px-16 / 2xl:px-24.
+ */
+const GRID = 1152, COL = 320, CAP = 384, CIRCLE = 1260;
+const clash = [1280, 1440, 1600, 1920].flatMap((vw) => {
+    const container = Math.min(1280, vw - (vw >= 1536 ? 192 : 128));
+    const grid = Math.min(GRID, container);
+    const gl = (vw - grid) / 2, gr = gl + grid;
+    const capL = vw / 2 - CAP / 2, capR = vw / 2 + CAP / 2;
+    const rimL = vw / 2 - CIRCLE / 2;
+    const bad = [];
+    if (gl + COL > capL) bad.push(`${vw}: left column overlaps the caption`);
+    if (gr - COL < capR) bad.push(`${vw}: right column overlaps the caption`);
+    if (gl <= rimL) bad.push(`${vw}: left heading sits outside the rim`);
+    return bad;
+});
+check(clash.length === 0,
+      `the raised lists clear the cloud caption and stay inside the rim at every xl width ${clash.join(" | ")}`);
 const orbitIds = [...orbit.matchAll(/id="([^"]+)"/g)].map((m) => m[1]);
 /* Same arithmetic as the artwork's washes, on the portal's own canvas. The
    rims were enlarged to enclose both drawings, and an ellipse that runs past
