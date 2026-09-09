@@ -50,6 +50,13 @@ const DEFAULTS = {
     ebook_body: "Opens on the Oakbridge eReader, minutes after you buy it.",
     cta_kicker: "Not sure which?",
     cta_headline: "Every book's own page lists both prices side by side.",
+    /* The book in the illustration. Content rather than code, so the featured
+       title can change without a deploy — and it should be one that genuinely
+       HAS an eBook, since it is being shown on the eBooks page. */
+    art_title: "Climate Justice",
+    art_author: "Sudhir Mishra",
+    art_chapter: "Chapter One",
+    art_pages: "231",
     cloud_kicker: "Anywhere you read",
     cloud_tagline: "Oakbridge, now on the cloud.",
     cloud_body:
@@ -193,7 +200,12 @@ export default function Ebooks() {
                         page before any of the reading does. Between the columns
                         on a desktop, where it is the shared spine. */}
                     <div className="lg:col-span-6 order-first lg:order-none">
-                        <FormatSplitGraphic />
+                        <FormatSplitGraphic
+                            title={txt("art_title")}
+                            author={txt("art_author")}
+                            chapter={txt("art_chapter")}
+                            pages={txt("art_pages")}
+                        />
 
                         {/* Two bullet columns are taller than one wide drawing,
                             which left a long empty run down the middle of the

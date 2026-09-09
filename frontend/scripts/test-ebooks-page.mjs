@@ -13,7 +13,7 @@
  * sanity-check's route-parity check catches the prerender/sitemap pair. Nothing
  * catches the rest, so it is caught here.
  */
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -105,7 +105,8 @@ check(page.includes("ebook_cta_clicked"),
 console.log("\n-- the copy is admin-editable --");
 for (const key of ["eb_eyebrow", "eb_headline", "eb_accent", "eb_body",
                    "eb_print_title", "eb_ebook_title", "eb_cta_headline",
-                   "eb_cloud_kicker", "eb_cloud_tagline", "eb_cloud_body"]) {
+                   "eb_cloud_kicker", "eb_cloud_tagline", "eb_cloud_body",
+                   "eb_art_title", "eb_art_author", "eb_art_chapter", "eb_art_pages"]) {
     check(typeof DEFAULTS[key] === "string" && DEFAULTS[key].length > 0,
           `${key} has a default, so an unset key never renders blank`);
     check(adminEbooks.includes(`"${key}"`), `${key} is editable in Admin -> E-Books`);
@@ -153,18 +154,50 @@ check(ids.length > 0 && ids.every((id) => id.startsWith("fg-")),
 const PALETTE = new Set([
     "#002B5C", "#001F42", "#CC0033", "#F59E0B",
     "#E5E7EB", "#F5F7FA", "#FFFFFF", "#0A7D55",
-    // Shading stops for the illustration only: lit and shadowed navies, and
-    // the cool greys the paper and screen fall off into. Every one is on the
-    // navy/paper ramp — no new HUE enters the site through this drawing.
-    "#0A3A6E", "#00193A", "#00142E", "#11406F", "#00173A",
-    "#0A3A6E", "#E9EFF6", "#DCE4ED", "#F2F5F9", "#D2DCE6",
-    "#7A8AA0", "#5A6C86", "#C6D0DB",
+    // Navy shading stops. Same hue, lit and shadowed.
+    "#0A3A6E", "#00142E", "#123F6B", "#00152F", "#EAF0F7",
 ]);
-const strayHex = (src) =>
-    [...new Set(src.match(/#[0-9A-Fa-f]{6}/g) || [])].filter((h) => !PALETTE.has(h.toUpperCase()));
+
+/*
+ * Two colour families that exist ONLY in the illustration, and deliberately.
+ *
+ * Paper cream, because pure white paper read as a UI mockup rather than a book.
+ * And a cool blue for the digital side, because the transformation needs a
+ * colour the printed side does not have. Both are genuinely new to the site, so
+ * the assertion that matters is not that they are allowed — it is that they are
+ * CONFINED. A cream that leaks into a card background or a blue that leaks into
+ * a button is how a two-colour brand quietly becomes a five-colour one.
+ */
+const ART_ONLY = new Set([
+    "#FBF6EC", "#F6EFE1", "#E6DCC8", "#FFFDF8", "#E7DCC7",
+    "#DCD0B8", "#CFC4AC", "#9C8E74", "#8B7C60",
+    "#2F6FB5",
+]);
+
+const strayHex = (src, extra = null) =>
+    [...new Set(src.match(/#[0-9A-Fa-f]{6}/g) || [])]
+        .filter((h) => !PALETTE.has(h.toUpperCase()) && !(extra && extra.has(h.toUpperCase())));
 
 check(/#002B5C/.test(svg) && /#F59E0B/.test(svg), "drawn in navy and gold, like the rest of the site");
-check(strayHex(svg).length === 0, `no colour outside the brand palette ${strayHex(svg).join(", ")}`);
+check(strayHex(svg, ART_ONLY).length === 0,
+      `no colour outside the brand palette plus the two illustration-only families ${strayHex(svg, ART_ONLY).join(", ")}`);
+
+/* The containment check. Walk every source file and make sure the cream and the
+   blue appear in exactly one of them. */
+const walk = (dir) =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((d) => {
+        const full = join(dir, d.name);
+        return d.isDirectory() ? walk(full) : /\.(jsx?|css)$/.test(d.name) ? [full] : [];
+    });
+const leaked = walk(SRC)
+    .filter((f) => !f.endsWith("FormatSplitGraphic.jsx"))
+    .flatMap((f) => {
+        const hits = [...new Set(readFileSync(f, "utf8").match(/#[0-9A-Fa-f]{6}/g) || [])]
+            .filter((h) => ART_ONLY.has(h.toUpperCase()));
+        return hits.length ? [`${f.split(/[\\/]/).pop()}: ${hits.join(",")}`] : [];
+    });
+check(leaked.length === 0,
+      `the cream and the blue stay inside the illustration ${leaked.join(" | ")}`);
 
 console.log("\n-- and neither can the cloud panel --");
 check(/viewBox="0 0 560 262"/.test(cloud), "the cloud graphic has a fixed viewBox too");
@@ -177,13 +210,25 @@ check(cloud.includes("DEVICES") && /cx=\{d\.cx\}/.test(cloud),
 check(strayHex(cloud).length === 0, `and no stray colour in it either ${strayHex(cloud).join(", ")}`);
 
 console.log("\n-- the drawing says one book, not two --");
-check((svg.match(/COMMENTARY/g) || []).length === 2 && /Ornament/.test(svg),
-      "the title and its ornament appear on the cover AND on the screen — one book arriving, not two books side by side");
+check((svg.match(/lines\.map/g) || []).length === 2 && /Ornament/.test(svg),
+      "the title and its ornament are set on the page AND on the screen from the same value — one book arriving, not two books side by side");
+check(/const total = Math\.max\(1, parseInt\(pages/.test(svg) && /const pct = Math\.round\(\(at \/ total\)/.test(svg),
+      "reading position, extent and percentage all derive from the page count, so the three can never contradict each other on screen");
+check(/function titleLines\(title\)/.test(svg),
+      "a long title is split into two balanced lines rather than shrunk until it is unreadable");
+check(!/Climate Justice/.test(svg.replace(/title = "[^"]*"/, "")),
+      "the featured book is not hardcoded anywhere except the prop default — a title baked into an illustration is a product claim");
 check(/const pagePath = \(outer, dir\)/.test(svg) && /TOP_GUT/.test(svg) && /BOT_GUT/.test(svg),
       "both pages, the cover board, the block edges and every line of body text derive from the same four numbers, "
       + "so the book opens wider or flatter by changing a constant rather than by redrawing nine paths that must agree");
-check(/fg-gutter/.test(svg),
+check(/fg-gut"/.test(svg),
       "and there is a gutter shadow — nothing says 'open book' faster, and nothing else in the drawing needs one");
+check(/SCRAPS = /.test(svg),
+      "torn page scraps travel with the letters; without them the flight reads as a font specimen rather than a book coming apart");
+check(/t < 0\.36 \? GOLD : t > 0\.64 \? BLUE/.test(svg),
+      "the colour STEPS from warm to cool rather than blending — interpolating gold to blue passes through a desaturated olive and the middle of the stream turns to mud");
+check(/9:41/.test(svg),
+      "the device has a status bar, which costs six rectangles and buys most of the realism in it");
 
 console.log("\n-- it is letters that move, not shapes --");
 check(/GLYPHS = \[/.test(svg) && /"§"/.test(svg) && /"¶"/.test(svg),

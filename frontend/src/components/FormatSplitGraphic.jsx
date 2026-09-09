@@ -5,274 +5,341 @@ import React from "react";
  *
  * WHY THIS IS THE ONE ILLUSTRATION ALLOWED DEPTH
  *
- * The rest of the site is flat fills and hairlines, and two earlier attempts at
- * this drawing obeyed that. Both read as diagrams: grey bars standing in for
- * words look like a loading skeleton, and a flat elevation of a closed book has
- * no moment in it. This one is asked to sell rather than to explain, so it gets
+ * The rest of the site is flat fills and hairlines, and earlier attempts at
+ * this drawing obeyed that. They read as diagrams: grey bars standing in for
+ * words look like a loading skeleton, and a flat elevation of a book has no
+ * moment in it. This one is asked to sell rather than to explain, so it gets
  * gradients, a cast shadow and a glow. Nothing else does — including the cloud
  * panel directly beneath it, which a test keeps flat, because a flat design
  * language dies by copy-paste.
  *
- * THE IDEA
+ * TWO COLOUR FAMILIES THAT EXIST ONLY HERE
  *
- * Letters leave the page and land on the screen. Actual letterforms, section
- * and pilcrow marks among them, because that is what a statute page is made of
- * and they read as legal text faster than any Latin letter does. The running
- * head on the open page and the title on the screen are the same words: one
- * book arriving, not two books side by side.
+ * Paper cream and a cool blue. Neither is in the site palette, and both are
+ * deliberate: pure white paper read as a UI mockup rather than a book, and the
+ * digital side needs a colour the printed side does not have. A test confines
+ * both families to this file.
  *
- * HOW THE OPEN BOOK IS BUILT
+ * WHY THE COLOUR STEPS RATHER THAN BLENDS
  *
- * Everything hangs off four numbers — the two outer edges, the gutter, and how
- * far the paper sags into it. Pages, cover board, page-block striations, the
- * gutter shadow and every line of body text are derived from those, so the book
- * can be made fatter or flatter by changing one constant instead of by
- * redrawing nine paths that have to agree with each other.
+ * Gold interpolated to blue passes through a desaturated olive, and the middle
+ * of the stream — the part the eye actually follows — turns to mud. So the
+ * letters are warm near the page, cool near the screen, and alternate across
+ * the handover. The transition reads without a dead zone in it.
+ *
+ * WHY THE BOOK IS NAMED FROM CONTENT
+ *
+ * A hardcoded title is a product claim baked into an illustration. The title,
+ * author, chapter and extent come from admin content keys, so the featured book
+ * can change without a deploy — and the page count drives the reading position
+ * and the percentage, so those three numbers can never contradict each other.
  *
  * SAFE ON A PRERENDERED ROUTE
  *
- * One inline SVG, fixed viewBox, nothing fetched — so the browser knows the
- * aspect ratio before a byte of network arrives and nothing shifts under it.
- * Gradient and filter ids are prefixed `fg-` because SVG ids are global to the
- * document and this drawing shares a page with another one.
+ * One inline SVG, fixed viewBox, nothing fetched, so the browser knows the
+ * aspect ratio before a byte of network arrives. Gradient and filter ids carry
+ * an `fg-` prefix because SVG ids are global to the document and this drawing
+ * shares a page with another one.
  */
 
 const GOLD = "#F59E0B";
+const BLUE = "#2F6FB5"; // the digital side. Used nowhere else on the site.
 const INK = "#002B5C";
-const RULE = "#E5E7EB";
-
-/* The site's heading face. Named explicitly: SVG does not inherit the page's
-   font stack the way a block element does. */
 const FACE = "Public Sans, ui-sans-serif, system-ui, sans-serif";
 
-/* ------------------------------------------------------------ the open book */
+/* --------------------------------------------------------------- the book */
 
-const OUT_L = 44; // left fore-edge
-const OUT_R = 300; // right fore-edge
-const GUT = 172; // the gutter, where the two pages meet
-const TOP_OUT = 198; // top edge at the fore-edge…
-const TOP_GUT = 224; // …and where it sags into the gutter
-const BOT_OUT = 316;
-const BOT_GUT = 344;
+const GUT = 178;
+const OUT_L = 40;
+const OUT_R = 316;
+const TOP_OUT = 158;
+const TOP_GUT = 184;
+const BOT_OUT = 314;
+const BOT_GUT = 340;
 
-/* A page as a closed path: along the top edge from the fore-edge into the
-   gutter, straight down the gutter, then back out along the bottom edge. `dir`
-   is +1 for the right-hand page, which is the same shape mirrored. */
+/* One page: out along the top edge into the gutter, down the gutter, back out
+   along the bottom. `dir` is +1 for the left page, -1 for its mirror. */
 const pagePath = (outer, dir) =>
-    `M ${outer} ${TOP_OUT} ` +
-    `C ${outer + dir * 48} ${TOP_OUT + 4}, ${GUT - dir * 30} ${TOP_GUT - 9}, ${GUT} ${TOP_GUT} ` +
-    `L ${GUT} ${BOT_GUT} ` +
-    `C ${GUT - dir * 30} ${BOT_GUT - 9}, ${outer + dir * 48} ${BOT_OUT + 6}, ${outer} ${BOT_OUT} Z`;
+    `M ${outer} ${TOP_OUT} C ${outer + dir * 48} ${TOP_OUT + 4}, ${GUT - dir * 30} ${TOP_GUT - 9}, ${GUT} ${TOP_GUT} ` +
+    `L ${GUT} ${BOT_GUT} C ${GUT - dir * 30} ${BOT_GUT - 9}, ${outer + dir * 48} ${BOT_OUT + 6}, ${outer} ${BOT_OUT} Z`;
 
-/* The cover board, drawn behind and a little proud of the paper on every side —
-   which is the detail that stops an open book reading as two sheets of A4. */
+/* The board, proud of the paper on every side — the detail that stops an open
+   book reading as two sheets of A4. */
 const COVER_PATH =
-    `M 34 190 C 88 195, 142 210, ${GUT} 220 C 202 210, 256 195, 310 190 ` +
-    `L 310 330 C 256 335, 202 350, ${GUT} 360 C 142 350, 88 335, 34 330 Z`;
+    `M 30 150 C 84 154, 146 170, ${GUT} 180 C 210 170, 272 154, 326 150 ` +
+    `L 326 328 C 272 332, 210 348, ${GUT} 358 C 146 348, 84 332, 30 328 Z`;
 
-/* Cut edges of the pages still lying under the open ones. */
 const BLOCK_EDGES = [0, 1, 2].flatMap((j) => [
-    { key: `bl-${j}`, d: `M ${OUT_L} ${BOT_OUT + 4 * j} C 92 ${BOT_OUT + 6 + 4 * j}, 142 ${BOT_GUT - 9 + 4 * j}, ${GUT} ${BOT_GUT + 4 * j}` },
-    { key: `br-${j}`, d: `M ${OUT_R} ${BOT_OUT + 4 * j} C 252 ${BOT_OUT + 6 + 4 * j}, 202 ${BOT_GUT - 9 + 4 * j}, ${GUT} ${BOT_GUT + 4 * j}` },
+    { key: `bl-${j}`, d: `M ${OUT_L} ${BOT_OUT + 4 * j} C 88 ${BOT_OUT + 6 + 4 * j}, 148 ${BOT_GUT - 9 + 4 * j}, ${GUT} ${BOT_GUT + 4 * j}` },
+    { key: `br-${j}`, d: `M ${OUT_R} ${BOT_OUT + 4 * j} C 268 ${BOT_OUT + 6 + 4 * j}, 208 ${BOT_GUT - 9 + 4 * j}, ${GUT} ${BOT_GUT + 4 * j}` },
 ]);
 
-/* Body copy, curving with the paper. Each line drops as it runs into the
-   gutter, by the same sag the page edges use. The last line of each page is
-   short, because a paragraph that ends flush reads as a placeholder. */
-const TEXT_LINES = Array.from({ length: 8 }, (_, i) => {
-    const yOuter = 216 + i * 13;
-    const yGutter = yOuter + 24;
-    const last = i === 7;
+/* Leaves peeling off the right-hand page and curling away — where the letters
+   are coming from. */
+const LEAVES = [0, 1, 2, 3, 4].map((i) => {
+    const sx = 302 - i * 7;
+    const tipX = 334 + i * 17;
+    const tipTop = 152 - i * 13;
+    const tipBottom = 316 - i * 5;
     return {
         i,
-        left: `M 58 ${yOuter} Q 110 ${yOuter + 14} ${last ? 128 : 160} ${last ? yOuter + 19 : yGutter}`,
-        right: `M ${last ? 216 : 184} ${last ? yOuter + 19 : yGutter} Q 234 ${yOuter + 14} 286 ${yOuter}`,
+        d:
+            `M ${sx} ${172 + i * 3} C ${sx + 26} ${162 - i * 8}, ${tipX - 22} ${tipTop - 6}, ${tipX} ${tipTop} ` +
+            `C ${tipX + 11} ${(tipTop + tipBottom) / 2}, ${tipX - 6} ${tipBottom - 14}, ${tipX - 14} ${tipBottom} ` +
+            `C ${tipX - 40} ${tipBottom + 6}, ${sx + 20} ${330 - i * 3}, ${sx} ${328 - i * 4} Z`,
+        opacity: 0.96 - i * 0.15,
     };
 });
 
-/* Leaves peeling off the fore-edge — where the letters are coming from. */
-const LIFTING = [0, 1, 2].map((i) => ({
-    i,
-    d:
-        `M ${OUT_R} ${206 + i * 2} ` +
-        `C ${330 + i * 16} ${186 - i * 14}, ${354 + i * 24} ${190 - i * 18}, ${364 + i * 26} ${212 - i * 14} ` +
-        `C ${358 + i * 24} 256, ${336 + i * 16} ${290 - i * 4}, ${OUT_R} ${310 - i * 2} Z`,
-    opacity: 1 - i * 0.26,
-}));
-
 /* -------------------------------------------------------------- the flight */
 
-const GLYPHS = ["§", "A", "e", "¶", "n", "o", "t", "r", "s", "i", "a", "l", "m", "d", "e", "c"];
+const GLYPHS = ["§", "C", "l", "¶", "i", "m", "a", "t", "e", "J", "u", "s", "t", "i", "c", "e", "§", "r"];
 
 const LETTERS = GLYPHS.map((ch, i) => {
     const t = i / (GLYPHS.length - 1);
     const wobble = ((i * 5) % 7) - 3;
-    /* Wide at the page, narrow at the screen. The convergence is what makes the
+    /* Wide at the page, narrow at the screen: the convergence is what makes the
        stream read as going somewhere rather than merely scattering. */
-    const spread = 120 * (1 - t * 0.75);
+    const spread = 118 * (1 - t * 0.76);
     return {
         ch,
         i,
-        x: Math.round(344 + t * 190 + wobble * 5),
-        y: Math.round(236 + Math.sin(i * 1.9) * spread),
-        size: Math.round(26 - t * 15 + (i % 3) * 2),
-        rotate: Math.round(Math.sin(i * 2.4) * 26),
-        opacity: Number((0.95 - t * 0.3).toFixed(2)),
-        gold: i % 3 === 0,
+        x: Math.round(330 + t * 168 + wobble * 5),
+        y: Math.round(240 + Math.sin(i * 1.9) * spread),
+        size: Math.round(27 - t * 16 + (i % 3) * 2),
+        rotate: Math.round(Math.sin(i * 2.4) * 28),
+        opacity: Number((0.96 - t * 0.3).toFixed(2)),
+        colour: t < 0.36 ? GOLD : t > 0.64 ? BLUE : i % 2 ? GOLD : BLUE,
+    };
+});
+
+/* Torn page scraps travelling with the letters. Without them the flight reads
+   as a font specimen rather than as a book coming apart. */
+const SCRAPS = [0, 1, 2, 3].map((i) => {
+    const t = (i + 1) / 6;
+    const x = 346 + t * 90;
+    const y = 190 + ((i * 67) % 150);
+    const s = 13 - i * 2;
+    return { i, x, y, s, rotate: (i * 47) % 360, opacity: 0.7 - i * 0.12 };
+});
+
+/* The last of the paper, already pixels, arriving at the screen. */
+const PIXELS = Array.from({ length: 14 }, (_, i) => {
+    const t = i / 13;
+    return {
+        i,
+        x: Math.round(404 + t * 80 + (((i * 7) % 5) - 2) * 4),
+        y: 190 + ((i * 53) % 130),
+        size: Math.max(3, 8 - Math.round(t * 4) + (i % 2)),
+        opacity: Number((0.7 - t * 0.35).toFixed(2)),
     };
 });
 
 /* ------------------------------------------------------------ the e-reader */
 
-const DEV_X = 498;
-const SCREEN_X = 510;
-const SCREEN_W = 110;
-const SCREEN_MID = SCREEN_X + SCREEN_W / 2; // 565
+const DEV_X = 496;
+const SCREEN_X = 508;
+const SCREEN_W = 112;
+const SCREEN_MID = SCREEN_X + SCREEN_W / 2; // 564
 
-const SCREEN_BODY = [88, 80, 86, 64, 84, 76, 88, 70, 58].map((w, i) => ({
+const SCREEN_BODY = [90, 82, 88, 66, 86, 78, 90, 72, 60].map((w, i) => ({
     width: w,
-    y: 188 + i * 11,
+    y: 206 + i * 11,
 }));
 
+/* Split a title into at most two balanced lines. A long title set on one line
+   either overflows the page or has to be shrunk until it is unreadable. */
+function titleLines(title) {
+    const words = String(title || "").trim().split(/\s+/).filter(Boolean);
+    if (words.length < 2) return words;
+    let best = 1;
+    let bestDiff = Infinity;
+    for (let i = 1; i < words.length; i++) {
+        const a = words.slice(0, i).join(" ").length;
+        const b = words.slice(i).join(" ").length;
+        if (Math.abs(a - b) < bestDiff) {
+            bestDiff = Math.abs(a - b);
+            best = i;
+        }
+    }
+    return [words.slice(0, best).join(" "), words.slice(best).join(" ")];
+}
+
 /** Two rules and a diamond. The same mark sits on the page and on the screen. */
-function Ornament({ cx, cy, reach, size = 4 }) {
+function Ornament({ cx, cy, reach, size = 3.5 }) {
     return (
         <g>
             <line x1={cx - reach} y1={cy} x2={cx - size - 3} y2={cy} stroke={GOLD} strokeWidth="0.9" />
             <line x1={cx + size + 3} y1={cy} x2={cx + reach} y2={cy} stroke={GOLD} strokeWidth="0.9" />
-            <polygon
-                points={`${cx},${cy - size} ${cx + size},${cy} ${cx},${cy + size} ${cx - size},${cy}`}
-                fill={GOLD}
-            />
+            <polygon points={`${cx},${cy - size} ${cx + size},${cy} ${cx},${cy + size} ${cx - size},${cy}`} fill={GOLD} />
         </g>
     );
 }
 
-export default function FormatSplitGraphic({ className = "" }) {
+export default function FormatSplitGraphic({
+    title = "Climate Justice",
+    author = "Sudhir Mishra",
+    chapter = "Chapter One",
+    pages = 231,
+    className = "",
+}) {
+    const lines = titleLines(title);
+    /* Reading position, extent and percentage are derived from one number, so
+       the three can never contradict each other on screen. */
+    const total = Math.max(1, parseInt(pages, 10) || 231);
+    const at = Math.max(1, Math.round(total * 0.2));
+    const pct = Math.round((at / total) * 100);
+    const chapterCaps = String(chapter || "").toUpperCase();
+
     return (
         <svg
             viewBox="0 0 660 420"
             className={`w-full h-auto ${className}`}
             role="img"
-            aria-label="An open Oakbridge book with its letters lifting off the page and streaming into an e-reader, where they settle as the same text"
+            aria-label={`An open copy of ${title} with its letters lifting off the page and streaming into an e-reader, where they settle as the same text`}
             xmlns="http://www.w3.org/2000/svg"
         >
             <defs>
-                <linearGradient id="fg-page-l" x1="0" y1="0" x2="1" y2="0">
-                    <stop offset="0%" stopColor="#FFFFFF" />
-                    <stop offset="70%" stopColor="#F2F5F9" />
-                    <stop offset="100%" stopColor="#D2DCE6" />
+                <linearGradient id="fg-pl" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stopColor="#FBF6EC" />
+                    <stop offset="70%" stopColor="#F6EFE1" />
+                    <stop offset="100%" stopColor="#E6DCC8" />
                 </linearGradient>
-                <linearGradient id="fg-page-r" x1="1" y1="0" x2="0" y2="0">
-                    <stop offset="0%" stopColor="#FFFFFF" />
-                    <stop offset="70%" stopColor="#F2F5F9" />
-                    <stop offset="100%" stopColor="#D2DCE6" />
+                <linearGradient id="fg-pr" x1="1" y1="0" x2="0" y2="0">
+                    <stop offset="0%" stopColor="#FBF6EC" />
+                    <stop offset="70%" stopColor="#F6EFE1" />
+                    <stop offset="100%" stopColor="#E6DCC8" />
                 </linearGradient>
-                <linearGradient id="fg-leaf" x1="0" y1="0" x2="1" y2="0.3">
-                    <stop offset="0%" stopColor="#FFFFFF" />
-                    <stop offset="100%" stopColor="#DCE4ED" />
+                <linearGradient id="fg-leaf" x1="0" y1="0" x2="1" y2="0.4">
+                    <stop offset="0%" stopColor="#FFFDF8" />
+                    <stop offset="100%" stopColor="#E7DCC7" />
                 </linearGradient>
-                <linearGradient id="fg-cover" x1="0" y1="0" x2="0.3" y2="1">
+                <linearGradient id="fg-cover" x1="0" y1="0" x2="0.4" y2="1">
                     <stop offset="0%" stopColor="#0A3A6E" />
                     <stop offset="60%" stopColor="#002B5C" />
                     <stop offset="100%" stopColor="#00142E" />
                 </linearGradient>
-                <linearGradient id="fg-device" x1="0" y1="0" x2="0.45" y2="1">
-                    <stop offset="0%" stopColor="#11406F" />
-                    <stop offset="100%" stopColor="#00173A" />
+                <linearGradient id="fg-dev" x1="0" y1="0" x2="0.45" y2="1">
+                    <stop offset="0%" stopColor="#123F6B" />
+                    <stop offset="100%" stopColor="#00152F" />
                 </linearGradient>
-                <linearGradient id="fg-screen" x1="0" y1="0" x2="0" y2="1">
+                <linearGradient id="fg-scr" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#FFFFFF" />
-                    <stop offset="100%" stopColor="#E9EFF6" />
+                    <stop offset="100%" stopColor="#EAF0F7" />
                 </linearGradient>
-                {/* The valley where the paper turns into the spine. Nothing says
-                    "open book" faster than this and nothing else in the drawing
-                    needs it. */}
-                <linearGradient id="fg-gutter" x1="0" y1="0" x2="1" y2="0">
-                    <stop offset="0%" stopColor="#7A8AA0" stopOpacity="0" />
-                    <stop offset="50%" stopColor="#5A6C86" stopOpacity="0.5" />
-                    <stop offset="100%" stopColor="#7A8AA0" stopOpacity="0" />
+                {/* The valley where the paper turns into the spine. */}
+                <linearGradient id="fg-gut" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stopColor="#9C8E74" stopOpacity="0" />
+                    <stop offset="50%" stopColor="#8B7C60" stopOpacity="0.45" />
+                    <stop offset="100%" stopColor="#9C8E74" stopOpacity="0" />
                 </linearGradient>
-                <radialGradient id="fg-glow">
-                    <stop offset="0%" stopColor={GOLD} stopOpacity="0.4" />
-                    <stop offset="55%" stopColor={GOLD} stopOpacity="0.1" />
+                {/* Warm where the paper is, cool where the screen is. These two
+                    washes replace the reference's black vignette, which cannot
+                    meet a white page without a hard edge. */}
+                <radialGradient id="fg-warm">
+                    <stop offset="0%" stopColor={GOLD} stopOpacity="0.22" />
                     <stop offset="100%" stopColor={GOLD} stopOpacity="0" />
                 </radialGradient>
+                <radialGradient id="fg-cool">
+                    <stop offset="0%" stopColor={BLUE} stopOpacity="0.2" />
+                    <stop offset="100%" stopColor={BLUE} stopOpacity="0" />
+                </radialGradient>
                 <radialGradient id="fg-cast">
-                    <stop offset="0%" stopColor={INK} stopOpacity="0.3" />
+                    <stop offset="0%" stopColor={INK} stopOpacity="0.26" />
                     <stop offset="100%" stopColor={INK} stopOpacity="0" />
                 </radialGradient>
                 <filter id="fg-lift" x="-40%" y="-40%" width="200%" height="200%">
-                    <feDropShadow dx="0" dy="14" stdDeviation="16" floodColor={INK} floodOpacity="0.28" />
+                    <feDropShadow dx="0" dy="12" stdDeviation="14" floodColor={INK} floodOpacity="0.26" />
                 </filter>
-                <filter id="fg-soft" x="-80%" y="-80%" width="260%" height="260%">
-                    <feGaussianBlur stdDeviation="4.5" />
+                <filter id="fg-soft" x="-90%" y="-90%" width="280%" height="280%">
+                    <feGaussianBlur stdDeviation="5" />
                 </filter>
             </defs>
 
-            {/* Heat of the transfer, and the book's own shadow on the surface. */}
-            <ellipse cx="430" cy="230" rx="205" ry="180" fill="url(#fg-glow)" />
-            <ellipse cx="172" cy="368" rx="150" ry="26" fill="url(#fg-cast)" />
+            <ellipse cx="230" cy="238" rx="215" ry="185" fill="url(#fg-warm)" />
+            <ellipse cx="520" cy="228" rx="185" ry="175" fill="url(#fg-cool)" />
+            <ellipse cx="178" cy="366" rx="150" ry="24" fill="url(#fg-cast)" />
 
             {/* ---------------- the open book ---------------- */}
             <g>
                 <path d={COVER_PATH} fill="url(#fg-cover)" />
+                {BLOCK_EDGES.map((e) => (
+                    <path key={e.key} d={e.d} fill="none" stroke="#CFC4AC" strokeWidth="0.8" />
+                ))}
 
-                {/* Leaves peeling off the fore-edge, behind the flat pages so
-                    their roots tuck under rather than butting against them. */}
-                {LIFTING.map((leaf) => (
+                <path d={pagePath(OUT_R, -1)} fill="url(#fg-pr)" />
+                {LEAVES.map((leaf) => (
                     <path
-                        key={`lift-${leaf.i}`}
+                        key={`leaf-${leaf.i}`}
                         d={leaf.d}
                         fill="url(#fg-leaf)"
-                        stroke={RULE}
-                        strokeWidth="1"
+                        stroke="#DCD0B8"
+                        strokeWidth="0.9"
                         opacity={leaf.opacity}
                     />
                 ))}
+                <path d={pagePath(OUT_L, 1)} fill="url(#fg-pl)" />
+                <rect x={GUT - 13} y={TOP_GUT} width="26" height={BOT_GUT - TOP_GUT} fill="url(#fg-gut)" />
 
-                {BLOCK_EDGES.map((e) => (
-                    <path key={e.key} d={e.d} fill="none" stroke="#C6D0DB" strokeWidth="0.8" />
-                ))}
-
-                <path d={pagePath(OUT_L, 1)} fill="url(#fg-page-l)" />
-                <path d={pagePath(OUT_R, -1)} fill="url(#fg-page-r)" />
-                <rect x={GUT - 14} y={TOP_GUT} width="28" height={BOT_GUT - TOP_GUT} fill="url(#fg-gutter)" />
-
-                {/* Running head — the same words the screen carries. */}
-                <text
-                    x="235"
-                    y="212"
-                    fontFamily={FACE}
-                    fontSize="7.5"
-                    letterSpacing="1.4"
-                    fontWeight="600"
-                    fill={INK}
-                    opacity="0.5"
-                    textAnchor="middle"
-                >
-                    THE COMMENTARY
+                {/* The left page carries the title block; the right page is
+                    already coming apart, so it carries only body text. */}
+                <text x="105" y="204" fontFamily={FACE} fontSize="6.5" letterSpacing="2" fontWeight="600" fill={INK} opacity="0.5" textAnchor="middle">
+                    {chapterCaps}
                 </text>
-
-                <g stroke={INK} strokeOpacity="0.34" strokeWidth="2.4" strokeLinecap="round" fill="none">
-                    {TEXT_LINES.map((l) => (
-                        <React.Fragment key={`tl-${l.i}`}>
-                            <path d={l.left} />
-                            {l.i > 0 && <path d={l.right} />}
-                        </React.Fragment>
+                {lines.map((line, i) => (
+                    <text
+                        key={`t-${i}`}
+                        x="105"
+                        y={230 + i * 18}
+                        fontFamily={FACE}
+                        fontSize="15"
+                        letterSpacing="0.4"
+                        fontWeight="700"
+                        fill={INK}
+                        textAnchor="middle"
+                    >
+                        {line}
+                    </text>
+                ))}
+                <Ornament cx={105} cy={230 + lines.length * 18} reach={26} />
+                <text x="105" y={250 + lines.length * 18} fontFamily={FACE} fontSize="7" letterSpacing="1.2" fontWeight="500" fill={INK} opacity="0.62" textAnchor="middle">
+                    {String(author || "").toUpperCase()}
+                </text>
+                <g stroke={INK} strokeOpacity="0.26" strokeWidth="2" strokeLinecap="round" fill="none">
+                    {[0, 1, 2].map((i) => (
+                        <path key={`lb-${i}`} d={`M 62 ${300 + i * 10} Q 105 ${304 + i * 10} 150 ${306 + i * 10}`} />
                     ))}
                 </g>
+                <text x="105" y="332" fontFamily={FACE} fontSize="6" fill={INK} opacity="0.35" textAnchor="middle">
+                    {at}
+                </text>
 
-                <text x="70" y="330" fontFamily={FACE} fontSize="7" fill={INK} opacity="0.4">248</text>
-                <text x="278" y="330" fontFamily={FACE} fontSize="7" fill={INK} opacity="0.4" textAnchor="end">249</text>
+                <g stroke={INK} strokeOpacity="0.22" strokeWidth="2" strokeLinecap="round" fill="none">
+                    {Array.from({ length: 7 }, (_, i) => (
+                        <path key={`rb-${i}`} d={`M 200 ${208 + i * 15} Q 250 ${202 + i * 15} 296 ${196 + i * 15}`} />
+                    ))}
+                </g>
             </g>
 
-            {/* ---------------- the letters in flight ---------------- */}
-            {/* Gold ones are drawn twice — a blurred pass underneath — so they
-                glow without a filter over the whole group, which would soften
-                the navy ones too and cost far more to composite. */}
-            <g filter="url(#fg-soft)" opacity="0.75">
-                {LETTERS.filter((l) => l.gold).map((l) => (
+            {/* ---------------- the flight ---------------- */}
+            {SCRAPS.map((s) => (
+                <g key={`scrap-${s.i}`} transform={`rotate(${s.rotate} ${s.x} ${s.y})`} opacity={s.opacity}>
+                    <path
+                        d={
+                            `M ${s.x - s.s} ${s.y - s.s} C ${s.x} ${s.y - s.s - 4}, ${s.x + s.s} ${s.y - s.s + 3}, ${s.x + s.s} ${s.y - s.s} ` +
+                            `L ${s.x + s.s} ${s.y + s.s} C ${s.x} ${s.y + s.s + 4}, ${s.x - s.s} ${s.y + s.s - 3}, ${s.x - s.s} ${s.y + s.s} Z`
+                        }
+                        fill="#FFFDF8"
+                        stroke="#DCD0B8"
+                        strokeWidth="0.7"
+                    />
+                </g>
+            ))}
+
+            {/* A blurred pass under every third letter, so the stream glows
+                without a filter over the whole group softening all of it. */}
+            <g filter="url(#fg-soft)" opacity="0.7">
+                {LETTERS.filter((l) => l.i % 3 === 0).map((l) => (
                     <text
                         key={`glow-${l.i}`}
                         x={l.x}
@@ -280,7 +347,7 @@ export default function FormatSplitGraphic({ className = "" }) {
                         fontFamily={FACE}
                         fontSize={l.size}
                         fontWeight="700"
-                        fill={GOLD}
+                        fill={l.colour}
                         textAnchor="middle"
                         transform={`rotate(${l.rotate} ${l.x} ${l.y})`}
                     >
@@ -295,47 +362,70 @@ export default function FormatSplitGraphic({ className = "" }) {
                     y={l.y}
                     fontFamily={FACE}
                     fontSize={l.size}
-                    fontWeight={l.gold ? 700 : 600}
-                    fill={l.gold ? GOLD : INK}
-                    opacity={l.gold ? l.opacity : l.opacity * 0.6}
+                    fontWeight={l.i % 3 === 0 ? 700 : 600}
+                    fill={l.colour}
+                    opacity={l.opacity}
                     textAnchor="middle"
                     transform={`rotate(${l.rotate} ${l.x} ${l.y})`}
                 >
                     {l.ch}
                 </text>
             ))}
+            {PIXELS.map((p) => (
+                <rect key={`px-${p.i}`} x={p.x} y={p.y} width={p.size} height={p.size} fill={BLUE} opacity={p.opacity} />
+            ))}
 
             {/* ---------------- the e-reader ---------------- */}
             <g filter="url(#fg-lift)">
-                <rect x={DEV_X} y="70" width="134" height="300" rx="12" fill="url(#fg-device)" />
-                <rect x={SCREEN_X} y="90" width={SCREEN_W} height="240" fill="url(#fg-screen)" />
+                <rect x={DEV_X} y="78" width="130" height="288" rx="12" fill="url(#fg-dev)" />
+                <rect x={SCREEN_X} y="94" width={SCREEN_W} height="238" fill="url(#fg-scr)" />
 
-                <text x={SCREEN_MID} y="126" fontFamily={FACE} fontSize="8.5" letterSpacing="2.4" fontWeight="600" fill={INK} textAnchor="middle">
-                    THE
-                </text>
-                <text x={SCREEN_MID} y="145" fontFamily={FACE} fontSize="10" letterSpacing="0.4" fontWeight="600" fill={INK} textAnchor="middle">
-                    COMMENTARY
-                </text>
-                <Ornament cx={SCREEN_MID} cy={164} reach={22} size={3.5} />
+                {/* A status bar costs six rectangles and buys most of the
+                    realism in the device. */}
+                <text x="514" y="106" fontFamily={FACE} fontSize="6" fontWeight="600" fill={INK} opacity="0.5">9:41</text>
+                <g fill={INK} opacity="0.42">
+                    <rect x="584" y="101" width="2" height="6" rx="1" />
+                    <rect x="588" y="99" width="2" height="8" rx="1" />
+                    <rect x="592" y="97" width="2" height="10" rx="1" />
+                    <rect x="596" y="101" width="14" height="6" rx="1.5" />
+                    <rect x="611" y="103" width="2" height="2" rx="0.5" />
+                </g>
 
-                <g fill={INK} opacity="0.6">
+                <text x={SCREEN_MID} y="130" fontFamily={FACE} fontSize="6" letterSpacing="1.8" fontWeight="600" fill={INK} opacity="0.5" textAnchor="middle">
+                    {chapterCaps}
+                </text>
+                {lines.map((line, i) => (
+                    <text
+                        key={`st-${i}`}
+                        x={SCREEN_MID}
+                        y={154 + i * 16}
+                        fontFamily={FACE}
+                        fontSize="13"
+                        fontWeight="700"
+                        fill={INK}
+                        textAnchor="middle"
+                    >
+                        {line}
+                    </text>
+                ))}
+                <Ornament cx={SCREEN_MID} cy={155 + lines.length * 16} reach={22} size={3.2} />
+
+                <g fill={INK} opacity="0.55">
                     {SCREEN_BODY.map((b, i) => (
-                        <rect key={`sb-${i}`} x="520" y={b.y} width={b.width} height="3" rx="1.5" />
+                        <rect key={`sb-${i}`} x="519" y={b.y} width={b.width} height="3" rx="1.5" />
                     ))}
                 </g>
 
-                {/* Reading position — the one thing on the screen with no printed
-                    counterpart, so the one thing left in gold. */}
-                <rect x="520" y="296" width="90" height="3" rx="1.5" fill={RULE} />
-                <rect x="520" y="296" width="26" height="3" rx="1.5" fill={GOLD} />
-                <text x="520" y="315" fontFamily={FACE} fontSize="7" fontWeight="500" fill={INK} opacity="0.45">
-                    Page 248 of 612
+                <rect x="519" y="308" width="90" height="3" rx="1.5" fill="#E5E7EB" />
+                <rect x="519" y="308" width={Math.max(4, Math.round(90 * (pct / 100)))} height="3" rx="1.5" fill={BLUE} />
+                <text x="519" y="324" fontFamily={FACE} fontSize="6.5" fontWeight="500" fill={INK} opacity="0.45">
+                    {`Page ${at} of ${total}`}
                 </text>
-                <text x="610" y="315" fontFamily={FACE} fontSize="7" fontWeight="500" fill={INK} opacity="0.45" textAnchor="end">
-                    41%
+                <text x="609" y="324" fontFamily={FACE} fontSize="6.5" fontWeight="500" fill={INK} opacity="0.45" textAnchor="end">
+                    {`${pct}%`}
                 </text>
 
-                <circle cx={SCREEN_MID} cy="350" r="4.5" fill="#FFFFFF" opacity="0.3" />
+                <circle cx={SCREEN_MID} cy="348" r="4.5" fill="#FFFFFF" opacity="0.28" />
             </g>
         </svg>
     );

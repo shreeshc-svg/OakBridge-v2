@@ -83,6 +83,14 @@ const CONTENT_DEFAULTS = {
     eb_accent: "read it.",
     eb_body:
         "Every Oakbridge title is set for the page first. A growing number are set for the screen as well — the same text, the same edition, carried differently. Pick whichever suits how you actually read.",
+    // The book drawn in the /ebooks illustration. Pick one that genuinely has
+    // an eBook edition — it is shown on the eBooks page, and a title with no
+    // digital edition would be a quiet lie. Page count drives the reading
+    // position and the percentage, so the three cannot contradict each other.
+    eb_art_author: "Sudhir Mishra",
+    eb_art_chapter: "Chapter One",
+    eb_art_pages: "231",
+    eb_art_title: "Climate Justice",
     eb_cloud_body:
         "Buy the eBook once and your library, your highlights and your place in the book follow you — phone on the commute, laptop at the desk, tablet in chambers.",
     eb_cloud_kicker: "Anywhere you read",

@@ -537,6 +537,10 @@ export default function AdminEbooks() {
                             <TextSlotRow label="Left column — one-liner" value={site.eb_print_body} defaultValue={CONTENT_DEFAULTS.eb_print_body} onSave={(v) => saveSite("eb_print_body", v)} />
                             <TextSlotRow label="Right column — heading" value={site.eb_ebook_title} defaultValue={CONTENT_DEFAULTS.eb_ebook_title} onSave={(v) => saveSite("eb_ebook_title", v)} />
                             <TextSlotRow label="Right column — one-liner" value={site.eb_ebook_body} defaultValue={CONTENT_DEFAULTS.eb_ebook_body} onSave={(v) => saveSite("eb_ebook_body", v)} />
+                            <TextSlotRow label="Illustration — book title" value={site.eb_art_title} defaultValue={CONTENT_DEFAULTS.eb_art_title} onSave={(v) => saveSite("eb_art_title", v)} />
+                            <TextSlotRow label="Illustration — author" value={site.eb_art_author} defaultValue={CONTENT_DEFAULTS.eb_art_author} onSave={(v) => saveSite("eb_art_author", v)} />
+                            <TextSlotRow label="Illustration — chapter line" value={site.eb_art_chapter} defaultValue={CONTENT_DEFAULTS.eb_art_chapter} onSave={(v) => saveSite("eb_art_chapter", v)} />
+                            <TextSlotRow label="Illustration — page count (drives the reader's progress bar)" value={site.eb_art_pages} defaultValue={CONTENT_DEFAULTS.eb_art_pages} onSave={(v) => saveSite("eb_art_pages", v)} />
                             <TextSlotRow label="Cloud panel — kicker" value={site.eb_cloud_kicker} defaultValue={CONTENT_DEFAULTS.eb_cloud_kicker} onSave={(v) => saveSite("eb_cloud_kicker", v)} />
                             <TextSlotRow label="Cloud panel — tagline" value={site.eb_cloud_tagline} defaultValue={CONTENT_DEFAULTS.eb_cloud_tagline} onSave={(v) => saveSite("eb_cloud_tagline", v)} />
                             <TextSlotRow label="Cloud panel — supporting line" value={site.eb_cloud_body} defaultValue={CONTENT_DEFAULTS.eb_cloud_body} onSave={(v) => saveSite("eb_cloud_body", v)} multiline />
