@@ -7,7 +7,7 @@ import CloudSyncGraphic from "../components/CloudSyncGraphic";
 import OrbitField from "../components/OrbitField";
 import { fetchSiteContent, fetchCollection, resolveCollection } from "../lib/api";
 import { metaDescription, breadcrumbLd } from "../lib/schema";
-import { portalFit, FLANK_CONTAINER } from "../lib/portalFit";
+import { portalFit, FLANK_MAX } from "../lib/portalFit";
 import { track } from "../lib/analytics";
 
 /**
@@ -221,7 +221,7 @@ export default function Ebooks() {
                     page has already shipped that defect twice. */}
                 <div
                     className={`fg-flank mx-auto${fit.flank.fits ? "" : " fg-flank--stacked"}`}
-                    style={{ ...layout, maxWidth: FLANK_CONTAINER }}
+                    style={{ ...layout, maxWidth: FLANK_MAX }}
                 >
                     <div className="fg-flank-art relative">
                         {/* Painted before its siblings, so it sits behind them

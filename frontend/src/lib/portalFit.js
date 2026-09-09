@@ -84,11 +84,24 @@ export const LIST_MAX = 1280;
  */
 export const FLANK_GAP = 40;
 export const FLANK_MIN_COLUMN = 200;
-export const FLANK_CONTAINER = 1280;
+
+/*
+ * The width actually AVAILABLE, not the container's max-width.
+ *
+ * Flanking starts at a 1280px viewport, where the section's own padding takes
+ * 64px from each side — so the widest the grid can be at its narrowest
+ * qualifying viewport is 1152, not 1280. Sizing the fixed tracks to 1280 made
+ * them overflow between 1280 and about 1408px wide, and because the grid is
+ * centred the overflow went off BOTH edges: the Printed book column was cut in
+ * half by the left edge of the page.
+ */
+export const FLANK_CONTAINER = 1152;
+
+/* A visual cap, not a fit constraint. The columns flex to fill whatever is
+   available; this stops them sprawling on an ultra-wide monitor. */
+export const FLANK_MAX = 1280;
 
 export function flankFit(circle, artWidth, container = FLANK_CONTAINER) {
-    const free = (container - circle) / 2;
-    const column = Math.floor(free - FLANK_GAP);
 
     /*
      * THE GAP IS NOT THE AIR.
@@ -105,10 +118,14 @@ export function flankFit(circle, artWidth, container = FLANK_CONTAINER) {
      * container width, which is the arithmetic saying there is nothing spare.
      */
     const overhang = Math.max(0, (circle - artWidth) / 2);
+    const gap = Math.round(overhang + FLANK_GAP);
+    /* Whatever is left for the two columns once the artwork and both gaps are
+       taken out of the narrowest width flanking ever has to work in. */
+    const column = Math.floor((container - artWidth - 2 * gap) / 2);
     return {
         fits: column >= FLANK_MIN_COLUMN,
         column: Math.max(0, column),
-        gap: Math.round(overhang + FLANK_GAP),
+        gap,
         air: FLANK_GAP,
         overhang: Math.round(overhang),
     };

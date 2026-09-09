@@ -287,8 +287,9 @@ check(page.indexOf('"--fg-flank-col"') > -1 && css.includes("var(--fg-flank-col)
       "the column width is computed and handed to the stylesheet, because it depends on the admin's artwork size");
 check(/fit\.flank\.fits \? "" : " fg-flank--stacked"/.test(page),
       "and when there is no room beside the artwork the grid stays stacked rather than overlapping it");
-check(/grid-template-columns: var\(--fg-flank-col\) var\(--fg-art\) var\(--fg-flank-col\)/.test(css),
-      "three columns at 1280 and up, with the artwork in the middle one");
+check(/minmax\(var\(--fg-flank-col\), 1fr\)[\s\S]{0,60}var\(--fg-art\)[\s\S]{0,60}minmax\(var\(--fg-flank-col\), 1fr\)/.test(css),
+      "three columns at 1280 and up with the artwork in the middle, and the side columns FLEX — fixed tracks summing to "
+      + "the container's max-width overflowed at every narrower viewport and clipped the left column off the page");
 /*
  * ROW as well as column, and this is the half that was missing.
  *
@@ -318,6 +319,20 @@ check(/\.fg-flank-art \{ order: 1;/.test(css),
  * This version reproduces the real track layout: column, gap, artwork, gap,
  * column, all centred in the container, with the circle centred on the artwork.
  */
+/*
+ * What the grid ACTUALLY has to fit into at the narrowest viewport where
+ * flanking applies: the xl breakpoint, less the section's own lg:px-16 padding
+ * on each side. Derived here from the two numbers it comes from, so that if
+ * FLANK_CONTAINER is ever set to something else — it was 1280, the container's
+ * MAX width, which overflowed and cut the Printed book column off the left edge
+ * of the page — the check below catches it instead of agreeing with it.
+ */
+const XL_BREAKPOINT = 1280;
+const SECTION_PADDING = 64;
+const AVAILABLE_AT_BREAKPOINT = XL_BREAKPOINT - 2 * SECTION_PADDING;
+check(FLANK_CONTAINER === AVAILABLE_AT_BREAKPOINT,
+      `the flank arithmetic uses the width really available at 1280 (${AVAILABLE_AT_BREAKPOINT}), not the container's max-width — got ${FLANK_CONTAINER}`);
+
 const flankGeometry = (art) => {
     const f = portalFit(art);
     const half = FLANK_CONTAINER / 2;
@@ -336,8 +351,12 @@ const overlaps = [MIN_WIDTH, 300, 320, 400, 480, DEFAULT_WIDTH, MAX_WIDTH].flatM
     if (clearance < FLANK_GAP - 1) {
         bad.push(`art${art}: only ${Math.round(clearance)}px between the column and the ring`);
     }
-    if (g.total > FLANK_CONTAINER) {
-        bad.push(`art${art}: the three tracks come to ${g.total}px in a ${FLANK_CONTAINER}px container`);
+    /* Measured against the width DERIVED below, not against FLANK_CONTAINER —
+       comparing the constant to itself is a tautology that passes however wrong
+       the constant is, which is how the clipped column got through. */
+    const narrowest = 2 * FLANK_MIN_COLUMN + 2 * g.f.flank.gap + g.f.width;
+    if (narrowest > AVAILABLE_AT_BREAKPOINT) {
+        bad.push(`art${art}: needs ${narrowest}px, only ${AVAILABLE_AT_BREAKPOINT}px available at the 1280 breakpoint`);
     }
     return bad;
 });

@@ -391,7 +391,17 @@ body {
    keeps the tablet layout at every width. */
 @media (min-width: 1280px) {
     .fg-flank:not(.fg-flank--stacked) {
-        grid-template-columns: var(--fg-flank-col) var(--fg-art) var(--fg-flank-col);
+        /* minmax, not a fixed width: the columns take up whatever the viewport
+           actually offers, down to the computed minimum. Fixed tracks summing
+           to the container's MAX width overflowed at every viewport narrower
+           than that, and since the grid is centred the overflow went off both
+           edges — the Printed book column was cut in half by the left edge of
+           the page. The gaps stay fixed, so the clearance around the ring is
+           the same however wide the columns get. */
+        grid-template-columns:
+            minmax(var(--fg-flank-col), 1fr)
+            var(--fg-art)
+            minmax(var(--fg-flank-col), 1fr);
         justify-content: center;
         align-items: center;
         column-gap: var(--fg-flank-gap, 40px);
