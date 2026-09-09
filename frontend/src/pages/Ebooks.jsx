@@ -7,6 +7,7 @@ import CloudSyncGraphic from "../components/CloudSyncGraphic";
 import OrbitField from "../components/OrbitField";
 import { fetchSiteContent, fetchCollection, resolveCollection } from "../lib/api";
 import { metaDescription, breadcrumbLd } from "../lib/schema";
+import { portalFit } from "../lib/portalFit";
 import { track } from "../lib/analytics";
 
 /**
@@ -131,6 +132,11 @@ export default function Ebooks() {
         const n = Number(String(v ?? "").trim());
         return `${Number.isFinite(n) && n > 0 ? n : fallback}s`;
     };
+    /* How big the whole artwork block is, and therefore how far outside it the
+       portal has to sit. One number in admin drives both — a fixed inset is
+       right for exactly one width and wrong either side of it. */
+    const fit = portalFit(site?.eb_art_width);
+
     const rhythm = {
         "--fg-beat": secs(site?.eb_anim_beat, 2.6),
         "--fg-flight": secs(site?.eb_anim_flight, 5.2),
@@ -193,11 +199,11 @@ export default function Ebooks() {
                     gutter. Moving the lists below empties the margins, so the
                     portal can be as wide as it needs and the drawings get the
                     full column. */}
-                <div className="relative mx-auto max-w-2xl" style={rhythm}>
+                <div className="relative mx-auto w-full" style={{ ...rhythm, maxWidth: fit.width }}>
                     {/* Painted before its siblings, so it sits behind them
                         without needing a stacking context. Desktop only — on a
                         phone there are no margins to spill into. */}
-                    {portal && <OrbitField className="hidden lg:block" />}
+                    {portal && <OrbitField className="hidden lg:block" insetX={fit.insetX} insetY={fit.insetY} />}
                     <FormatSplitGraphic
                         animate={animate}
                         title={txt("art_title")}

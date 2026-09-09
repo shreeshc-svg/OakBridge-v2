@@ -103,13 +103,17 @@ const PARTICLES = ["§", "a", "¶", "e", "t", "§", "i", "m", "▪", "▪", "▪
     };
 });
 
-export default function OrbitField({ className = "" }) {
+export default function OrbitField({ className = "", insetX = 288, insetY = 144 }) {
     return (
         <svg
             viewBox="0 0 1100 1100"
             aria-hidden="true"
             focusable="false"
-            className={`pointer-events-none absolute -inset-x-72 -inset-y-36 ${className}`}
+            className={`pointer-events-none absolute ${className}`}
+            /* Inline, not Tailwind: these are derived from the artwork's width,
+               which is an admin setting. A fixed class is right for exactly one
+               width and wrong either side of it. */
+            style={{ left: -insetX, right: -insetX, top: -insetY, bottom: -insetY }}
             xmlns="http://www.w3.org/2000/svg"
         >
             <defs>

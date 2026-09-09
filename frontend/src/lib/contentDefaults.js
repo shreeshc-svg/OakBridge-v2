@@ -95,6 +95,9 @@ const CONTENT_DEFAULTS = {
     eb_anim_enabled: "on",
     eb_anim_flight: "5.2",
     eb_portal_enabled: "on",
+    // Width of the whole /ebooks artwork block, in px. The portal's distance
+    // from it is derived from this, so one number moves both.
+    eb_art_width: "672",
     eb_art_author: "Sudhir Mishra",
     eb_art_chapter: "Chapter One",
     eb_art_pages: "231",

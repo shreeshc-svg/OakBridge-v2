@@ -22,6 +22,8 @@ const ROOT = join(HERE, "..", "..");
 const SRC = join(HERE, "..", "src");
 
 const DEFAULTS = (await import(pathToFileURL(join(SRC, "lib", "contentDefaults.js")).href)).default;
+const { portalFit, MIN_WIDTH, MAX_WIDTH, DEFAULT_WIDTH } =
+    await import(pathToFileURL(join(SRC, "lib", "portalFit.js")).href);
 
 let failed = 0;
 const check = (cond, label) => {
@@ -257,11 +259,13 @@ check(/delay: `\$\{\(-\(t \* 5\.2\)\)/.test(svg) || /-\(t \* 5\.2\)/.test(svg),
 console.log("\n-- the portal is decorative and stays out of the way --");
 check(/aria-hidden="true"/.test(orbit) && /pointer-events-none/.test(orbit),
       "the portal is announced to nobody and catches no clicks — it is scenery, not content");
-check(/absolute -inset-x-\d+ -inset-y-\d+/.test(orbit),
-      "it is positioned out of flow and NEGATIVELY inset, so the rings spill into the gutters — held to the column "
-      + "exactly, the widest ring the canvas can carry is only as wide as the artwork, which is an outline rather than an enclosure");
-check(page.includes('<OrbitField className="hidden lg:block" />'),
-      "and it is desktop only: on a phone the column is full width and the copy runs straight through it");
+check(/left: -insetX, right: -insetX, top: -insetY, bottom: -insetY/.test(orbit),
+      "the layer is held outside the artwork by insets passed IN, not by fixed Tailwind classes — the artwork width "
+      + "is an admin setting, and a fixed class is right for exactly one width and wrong either side of it");
+check(page.includes("portalFit(site?.eb_art_width)"),
+      "and the page derives both the artwork width and those insets from one setting");
+check(/<OrbitField className="hidden lg:block"/.test(page),
+      "and it is desktop only: on a phone the artwork already fills the screen, so there are no margins for a portal to occupy");
 check(page.indexOf("<OrbitField") < page.indexOf("<FormatSplitGraphic"),
       "painted before its siblings, so it sits behind them without needing a stacking context");
 check(/md:grid-cols-2/.test(page) && page.indexOf("<FormatSplitGraphic") < page.indexOf("ebooks-browse-print"),
@@ -294,8 +298,6 @@ check(obRadii.every(([rx, ry]) => rx === ry),
 const num = (re, src) => Number(src.match(re)[1]);
 const R = Math.max(...obRadii.map(([rx]) => rx));
 const OB = num(/viewBox="0 0 (\d+) \d+"/, orbit);
-const IX = num(/-inset-x-(\d+)/, orbit) * 4; // tailwind spacing unit = 4px
-const IY = num(/-inset-y-(\d+)/, orbit) * 4;
 const artVb = [num(/viewBox="0 0 (\d+) \d+"/, svg), num(/viewBox="0 0 \d+ (\d+)"/, svg)];
 const cloudVb = [num(/viewBox="0 0 (\d+) \d+"/, cloud), num(/viewBox="0 0 \d+ (\d+)"/, cloud)];
 const GAP = 48, TAGLINE = 150;                       // mt-12, then the cloud caption
@@ -303,6 +305,8 @@ const INK_ART = [[30, 150], [326, 150], [626, 78], [496, 78], [30, 358], [626, 3
 const INK_CLOUD = [[202, 16], [150, 246], [450, 246]];
 
 const encloses = (contentW) => {
+    const { width: W, insetX: IX, insetY: IY } = portalFit(contentW);
+    contentW = W;
     const artH = (contentW * artVb[1]) / artVb[0];
     const cloudH = (contentW * cloudVb[1]) / cloudVb[0];
     const stackH = artH + GAP + cloudH + TAGLINE;
@@ -318,9 +322,18 @@ const encloses = (contentW) => {
     ];
     return Math.max(...pts.map(([x, y]) => Math.hypot(x - cx, y - cy) / r));
 };
-const fits = [560, 600, 672].map((w) => ({ w, v: encloses(w) }));
+/* Across the WHOLE range an admin can choose, not just the shipped default.
+   Insets proportional to the width fail at the small end, because the caption
+   under the cloud is a fixed number of lines and does not shrink with the
+   drawings — the stack gets relatively taller as it narrows. */
+const widths = [MIN_WIDTH, 400, 500, DEFAULT_WIDTH, 800, MAX_WIDTH];
+const fits = widths.map((w) => ({ w, v: encloses(w) }));
 check(fits.every((f) => f.v <= 0.95),
-      `the rim encloses every inked corner of both drawings — worst ${fits.map((f) => `${f.w}px:${f.v.toFixed(2)}`).join(" ")}`);
+      `the rim encloses both drawings at every width an admin can set — ${fits.map((f) => `${f.w}:${f.v.toFixed(2)}`).join(" ")}`);
+check(portalFit("").width === DEFAULT_WIDTH && portalFit("nonsense").width === DEFAULT_WIDTH,
+      "a blank or unparseable width falls back to the design width — a zero here would collapse the artwork, not merely mis-size the ring");
+check(portalFit(50).width === MIN_WIDTH && portalFit(99999).width === MAX_WIDTH,
+      `and it is clamped to ${MIN_WIDTH}-${MAX_WIDTH}px, so no entry can shrink it to nothing or overflow the page`);
 
 check(orbitIds.every((id) => id.startsWith("fg-")),
       `its gradient ids are prefixed too ${orbitIds.join(", ")} — three SVGs share this page`);
