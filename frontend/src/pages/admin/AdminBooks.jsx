@@ -59,7 +59,17 @@ const BLANK = {
     ebook_price: "",
     stock: 100,
     variants: [],
+    is_volume_set: false,
+    volumes: [],
 };
+
+/* The set's page count is the sum of its volumes, never typed. Mirrors
+   volume_sets.total_pages() on the server, which is the authority — this copy
+   exists so the admin sees the total update as they type rather than after a
+   save. */
+function volumeTotalPages(volumes) {
+    return (volumes || []).reduce((n, v) => n + (Number(v?.pages) || 0), 0);
+}
 
 function resolveImage(url) {
     if (!url) return "";
@@ -744,6 +754,10 @@ function BookForm({ initial, categories, onClose, onSaved }) {
         setForm((f) => ({ ...f, variants: (f.variants || []).map((v, idx) => (idx === i ? { ...v, [key]: val } : v)) }));
     const removeVariant = (i) =>
         setForm((f) => ({ ...f, variants: (f.variants || []).filter((_, idx) => idx !== i) }));
+    const updateVolume = (i, key, val) =>
+        setForm((f) => ({ ...f, volumes: (f.volumes || []).map((v, idx) => (idx === i ? { ...v, [key]: val } : v)) }));
+    const removeVolume = (i) =>
+        setForm((f) => ({ ...f, volumes: (f.volumes || []).filter((_, idx) => idx !== i) }));
     const [saving, setSaving] = useState(false);
     const [draftingBio, setDraftingBio] = useState(false);
     const isEdit = !!initial?.id;
@@ -787,7 +801,19 @@ function BookForm({ initial, categories, onClose, onSaved }) {
                     form.ebook_price === "" || form.ebook_price == null
                         ? null
                         : Number(form.ebook_price),
-                pages: Number(form.pages),
+                // A set's page count is the sum of its volumes. Sent anyway so
+                // the field is never absent, but the server recomputes it and
+                // wins — this is display convenience, not the source of truth.
+                pages: form.is_volume_set
+                    ? volumeTotalPages(form.volumes)
+                    : Number(form.pages),
+                is_volume_set: !!form.is_volume_set,
+                volumes: (form.volumes || []).map((v, i) => ({
+                    no: i + 1,
+                    title: (v.title || "").trim(),
+                    pages: Number(v.pages) || 0,
+                    blurb: (v.blurb || "").trim(),
+                })),
                 coming_soon: !!form.coming_soon,
                 // Empty rather than a half-value: a flag with no date is treated
                 // as not-a-pre-order everywhere, so it shows nothing rather than
@@ -862,20 +888,31 @@ function BookForm({ initial, categories, onClose, onSaved }) {
                         // the default.
                         ["publication_year", "Publication year", "number", 1, false],
                         ["stock", "Stock", "number", 1, false],
-                    ].map(([name, label, type, col, req]) => (
-                        <div key={name} className={col === 2 ? "col-span-2" : "col-span-2 sm:col-span-1"}>
-                            <label className="overline !text-[10px] block mb-2">{label}</label>
-                            <input
-                                type={type}
-                                name={name}
-                                required={req}
-                                value={form[name] ?? ""}
-                                onChange={onChange}
-                                data-testid={`book-form-${name}`}
-                                className="w-full border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none focus:border-[#002B5C]"
-                            />
-                        </div>
-                    ))}
+                    ].map(([name, label, type, col, req]) => {
+                        /* A set's page count is the sum of its volumes, so the
+                           field goes read-only rather than disappearing: hiding
+                           it would leave the admin wondering where the total
+                           went, and leaving it editable would let them type a
+                           number the server immediately overwrites. */
+                        const derived = name === "pages" && !!form.is_volume_set;
+                        return (
+                            <div key={name} className={col === 2 ? "col-span-2" : "col-span-2 sm:col-span-1"}>
+                                <label className="overline !text-[10px] block mb-2">
+                                    {derived ? "Pages (total of all volumes)" : label}
+                                </label>
+                                <input
+                                    type={type}
+                                    name={name}
+                                    required={req}
+                                    readOnly={derived}
+                                    value={derived ? volumeTotalPages(form.volumes) : (form[name] ?? "")}
+                                    onChange={onChange}
+                                    data-testid={`book-form-${name}`}
+                                    className={`w-full border border-[#E5E7EB] px-3 py-2 text-sm outline-none focus:border-[#002B5C] ${derived ? "bg-[#F5F7FA] text-[#4B5563] cursor-not-allowed" : "bg-white"}`}
+                                />
+                            </div>
+                        );
+                    })}
                     <div className="col-span-2">
                         <CoverUploader
                             value={form.cover_image}
@@ -1122,6 +1159,120 @@ function BookForm({ initial, categories, onClose, onSaved }) {
                     </>
                 )}
 
+                {/* MULTI-VOLUME SETS
+
+                    A set is this book — one ISBN, one price, one stock count.
+                    The volumes below are descriptive: they are printed in the
+                    Specifications tab and nowhere else. They are not products,
+                    have no price and are never sold separately, which is why
+                    this is a checkbox here rather than a screen of its own. */}
+                <div className="mt-8 border-t border-[#E5E7EB] pt-6">
+                    <label className="flex items-start gap-3 cursor-pointer">
+                        <input
+                            type="checkbox"
+                            name="is_volume_set"
+                            checked={!!form.is_volume_set}
+                            onChange={onChange}
+                            data-testid="book-form-is_volume_set"
+                            className="mt-0.5 accent-[#002B5C] w-4 h-4"
+                        />
+                        <span>
+                            <span className="overline block">This is a volume set</span>
+                            <span className="text-xs text-[#4B5563] block mt-1">
+                                Sold as one boxed set at the price above. The volumes are listed
+                                in Specifications with their own page counts; they are not sold
+                                separately and have no stock of their own.
+                            </span>
+                        </span>
+                    </label>
+
+                    {form.is_volume_set && (
+                        <div className="mt-5 pl-7">
+                            <div className="flex items-center justify-between gap-4">
+                                <p className="text-xs text-[#4B5563]">
+                                    At least two volumes, each with a page count — the set&rsquo;s
+                                    total is their sum.
+                                </p>
+                                <button
+                                    type="button"
+                                    onClick={() =>
+                                        setForm((f) => ({
+                                            ...f,
+                                            volumes: [
+                                                ...(f.volumes || []),
+                                                { no: (f.volumes || []).length + 1, title: "", pages: "", blurb: "" },
+                                            ],
+                                        }))
+                                    }
+                                    data-testid="add-volume"
+                                    className="text-xs border border-[#002B5C] px-3 py-1.5 hover:bg-[#F5F7FA] whitespace-nowrap"
+                                >
+                                    + Add volume
+                                </button>
+                            </div>
+
+                            {(form.volumes || []).length > 0 && (
+                                <div className="mt-4 space-y-3">
+                                    {(form.volumes || []).map((v, i) => (
+                                        <div key={i} className="border border-[#E5E7EB] p-3">
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                {/* Numbered by position, not typed. Deleting a row
+                                                    from the middle otherwise leaves "Volume 1,
+                                                    Volume 3" — the server renumbers on save too. */}
+                                                <span className="overline !text-[10px] w-16 shrink-0">
+                                                    Vol {i + 1}
+                                                </span>
+                                                <input
+                                                    type="text"
+                                                    value={v.title || ""}
+                                                    onChange={(e) => updateVolume(i, "title", e.target.value)}
+                                                    placeholder="Volume title (e.g. Bala Kanda)"
+                                                    data-testid={`volume-title-${i}`}
+                                                    className="flex-1 min-w-[12rem] border border-[#E5E7EB] bg-white px-2 py-1.5 text-sm"
+                                                />
+                                                <input
+                                                    type="number"
+                                                    min="1"
+                                                    value={v.pages ?? ""}
+                                                    onChange={(e) => updateVolume(i, "pages", e.target.value)}
+                                                    placeholder="Pages"
+                                                    data-testid={`volume-pages-${i}`}
+                                                    className="w-24 border border-[#E5E7EB] bg-white px-2 py-1.5 text-sm"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => removeVolume(i)}
+                                                    className="text-[#CC0033] border border-[#CC0033] px-2 py-1.5 text-xs"
+                                                >
+                                                    Remove
+                                                </button>
+                                            </div>
+                                            <input
+                                                type="text"
+                                                value={v.blurb || ""}
+                                                onChange={(e) => updateVolume(i, "blurb", e.target.value)}
+                                                placeholder="One line about this volume (optional)"
+                                                data-testid={`volume-blurb-${i}`}
+                                                className="mt-2 w-full border border-[#E5E7EB] bg-white px-2 py-1.5 text-sm"
+                                            />
+                                        </div>
+                                    ))}
+                                    <div
+                                        data-testid="volume-total"
+                                        className="text-xs text-[#4B5563] pt-1"
+                                    >
+                                        {(form.volumes || []).length} volumes ·{" "}
+                                        <strong className="text-[#002B5C]">
+                                            {volumeTotalPages(form.volumes)}
+                                        </strong>{" "}
+                                        pages total
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+
                 <div className="mt-8 border-t border-[#E5E7EB] pt-6">
                     <div className="flex items-center justify-between gap-4">
                         <div>
@@ -1200,6 +1351,7 @@ export default function AdminBooks() {
     const [loading, setLoading] = useState(true);
     const [query, setQuery] = useState("");
     const [catFilter, setCatFilter] = useState("all");
+    const [setsOnly, setSetsOnly] = useState(false);
     const [sort, setSort] = useState("newest");
     const [selected, setSelected] = useState(() => new Set());
     const [deleteAllOpen, setDeleteAllOpen] = useState(false);
@@ -1302,6 +1454,11 @@ export default function AdminBooks() {
                 (b.isbn || "").includes(query.trim()),
         );
         if (catFilter !== "all") a = a.filter((b) => b.category === catFilter);
+        /* Sets are ordinary books, so this list is where they are managed —
+           there is no separate Volume Sets screen to keep in step with this
+           one. The filter is what makes that workable: without it, finding the
+           four sets among 194 titles means knowing their names. */
+        if (setsOnly) a = a.filter((b) => b.is_volume_set);
         const t = (b) => new Date(b.created_at || 0).getTime();
         a = [...a].sort((x, y) => {
             if (sort === "title") return (x.title || "").localeCompare(y.title || "");
@@ -1311,7 +1468,11 @@ export default function AdminBooks() {
             return t(y) - t(x);
         });
         return a;
-    }, [books, query, catFilter, sort]);
+    }, [books, query, catFilter, setsOnly, sort]);
+
+    /* Hides the filter entirely until there is something to filter for, so it
+       is not a permanently dead control on a catalogue with no sets. */
+    const setCount = books.filter((b) => b.is_volume_set).length;
 
     const allFilteredSelected = filtered.length > 0 && filtered.every((r) => selected.has(r.id));
 
@@ -1345,6 +1506,17 @@ export default function AdminBooks() {
                             </option>
                         ))}
                     </select>
+                    {setCount > 0 && (
+                        <button
+                            type="button"
+                            onClick={() => setSetsOnly((v) => !v)}
+                            data-testid="admin-books-sets-filter"
+                            aria-pressed={setsOnly}
+                            className={`border px-3 py-2 text-sm whitespace-nowrap ${setsOnly ? "border-[#002B5C] bg-[#002B5C] text-white" : "border-[#E5E7EB] bg-white text-[#4B5563] hover:border-[#002B5C]"}`}
+                        >
+                            Volume sets ({setCount})
+                        </button>
+                    )}
                     <select
                         value={sort}
                         onChange={(e) => setSort(e.target.value)}

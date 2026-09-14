@@ -220,6 +220,14 @@ export default function BookDetail() {
     const variants = Array.isArray(book.variants) ? book.variants : [];
     const hasVariants = variants.length > 0;
 
+    /* Multi-volume set. One product, one ISBN, one price — the volumes are
+       descriptive only, so nothing below this line touches cart, stock or
+       price. They are read for the Specifications tab and the set badge and
+       nowhere else. `pages` already arrives as their sum, derived server-side
+       in _decorate_book. */
+    const volumes = Array.isArray(book.volumes) ? book.volumes : [];
+    const isVolumeSet = Boolean(book.is_volume_set) && volumes.length > 0;
+
     /* eBook edition — three conditions, read from two places. The store and the
        PDP mark are site-wide switches; ebook_url belongs to this title alone,
        and is what keeps the CTA off the 141 books that are not on the reader. */
@@ -474,6 +482,19 @@ export default function BookDetail() {
                     <p className="mt-4 text-[#4B5563]">
                         by <span className="text-[#002B5C] font-medium">{book.author}</span>
                     </p>
+
+                    {/* Stated next to the title, not left to the Specifications
+                        tab. The price below is for the whole set, and a buyer
+                        who has to open a tab to find that out has already
+                        decided the book is overpriced. */}
+                    {isVolumeSet && (
+                        <p
+                            data-testid="volume-set-note"
+                            className="mt-3 inline-flex items-center border border-[#002B5C] text-[#002B5C] font-mono uppercase tracking-widest text-[10px] px-2 py-1"
+                        >
+                            Set of {volumes.length} volumes · {book.pages} pages
+                        </p>
+                    )}
 
                     <div className="mt-6 flex items-center gap-4">
                         <div className="flex items-center gap-1 text-[#F59E0B]">
@@ -904,11 +925,20 @@ export default function BookDetail() {
                                 <p className="text-base max-w-2xl">{book.description}</p>
                             )}
                             {tab === "specs" && (
+                                <>
                                 <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-4 max-w-2xl">
                                     {[
                                         ["Publisher", book.publisher],
                                         ["Language", book.language],
-                                        ["Pages", book.pages],
+                                        // For a set this is the sum of the volumes, derived
+                                        // server-side. Labelled so the number is not read as
+                                        // the length of one book.
+                                        [
+                                            "Pages",
+                                            isVolumeSet
+                                                ? `${book.pages} across ${volumes.length} volumes`
+                                                : book.pages,
+                                        ],
                                         ["Publication Year", book.publication_year],
                                         ["ISBN", book.isbn],
                                         ["Category", book.category],
@@ -930,6 +960,42 @@ export default function BookDetail() {
                                         </div>
                                     ))}
                                 </dl>
+
+                                {/* The per-volume breakdown. The user's requirement
+                                    verbatim: "in specifications the total pages of each
+                                    volume will be shown separately, rest the book
+                                    description and all will be same". */}
+                                {isVolumeSet && volumes.length > 0 && (
+                                    <div className="mt-10 max-w-2xl" data-testid="volume-breakdown">
+                                        <div className="overline !text-[10px] mb-4">
+                                            Volumes in this set
+                                        </div>
+                                        <ul className="divide-y divide-[#E5E7EB] border-t border-[#E5E7EB]">
+                                            {volumes.map((v, i) => (
+                                                <li
+                                                    key={v.no ?? i}
+                                                    className="py-3 flex items-baseline justify-between gap-6"
+                                                >
+                                                    <div className="min-w-0">
+                                                        <span className="text-sm text-[#002B5C]">
+                                                            Volume {v.no ?? i + 1}
+                                                            {v.title ? ` · ${v.title}` : ""}
+                                                        </span>
+                                                        {v.blurb && (
+                                                            <p className="text-xs text-[#4B5563] mt-1">
+                                                                {v.blurb}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                    <span className="font-mono text-xs text-[#002B5C] whitespace-nowrap shrink-0">
+                                                        {v.pages} pages
+                                                    </span>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )}
+                                </>
                             )}
                             {tab === "author" && (
                                 <div className="max-w-2xl">

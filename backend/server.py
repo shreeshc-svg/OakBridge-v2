@@ -47,6 +47,7 @@ from hampers import (
     admin_router as hampers_admin_router,
 )
 
+import volume_sets
 from features import (
     public_router as features_public_router,
     customer_router as features_customer_router,
@@ -72,6 +73,13 @@ def _decorate_book(doc: dict) -> dict:
             from hampers import merge_copy
 
             doc["hamper_copy"] = merge_copy(doc.get("hamper_copy"))
+        # A volume set's page count is the sum of its volumes, recomputed here
+        # rather than trusted from the document. The bulk CSV importer writes
+        # `pages` from a column, so a hand-edited backup can leave a stored
+        # total that disagrees with the volumes stored beside it. Deriving on
+        # the way out means the specs tab cannot print a total that contradicts
+        # the per-volume rows printed underneath it. See volume_sets.py.
+        volume_sets.apply(doc)
     return doc
 
 
@@ -168,6 +176,22 @@ class Book(BaseModel):
     # Same rule as every field above: declared here or response_model=Book drops
     # it, the admin ticks a box, Mongo stores it, and the site never sees it.
     product_type: str = "book"  # book | hamper
+
+    # ---- Multi-volume sets --------------------------------------------------
+    #
+    # A set is ONE book: one ISBN (the publisher prints the same one on every
+    # volume), one price, one stock count. The volumes below are descriptive —
+    # they exist to be printed in the specs tab, not to be bought. Nothing in
+    # cart, orders, stock or invoicing knows they exist, which is the point.
+    #
+    # `pages` above is the SUM of volumes[].pages, derived in _decorate_book
+    # rather than typed. Full reasoning in volume_sets.py.
+    #
+    # Same rule as every field here: declared or response_model=Book drops it,
+    # the admin ticks the box, Mongo stores it, and the site never sees it.
+    is_volume_set: bool = False
+    # [{no, title, pages, blurb}] — renumbered 1..n on save.
+    volumes: list = Field(default_factory=list)
     # Hampers have no ISBN. `isbn` stays a str rather than becoming Optional so
     # nothing downstream has to learn to format None -- the packing email and
     # the order line join both print it raw.

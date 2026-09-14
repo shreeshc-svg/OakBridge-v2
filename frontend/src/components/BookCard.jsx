@@ -324,6 +324,21 @@ export default function BookCard({ book, index = 0, compact = false, toEbook = f
                     >
                         {book.author}
                     </p>
+                    {/* A boxed set costs several times a single book, so without
+                        this the card reads as one overpriced title. In the text
+                        block rather than as a corner badge on purpose: top-left
+                        is Bestseller / New Arrival, top-right is the discount
+                        chip, and a fourth overlay would have to fight all three.
+                        Volumes are descriptive — this is the only place a
+                        listing knows about them. */}
+                    {book.is_volume_set && (book.volumes || []).length > 0 && (
+                        <span
+                            data-testid={`volume-set-badge-${book.id}`}
+                            className={`inline-block border border-[#002B5C] text-[#002B5C] font-mono uppercase tracking-widest ${compact ? "text-[8px] mt-1.5 px-1.5 py-0.5" : "text-[10px] mt-2 px-2 py-0.5"}`}
+                        >
+                            Set of {book.volumes.length} volumes
+                        </span>
+                    )}
                 </div>
             </CardLink>
 

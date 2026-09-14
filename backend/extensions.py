@@ -21,6 +21,7 @@ from typing import List, Optional
 import bcrypt
 import jwt
 import rbac
+import volume_sets
 from audit import audit_log, LOGIN, LOGIN_FAILED, LOGOUT, REGISTER, USER_DELETED, SPAM_PURGED
 from csv_export import csv_response, flatten_items
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -144,6 +145,10 @@ class BookAdminCreate(BaseModel):
     rating: float = 4.5
     stock: int = 100
     variants: Optional[list] = None
+    # Multi-volume set. `pages` above is derived from these and whatever is sent
+    # for it is overwritten — see volume_sets.py.
+    is_volume_set: bool = False
+    volumes: Optional[list] = None
 
 
 class BookAdminUpdate(BaseModel):
@@ -177,6 +182,11 @@ class BookAdminUpdate(BaseModel):
     coming_soon_label: Optional[str] = None
     stock: Optional[int] = None
     variants: Optional[list] = None
+    # Optional[bool], but False still reaches the update: admin_update_book
+    # filters on `is not None`, so unticking the box is a real edit rather than
+    # a silently discarded one. Same for an emptied volumes list.
+    is_volume_set: Optional[bool] = None
+    volumes: Optional[list] = None
 
 
 # Desk copies -- free examination copies for educators -- were retired in
@@ -1403,9 +1413,24 @@ def rank_for_year(year: Optional[int]) -> float:
     return float(min(e["rank"] for e in older_or_same)) - 0.5
 
 
+def _finalise_volume_set(doc: dict) -> None:
+    """Normalise the volumes, refuse a malformed set, derive `pages`.
+
+    Shared by create and update so the two cannot drift — the failure mode of
+    validating in one and not the other is a set that is well-formed when it is
+    created and broken the first time it is edited.
+    """
+    doc["volumes"] = volume_sets.normalise(doc.get("volumes"))
+    err = volume_sets.validate(bool(doc.get("is_volume_set")), doc["volumes"])
+    if err:
+        raise HTTPException(status_code=400, detail=err)
+    volume_sets.apply(doc)
+
+
 @admin_router.post("/books")
 async def admin_create_book(payload: BookAdminCreate):
     doc = {"id": str(uuid.uuid4()), **payload.model_dump()}
+    _finalise_volume_set(doc)
     # Without this a book added here can never appear under "Newest".
     #
     # That sort runs on release_rank, which is stamped from release_order.json
@@ -1440,9 +1465,28 @@ async def admin_update_book(book_id: str, payload: BookAdminUpdate):
     updates = {k: v for k, v in payload.model_dump().items() if v is not None}
     if not updates:
         raise HTTPException(status_code=400, detail="No updates provided")
-    prev = await db.books.find_one({"id": book_id}, {"_id": 0, "stock": 1, "release_rank": 1})
+    prev = await db.books.find_one(
+        {"id": book_id},
+        {"_id": 0, "stock": 1, "release_rank": 1, "is_volume_set": 1, "volumes": 1},
+    )
     if prev is None:
         raise HTTPException(status_code=404, detail="Book not found")
+
+    # A PATCH carries only what changed, so the set has to be validated against
+    # the MERGED state. Ticking the box without sending volumes, or editing the
+    # volumes without resending the flag, are both ordinary edits from the form,
+    # and validating either half alone would pass a set that is actually broken.
+    if "is_volume_set" in updates or "volumes" in updates:
+        merged = {
+            "is_volume_set": updates.get("is_volume_set", prev.get("is_volume_set")),
+            "volumes": updates["volumes"] if "volumes" in updates else prev.get("volumes"),
+        }
+        _finalise_volume_set(merged)
+        updates["volumes"] = merged["volumes"]
+        # Only when it IS a set. Unticking must not go on overwriting `pages`,
+        # or an ex-set could never be given an ordinary page count again.
+        if merged.get("is_volume_set") and merged["volumes"]:
+            updates["pages"] = merged["pages"]
 
     # Correcting the year re-slots the book under "Newest" — but only if its
     # rank was one we derived. A whole-number rank came from the release master,
@@ -2231,6 +2275,11 @@ _BOOK_EXPORT_IMPORTABLE = [
 # back in rather than causing an error.
 _BOOK_EXPORT_REFERENCE = [
     "id", "edition", "binding", "size", "sku", "enabled", "has_ebook", "order",
+    # A set's volumes are the only thing in a book document that a CSV cannot
+    # round-trip, so they are exported flattened and read-only. Without this a
+    # backup silently loses the difference between a 1440-page single book and
+    # a three-volume set, which is the one thing you would be comparing for.
+    "is_volume_set", "volumes",
 ]
 
 # CSV has no null. A blank cell and the string "None" are worlds apart when the
@@ -2240,6 +2289,17 @@ def _book_cell(b: dict, key: str):
     v = b.get(key)
     if v is None:
         return ""
+    if key == "volumes":
+        # "1: Bala Kanda (480) | 2: Ayodhya Kanda (512)". Flattened rather than
+        # JSON because this column is read by a person comparing two exports,
+        # and the importer ignores it either way.
+        if not isinstance(v, list) or not v:
+            return ""
+        return " | ".join(
+            f"{i.get('no')}: {i.get('title') or '—'} ({i.get('pages') or 0})"
+            for i in v
+            if isinstance(i, dict)
+        )
     if isinstance(v, bool):
         # _csv_bool() accepts true/yes/1; TRUE is what the template documents.
         return "TRUE" if v else "FALSE"
