@@ -12,10 +12,18 @@ import {
     GiftingPanel,
     GiftingDrawerSection,
 } from "./GiftingFlyout";
+import {
+    useCategoryFlyout,
+    CategoryTrigger,
+    CategoryPanel,
+    CategoryDrawerSection,
+} from "./CategoryFlyout";
 
 const DEFAULT_NAV = [
     { to: "/what-we-do", label: "What We Do" },
-    { to: "/books", label: "Bookstore" },
+    // Carries the category flyout, on the same terms as Gifting below: named
+    // explicitly here so a site with no saved site_nav still drops the menu.
+    { to: "/books", label: "Bookstore", flyout: "categories" },
     // Directly after the Bookstore, because it is the same shelf in a different
     // format — not a separate part of the business like Events or Academy.
     { to: "/ebooks", label: "eBooks" },
@@ -47,7 +55,33 @@ export default function Header() {
      * make today, and it should work the moment they make it rather than
      * needing a second, non-obvious setting turned on as well.
      */
-    const hasGiftFlyout = (n) => n?.flyout === "hampers" || n?.to === "/gifting";
+    /*
+     * The kill switch.
+     *
+     * Both matchers below fall back to a conventional path, which means the
+     * "No flyout" option in Admin → Navigation cannot turn either menu off:
+     * blank is indistinguishable from never-set, and every saved menu row
+     * already stores blank. So the dropdown offered a choice that silently did
+     * nothing on exactly the two rows it mattered for. "off" is the explicit
+     * value that beats the path fallback.
+     */
+    const flyoutOff = (n) => n?.flyout === "off";
+    const hasGiftFlyout = (n) =>
+        !flyoutOff(n) && (n?.flyout === "hampers" || n?.to === "/gifting");
+    const cfly = useCategoryFlyout();
+    /*
+     * Which nav link drops the category panel. Same two-way match as Gifting:
+     * the explicit `flyout` field from Admin → Navigation, or the conventional
+     * path, so an existing saved menu — which has no `flyout` on its Bookstore
+     * row, because the field did not exist when it was saved — still gets the
+     * menu without anybody being told to go and set something.
+     *
+     * That fallback is not cosmetic here. A saved site_nav replaces DEFAULT_NAV
+     * wholesale, so without it this feature would ship and appear to do nothing
+     * on the live site.
+     */
+    const hasCategoryFlyout = (n) =>
+        !flyoutOff(n) && (n?.flyout === "categories" || n?.to === "/books");
     const nav = useNavigate();
     const accountRef = useRef(null);
 
@@ -77,6 +111,33 @@ export default function Header() {
             document.removeEventListener("keydown", onKey);
         };
     }, [accountOpen]);
+
+    /*
+     * Only one mega-panel at a time.
+     *
+     * Both are full-width boxes absolutely positioned at top-full, so two open
+     * at once do not sit side by side — they stack on the same pixels. It is
+     * reachable without trying: leaving Bookstore arms a 180ms close, and
+     * arriving at Gifting arms a 120ms open, so a pointer moving between them
+     * has a 60ms window where both are on screen.
+     *
+     * Closing rather than merely hiding, because close() also clears the other
+     * menu's pending timers — a hidden panel with a live open timer comes back
+     * on its own a moment later.
+     */
+    /* Destructured, because each hook returns a fresh object literal every
+       render. Depending on `fly` rather than on `fly.close` would re-run these
+       on every render and quietly cancel the other menu's pending open timer
+       for as long as one panel stayed open. `close` is a useCallback with no
+       deps, so it is stable and these fire only on an actual open. */
+    const { close: closeGifting } = fly;
+    const { close: closeCategories } = cfly;
+    useEffect(() => {
+        if (cfly.open) closeGifting();
+    }, [cfly.open, closeGifting]);
+    useEffect(() => {
+        if (fly.open) closeCategories();
+    }, [fly.open, closeCategories]);
 
     useEffect(() => {
         fetchCollection("site_nav")
@@ -117,6 +178,8 @@ export default function Header() {
                         {navItems.map((n) =>
                             hasGiftFlyout(n) ? (
                                 <GiftingTrigger key={n.to} label={n.label} to={n.to} fly={fly} />
+                            ) : hasCategoryFlyout(n) ? (
+                                <CategoryTrigger key={n.to} label={n.label} to={n.to} fly={cfly} />
                             ) : (
                                 <NavLink
                                     key={n.to}
@@ -260,6 +323,10 @@ export default function Header() {
                   * That is the fault this placement exists to avoid.
                   */}
                 <GiftingPanel fly={fly} />
+                {/* Same placement rule, same reason — a child of <header>, not
+                    of <nav>. Only one of the two is ever visible; see the
+                    mutual-close effects above. */}
+                <CategoryPanel fly={cfly} />
 
                 {searchOpen && (
                     <div className="md:hidden border-t border-[#002B5C]/10 bg-white px-6 py-3" data-testid="mobile-search-row">
@@ -277,6 +344,14 @@ export default function Header() {
                                         label={n.label}
                                         to={n.to}
                                         fly={fly}
+                                        onNavigate={() => setMobileOpen(false)}
+                                    />
+                                ) : hasCategoryFlyout(n) ? (
+                                    <CategoryDrawerSection
+                                        key={n.to}
+                                        label={n.label}
+                                        to={n.to}
+                                        fly={cfly}
                                         onNavigate={() => setMobileOpen(false)}
                                     />
                                 ) : (

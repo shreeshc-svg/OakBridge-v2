@@ -167,6 +167,12 @@ function HeaderNavEditor() {
                         >
                             <option value="">No flyout</option>
                             <option value="hampers">Gift hampers</option>
+                            <option value="categories">Book categories</option>
+                            {/* /books and /gifting drop their panels by
+                                convention, without the field being set — so
+                                blank cannot mean "off" for them, and this is
+                                the value that does. */}
+                            <option value="off">Force off</option>
                         </select>
                         <button type="button" onClick={() => update(i, "hidden", !it.hidden)} title={it.hidden ? "Hidden — click to show" : "Visible — click to hide"} className="border border-[#E5E7EB] p-1.5 hover:bg-[#F5F7FA]">
                             {it.hidden ? <EyeOff size={14} strokeWidth={1.5} className="text-[#4B5563]" /> : <Eye size={14} strokeWidth={1.5} className="text-[#002B5C]" />}
