@@ -35,7 +35,19 @@ const local = (iso) => {
     return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 };
 
-console.log("-- all time is the absence of a range, not a very wide one --");
+console.log("-- the dashboard opens on this month --");
+/* A one-line default is exactly the kind of thing a later edit reverts without
+   anyone noticing: nothing breaks, the dashboard just quietly goes back to
+   showing a lifetime total where a monthly one is expected. */
+check(/useState\("this_month"\)/.test(dash),
+      "the range starts on This month, not on all time");
+check(RANGE_PRESETS.some((p) => p.key === "this_month"),
+      "and that key is a real preset — a typo here would silently resolve to all time, "
+      + "because resolveRange falls back rather than throwing");
+check(resolveRange("this_month") !== null,
+      "which resolves to an actual window");
+
+console.log("\n-- all time is the absence of a range, not a very wide one --");
 check(resolveRange("all") === null, "'all' resolves to null, so no params are sent at all");
 check(resolveRange("nonsense") === null, "an unknown preset falls back to all time rather than throwing");
 

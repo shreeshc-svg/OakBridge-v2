@@ -192,7 +192,26 @@ export default function AdminDashboard() {
     const [reminding, setReminding] = useState(false);
     const [searchInsight, setSearchInsight] = useState(null);
 
-    const [preset, setPreset] = useState("all");
+    /*
+     * THIS MONTH, not all time.
+     *
+     * The dashboard opens on the number somebody actually came to look at.
+     * Lifetime revenue is a figure that only moves upward and never answers
+     * "how are we doing" — it was the default because "all time" is the
+     * absence of a range and therefore the simplest thing to start with, which
+     * is a reason about the code rather than about the person reading it.
+     *
+     * Safe to change only because every tile already states the period it
+     * covers (see the scope prop below): the tiles that cannot follow a range —
+     * customers, titles, waitlist — go on saying "all time" beside the ones
+     * that do, rather than silently appearing to be monthly figures too.
+     *
+     * Not persisted, deliberately. "Leave the rest as is" — the range is still
+     * one click from All time, and a remembered range is a different feature
+     * with its own failure mode, where a figure you set months ago looks like
+     * today's.
+     */
+    const [preset, setPreset] = useState("this_month");
     const [customFrom, setCustomFrom] = useState("");
     const [customTo, setCustomTo] = useState("");
     const [order, setOrder] = useState(() => readTileOrder(TILE_ORDER_DEFAULT));
