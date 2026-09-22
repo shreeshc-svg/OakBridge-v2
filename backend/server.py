@@ -895,28 +895,63 @@ def _alias_pairs() -> tuple:
 _ALIAS_PAIRS: tuple = ()
 
 
-def _alias_variants(search: str) -> List[str]:
-    """The query, plus the same query under every other spelling of a name in it."""
+def _name_phrase(name: str) -> str:
+    """A regex matching a person's name as a CONTIGUOUS phrase.
+
+    WHY A PHRASE AND NOT TOKENS — THE BUG THIS FUNCTION EXISTS FOR
+
+    The first version of this feature swapped the spelling and handed the
+    result back to the ordinary tokeniser, which AND-s words across all search
+    fields. For "Praveen Kumar" that produced a search for "p" AND "kumar" —
+    and "p" is a ONE-CHARACTER pattern that matches any field containing the
+    letter p. So the alias worked, the swap happened, and the query returned
+    Sacred Tiger Tales by Dr Manoj Kumar while the book actually credited to
+    P Kumar never surfaced. Worse than the empty shelf it replaced: an empty
+    result says "we don't have it", a wrong result says "this is what we have".
+
+    Initials are the whole point of an alias table, so any design that
+    tokenises them is wrong by construction. Matched here as one phrase
+    against the AUTHOR field only, with separators optional between the parts
+    so "P Kumar", "P. Kumar" and "P.Kumar" are one thing.
+
+    The lookarounds stop "p kumar" matching inside "Deep Kumar".
+    """
+    parts = [
+        re.escape(w)
+        for w in re.split(r"[^\w]+", str(name or ""), flags=re.UNICODE)
+        if w
+    ]
+    if not parts:
+        return ""
+    return r"(?<![0-9A-Za-z])" + r"[^0-9A-Za-z]*".join(parts) + r"(?![0-9A-Za-z])"
+
+
+def _alias_matches(search: str) -> List[tuple]:
+    """(query with the name removed, the other spelling of that name) per alias.
+
+    The rest of the query is returned separately so it stays AND-ed: searching
+    "disaster management praveen kumar" must still require the subject, rather
+    than widening to every title the man ever wrote.
+    """
     global _ALIAS_PAIRS
     if not _ALIAS_PAIRS:
         _ALIAS_PAIRS = _alias_pairs()
     norm = re.sub(r"[^\w]+", " ", str(search or "").lower(), flags=re.UNICODE).strip()
     if not norm:
         return []
-    out = [search]
-    for found, replacement in _ALIAS_PAIRS:
-        # Whole words only. A plain substring test matches "p kumar" inside
-        # "deep kumar" and would hand the OR a branch built from
-        # "deepraveen kumar" — harmless, since it matches nothing, but it is
-        # the kind of nonsense that shows up in a log six months later.
-        swapped = re.sub(
-            r"(?<!\w)" + re.escape(found) + r"(?!\w)",
-            replacement,
-            norm,
-            flags=re.UNICODE,
-        ).strip()
-        if swapped != norm and swapped and swapped not in out:
-            out.append(swapped)
+    out = []
+    seen = set()
+    for found, counterpart in _ALIAS_PAIRS:
+        # Whole words only: "p kumar" sits inside "deep kumar" as a substring.
+        pattern = r"(?<!\w)" + re.escape(found) + r"(?!\w)"
+        if not re.search(pattern, norm, flags=re.UNICODE):
+            continue
+        rest = re.sub(pattern, " ", norm, flags=re.UNICODE)
+        rest = re.sub(r"\s+", " ", rest).strip()
+        key = (rest, counterpart)
+        if key not in seen:
+            seen.add(key)
+            out.append(key)
     return out
 
 
@@ -970,16 +1005,31 @@ def _search_clauses(search: str) -> List[dict]:
 def _alias_aware_clauses(search: str) -> List[dict]:
     """`_search_clauses`, but a name spelled either way finds the same book.
 
-    One clause list per spelling, OR-ed together — rather than OR-ing the
-    individual word clauses, which would lose the AND between the words and
-    turn "praveen kumar" into "anything containing praveen OR kumar".
+    Each branch is a COMPLETE, AND-ed query; only whole branches are OR-ed.
+    OR-ing the individual word clauses instead would drop the AND between the
+    words and turn "praveen kumar" into "praveen OR kumar".
+
+    The alias branch matches the other spelling as a phrase against `author`
+    (see _name_phrase) and AND-s whatever else was typed — so the name is found
+    precisely, and "disaster management praveen kumar" still requires the
+    subject.
     """
-    built = [c for c in (_search_clauses(v) for v in _alias_variants(search)) if c]
-    if not built:
+    base = _search_clauses(search)
+    branches: List[List[dict]] = [base] if base else []
+
+    for rest, counterpart in _alias_matches(search):
+        phrase = _name_phrase(counterpart)
+        if not phrase:
+            continue
+        branch = _search_clauses(rest) if rest else []
+        branch.append({"author": {"$regex": phrase, "$options": "i"}})
+        branches.append(branch)
+
+    if not branches:
         return []
-    if len(built) == 1:
-        return built[0]
-    return [{"$or": [{"$and": b} for b in built]}]
+    if len(branches) == 1:
+        return branches[0]
+    return [{"$or": [{"$and": b} for b in branches]}]
 
 
 # ---------------------------------------------------------- typo tolerance ---

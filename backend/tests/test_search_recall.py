@@ -94,35 +94,81 @@ def test_the_alias_table_is_still_the_source():
 
 
 def test_praveen_kumar_also_searches_for_p_kumar():
-    variants = [v.lower() for v in server._alias_variants("praveen kumar")]
-    assert "p kumar" in variants, variants
+    matches = server._alias_matches("praveen kumar")
+    assert ("", "p kumar") in matches, matches
 
 
 def test_and_the_other_direction():
     """We cannot know which spelling the shopper has seen, so both work."""
-    variants = [v.lower() for v in server._alias_variants("p kumar")]
-    assert "praveen kumar" in variants, variants
+    matches = server._alias_matches("p kumar")
+    assert ("", "praveen kumar") in matches, matches
 
 
-def test_the_original_spelling_is_never_dropped():
-    assert "praveen kumar" in server._alias_variants("praveen kumar")
+def test_a_name_inside_a_longer_query_keeps_the_rest():
+    """The subject must stay AND-ed, or the branch widens to every title the
+    man ever wrote."""
+    matches = server._alias_matches("disaster management praveen kumar")
+    assert ("disaster management", "p kumar") in matches, matches
 
 
-def test_a_name_inside_a_longer_query_still_swaps():
-    variants = [v.lower() for v in server._alias_variants("disaster management praveen kumar")]
-    assert any("p kumar" in v for v in variants), variants
-
-
-def test_an_unrelated_query_produces_no_variants():
+def test_an_unrelated_query_produces_no_matches():
     """Cheap assurance that this does not quietly widen every search."""
-    assert server._alias_variants("mediation") == ["mediation"]
+    assert server._alias_matches("mediation") == []
 
 
 def test_an_alias_must_be_whole_words():
-    """"p kumar" sits inside "deep kumar" as a substring. Swapping there would
-    build a branch from "deepraveen kumar" — matches nothing, so harmless, and
-    exactly the sort of nonsense that turns up in a log months later."""
-    assert server._alias_variants("deep kumar") == ["deep kumar"]
+    """"p kumar" sits inside "deep kumar" as a substring."""
+    assert server._alias_matches("deep kumar") == []
+
+
+# --------------------------------------------------------------------------
+# Initials — the bug that shipped
+# --------------------------------------------------------------------------
+
+def test_an_initial_is_never_searched_as_a_token():
+    """THE REGRESSION THIS FILE EXISTS FOR.
+
+    The first version swapped the spelling and handed the result to the
+    ordinary tokeniser, which AND-s words across all fields. "P Kumar" became
+    "p" AND "kumar" — and "p" is a ONE-CHARACTER pattern matching any field
+    containing the letter p. Live, that returned Sacred Tiger Tales by Dr Manoj
+    Kumar and never surfaced the book credited to P Kumar at all.
+
+    Worse than the empty shelf it replaced: an empty result says "we don't have
+    it", a wrong result says "this is what we have".
+    """
+    clauses = server._alias_aware_clauses("praveen kumar")
+    blob = repr(clauses)
+    # A bare single-character alternative, e.g. {"title": {"$regex": "p", ...}}
+    assert '"$regex": "p"' not in blob and "'$regex': 'p'" not in blob, blob
+
+
+def test_the_alias_branch_matches_the_author_field_as_a_phrase():
+    clauses = server._alias_aware_clauses("praveen kumar")
+    branches = clauses[0]["$or"]
+    alias_branch = branches[-1]["$and"]
+    assert len(alias_branch) == 1
+    cond = alias_branch[0]
+    assert set(cond) == {"author"}, cond
+    assert "kumar" in cond["author"]["$regex"]
+
+
+def test_the_phrase_matches_the_initial_but_not_a_longer_name():
+    import re as _re
+
+    rx = _re.compile(server._name_phrase("p kumar"), _re.IGNORECASE)
+    assert rx.search("P Kumar")
+    assert rx.search("Dr P. Kumar")
+    assert rx.search("P.Kumar")
+    # The ones that polluted the live results.
+    assert not rx.search("Dr Manoj Kumar")
+    assert not rx.search("Dr Prabhat Kumar & D")
+    assert not rx.search("Deep Kumar")
+
+
+def test_the_phrase_is_empty_for_an_empty_name():
+    assert server._name_phrase("") == ""
+    assert server._name_phrase("   ") == ""
 
 
 def test_single_word_aliases_are_refused():
@@ -155,9 +201,10 @@ def test_variants_are_or_ed_but_words_stay_and_ed():
     assert len(clauses) == 1
     branches = clauses[0]["$or"]
     assert len(branches) >= 2
-    for branch in branches:
-        # Two words in, two AND-ed conditions out.
-        assert len(branch["$and"]) == 2
+    # Branch 1 is what was typed: two words in, two AND-ed conditions out.
+    assert len(branches[0]["$and"]) == 2
+    # Branch 2 is the alias: one phrase condition, not two loose tokens.
+    assert len(branches[-1]["$and"]) == 1
 
 
 def test_a_query_with_no_alias_is_unchanged():
