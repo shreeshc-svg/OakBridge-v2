@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Eye, EyeOff, Trash2, Plus, Download, Bold, List, Heading, Minus as Rule } from "lucide-react";
 import { fetchCollection, adminSaveCollection, adminListJobApplications,
-         adminDeleteJobApplication, formatApiError, mediaUrl } from "../../lib/api";
+         adminDeleteJobApplication, adminDownloadCv, formatApiError } from "../../lib/api";
 import { canDelete } from "../../lib/rbac";
 import { useAuth } from "../../context/AuthContext";
 import RichText from "../../components/RichText";
@@ -137,6 +137,9 @@ export default function AdminCareers() {
     const [apps, setApps] = useState([]);
     const [saving, setSaving] = useState(false);
     const [busyId, setBusyId] = useState("");
+    // Separate from busyId: fetching a CV must not grey out the Delete button
+    // on the same row, and vice versa.
+    const [cvBusyId, setCvBusyId] = useState("");
     // Deletion is superadmin-only across this admin; the endpoint enforces it too.
     const { user: me } = useAuth();
     const mayDelete = canDelete(me);
@@ -154,6 +157,17 @@ export default function AdminCareers() {
      * else goes. A dialog that only says "are you sure?" is one someone clicks
      * through; one that says whose CV is about to be destroyed is not.
      */
+    const downloadCv = async (a) => {
+        setCvBusyId(a.id);
+        try {
+            await adminDownloadCv(a.id);
+        } catch (e) {
+            toast.error(formatApiError(e));
+        } finally {
+            setCvBusyId("");
+        }
+    };
+
     const removeApp = async (a) => {
         if (!window.confirm(
             `Delete ${a.name}'s application?\n\n` +
@@ -252,9 +266,21 @@ export default function AdminCareers() {
                                     <div className="font-medium text-[#002B5C] truncate">{a.name} <span className="text-[#4B5563] font-normal">· {a.role}</span></div>
                                     <div className="text-xs text-[#4B5563] truncate">{a.email} · {a.phone}</div>
                                 </div>
-                                <a href={mediaUrl(a.cv_url) || a.cv_url} target="_blank" rel="noreferrer" className="flex-shrink-0 inline-flex items-center gap-1.5 text-xs font-mono uppercase tracking-widest text-[#002B5C] border-b border-[#002B5C] pb-0.5 hover:text-[#CC0033] hover:border-[#CC0033]">
-                                    <Download size={13} strokeWidth={1.5} /> CV
-                                </a>
+                                {/* A button, not a link. The CV is personal data
+                                    and its URL is no longer public, so it has to
+                                    be fetched with the admin session — a browser
+                                    sends no Authorization header when it simply
+                                    follows an href. */}
+                                <button
+                                    type="button"
+                                    onClick={() => downloadCv(a)}
+                                    disabled={cvBusyId === a.id}
+                                    data-testid={`download-cv-${a.id}`}
+                                    className="flex-shrink-0 inline-flex items-center gap-1.5 text-xs font-mono uppercase tracking-widest text-[#002B5C] border-b border-[#002B5C] pb-0.5 hover:text-[#CC0033] hover:border-[#CC0033] disabled:opacity-40"
+                                >
+                                    <Download size={13} strokeWidth={1.5} />
+                                    {cvBusyId === a.id ? "Fetching…" : "CV"}
+                                </button>
                                 {mayDelete && (
                                     <button
                                         type="button"

@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 
 # Extensions (auth, admin, authors, reviews)
 from extensions import (
+    AUTHOR_ALIASES,
     auth_router,
     admin_router,
     books_for_authors,
@@ -829,6 +830,96 @@ NEW_RELEASE_TOP_N = 24
 SEARCH_FIELDS = ("title", "subtitle", "author", "subject", "isbn", "description")
 
 
+#
+# "…, 5th ed" — an edition the shopper typed and the catalogue spells differently.
+#
+# Search AND-s every word, so one token that matches nothing empties the shelf.
+# The catalogue writes editions as "5/e" and "2/e", nobody types that, and
+# "Environment and Ecology With Disaster Management, 5th ed" therefore returned
+# nothing while the same query without the suffix returned three titles —
+# including the fifth edition being asked for.
+#
+# Dropped rather than translated. Matching "5" and "e" as separate tokens would
+# put a one-character pattern into the regex and match most of the catalogue,
+# and a shopper who names an edition wants the book more than they want that
+# edition — showing all editions is a better answer than showing none.
+#
+# Deliberately narrow: it only fires on a DIGIT followed by ed/edn/edition, so
+# "Premium Collectors' Edition" and "Article 370" are untouched.
+_EDITION_PHRASE = re.compile(
+    r"\b\d{1,2}\s*(?:st|nd|rd|th)?\s*(?:ed|edn|edition)\b\.?", re.IGNORECASE
+)
+
+
+def _strip_edition(search: str) -> str:
+    """Remove an edition suffix, unless that is all there was."""
+    cleaned = _EDITION_PHRASE.sub(" ", str(search or ""))
+    cleaned = re.sub(r"[\s,;/]+", " ", cleaned).strip()
+    return cleaned or str(search or "")
+
+
+def _alias_pairs() -> tuple:
+    """Every pair of spellings the alias table says mean one person.
+
+    AUTHOR_ALIASES already records that "P Kumar" and "Praveen Kumar" are one
+    man — confirmed by the editorial team — but only the AUTHOR INDEX read it.
+    Book search asks a different question, of a different collection, so a
+    shopper searching "praveen kumar" got nothing while the catalogue carried
+    "Disaster Management, 2/e" credited to "P Kumar". Five searches in a month.
+
+    The alias key is the author's slug, so it doubles as the canonical spelling
+    once the punctuation is turned back into spaces. Pairs are emitted BOTH
+    ways: either spelling should find the book, because we cannot know which
+    one the shopper has seen.
+
+    `\\w` with re.UNICODE on purpose — one alias is in Devanagari, and no
+    normalisation can cross scripts, which is the whole reason a list exists.
+    """
+    pairs = []
+    for slug, spellings in AUTHOR_ALIASES.items():
+        canonical = re.sub(r"[^\w]+", " ", str(slug).lower(), flags=re.UNICODE).strip()
+        for spelling in spellings:
+            alt = re.sub(r"[^\w]+", " ", str(spelling).lower(), flags=re.UNICODE).strip()
+            # Both sides must be more than one word. A single-word alias would
+            # match inside half the catalogue — the same trap author_match_key
+            # guards against when it refuses to collapse "Rao, IAS" to "rao".
+            if not alt or not canonical or alt == canonical:
+                continue
+            if len(alt.split()) < 2 or len(canonical.split()) < 2:
+                continue
+            pairs.append((alt, canonical))
+            pairs.append((canonical, alt))
+    return tuple(pairs)
+
+
+_ALIAS_PAIRS: tuple = ()
+
+
+def _alias_variants(search: str) -> List[str]:
+    """The query, plus the same query under every other spelling of a name in it."""
+    global _ALIAS_PAIRS
+    if not _ALIAS_PAIRS:
+        _ALIAS_PAIRS = _alias_pairs()
+    norm = re.sub(r"[^\w]+", " ", str(search or "").lower(), flags=re.UNICODE).strip()
+    if not norm:
+        return []
+    out = [search]
+    for found, replacement in _ALIAS_PAIRS:
+        # Whole words only. A plain substring test matches "p kumar" inside
+        # "deep kumar" and would hand the OR a branch built from
+        # "deepraveen kumar" — harmless, since it matches nothing, but it is
+        # the kind of nonsense that shows up in a log six months later.
+        swapped = re.sub(
+            r"(?<!\w)" + re.escape(found) + r"(?!\w)",
+            replacement,
+            norm,
+            flags=re.UNICODE,
+        ).strip()
+        if swapped != norm and swapped and swapped not in out:
+            out.append(swapped)
+    return out
+
+
 def _search_clauses(search: str) -> List[dict]:
     """Build a forgiving, injection-safe query for a storefront search.
 
@@ -851,7 +942,7 @@ def _search_clauses(search: str) -> List[dict]:
     out: List[dict] = []
     # "&" and "and" are the same word to a shopper: the catalogue has both
     # "Legal Aptitude & Reasoning" and "…Health and Working Conditions".
-    normalised = _re.sub(r"\s*&\s*", " and ", str(search))
+    normalised = _re.sub(r"\s*&\s*", " and ", _strip_edition(search))
     for token in normalised.split():
         alnum = _re.sub(r"[^0-9A-Za-z]+", "", token)
         if not alnum:
@@ -874,6 +965,21 @@ def _search_clauses(search: str) -> List[dict]:
             {"$or": [{f: {"$regex": pattern, "$options": "i"}} for f in SEARCH_FIELDS]}
         )
     return out
+
+
+def _alias_aware_clauses(search: str) -> List[dict]:
+    """`_search_clauses`, but a name spelled either way finds the same book.
+
+    One clause list per spelling, OR-ed together — rather than OR-ing the
+    individual word clauses, which would lose the AND between the words and
+    turn "praveen kumar" into "anything containing praveen OR kumar".
+    """
+    built = [c for c in (_search_clauses(v) for v in _alias_variants(search)) if c]
+    if not built:
+        return []
+    if len(built) == 1:
+        return built[0]
+    return [{"$or": [{"$and": b} for b in built]}]
 
 
 # ---------------------------------------------------------- typo tolerance ---
@@ -1126,7 +1232,7 @@ async def list_books(
         query["price"] = price_q
 
     if search:
-        clauses.extend(_search_clauses(search))
+        clauses.extend(_alias_aware_clauses(search))
 
     if clauses:
         query["$and"] = clauses
@@ -1180,8 +1286,11 @@ async def list_books(
     if search and not docs:
         fixed = await _correct_search(search)
         if fixed:
-            retry_clauses = [c for c in clauses if c not in _search_clauses(search)]
-            retry_clauses.extend(_search_clauses(fixed))
+            # Both sides through the SAME builder as the first attempt, or the
+            # diff below removes nothing and the original search stays AND-ed
+            # onto the corrected one — which can only ever return zero.
+            retry_clauses = [c for c in clauses if c not in _alias_aware_clauses(search)]
+            retry_clauses.extend(_alias_aware_clauses(fixed))
             retry_query = dict(query)
             if retry_clauses:
                 retry_query["$and"] = retry_clauses
@@ -1606,7 +1715,16 @@ app.add_middleware(
     # "*" on allow_headers governs the request side only. Without this line the
     # search-correction header is sent, arrives, and is invisible to JavaScript,
     # so the "Showing results for …" notice would silently never appear.
-    expose_headers=["X-Search-Corrected-To"],
+    #
+    # Content-Disposition is on this list for the same reason, and it was
+    # missing. Every admin download goes through downloadBlob(), which reads the
+    # filename out of that header — and the API is a different origin from the
+    # site (api.oakbridge.in vs www.oakbridge.in), so the header arrived and was
+    # invisible to JavaScript. Each export therefore saved under its hardcoded
+    # fallback name instead of the dated one the server chose, which is the one
+    # thing the comment on downloadBlob promises: "two downloads a week apart do
+    # not overwrite each other in the Downloads folder". They did.
+    expose_headers=["X-Search-Corrected-To", "Content-Disposition"],
 )
 
 

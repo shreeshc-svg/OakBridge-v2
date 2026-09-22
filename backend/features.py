@@ -21,6 +21,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Any, List, Optional
 
 import requests
+import uploads_guard
 from audit import (
     AUDIT_EVENTS, SUBMISSION_DELETED, audit_log, payment_event_to_row, period_start,
 )
@@ -178,10 +179,28 @@ _GENERIC_TYPES = {"application/octet-stream", "binary/octet-stream", "applicatio
 # know .webp, and returning None there would hand the octet-stream straight back
 # and re-break the very thing this function exists to fix. These are the formats
 # every mail client renders.
+# NO .svg HERE, DELIBERATELY. It used to be, and the image endpoints took the
+# stored extension straight from the uploaded filename, so an SVG carrying a
+# <script> was stored and served back as image/svg+xml — stored XSS on the API
+# origin. The upload side now refuses it by signature (uploads_guard); this is
+# the other half, covering anything already sitting in the bucket.
 _IMAGE_TYPES = {
     ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
-    ".gif": "image/gif", ".webp": "image/webp", ".svg": "image/svg+xml",
+    ".gif": "image/gif", ".webp": "image/webp",
     ".bmp": "image/bmp", ".ico": "image/x-icon", ".avif": "image/avif",
+}
+
+# Types a browser EXECUTES when it renders them inline. Nothing we store should
+# ever be one, but the resolution above has three sources — the declared type
+# from S3, our extension map, and the stdlib's guess — and only one of them is
+# ours. mimetypes knows perfectly well that .svg is image/svg+xml, so simply
+# removing the entry above would not have been enough.
+#
+# Downgrading to octet-stream makes the browser download the file rather than
+# run it, which is the correct outcome for something that should not be there.
+_NEVER_INLINE = {
+    "image/svg+xml", "text/html", "application/xhtml+xml",
+    "text/xml", "application/xml", "text/javascript", "application/javascript",
 }
 
 
@@ -190,14 +209,18 @@ def _resolved_type(declared: str, path: str) -> str:
     import os as _os
 
     if declared and declared.split(";")[0].strip().lower() not in _GENERIC_TYPES:
-        return declared
-    ext = _os.path.splitext(path)[1].lower()
-    return (
-        _IMAGE_TYPES.get(ext)
-        or mimetypes.guess_type(path)[0]
-        or declared
-        or "application/octet-stream"
-    )
+        resolved = declared
+    else:
+        ext = _os.path.splitext(path)[1].lower()
+        resolved = (
+            _IMAGE_TYPES.get(ext)
+            or mimetypes.guess_type(path)[0]
+            or declared
+            or "application/octet-stream"
+        )
+    if resolved.split(";")[0].strip().lower() in _NEVER_INLINE:
+        return "application/octet-stream"
+    return resolved
 
 
 def get_object(path: str) -> tuple[bytes, str]:
@@ -221,7 +244,10 @@ def get_object(path: str) -> tuple[bytes, str]:
     full = _resolve(path)
     if not os.path.isfile(full):
         raise HTTPException(status_code=404, detail="File not found")
-    ctype = mimetypes.guess_type(full)[0] or "application/octet-stream"
+    # Through _resolved_type, not raw mimetypes: the never-inline downgrade has
+    # to apply on local disk too, or the defence exists only in production and
+    # the one place anybody tests it by hand is the place it is missing.
+    ctype = _resolved_type("", full)
     with open(full, "rb") as f:
         return f.read(), ctype
 
@@ -446,9 +472,28 @@ async def validate_coupon(payload: CouponValidateRequest):
     )
 
 
+# Storage prefixes that are NOT public, whatever their URL looks like.
+#
+# Job applicants' CVs live at {APP_NAME}/cv/<uuid>.pdf and were reachable here
+# by anyone who had the link — no session, and served with
+# `Cache-Control: public, max-age=86400`, so an intermediary was entitled to
+# keep a stranger's résumé for a day. The unguessable UUID was the only thing
+# protecting it, and a link pasted into a chat or a mail thread survives longer
+# than the job does.
+#
+# Matched on the path SEGMENT rather than a prefix string, so neither
+# "oakbridge/cv/x.pdf" nor any ../ walk arriving here can slip past on
+# punctuation.
+_PRIVATE_SEGMENTS = {"cv"}
+
+
 @public_router.get("/files/{path:path}")
 async def public_file(path: str):
     """Proxy public assets (book covers etc.) from object storage."""
+    if _PRIVATE_SEGMENTS & {s.lower() for s in (path or "").split("/")}:
+        # 404, not 403: a 403 confirms the file is there, which is exactly the
+        # fact being protected.
+        raise HTTPException(status_code=404, detail="File not found")
     try:
         data, content_type = get_object(path)
     except HTTPException:
@@ -555,15 +600,21 @@ async def apply_for_job(
     email = (email or "").strip().lower()
     if not name or not phone or not email:
         raise HTTPException(status_code=400, detail="Name, phone and email are required")
-    ctype = (cv.content_type or "").lower()
-    fname = (cv.filename or "").lower()
-    if "pdf" not in ctype and not fname.endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="CV must be a PDF file")
-    data = await cv.read()
-    if len(data) > 8 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="CV too large (max 8 MB)")
-    if not data:
-        raise HTTPException(status_code=400, detail="CV file is empty")
+    """
+    THE ONLY UNAUTHENTICATED FILE UPLOAD ON THE SITE. Everything below is here
+    because of that.
+
+    The old check was `if "pdf" not in ctype and not fname.endswith(".pdf")` —
+    an `or` between two values the uploader controls, so satisfying either was
+    enough. An executable named resume.pdf was accepted, stored, force-labelled
+    application/pdf, and mailed to the hiring inbox as a download button.
+
+    Now: the size is enforced while reading rather than after (a 500 MB body
+    used to be fully materialised on a 512 MB instance before the 8 MB limit
+    rejected it), and the bytes themselves have to say PDF.
+    """
+    data = await uploads_guard.read_limited(cv, 8 * 1024 * 1024, "CV")
+    uploads_guard.require_pdf(data, "CV")
 
     cv_path = f"{APP_NAME}/cv/{uuid.uuid4()}.pdf"
     put_object(cv_path, data, "application/pdf")
@@ -668,6 +719,57 @@ admin_router = APIRouter(
 async def admin_list_job_applications():
     cursor = db.job_applications.find({}, {"_id": 0}).sort([("created_at", -1)])
     return await cursor.to_list(1000)
+
+
+def _cv_filename(app: dict) -> str:
+    """A filename the hiring inbox can file, from a name we do not control.
+
+    Stripped to a conservative set, because this lands in a Content-Disposition
+    header: a quote or a newline in an applicant's name would otherwise let them
+    write their own header. Applicants type their own names, and this is a
+    public form.
+    """
+    raw = (app.get("name") or "applicant").strip()
+    safe = "".join(ch for ch in raw if ch.isalnum() or ch in " -_")[:60].strip()
+    return f"CV - {safe or 'applicant'}.pdf"
+
+
+@admin_router.get("/job-applications/{app_id}/cv")
+async def admin_download_cv(app_id: str):
+    """Stream an applicant's CV to a signed-in admin.
+
+    WHY THIS EXISTS RATHER THAN A LINK
+
+    The CV used to be fetched straight off /api/files/<uuid>.pdf, which is
+    unauthenticated. That made an applicant's résumé — name, address, phone,
+    employment history — available to anyone holding the URL, and the response
+    said `Cache-Control: public, max-age=86400`, so any proxy between here and
+    the reader was entitled to keep a copy for a day.
+
+    This route sits on admin_router, which carries require_admin for everything
+    under it, so the session is checked before a byte is read.
+    """
+    app = await db.job_applications.find_one({"id": app_id}, {"_id": 0})
+    if not app:
+        raise HTTPException(status_code=404, detail="Application not found")
+    path = storage_path_from_url(app.get("cv_url", ""))
+    if not path:
+        raise HTTPException(status_code=404, detail="No CV on this application")
+    data, _ = get_object(path)
+    return Response(
+        content=data,
+        # Always attachment, always application/pdf. The stored object's own
+        # type is ignored on purpose: this file arrived from the public
+        # internet, and nothing it claims about itself should decide how an
+        # admin's browser treats it.
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{_cv_filename(app)}"',
+            # The header the public proxy got wrong. Personal data must not sit
+            # in a shared cache.
+            "Cache-Control": "private, no-store",
+        },
+    )
 
 
 @admin_router.delete("/job-applications/{app_id}")
@@ -791,11 +893,14 @@ async def admin_upload_ebook(book_id: str, file: UploadFile = File(...)):
     book = await db.books.find_one({"id": book_id}, {"_id": 0})
     if not book:
         raise HTTPException(status_code=404, detail="Book not found")
+    # The filename check stays as the cheap first pass; the signature check is
+    # what actually decides. This file is later served to paying customers as
+    # their eBook, so "it was named .pdf" is not a good enough reason to
+    # believe it is one.
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are accepted")
-    data = await file.read()
-    if len(data) > 60 * 1024 * 1024:  # 60MB
-        raise HTTPException(status_code=400, detail="File too large (max 60 MB)")
+    data = await uploads_guard.read_limited(file, 60 * 1024 * 1024, "File")
+    uploads_guard.require_pdf(data, "eBook")
     path = f"{APP_NAME}/ebooks/{book_id}/{uuid.uuid4()}.pdf"
     result = put_object(path, data, "application/pdf")
     await db.books.update_one(
@@ -1512,9 +1617,11 @@ async def admin_upload_preview(book_id: str, file: UploadFile = File(...), max_p
         raise HTTPException(status_code=404, detail="Book not found")
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are accepted")
-    data = await file.read()
-    if len(data) > 60 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="File too large (max 60 MB)")
+    data = await uploads_guard.read_limited(file, 60 * 1024 * 1024, "File")
+    # Checked before pypdfium2 touches it. Handing a rendering library a file
+    # that is not the format it expects is how a parser bug becomes a crash on
+    # the API process, and this one runs inline on the request.
+    uploads_guard.require_pdf(data, "Preview PDF")
 
     try:
         import pypdfium2 as pdfium
@@ -1571,14 +1678,23 @@ async def admin_remove_ebook(book_id: str):
 @admin_router.post("/uploads/cover")
 async def admin_upload_cover(file: UploadFile = File(...)):
     """Upload a book cover image. Returns a publicly-readable URL for use as cover_image."""
-    if not file.content_type or not file.content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="Only image files are accepted")
-    data = await file.read()
-    if len(data) > 8 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="Cover image too large (max 8 MB)")
-    ext = (file.filename or "cover").rsplit(".", 1)[-1].lower()[:8] or "jpg"
+    """
+    The extension comes from the SIGNATURE, not from the filename.
+
+    It used to be `(file.filename or "cover").rsplit(".", 1)[-1]` — so the
+    uploader chose what the object was stored as, and `image/svg+xml` passed
+    the startswith("image/") test. An SVG is an XML document that may contain
+    <script>, and /api/files served it straight back under that type: stored
+    XSS on the API origin.
+
+    Sniffing answers a narrower question — which of the raster formats we serve
+    is this? — and refuses everything else, including the next script-capable
+    "image" format nobody has thought of yet. See uploads_guard.
+    """
+    data = await uploads_guard.read_limited(file, 8 * 1024 * 1024, "Cover image")
+    ext = uploads_guard.require_image(data, "Cover image")
     path = f"{APP_NAME}/covers/{uuid.uuid4()}.{ext}"
-    put_object(path, data, file.content_type)
+    put_object(path, data, f"image/{'jpeg' if ext == 'jpg' else ext}")
     # Public URL served by our own proxy below (works across all browsers without auth headers)
     return {"url": f"/api/files/{path}", "path": path, "size": len(data)}
 
@@ -1608,10 +1724,31 @@ async def admin_upload_doc(file: UploadFile = File(...)):
             status_code=400,
             detail="Only PDF, ZIP, Word or Excel files are accepted",
         )
-    data = await file.read()
-    if len(data) > 25 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="File too large (max 25 MB)")
+    data = await uploads_guard.read_limited(file, 25 * 1024 * 1024, "File")
     ext = DOC_TYPES[ctype]
+    """
+    The declared MIME picks the extension; the CONTENT has to agree with it.
+
+    Only at the container level — a .docx and a .xlsx are both ZIP archives and
+    this cannot tell them apart, which is fine: the declared type is trusted for
+    that distinction and wrong is merely wrong, not dangerous. What it refuses
+    is the mismatch that matters, an executable declared as application/pdf and
+    published on the Media page as a company brochure.
+    """
+    if ext == "pdf":
+        uploads_guard.require_pdf(data, "File")
+    elif ext in ("zip", "docx", "xlsx"):
+        if not uploads_guard.is_zip_container(data):
+            raise HTTPException(
+                status_code=400,
+                detail="That file is not really a ZIP/Word/Excel document.",
+            )
+    elif ext in ("doc", "xls"):
+        if not uploads_guard.is_ole_document(data):
+            raise HTTPException(
+                status_code=400,
+                detail="That file is not really a Word/Excel document.",
+            )
     path = f"{APP_NAME}/docs/{uuid.uuid4()}.{ext}"
     put_object(path, data, ctype)
     return {
@@ -1626,14 +1763,11 @@ async def admin_upload_doc(file: UploadFile = File(...)):
 @admin_router.post("/uploads/author-photo")
 async def admin_upload_author_photo(file: UploadFile = File(...)):
     """Upload an author photo. Returns a /api/files URL to store on the author record."""
-    if not file.content_type or not file.content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="Only image files are accepted")
-    data = await file.read()
-    if len(data) > 8 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="Photo too large (max 8 MB)")
-    ext = (file.filename or "photo").rsplit(".", 1)[-1].lower()[:8] or "jpg"
+    # Same rule as the cover endpoint: content decides the type, not the name.
+    data = await uploads_guard.read_limited(file, 8 * 1024 * 1024, "Photo")
+    ext = uploads_guard.require_image(data, "Photo")
     path = f"{APP_NAME}/authors/{uuid.uuid4()}.{ext}"
-    put_object(path, data, file.content_type)
+    put_object(path, data, f"image/{'jpeg' if ext == 'jpg' else ext}")
     return {"url": f"/api/files/{path}", "path": path, "size": len(data)}
 
 
@@ -1919,7 +2053,11 @@ async def admin_bulk_import(file: UploadFile = File(...)):
                       language, publisher, publication_year, rating
     """
     name = (file.filename or "").lower()
-    file_bytes = await file.read()
+    # Capped. This had no limit at all, and openpyxl will happily try to
+    # materialise whatever it is handed — the catalogue is 251 rows, so 25 MB is
+    # already absurdly generous and the wrong file picked by accident should
+    # bounce rather than take the API down with it.
+    file_bytes = await uploads_guard.read_limited(file, 25 * 1024 * 1024, "Import file")
     if name.endswith(".xlsx"):
         rows_iter = enumerate(_parse_xlsx_rows(file_bytes), start=2)
     elif name.endswith(".csv"):
@@ -1986,7 +2124,7 @@ async def admin_upload_ebook_price_list(file: UploadFile = File(...), dry_run: b
     displayed, from one setting, so it can be changed in one place.
     """
     name = (file.filename or "").lower()
-    file_bytes = await file.read()
+    file_bytes = await uploads_guard.read_limited(file, 25 * 1024 * 1024, "Price list")
     if name.endswith(".xlsx"):
         try:
             wb = load_workbook(io.BytesIO(file_bytes), data_only=True, read_only=True)
@@ -2470,20 +2608,20 @@ class CategoryImageSet(BaseModel):
 
 @admin_router.post("/media")
 async def admin_upload_media(file: UploadFile = File(...), alt: str = Form("")):
-    if not file.content_type or not file.content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="Only image files are accepted")
-    data = await file.read()
-    if len(data) > APP_MEDIA_MAX:
-        raise HTTPException(status_code=400, detail="Image too large (max 10 MB)")
-    ext = (file.filename or "img").rsplit(".", 1)[-1].lower()[:8] or "jpg"
+    # Same rule as the cover endpoint: content decides the type, not the name.
+    data = await uploads_guard.read_limited(file, APP_MEDIA_MAX, "Image")
+    ext = uploads_guard.require_image(data, "Image")
+    ctype = f"image/{'jpeg' if ext == 'jpg' else ext}"
     path = f"{APP_NAME}/media/{uuid.uuid4()}.{ext}"
-    put_object(path, data, file.content_type)
+    put_object(path, data, ctype)
     doc = {
         "id": str(uuid.uuid4()),
         "url": f"/api/files/{path}",
         "filename": file.filename or "",
         "alt": alt or "",
-        "content_type": file.content_type,
+        # The type we RESOLVED, not the one that was declared — this is read
+        # back by the media library and must describe what is actually stored.
+        "content_type": ctype,
         "size": len(data),
         "uploaded_at": datetime.now(timezone.utc).isoformat(),
     }

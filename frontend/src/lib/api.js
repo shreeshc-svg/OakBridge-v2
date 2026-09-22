@@ -376,6 +376,16 @@ export const adminListJobApplications = () =>
 // and there is no undo — see the endpoint for why there is no tombstone.
 export const adminDeleteJobApplication = (id) =>
     api.delete(`/admin/job-applications/${id}`).then((r) => r.data);
+/*
+ * A CV is personal data and no longer sits behind a public URL, so it cannot be
+ * a plain <a href> — a browser sends no Authorization header on a navigation.
+ * Same pattern as ExportButton and the invoice download: fetch it as a blob
+ * with the session, then hand the blob to the browser.
+ */
+export const adminDownloadCv = async (id) => {
+    const res = await api.get(`/admin/job-applications/${id}/cv`, { responseType: "blob" });
+    downloadBlob(res, "CV.pdf");
+};
 
 // ---- Authors admin ----
 export const adminListAuthors = () => api.get("/admin/authors").then((r) => r.data);

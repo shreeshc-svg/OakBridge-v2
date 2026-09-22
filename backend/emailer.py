@@ -1020,7 +1020,14 @@ def render_contact_admin_html(msg: dict) -> str:
 async def send_job_application_admin(app: dict) -> bool:
     """Notify the hiring inbox of a new job application, with a link to the CV."""
     to = ADMIN_NOTIFY_EMAIL or "info@oakbridge.in"
-    cv_link = f"{SITE_URL}{app.get('cv_url','')}" if SITE_URL else app.get("cv_url", "")
+    # The admin SCREEN, not the file.
+    #
+    # This used to link straight at /api/files/<uuid>.pdf, which was
+    # unauthenticated — so the CV of everyone who ever applied was one forwarded
+    # email away from being public, permanently, with no way to withdraw it.
+    # That path is now closed (see _PRIVATE_SEGMENTS in features.py) and the
+    # download runs through an admin session instead.
+    cv_link = f"{SITE_URL}/admin/careers" if SITE_URL else "/admin/careers"
     role = app.get("role", "General application")
     html = f"""\
 <!DOCTYPE html><html><head><meta charset="utf-8"></head>
@@ -1037,7 +1044,8 @@ async def send_job_application_admin(app: dict) -> bool:
       <tr><td style="color:{BRAND_GREY};padding:6px 0;">Phone</td><td style="padding:6px 0;">{app.get('phone','')}</td></tr>
     </table>
     <div style="margin-top:20px;">
-      <a href="{cv_link}" style="display:inline-block;background-color:{BRAND_NAVY};color:#FFFFFF;text-decoration:none;font-size:14px;font-weight:600;padding:12px 24px;">Download CV (PDF)</a>
+      <a href="{cv_link}" style="display:inline-block;background-color:{BRAND_NAVY};color:#FFFFFF;text-decoration:none;font-size:14px;font-weight:600;padding:12px 24px;">Open in Admin &rarr; Careers</a>
+      <div style="margin-top:10px;font-size:12px;color:{BRAND_GREY};">The CV downloads from there. It is no longer a public link, so forwarding this email does not forward the applicant's personal data.</div>
     </div>
   </td></tr>
 </table>
