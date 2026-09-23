@@ -4,7 +4,7 @@ import Seo from "../components/Seo";
 import { Link, useSearchParams } from "react-router-dom";
 import { Search, SlidersHorizontal, X, Clock, BookOpen } from "lucide-react";
 import BookCard from "../components/BookCard";
-import { fetchBooks, fetchBooksWithMeta, fetchCategories, fetchSiteContent, fetchSettings, mediaUrl, logSearch, fetchSuggestIndex } from "../lib/api";
+import { fetchBooks, fetchBooksWithMeta, fetchCategories, fetchSiteContent, fetchSettings, mediaUrl, logSearch, fetchSuggestIndex, fetchAuthors } from "../lib/api";
 import EbookCta from "../components/EbookCta";
 import CategoryRow from "../components/CategoryRow";
 import { catalogueTotalFrom } from "../lib/catalogue";
@@ -454,6 +454,36 @@ export default function Catalog() {
 
     // Typo-tolerant suggestions. The previous version scored on substrings, so a
     // slip like "cconstitution" or "intermidiaries" matched nothing at all — the
+    /*
+     * Authors matching the query, for the empty-results panel.
+     *
+     * Fetched on the same condition as the book index — only once a search has
+     * actually come back empty — so the ordinary case costs nothing.
+     */
+    const [indexAuthors, setIndexAuthors] = useState([]);
+    useEffect(() => {
+        if (!loading && search && books.length === 0 && indexAuthors.length === 0) {
+            fetchAuthors()
+                .then((d) => setIndexAuthors(Array.isArray(d) ? d : []))
+                .catch(() => {});
+        }
+    }, [loading, search, books.length, indexAuthors.length]);
+
+    const authorHits = useMemo(() => {
+        const term = (search || "").trim().toLowerCase();
+        if (term.length < 3 || !indexAuthors.length) return [];
+        /* Every word the shopper typed has to appear in the name. "vaibhav
+           kumar" must not match every Kumar on the roster — the same mistake
+           the author-alias search made when it tokenised an initial. */
+        const words = term.split(/\s+/).filter(Boolean);
+        return indexAuthors
+            .filter((a) => {
+                const n = (a?.name || "").toLowerCase();
+                return n && words.every((w) => n.includes(w));
+            })
+            .slice(0, 4);
+    }, [search, indexAuthors]);
+
     // search logs show those exact queries returning an empty shelf.
     const didYouMean = useMemo(
         () => (search && indexBooks.length ? fuzzySearch(indexBooks, search, 4) : []),
@@ -870,6 +900,38 @@ export default function Catalog() {
                                     ? "It may be spelled differently, or we may not publish it yet."
                                     : "Try adjusting your filters."}
                             </p>
+
+                            {/* A PERSON is a thing people search for, and search
+                                only ever queried db.books — so a name matched
+                                only if it happened to sit inside some book's
+                                author string. Four people searched "vaibhav
+                                kumar" in a month and were told there was
+                                nothing, while /authors/vaibhav-kumar existed the
+                                whole time. He has no titles listed, so no book
+                                could ever have carried his name.
+
+                                Shown above "Did you mean", because an exact
+                                match on a person is a better answer than a fuzzy
+                                match on a title. */}
+                            {authorHits.length > 0 && (
+                                <div className="mt-8">
+                                    <div className="overline !text-[10px]">
+                                        {authorHits.length === 1 ? "Author" : "Authors"}
+                                    </div>
+                                    <div className="mt-3 flex flex-wrap justify-center gap-2">
+                                        {authorHits.map((a) => (
+                                            <Link
+                                                key={a.id}
+                                                to={`/authors/${a.id}`}
+                                                data-testid={`search-author-${a.id}`}
+                                                className="max-w-full inline-flex items-center gap-2 border border-[#002B5C] bg-[#002B5C] text-white px-4 py-2 text-sm hover:bg-[#001F42] transition-colors"
+                                            >
+                                                <span className="truncate">{a.name}</span>
+                                            </Link>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
 
                             {didYouMean.length > 0 && (
                                 <div className="mt-8">

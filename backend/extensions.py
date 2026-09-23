@@ -993,8 +993,45 @@ def _author_slug(name: str) -> str:
 
 @admin_router.get("/authors")
 async def admin_list_authors():
-    """Full roster including hidden authors, in the site's current order."""
+    """Full roster including hidden authors, in the site's current order.
+
+    WHY EACH ROW CARRIES ITS SITEMAP STATUS
+
+    The sitemap advertises an author only if they have a bio AND at least one
+    live title — a deliberate rule, so Google is never handed a page that is a
+    name, a photo and whitespace. The rule is right. What was wrong is that its
+    cost was invisible.
+
+    Somesh Kumar Upadhyay ranked 8th for a 260-a-month keyword and was the
+    highest-traffic landing page on the site, and his page was not in the
+    sitemap, because his bio is empty. Nothing anywhere said so. The only way
+    to find out was to diff 160 author ids against the sitemap XML by hand,
+    which is what it took to find it.
+
+    So the reason travels with the row. `title_count` is NOT used for this —
+    it is stale (it reads 1 for authors whose book is no longer on sale), and
+    the sitemap has ignored it for exactly that reason since the day it was
+    written. The live matcher is asked instead, which is the same question the
+    author's own page asks when it renders.
+    """
     authors = await db.authors.find({}, {"_id": 0}).to_list(None)
+    with_books = await books_for_authors()
+    for a in authors:
+        has_bio = bool((a.get("bio") or "").strip())
+        has_books = bool(with_books.get(a.get("id")))
+        a["in_sitemap"] = has_bio and has_books
+        if has_bio and has_books:
+            a["sitemap_reason"] = ""
+        elif not has_bio and not has_books:
+            a["sitemap_reason"] = "No bio, and no live titles"
+        elif not has_bio:
+            a["sitemap_reason"] = "No bio"
+        else:
+            a["sitemap_reason"] = "No live titles"
+        # What the matcher actually found, so a stale title_count is obvious
+        # rather than quietly believed.
+        a["live_title_count"] = len(with_books.get(a.get("id")) or [])
+
     mode = await _authors_order_mode()
     if mode == "custom":
         authors.sort(key=lambda a: (a.get("order", 10**6), (a.get("name") or "").lower()))

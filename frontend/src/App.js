@@ -48,6 +48,7 @@ import AdminLegal from "@/pages/admin/AdminLegal";
 import AdminMessages from "@/pages/admin/AdminMessages";
 import AdminEbooks from "@/pages/admin/AdminEbooks";
 import NotFound from "@/pages/NotFound";
+import WriterRedirect from "@/pages/WriterRedirect";
 import Submissions from "@/pages/Submissions";
 import Careers from "@/pages/Careers";
 import MediaGallery from "@/pages/MediaGallery";
@@ -128,6 +129,13 @@ function App() {
                                 <Route path="/contact" element={<Contact />} />
                                 <Route path="/authors" element={<Authors />} />
                                 <Route path="/authors/:id" element={<Authors />} />
+                                {/* The old site's author URL. Still ranking, and
+                                    every visitor was meeting the 404 page.
+                                    Redirects only for slugs that name a real
+                                    author — the old domain was compromised, so a
+                                    pattern redirect would forward an attacker's
+                                    links into this site. See WriterRedirect. */}
+                                <Route path="/writer/:id" element={<WriterRedirect />} />
                                 <Route path="/submissions" element={<Submissions />} />
                                 <Route path="/careers" element={<Careers />} />
                                 <Route path="/media" element={<MediaGallery />} />

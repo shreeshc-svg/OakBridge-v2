@@ -123,6 +123,35 @@ function AuthorRow({ a, index, count, mode, onChange, onSave, onDelete, onMove, 
                     rows={2}
                     className="w-full border border-[#E5E7EB] px-2 py-1.5 text-xs outline-none focus:border-[#002B5C] resize-y"
                 />
+
+                {/* WHETHER GOOGLE IS EVEN TOLD THIS PAGE EXISTS.
+
+                    The sitemap advertises an author only with a bio AND a live
+                    title — right, because a page that is a name and whitespace
+                    is a page Google judges the site by. But the cost was
+                    invisible: Somesh Kumar Upadhyay ranked 8th for a keyword
+                    searched 260 times a month, was the site's top landing page,
+                    and was not in the sitemap because his bio is blank. Nothing
+                    said so. Finding it meant diffing 160 ids against the XML.
+
+                    The count shown is what the LIVE matcher found, not the
+                    stored title_count — that field is stale and reads 1 for
+                    authors whose only book is no longer on sale. */}
+                {a.in_sitemap === false && (
+                    <div
+                        data-testid={`author-sitemap-${a.id}`}
+                        className="text-[11px] text-[#B4750F] bg-[#F59E0B]/[0.08] border border-[#F59E0B]/30 px-2 py-1"
+                    >
+                        Not in the sitemap — {a.sitemap_reason}. Google is not
+                        being told this page exists.
+                    </div>
+                )}
+                {a.in_sitemap === true && (
+                    <div className="text-[11px] text-[#4B5563]">
+                        In the sitemap · {a.live_title_count}{" "}
+                        {a.live_title_count === 1 ? "live title" : "live titles"}
+                    </div>
+                )}
             </div>
 
             {/* Actions */}
