@@ -46,8 +46,8 @@ check(/\("1", "true", "yes", "y"\)/.test(feat),
       "and the importer's _csv_bool accepts 'true', so TRUE round-trips");
 
 console.log("\n-- it exports the catalogue, not the current view --");
-check(ext.includes('{"product_type": {"$ne": "hamper"}}, {"_id": 0}\n    ).sort([("title", 1)])'),
-      "hampers excluded and sorted by title, matching what the Books tab lists");
+check(ext.includes('{"product_type": {"$nin": ["hamper", "pack"]}}, {"_id": 0}\n    ).sort([("title", 1)])'),
+      "hampers and packs excluded, sorted by title, matching what the Books tab lists");
 check(ext.includes('csv_response(\n        "oakbridge-books"'),
       "uses the shared csv_response, so the escaping and BOM rules stay in one place");
 check(/safe_cell/.test(readFileSync(join(BE, "csv_export.py"), "utf8")),

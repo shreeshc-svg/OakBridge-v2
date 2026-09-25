@@ -2356,7 +2356,7 @@ async def admin_export_books():
     do with this file is compare it against last month's.
     """
     rows = await db.books.find(
-        {"product_type": {"$ne": "hamper"}}, {"_id": 0}
+        {"product_type": {"$nin": ["hamper", "pack"]}}, {"_id": 0}
     ).sort([("title", 1)]).to_list(20000)
     cols = _BOOK_EXPORT_IMPORTABLE + _BOOK_EXPORT_REFERENCE
     return csv_response(

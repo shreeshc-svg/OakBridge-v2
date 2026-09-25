@@ -49,6 +49,10 @@ from hampers import (
 )
 
 import volume_sets
+from packs import (
+    public_router as packs_public_router,
+    admin_router as packs_admin_router,
+)
 from features import (
     public_router as features_public_router,
     customer_router as features_customer_router,
@@ -191,6 +195,10 @@ class Book(BaseModel):
     # Same rule as every field here: declared or response_model=Book drops it,
     # the admin ticks the box, Mongo stores it, and the site never sees it.
     is_volume_set: bool = False
+    # ---- Packs (product_type="pack") — see packs.py. Declared, or
+    # response_model=Book drops them and the PDP cannot list the books inside.
+    pack_items: list = Field(default_factory=list)   # [{book_id}]
+    pack_pricing: dict = Field(default_factory=dict)  # {mode, value}
     # [{no, title, pages, blurb}] — renumbered 1..n on save.
     volumes: list = Field(default_factory=list)
     # Hampers have no ISBN. `isbn` stays a str rather than becoming Optional so
@@ -754,7 +762,8 @@ async def sitemap():
         f"  <url><loc>{SITE_URL}{p}</loc><changefreq>weekly</changefreq></url>"
         for p in _SITEMAP_STATIC_PATHS
     ]
-    books = await db.books.find({}, {"_id": 0, "id": 1}).to_list(None)
+    # A disabled pack 404s (get_book), so it must not be advertised either.
+    books = await db.books.find({"enabled": {"$ne": False}}, {"_id": 0, "id": 1}).to_list(None)
     for b in books:
         bid = escape(str(b.get("id", "")))
         if bid:
@@ -1268,6 +1277,10 @@ async def list_books(
     # are themselves $or expressions (search, bestseller, new_release). Assigning
     # query["$or"] more than once would silently drop all but the last.
     query: dict = dict(NOT_A_HAMPER)
+    # A pack switched off in Admin → Packs must leave the bookstore and search.
+    # Books carry no `enabled` field, and $ne False matches a missing field, so
+    # every existing title is unaffected.
+    query["enabled"] = {"$ne": False}
     clauses: List[dict] = []
     if category:
         # `professional` was retired when Law and Tax became categories of their
@@ -1566,7 +1579,8 @@ async def bestseller_books(limit: int = 12, days: int = 90):
 @api_router.get("/books/{book_id}", response_model=Book)
 async def get_book(book_id: str):
     book = await db.books.find_one({"id": book_id}, {"_id": 0})
-    if not book:
+    # A disabled pack is withdrawn: its page must not be reachable by old link.
+    if not book or (book.get("product_type") == "pack" and book.get("enabled") is False):
         raise HTTPException(status_code=404, detail="Book not found")
     return _decorate_book(book)
 
@@ -1852,6 +1866,8 @@ app.include_router(features_admin_router)
 app.include_router(features_tasks_router)
 app.include_router(hampers_public_router)
 app.include_router(hampers_admin_router)
+app.include_router(packs_public_router)
+app.include_router(packs_admin_router)
 from inventory_sync import inventory_router  # noqa: E402
 app.include_router(inventory_router)
 

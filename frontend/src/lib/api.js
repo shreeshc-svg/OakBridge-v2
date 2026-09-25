@@ -252,6 +252,19 @@ export const adminImportAuthors = (confirm = false) =>
     api.post(`/admin/import-authors?confirm=${confirm ? "true" : "false"}`).then((r) => r.data);
 export const adminRepairBookAuthors = (confirm = false) =>
     api.post(`/admin/repair-book-authors?confirm=${confirm ? "true" : "false"}`).then((r) => r.data);
+// ---- Packs ----
+export const fetchPackItems = (id) => api.get(`/packs/${id}/items`).then((r) => r.data);
+export const adminListPacks = (params = {}) =>
+    api.get("/admin/packs", { params }).then((r) => r.data);
+export const adminCreatePack = (payload) => api.post("/admin/packs", payload).then((r) => r.data);
+export const adminUpdatePack = (id, payload) =>
+    api.patch(`/admin/packs/${id}`, payload).then((r) => r.data);
+export const adminDeletePack = (id) => api.delete(`/admin/packs/${id}`).then((r) => r.data);
+export const adminDuplicatePack = (id) =>
+    api.post(`/admin/packs/${id}/duplicate`).then((r) => r.data);
+export const adminReorderPacks = (ids) =>
+    api.post("/admin/packs/reorder", { ids }).then((r) => r.data);
+
 // ---- Gift hampers ----
 export const listHampers = () => api.get("/hampers").then((r) => r.data);
 export const getHamper = (id) => api.get(`/hampers/${id}`).then((r) => r.data);

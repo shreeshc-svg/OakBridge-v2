@@ -1366,7 +1366,10 @@ export default function AdminBooks() {
         setLoading(true);
         fetchBooks({ limit: 500 })
             .then((list) => {
-                setBooks(list);
+                // Packs live in db.books so they can be sold like a book, but
+                // they are managed in Admin → Packs. Listing them here too is
+                // how one gets edited as if it were a title.
+                setBooks((list || []).filter((b) => b.product_type !== "pack"));
                 setSelected(new Set());
             })
             .finally(() => setLoading(false));

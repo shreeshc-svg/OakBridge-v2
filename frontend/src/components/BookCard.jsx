@@ -339,6 +339,16 @@ export default function BookCard({ book, index = 0, compact = false, toEbook = f
                             Set of {book.volumes.length} volumes
                         </span>
                     )}
+                    {/* Same slot and style as the set badge, for the same reason:
+                        without it a pack reads as one overpriced title. */}
+                    {book.product_type === "pack" && (book.pack_items || []).length > 0 && (
+                        <span
+                            data-testid={`pack-badge-${book.id}`}
+                            className={`inline-block border border-[#002B5C] text-[#002B5C] font-mono uppercase tracking-widest ${compact ? "text-[8px] mt-1.5 px-1.5 py-0.5" : "text-[10px] mt-2 px-2 py-0.5"}`}
+                        >
+                            Pack of {book.pack_items.length}
+                        </span>
+                    )}
                 </div>
             </CardLink>
 

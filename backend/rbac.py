@@ -32,6 +32,7 @@ SECTIONS: tuple[str, ...] = (
     "dashboard",
     "books",
     "hampers",
+    "packs",
     "inventory",
     "authors",
     "page-bookstore",
@@ -58,6 +59,7 @@ SECTION_LABELS: dict[str, str] = {
     "dashboard": "Dashboard",
     "books": "Books",
     "hampers": "Gift Hampers",
+    "packs": "Packs",
     "inventory": "Inventory",
     "authors": "Authors",
     "page-bookstore": "Bookstore Page",
@@ -97,6 +99,9 @@ SECTION_PATHS: dict[str, set[str]] = {
     # `uploads` is shared with books and authors: the hamper form posts its
     # photography to the same image endpoint, and without it the picker 403s.
     "hampers": {"hampers", "hampers-copy-defaults", "uploads", "settings"},
+    # Cover upload shares the image endpoint with books; the book picker reads
+    # the public catalogue, so no admin books access is needed.
+    "packs": {"packs", "uploads"},
     "authors": {"authors", "authors-order", "authors-order-mode", "uploads"},
     "inventory": {"inventory"},
     "orders": {"orders", "cart-reminders"},

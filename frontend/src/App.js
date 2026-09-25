@@ -27,6 +27,7 @@ import AdminLayout from "@/pages/admin/AdminLayout";
 import AdminDashboard from "@/pages/admin/AdminDashboard";
 import AdminBooks from "@/pages/admin/AdminBooks";
 import AdminHampers from "@/pages/admin/AdminHampers";
+import AdminPacks from "@/pages/admin/AdminPacks";
 import AdminOrders from "@/pages/admin/AdminOrders";
 import AdminUsers from "@/pages/admin/AdminUsers";
 import AdminWaitlists from "@/pages/admin/AdminWaitlists";
@@ -228,6 +229,7 @@ function App() {
                                 <Route index element={<AdminDashboard />} />
                                 <Route path="books" element={<AdminBooks />} />
                                 <Route path="hampers" element={<AdminHampers />} />
+                                <Route path="packs" element={<AdminPacks />} />
                                 <Route path="orders" element={<AdminOrders />} />
                                 <Route path="users" element={<AdminUsers />} />
                                 <Route path="waitlists" element={<AdminWaitlists />} />

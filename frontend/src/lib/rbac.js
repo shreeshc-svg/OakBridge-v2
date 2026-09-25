@@ -11,6 +11,7 @@ export const SECTIONS = [
     "dashboard",
     "books",
     "hampers",
+    "packs",
     "inventory",
     "authors",
     "page-bookstore",
@@ -37,6 +38,7 @@ export const SECTION_LABELS = {
     dashboard: "Dashboard",
     books: "Books",
     hampers: "Gift Hampers",
+    packs: "Packs",
     inventory: "Inventory",
     authors: "Authors",
     "page-bookstore": "Bookstore Page",
@@ -61,7 +63,7 @@ export const SECTION_LABELS = {
 
 /** Grouping for the permission picker only — not a security boundary. */
 export const SECTION_GROUPS = [
-    { label: "Catalogue", sections: ["books", "hampers", "authors", "inventory"] },
+    { label: "Catalogue", sections: ["books", "hampers", "packs", "authors", "inventory"] },
     {
         label: "Site content",
         sections: ["pages", "navigation", "media", "media-gallery", "careers", "page-bookstore", "page-book", "ebooks"],

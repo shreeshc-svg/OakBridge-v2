@@ -11,7 +11,7 @@ import { Minus, Plus, ShoppingBag, ArrowLeft, Star, ChevronLeft, ChevronRight, B
 import BookCard from "../components/BookCard";
 import ReviewsSection from "../components/ReviewsSection";
 import { fetchBook, fetchBooks, formatINR, notifyBackInStock, fetchSettings, mediaUrl,
-    fetchBookPreview, fetchBookAuthors,
+    fetchBookPreview, fetchBookAuthors, fetchPackItems,
 } from "../lib/api";
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
@@ -142,6 +142,18 @@ export default function BookDetail() {
     useEffect(() => {
         fetchSettings().then(setSettings).catch(() => {});
     }, []);
+
+    /* The books inside a pack, read live so a title or cover change in the
+       catalogue shows here without re-saving the pack. Only fetched for packs. */
+    const [packItems, setPackItems] = useState([]);
+    const isPack = book?.product_type === "pack";
+    useEffect(() => {
+        setPackItems([]);
+        if (!isPack) return;
+        fetchPackItems(id)
+            .then((d) => setPackItems(d?.items || []))
+            .catch(() => {});
+    }, [id, isPack]);
 
     useEffect(() => {
         setPreview({ pages: [], page_count: 0 });
@@ -494,6 +506,49 @@ export default function BookDetail() {
                         >
                             Set of {volumes.length} volumes · {book.pages} pages
                         </p>
+                    )}
+
+                    {/* A pack is sold as one shrink-wrapped product with its own
+                        ISBN and stock. The books are listed so the buyer knows
+                        exactly what is in the box; they link to their own
+                        pages, but the pack's price and stock are the pack's. */}
+                    {isPack && packItems.length > 0 && (
+                        <div className="mt-5" data-testid="pack-items">
+                            <p className="inline-flex items-center border border-[#002B5C] text-[#002B5C] font-mono uppercase tracking-widest text-[10px] px-2 py-1">
+                                Pack of {packItems.length} books
+                            </p>
+                            <div className="overline !text-[10px] mt-4 mb-2">Included in this pack</div>
+                            <ul className="divide-y divide-[#E5E7EB] border-y border-[#E5E7EB]">
+                                {packItems.map((it) => (
+                                    <li key={it.id} className="py-2.5">
+                                        <Link
+                                            to={`/books/${it.id}`}
+                                            data-testid={`pack-item-${it.id}`}
+                                            className="group flex items-center gap-3"
+                                        >
+                                            <span className="w-9 h-12 shrink-0 bg-[#F5F7FA] border border-[#E5E7EB] overflow-hidden">
+                                                {it.cover_image ? (
+                                                    <img
+                                                        src={mediaUrl(it.cover_image)}
+                                                        alt={it.title}
+                                                        loading="lazy"
+                                                        className="w-full h-full object-contain"
+                                                    />
+                                                ) : null}
+                                            </span>
+                                            <span className="min-w-0">
+                                                <span className="block text-sm text-[#002B5C] leading-snug line-clamp-2 group-hover:text-[#CC0033]">
+                                                    {it.title}
+                                                </span>
+                                                {it.author && (
+                                                    <span className="block text-xs text-[#4B5563] truncate">{it.author}</span>
+                                                )}
+                                            </span>
+                                        </Link>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
                     )}
 
                     <div className="mt-6 flex items-center gap-4">
