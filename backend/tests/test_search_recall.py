@@ -218,6 +218,56 @@ def test_an_empty_search_produces_no_clauses():
     assert server._alias_aware_clauses("   ") == []
 
 
+# --------------------------------------------------------------------------
+# Round 2 — the next month's zero-result log
+# --------------------------------------------------------------------------
+
+def test_a_bare_ordinal_is_an_edition():
+    """Logged: "social justice (1st" and "social justice (1t"."""
+    assert server._strip_edition("social justice (1st") == "social justice"
+    assert server._strip_edition("social justice (1t") == "social justice"
+    assert server._strip_edition("constitution 2nd") == "constitution"
+
+
+def test_an_act_number_keeps_its_year():
+    """"(46 of 2023)" is an act citation, not an edition: only "(46" may go."""
+    assert server._strip_edition("bnss (46 of 2023)").startswith("bnss of 2023")
+
+
+def test_a_half_typed_alias_still_finds_the_author():
+    """Logged: "praveen ku"."""
+    assert ("", "p kumar") in server._alias_matches("praveen ku")
+
+
+def test_a_fragment_does_not_pull_in_an_author():
+    """The first word must be complete — "pra" and "praveen" alone must not
+    drag P Kumar into an unrelated search."""
+    assert server._alias_matches("pra") == []
+    assert server._alias_matches("praveen") == []
+
+
+def _with_vocab(words):
+    async def vocab():
+        return tuple(sorted(words))
+    server._catalogue_vocabulary = vocab
+
+
+def test_a_half_typed_last_word_is_corrected_by_prefix():
+    """Logged: "sexual harashme" — 3 edits from "harassment", 1 from its
+    first 8 letters."""
+    import asyncio
+    _with_vocab({"sexual", "harassment", "harish"})
+    assert asyncio.run(server._correct_search("sexual harashme")) == "sexual harassment"
+
+
+def test_prefix_correction_is_last_word_only():
+    """Earlier words are finished words; a prefix match there would lengthen
+    every short word into a longer one."""
+    import asyncio
+    _with_vocab({"sexual", "harassment"})
+    assert asyncio.run(server._correct_search("harashme sexual")) is None
+
+
 def test_clauses_are_still_injection_safe():
     """Every pattern must compile — a query containing "(2 Vol. Set)*+" used to
     reach the regex engine as a PATTERN and could 500 the endpoint.

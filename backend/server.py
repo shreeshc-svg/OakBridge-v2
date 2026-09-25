@@ -850,10 +850,26 @@ _EDITION_PHRASE = re.compile(
     r"\b\d{1,2}\s*(?:st|nd|rd|th)?\s*(?:ed|edn|edition)\b\.?", re.IGNORECASE
 )
 
+# A bare ordinal is an edition too. "social justice (1st" and its typo
+# "(1t" were logged as zero-result searches: no title contains "1st", and
+# every token is AND-ed, so the one word naming the edition emptied the shelf.
+#
+# Two shapes, both narrow on purpose:
+#   * a 1-2 digit number with an ordinal suffix — "1st", "2nd", "5th"
+#   * a 1-2 digit number opened by "(" with at most two trailing letters —
+#     "(1t", "(2", "(3rd)" — the way people type "(1st edition)" half-way
+# A plain number is never touched, so "Article 370", "2023" and the "(46 of
+# 2023)" act number keep their meaning ("(46" goes, "of 2023" still matches).
+_ORDINAL = re.compile(
+    r"\b\d{1,2}(?:st|nd|rd|th)\b\.?|\(\s*\d{1,2}[a-z]{0,2}\b\.?\)?",
+    re.IGNORECASE,
+)
+
 
 def _strip_edition(search: str) -> str:
     """Remove an edition suffix, unless that is all there was."""
     cleaned = _EDITION_PHRASE.sub(" ", str(search or ""))
+    cleaned = _ORDINAL.sub(" ", cleaned)
     cleaned = re.sub(r"[\s,;/]+", " ", cleaned).strip()
     return cleaned or str(search or "")
 
@@ -945,6 +961,22 @@ def _alias_matches(search: str) -> List[tuple]:
         # Whole words only: "p kumar" sits inside "deep kumar" as a substring.
         pattern = r"(?<!\w)" + re.escape(found) + r"(?!\w)"
         if not re.search(pattern, norm, flags=re.UNICODE):
+            # A name still being typed. "praveen ku" was logged as a zero:
+            # the alias only fired on the finished name. Accepted when the
+            # WHOLE query is a prefix of the alias and the first word is
+            # already complete — "praveen ku" yes, "pra" no, so a two-letter
+            # fragment cannot pull an author into an unrelated search.
+            first = found.split()[0]
+            if (
+                found.startswith(norm)
+                and norm != found
+                and len(norm) > len(first) + 1
+                and norm.startswith(first + " ")
+            ):
+                key = ("", counterpart)
+                if key not in seen:
+                    seen.add(key)
+                    out.append(key)
             continue
         rest = re.sub(pattern, " ", norm, flags=re.UNICODE)
         rest = re.sub(r"\s+", " ", rest).strip()
@@ -1177,6 +1209,23 @@ async def _correct_search(search: str) -> Optional[str]:
                 d = _edit_distance(w, v, allow)
                 if d < best_d:
                     best_d, best = d, v
+            # THE LAST WORD MAY BE HALF-TYPED. "sexual harashme" was logged as
+            # a zero: "harashme" is 3 edits from "harassment", over the budget
+            # of 2 — but it is ONE edit from "harassme", the first 8 letters.
+            # So for the final word only, and only when no whole word was
+            # close, compare against each vocabulary word cut to the typed
+            # length. Earlier words are finished words, and a prefix match on
+            # them would turn every short word into a longer one.
+            #
+            # This runs server-side only; didYouMean() in fuzzy.js does not do
+            # it, so the browser's own suggestions stay as they were.
+            if best is None and w == words[-1] and len(w) >= 5:
+                for v in vocab:
+                    if len(v) <= len(w):
+                        continue
+                    d = _edit_distance(w, v[: len(w)], allow)
+                    if d < best_d:
+                        best_d, best = d, v
         if best:
             corrected.append(best)
             changed = True
@@ -1351,7 +1400,72 @@ async def list_books(
             if docs:
                 response.headers["X-Search-Corrected-To"] = fixed
 
+        if not docs:
+            reduced = await _drop_dead_words(query, clauses, search, fixed)
+            if reduced:
+                red_clauses = [c for c in clauses if c not in _alias_aware_clauses(search)]
+                red_clauses.extend(_alias_aware_clauses(reduced))
+                red_query = dict(query)
+                if red_clauses:
+                    red_query["$and"] = red_clauses
+                else:
+                    red_query.pop("$and", None)
+                docs = await db.books.aggregate(
+                    [{"$match": red_query}] + pipeline[1:]
+                ).to_list(limit)
+                if docs:
+                    # Same header as a spelling fix, so the storefront says
+                    # "Showing results for …" and the visitor can see which
+                    # word was set aside rather than being silently overruled.
+                    response.headers["X-Search-Corrected-To"] = reduced
+
     return [_decorate_book(d) for d in docs]
+
+
+async def _drop_dead_words(
+    query: dict, clauses: List[dict], search: str, fixed: Optional[str]
+) -> Optional[str]:
+    """The query minus the words that match nothing on their own, or None.
+
+    WHY: every word is AND-ed, so ONE unmatched word empties the shelf even when
+    the rest names the book exactly. Logged zeros: "applied psychology by
+    smarak swin" (the book is Applied Psychology, Smarak Swain — "swin" is 4
+    letters, below the spelling-correction floor) and "harpreet cair" (Harpreet
+    Kaur). Neither is a typo the corrector may fix: the 4-letter floor exists
+    because loosening it turned "cost" into "post". Dropping the dead word is
+    safer than guessing what it meant.
+
+    Guarded so it cannot turn a real gap into noise:
+      * runs only when everything else — including correction — found nothing;
+      * a word is dead only if it matches NO book by itself (within any
+        category/price filters already applied);
+      * at least one live word of 3+ letters must remain, and at least one word
+        must actually be dead — "ufgc ney", where nothing is alive, stays a
+        zero, which is the honest answer;
+      * starts from the corrected spelling when there is one, so a fixed
+        "smarak" is kept and only "swin" goes.
+    One count per word, capped by _MAX_CORRECT_WORDS, on a ~200-document
+    collection, and only on the zero-result path.
+    """
+    base_text = fixed or search
+    words = [w for w in re.split(r"\s+", _strip_edition(base_text).strip()) if w]
+    if len(words) < 2 or len(words) > _MAX_CORRECT_WORDS:
+        return None
+    base_clauses = [c for c in clauses if c not in _alias_aware_clauses(search)]
+    live, dead = [], []
+    for w in words:
+        wc = _search_clauses(w)
+        if not wc:
+            continue
+        q = dict(query)
+        q["$and"] = base_clauses + wc
+        if await db.books.count_documents(q, limit=1):
+            live.append(w)
+        else:
+            dead.append(w)
+    if not dead or not any(len(re.sub(r"[^0-9A-Za-z]", "", w)) >= 3 for w in live):
+        return None
+    return " ".join(live)
 
 
 # A hamper lives in db.books so it can be sold, but it is not a book and must

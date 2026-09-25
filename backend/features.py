@@ -928,6 +928,11 @@ class SearchLog(BaseModel):
     q: str
     results: int = 0
     category: Optional[str] = None
+    # What the server rewrote the search to, when the literal term found
+    # nothing but a corrected/reduced one did. `results` stays 0 for those on
+    # purpose (typo demand stays visible); this is what lets the report tell
+    # "found nothing" apart from "found it after a fix".
+    corrected_to: Optional[str] = None
 
 
 @public_router.post("/search/log")
@@ -942,6 +947,7 @@ async def log_search(payload: SearchLog):
             "q_lower": q.lower(),
             "results": int(payload.results or 0),
             "category": payload.category or None,
+            "corrected_to": (payload.corrected_to or "").strip()[:120] or None,
             "at": datetime.now(timezone.utc),
         }
     )
@@ -1125,6 +1131,10 @@ async def admin_search_logs(days: int = 30, limit: int = 20):
             # what separates "we do not have it" from "not in that category".
             "best": {"$max": "$results"},
             "categories": {"$addToSet": "$category"},
+            # Any occasion on which the server rescued this term by rewriting
+            # it. Logs written before corrected_to existed have no field and
+            # count as not rescued — they stay in "found nothing".
+            "rescued_to": {"$max": {"$ifNull": ["$corrected_to", ""]}},
         }
         cur = db.search_logs.aggregate(
             [{"$match": match}, {"$group": group}, {"$sort": {"n": -1}}, {"$limit": limit}]
@@ -1139,6 +1149,7 @@ async def admin_search_logs(days: int = 30, limit: int = 20):
                     "results": r.get("results", 0),
                     "categories": cats if keep_category else [],
                     "is_isbn": _is_isbn(r["_id"]),
+                    "rescued_to": r.get("rescued_to") or "",
                 }
             )
         return out
@@ -1161,10 +1172,14 @@ async def admin_search_logs(days: int = 30, limit: int = 20):
         )
         ever_worked = {r["_id"] async for r in cur}
 
-    never_found, filtered_out, isbn_requests = [], [], []
+    never_found, filtered_out, isbn_requests, rescued = [], [], [], []
     for row in zero_rows:
         if row["is_isbn"]:
             isbn_requests.append(row)
+        elif row["rescued_to"]:
+            # The visitor saw results — for the corrected or reduced search.
+            # Listed so the typo demand stays visible, but NOT as a gap.
+            rescued.append(row)
         elif row["q"] in ever_worked:
             filtered_out.append(row)
         else:
@@ -1181,6 +1196,8 @@ async def admin_search_logs(days: int = 30, limit: int = 20):
         "filtered_out": filtered_out,
         # Somebody asked for a title by ISBN that the site does not list.
         "isbn_requests": isbn_requests,
+        # Literal term found nothing; the corrected/reduced one did.
+        "rescued": rescued,
         # Kept so nothing that reads the old shape breaks.
         "zero_result_queries": zero_rows,
     }

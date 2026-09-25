@@ -153,8 +153,15 @@ export const adminUpdateCategoryImage = (id, image) =>
     api.patch(`/admin/categories/${id}`, { image }).then((r) => r.data);
 export const mediaUrl = (u) => (u && u.startsWith("/api/") ? `${BACKEND_URL}${u}` : u);
 export const fetchSuggestIndex = () => api.get("/search/suggest-index").then((r) => r.data);
-export const logSearch = (q, results, category) =>
-    api.post("/search/log", { q, results, category: category || null }).catch(() => {});
+export const logSearch = (q, results, category, correctedTo) =>
+    api
+        .post("/search/log", {
+            q,
+            results,
+            category: category || null,
+            corrected_to: correctedTo || null,
+        })
+        .catch(() => {});
 export const adminSearchLogs = (days = 30) =>
     api.get(`/admin/search-logs?days=${days}`).then((r) => r.data);
 export const fetchBookPreview = (id) => api.get(`/books/${id}/preview`).then((r) => r.data);

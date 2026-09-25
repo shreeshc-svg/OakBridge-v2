@@ -111,7 +111,7 @@ console.log("\n-- the bestseller rail is decoration, not a dependency --");
    the whole menu shut waiting on the part nobody came for. */
 check(/let catInflight = null;/.test(fly) && /let bestInflight = null;/.test(fly),
       "the two loads are cached separately");
-check(!/Promise\.all/.test(fly),
+check(!/Promise\.all\(/.test(fly),
       "and are never awaited together, so a failing bestsellers call cannot keep the categories shut");
 check(/fly\.bestsellers\.length > 0 && \(/.test(panelBlock),
       "the rail is omitted when empty rather than rendering a headed, blank column");

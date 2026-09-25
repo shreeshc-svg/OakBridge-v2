@@ -319,7 +319,16 @@ export default function Catalog() {
                  * report. That report is the only place typo demand is visible;
                  * it is how this whole feature was found in the first place.
                  */
-                if (search) logSearch(search, correctedTo ? 0 : data.length, category || null);
+                /* corrected_to rides along only when the rewrite actually found
+                   something, so the report can list it as "rescued" rather than
+                   as a catalogue gap. */
+                if (search)
+                    logSearch(
+                        search,
+                        correctedTo ? 0 : data.length,
+                        category || null,
+                        correctedTo && data.length ? correctedTo : null,
+                    );
 
                 /*
                  * The server fixed the spelling and told us to what. Kept

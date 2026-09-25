@@ -522,6 +522,13 @@ export default function AdminDashboard() {
                                 hint="No title matched, on any attempt. This is the catalogue gap."
                             />
                             <SearchList
+                                title="Fixed by spelling correction"
+                                tone="muted"
+                                empty="No searches needed rescuing."
+                                rows={searchInsight.rescued || []}
+                                hint="The words as typed found nothing; the corrected or shortened search did, and the visitor saw those results."
+                            />
+                            <SearchList
                                 title="Asked for by ISBN"
                                 tone="amber"
                                 empty="No ISBN searches went unanswered."
