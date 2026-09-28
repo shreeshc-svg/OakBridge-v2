@@ -268,11 +268,15 @@ export default function Events() {
             .then(setFlagshipData)
             .catch(() => {});
     }, []);
+    /* The card's OWN image wins; the hero banner is only a fallback for a card
+       with none. This was the other way round, so an image uploaded for the
+       Summit card in Admin was silently ignored while the hero banner was set
+       — the card kept showing the banner. */
     const resolveImg = (e) =>
         mediaUrl(
-            (e.id === "vidhi-utsav" && site.events_vidhi_banner) ||
-                (e.id === "law-ai-tech-summit" && site.events_summit_banner) ||
-                e.image,
+            e.image ||
+                (e.id === "vidhi-utsav" && site.events_vidhi_banner) ||
+                (e.id === "law-ai-tech-summit" && site.events_summit_banner),
         ) || e.image;
     const flagshipEvents = resolveCollection(flagshipData, FLAGSHIP_EVENTS).map((e) => ({
         ...e,
