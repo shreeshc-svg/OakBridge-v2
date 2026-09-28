@@ -1448,9 +1448,6 @@ PUBLISHING_ENQUIRY_PARAGRAPHS = (
 PUBLISHING_ENQUIRY_ITEMS = (
     ("Duly filled Book Proposal Form", " – attached with this email."),
     ("Sample Chapter", " of the proposed book for our editorial review."),
-    ("Target market / audience", " for the book."),
-    ("Any competing titles", " in the market."),
-    ("Draft Table of Contents", " or the manuscript."),
 )
 PUBLISHING_ENQUIRY_CLOSING = (
     "Once we receive the completed proposal form and sample chapter, our editorial team will "

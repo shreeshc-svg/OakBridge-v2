@@ -1676,14 +1676,13 @@ async def contact_submit(payload: ContactMessage, request: Request):
     }
     await db.contact_messages.insert_one({**doc})
     try:
-        from emailer import (
-            send_contact_admin_alert, send_contact_ack, send_publishing_enquiry_reply,
-        )
+        from emailer import send_contact_admin_alert, send_publishing_enquiry_reply
 
         await send_contact_admin_alert(doc)
-        # Only a publishing enquiry gets the proposal-form reply. The contact
-        # form also carries orders, support and press, and "Dear Author" is
-        # the wrong answer to those — they keep the ordinary acknowledgement.
+        # The ONLY automatic reply a contact message gets: the proposal-form
+        # email, and only when "Manuscript Submission" was chosen in the subject
+        # dropdown. Every other subject gets no automatic email at all (the
+        # internal alert above still goes) — editorial decision, 2026-09-28.
         if (doc.get("subject") or "").strip().lower() == "manuscript submission":
             if await send_publishing_enquiry_reply(doc.get("email")):
                 await db.contact_messages.update_one(
@@ -1691,8 +1690,6 @@ async def contact_submit(payload: ContactMessage, request: Request):
                     {"$set": {"proposal_sent_at": datetime.now(timezone.utc).isoformat(),
                               "proposal_sent_by": "auto"}},
                 )
-        else:
-            await send_contact_ack(doc)
     except Exception:  # noqa: BLE001
         logger.exception("contact email failed for %s", doc.get("email"))
     return ContactResponse(
