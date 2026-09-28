@@ -221,7 +221,7 @@ export default function AdminOrders() {
             setOrders((prev) =>
                 prev.map((o) =>
                     o.id === trackingFor.id
-                        ? { ...o, courier: payload.courier, tracking_id: payload.tracking_id }
+                        ? { ...o, courier: payload.courier, tracking_id: payload.tracking_id, tracking_set_at: new Date().toISOString() }
                         : o,
                 ),
             );
@@ -393,10 +393,26 @@ export default function AdminOrders() {
                                             Written off
                                         </div>
                                     )}
+                                    {/* Courier + AWB, readable at a glance. It was a
+                                        10px grey line, easy to read as "no tracking
+                                        yet". Filled from the tracking (truck) button;
+                                        changing status alone does not set it. */}
                                     {o.tracking_id && (
-                                        <div className="mt-1 font-mono text-[10px] text-[#4B5563] break-all">
-                                            {o.courier ? `${o.courier} ` : ""}
-                                            {o.tracking_id}
+                                        <div
+                                            data-testid={`order-awb-${o.id}`}
+                                            className="mt-2 border-l-2 border-[#002B5C] pl-2 font-sans"
+                                        >
+                                            <div className="text-[10px] uppercase tracking-widest text-[#4B5563]">
+                                                {o.courier || "Courier"}
+                                            </div>
+                                            <div className="font-mono text-xs text-[#002B5C] break-all">
+                                                AWB {o.tracking_id}
+                                            </div>
+                                            {o.tracking_set_at && (
+                                                <div className="text-[10px] text-[#4B5563]">
+                                                    added {new Date(o.tracking_set_at).toLocaleDateString("en-IN")}
+                                                </div>
+                                            )}
                                         </div>
                                     )}
                                     {o.payment_link_sent_at && (
