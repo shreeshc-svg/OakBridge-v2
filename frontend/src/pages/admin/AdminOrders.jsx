@@ -105,11 +105,20 @@ export default function AdminOrders() {
         setPendingChange({ order, nextStatus: status });
     };
 
-    const applyStatusChange = async ({ notify, note }) => {
+    /* courier/tracking_id come from the "shipped" dialog. They used to be
+       dropped here — only { notify, note } was forwarded — so the AWB typed
+       while marking an order shipped never reached the server and had to be
+       entered a second time under the tracking button. */
+    const applyStatusChange = async ({ notify, note, courier, tracking_id }) => {
         const { order, nextStatus } = pendingChange;
         setSavingStatus(true);
+        const hasTracking = Boolean((tracking_id || "").trim());
         try {
-            const saved = await adminUpdateOrder(order.id, nextStatus, { notify, note });
+            const saved = await adminUpdateOrder(order.id, nextStatus, {
+                notify,
+                note,
+                ...(hasTracking ? { courier: courier || "", tracking_id } : {}),
+            });
             // email_sent is the outcome, not the request — a mail failure is
             // swallowed server-side so it cannot block dispatch, and claiming
             // "notified" when nothing left the building is how a customer ends
@@ -122,7 +131,21 @@ export default function AdminOrders() {
                 toast.warning(`Marked ${nextStatus}, but the email did not send.`);
             }
             setOrders((prev) =>
-                prev.map((o) => (o.id === order.id ? { ...o, status: nextStatus } : o)),
+                prev.map((o) =>
+                    o.id === order.id
+                        ? {
+                              ...o,
+                              status: nextStatus,
+                              ...(hasTracking
+                                  ? {
+                                        courier: courier || "",
+                                        tracking_id: tracking_id.trim(),
+                                        tracking_set_at: new Date().toISOString(),
+                                    }
+                                  : {}),
+                          }
+                        : o,
+                ),
             );
             setPendingChange(null);
         } catch (err) {

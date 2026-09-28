@@ -1623,6 +1623,10 @@ async def admin_update_order(order_id: str, payload: OrderStatusUpdate):
         updates["courier"] = payload.courier.strip()
     if payload.tracking_id is not None:
         updates["tracking_id"] = payload.tracking_id.strip()
+        # Same stamp the tracking button writes, so the admin list can say when
+        # the AWB was added whichever way it was entered.
+        if updates["tracking_id"]:
+            updates["tracking_set_at"] = datetime.now(timezone.utc).isoformat()
 
     result = await db.orders.update_one({"id": order_id}, {"$set": updates})
     if result.matched_count == 0:
