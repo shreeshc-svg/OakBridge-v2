@@ -1676,10 +1676,23 @@ async def contact_submit(payload: ContactMessage, request: Request):
     }
     await db.contact_messages.insert_one({**doc})
     try:
-        from emailer import send_contact_admin_alert, send_contact_ack
+        from emailer import (
+            send_contact_admin_alert, send_contact_ack, send_publishing_enquiry_reply,
+        )
 
         await send_contact_admin_alert(doc)
-        await send_contact_ack(doc)
+        # Only a publishing enquiry gets the proposal-form reply. The contact
+        # form also carries orders, support and press, and "Dear Author" is
+        # the wrong answer to those — they keep the ordinary acknowledgement.
+        if (doc.get("subject") or "").strip().lower() == "manuscript submission":
+            if await send_publishing_enquiry_reply(doc.get("email")):
+                await db.contact_messages.update_one(
+                    {"id": doc["id"]},
+                    {"$set": {"proposal_sent_at": datetime.now(timezone.utc).isoformat(),
+                              "proposal_sent_by": "auto"}},
+                )
+        else:
+            await send_contact_ack(doc)
     except Exception:  # noqa: BLE001
         logger.exception("contact email failed for %s", doc.get("email"))
     return ContactResponse(

@@ -1433,6 +1433,98 @@ async def send_submission_ack(sub: dict) -> bool:
     )
 
 
+# ====== Publishing enquiry: reply with the Book Proposal Form ======
+
+PUBLISHING_ENQUIRY_SUBJECT = "Thank You for Your Publishing Enquiry"
+PROPOSAL_FORM_PATH = os.path.join(os.path.dirname(__file__), "assets", "Book_Proposal_Form.docx")
+PROPOSAL_FORM_NAME = "OakBridge Book Proposal Form.docx"
+
+# The editorial team's wording, verbatim. Kept as data rather than inlined in the
+# HTML so the plain text and the rendered email cannot drift apart.
+PUBLISHING_ENQUIRY_PARAGRAPHS = (
+    "Thank you for your interest in publishing your book with OakBridge Publishing.",
+    "To help us evaluate your proposal and manuscript, we request you to kindly share the following:",
+)
+PUBLISHING_ENQUIRY_ITEMS = (
+    ("Duly filled Book Proposal Form", " – attached with this email."),
+    ("Sample Chapter", " of the proposed book for our editorial review."),
+    ("Target market / audience", " for the book."),
+    ("Any competing titles", " in the market."),
+    ("Draft Table of Contents", " or the manuscript."),
+)
+PUBLISHING_ENQUIRY_CLOSING = (
+    "Once we receive the completed proposal form and sample chapter, our editorial team will "
+    "review the submission and get back to you with the next steps.",
+    "We appreciate your interest in working with OakBridge Publishing and look forward to "
+    "receiving your submission.",
+)
+
+
+def render_publishing_enquiry_html() -> str:
+    p = lambda s: (  # noqa: E731
+        f'<p style="margin:0 0 14px;font-size:15px;line-height:1.6;color:{BRAND_GREY};">{s}</p>'
+    )
+    items = "".join(
+        f'<li style="margin:0 0 6px;"><strong style="color:{BRAND_NAVY};">{a}</strong>{b}</li>'
+        for a, b in PUBLISHING_ENQUIRY_ITEMS
+    )
+    return f"""\
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background-color:#F5F7FA;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:{BRAND_NAVY};">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#F5F7FA;padding:40px 16px;">
+  <tr><td align="center">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="560" style="max-width:560px;background-color:#FFFFFF;border:1px solid #E5E7EB;">
+      <tr><td style="background-color:{BRAND_NAVY};padding:28px 36px;color:#FFFFFF;">
+        <div style="font-family:Georgia,serif;font-size:22px;">Oakbridge <span style="color:{BRAND_AMBER};">Publishing</span></div>
+        <div style="font-family:monospace;text-transform:uppercase;letter-spacing:2px;font-size:11px;margin-top:6px;color:rgba(255,255,255,0.6);">Publishing enquiry</div>
+      </td></tr>
+      <tr><td style="padding:36px 36px 8px;">
+        {p("Dear Author,")}
+        {"".join(p(s) for s in PUBLISHING_ENQUIRY_PARAGRAPHS)}
+        <ol style="margin:0 0 16px;padding-left:22px;font-size:15px;line-height:1.6;color:{BRAND_GREY};">{items}</ol>
+        {"".join(p(s) for s in PUBLISHING_ENQUIRY_CLOSING)}
+        <p style="margin:22px 0 0;font-size:15px;line-height:1.6;color:{BRAND_GREY};">Warm regards,<br>
+        <strong style="color:{BRAND_NAVY};">Editorial Team</strong><br>OakBridge Publishing Pvt. Ltd.</p>
+      </td></tr>
+      <tr><td style="padding:24px 36px 36px;">
+        <p style="margin:0;font-size:12px;color:{BRAND_GREY};">Reply to this email with your completed form and sample chapter, or write to <a href="mailto:info@oakbridge.in" style="color:{BRAND_NAVY};">info@oakbridge.in</a>.</p>
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+</body></html>
+"""
+
+
+async def send_publishing_enquiry_reply(to: str) -> bool:
+    """Auto-reply to a publishing enquiry, with the Book Proposal Form attached.
+
+    Sent for every manuscript submission, and for contact messages whose subject
+    is "Manuscript Submission" — NOT for every contact message: the same form is
+    used for orders, support and press, and "Dear Author … your publishing
+    enquiry" is the wrong reply to someone asking where their parcel is.
+
+    If the form file is missing from the deploy the email still goes, without
+    the attachment, and the failure is logged — an acknowledgement with a
+    missing attachment is recoverable, silence is not.
+    """
+    if not to:
+        return False
+    attachments = None
+    try:
+        with open(PROPOSAL_FORM_PATH, "rb") as fh:
+            attachments = [(PROPOSAL_FORM_NAME, fh.read())]
+    except OSError:
+        logger.error("Book proposal form missing at %s — sending without it", PROPOSAL_FORM_PATH)
+    return await send_email(
+        to=to,
+        subject=PUBLISHING_ENQUIRY_SUBJECT,
+        html=render_publishing_enquiry_html(),
+        reply_to=os.environ.get("EDITORIAL_REPLY_TO") or "info@oakbridge.in",
+        attachments=attachments,
+    )
+
+
 # ====== Account welcome (on signup) ======
 
 def render_account_welcome_html(name: str) -> str:

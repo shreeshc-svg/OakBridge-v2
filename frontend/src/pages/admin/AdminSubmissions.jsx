@@ -9,7 +9,8 @@ import { toast } from "sonner";
 import { useAuth } from "../../context/AuthContext";
 import { canDelete } from "../../lib/rbac";
 import AdminToolbar from "../../components/AdminToolbar";
-import { Trash2 } from "lucide-react";
+import { Trash2, FileText } from "lucide-react";
+import { sendProposalForm, proposalSentLabel } from "../../lib/proposalForm";
 import ExportButton from "../../components/admin/ExportButton";
 
 const STATUSES = ["received", "reviewing", "shortlisted", "declined", "accepted"];
@@ -57,6 +58,14 @@ export default function AdminSubmissions() {
         } catch (e) {
             toast.error(formatApiError(e));
         }
+    };
+
+    const [sending, setSending] = useState(null);
+    const onSendForm = async (sub) => {
+        setSending(sub.id);
+        const r = await sendProposalForm("submissions", sub.id);
+        if (r) setItems((prev) => prev.map((x) => (x.id === sub.id ? { ...x, ...r } : x)));
+        setSending(null);
     };
 
     const onStatus = async (id, status) => {
@@ -166,6 +175,20 @@ export default function AdminSubmissions() {
                                     </option>
                                 ))}
                             </select>
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    e.preventDefault();
+                                    onSendForm(s);
+                                }}
+                                disabled={sending === s.id}
+                                data-testid={`submission-send-form-${s.id}`}
+                                title={proposalSentLabel(s) || "Email the Book Proposal Form to this author"}
+                                className={`ml-2 inline-flex items-center gap-1.5 text-xs font-medium border px-3 py-2 whitespace-nowrap disabled:opacity-50 ${s.proposal_sent_at ? "border-[#0A7D55] text-[#0A7D55]" : "border-[#002B5C] text-[#002B5C]"} hover:bg-[#F5F7FA]`}
+                            >
+                                <FileText size={12} strokeWidth={1.75} />
+                                {sending === s.id ? "Sending…" : s.proposal_sent_at ? "Form sent ✓" : "Send proposal form"}
+                            </button>
                             {mayDelete && (
                                 <button
                                     onClick={(e) => {

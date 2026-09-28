@@ -23,7 +23,7 @@ from typing import Any, List, Optional
 import requests
 import uploads_guard
 from audit import (
-    AUDIT_EVENTS, SUBMISSION_DELETED, audit_log, payment_event_to_row, period_start,
+    AUDIT_EVENTS, PROPOSAL_FORM_SENT, SUBMISSION_DELETED, audit_log, payment_event_to_row, period_start,
 )
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Header, Request, UploadFile
 from fastapi.responses import Response, StreamingResponse
@@ -334,6 +334,11 @@ class Submission(BaseModel):
     bio: str = ""
     status: str = "received"  # received | reviewing | shortlisted | declined | accepted
     created_at: str
+    # When the Book Proposal Form email last went out, and who sent it
+    # ("auto" for the intake reply). Declared, or response_model drops them and
+    # the admin screen cannot say it was already sent.
+    proposal_sent_at: Optional[str] = None
+    proposal_sent_by: Optional[str] = None
 
 
 class StatusUpdate(BaseModel):
@@ -573,11 +578,19 @@ async def create_submission(payload: SubmissionCreate, request: Request):
         await send_submission_admin(doc)
     except Exception:  # noqa: BLE001
         log.exception("submission admin email failed for %s", doc["email"])
+    # The author gets the editorial team's reply with the Book Proposal Form
+    # attached. It replaces the old "we've received your manuscript" ack rather
+    # than following it: two automatic emails for one submission reads as noise.
     try:
-        from emailer import send_submission_ack
-        await send_submission_ack(doc)
+        from emailer import send_publishing_enquiry_reply
+        if await send_publishing_enquiry_reply(doc["email"]):
+            await db.submissions.update_one(
+                {"id": doc["id"]},
+                {"$set": {"proposal_sent_at": datetime.now(timezone.utc).isoformat(),
+                          "proposal_sent_by": "auto"}},
+            )
     except Exception:  # noqa: BLE001
-        log.exception("submission ack email failed for %s", doc["email"])
+        log.exception("publishing enquiry reply failed for %s", doc["email"])
 
     return Submission(**doc)
 
@@ -2380,6 +2393,66 @@ async def admin_update_submission(sub_id: str, payload: StatusUpdate):
         raise HTTPException(status_code=404, detail="Submission not found")
     doc = await db.submissions.find_one({"id": sub_id}, {"_id": 0})
     return Submission(**doc)
+
+
+# ---- Manual "Send proposal form" -------------------------------------------
+#
+# The intake reply only covers what arrives from now on, and only the contact
+# messages filed under "Manuscript Submission". Everything already in the inbox,
+# and every author who picked the wrong subject, needs an admin to send it by
+# hand. Offered on every message and every submission.
+#
+# Guarded against a double-click or a second admin sending it twice: if it was
+# already sent, the server answers 409 with when and by whom, and only an
+# explicit `force` sends it again. Every send is audit-logged.
+
+class ProposalSend(BaseModel):
+    force: bool = False
+
+
+async def _send_proposal_form(coll: str, rec_id: str, actor: dict, force: bool, kind: str) -> dict:
+    from emailer import send_publishing_enquiry_reply
+
+    doc = await db[coll].find_one({"id": rec_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail=f"{kind.capitalize()} not found")
+    if not doc.get("email"):
+        raise HTTPException(status_code=400, detail="This record has no email address.")
+    if doc.get("proposal_sent_at") and not force:
+        by = doc.get("proposal_sent_by") or "unknown"
+        raise HTTPException(
+            status_code=409,
+            detail=f"The proposal form was already sent on {doc['proposal_sent_at'][:10]} "
+                   f"({'automatically' if by == 'auto' else 'by ' + by}). Send it again?",
+        )
+    if not await send_publishing_enquiry_reply(doc["email"]):
+        raise HTTPException(status_code=502, detail="The email could not be sent. Check the email service and try again.")
+    now = datetime.now(timezone.utc).isoformat()
+    by = actor.get("email", "")
+    await db[coll].update_one(
+        {"id": rec_id},
+        {"$set": {"proposal_sent_at": now, "proposal_sent_by": by}, "$inc": {"proposal_sent_count": 1}},
+    )
+    await audit_log(
+        db, PROPOSAL_FORM_SENT,
+        email=by, role=actor.get("role", ""),
+        meta={"kind": kind, "record": rec_id, "to": doc["email"], "resend": bool(doc.get("proposal_sent_at"))},
+    )
+    return {"ok": True, "proposal_sent_at": now, "proposal_sent_by": by}
+
+
+@admin_router.post("/messages/{msg_id}/send-proposal-form")
+async def admin_send_proposal_form_message(
+    msg_id: str, payload: ProposalSend = ProposalSend(), actor: dict = Depends(get_current_user)
+):
+    return await _send_proposal_form("contact_messages", msg_id, actor, payload.force, "message")
+
+
+@admin_router.post("/submissions/{sub_id}/send-proposal-form")
+async def admin_send_proposal_form_submission(
+    sub_id: str, payload: ProposalSend = ProposalSend(), actor: dict = Depends(get_current_user)
+):
+    return await _send_proposal_form("submissions", sub_id, actor, payload.force, "submission")
 
 
 # ============== SEED ==============

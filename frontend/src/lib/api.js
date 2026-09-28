@@ -191,6 +191,9 @@ export const sendChat = (message, history = []) =>
 
 // Contact / enquiry messages (admin)
 export const adminListMessages = () => api.get("/admin/messages").then((r) => r.data);
+// kind: "messages" | "submissions". force re-sends after the 409 "already sent" answer.
+export const adminSendProposalForm = (kind, id, force = false) =>
+    api.post(`/admin/${kind}/${id}/send-proposal-form`, { force }).then((r) => r.data);
 export const adminDeleteMessage = (id) =>
     api.delete(`/admin/messages/${id}`).then((r) => r.data);
 

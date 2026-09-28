@@ -31,6 +31,7 @@ const TONE = {
     USER_DELETED: "bg-[#CC0033]/10 text-[#CC0033] border-[#CC0033]/30",
     SUBMISSION_DELETED: "bg-[#CC0033]/10 text-[#CC0033] border-[#CC0033]/30",
     SPAM_PURGED: "bg-[#F59E0B]/10 text-[#854F0B] border-[#F59E0B]/40",
+    PROPOSAL_FORM_SENT: "bg-[#3D9970]/10 text-[#0A7D55] border-[#0A7D55]/30",
     AUDIT_PURGED: "bg-[#F59E0B]/10 text-[#854F0B] border-[#F59E0B]/40",
 };
 const toneFor = (a) => TONE[a] || "bg-[#002B5C]/[0.06] text-[#002B5C] border-[#002B5C]/20";

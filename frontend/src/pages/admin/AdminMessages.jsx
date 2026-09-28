@@ -2,7 +2,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "../../context/AuthContext";
 import { canDelete } from "../../lib/rbac";
-import { Trash2, CornerUpLeft } from "lucide-react";
+import { Trash2, CornerUpLeft, FileText } from "lucide-react";
+import { sendProposalForm, proposalSentLabel } from "../../lib/proposalForm";
 import { adminListMessages, adminDeleteMessage, formatApiError } from "../../lib/api";
 import AdminToolbar from "../../components/AdminToolbar";
 import ExportButton from "../../components/admin/ExportButton";
@@ -55,6 +56,13 @@ export default function AdminMessages() {
         } finally {
             setBusy(null);
         }
+    };
+
+    const onSendForm = async (m) => {
+        setBusy(`form-${m.id}`);
+        const r = await sendProposalForm("messages", m.id);
+        if (r) setMsgs((prev) => prev.map((x) => (x.id === m.id ? { ...x, ...r } : x)));
+        setBusy(null);
     };
 
     const replyHref = (m) =>
@@ -129,6 +137,24 @@ export default function AdminMessages() {
                             >
                                 <CornerUpLeft size={12} strokeWidth={1.5} /> Reply
                             </a>
+                            {/* On every message, not only "Manuscript Submission":
+                                the case this exists for is an author who picked
+                                the wrong subject, or wrote in before the
+                                automatic reply existed. */}
+                            <button
+                                onClick={() => onSendForm(m)}
+                                disabled={busy === `form-${m.id}`}
+                                data-testid={`message-send-form-${m.id}`}
+                                title="Email the publishing enquiry reply with the Book Proposal Form attached"
+                                className="inline-flex items-center gap-1.5 border border-[#002B5C] text-[#002B5C] px-3 py-1.5 text-xs font-medium hover:bg-[#F5F7FA] disabled:opacity-50"
+                            >
+                                <FileText size={12} strokeWidth={1.5} /> {busy === `form-${m.id}` ? "Sending…" : "Send proposal form"}
+                            </button>
+                            {m.proposal_sent_at && (
+                                <span className="text-xs text-[#0A7D55]" data-testid={`message-form-sent-${m.id}`}>
+                                    {proposalSentLabel(m)}
+                                </span>
+                            )}
                             {mayDelete && (
                                 <button
                                     onClick={() => onDelete(m.id)}
