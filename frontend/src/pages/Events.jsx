@@ -29,7 +29,8 @@ function renderRich(text, color = "#F59E0B") {
 import { ArrowUpRight, Calendar, MapPin, Users, Sparkles, Mic, BookOpen, Award, Music, Smile, ShoppingBag, Brain, Building2 } from "lucide-react";
 import { breadcrumbLd } from "../lib/schema";
 
-const ASSET = (p) => `${process.env.REACT_APP_BACKEND_URL}${p}`;
+// Through mediaUrl so these seeded banners follow REACT_APP_MEDIA_BASE too.
+const ASSET = (p) => mediaUrl(p);
 
 const FLAGSHIP_EVENTS = [
     {

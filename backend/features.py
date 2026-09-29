@@ -62,6 +62,19 @@ S3_REGION = (
 )
 S3_PREFIX = (os.environ.get("S3_PREFIX", "") or "").strip("/")
 
+# A SEPARATE, private bucket for personal documents (applicants' CVs).
+#
+# The main bucket is being put behind CloudFront for the site's images. Even
+# with a folder-limited bucket policy, keeping CVs in the same bucket means one
+# policy mistake away from exposure. A bucket that CloudFront has no grant on at
+# all removes that failure mode, and lets CVs carry their own encryption and an
+# auto-delete lifecycle rule (DPDP: keep personal data only as long as needed).
+#
+# Optional: unset, CVs stay in the main bucket as before. Set, new CVs go here,
+# reads fall back to the main bucket for anything not yet migrated
+# (backend/migrate_cvs_to_private_bucket.py), and deletes clear both.
+S3_PRIVATE_BUCKET = (os.environ.get("S3_PRIVATE_BUCKET") or "").strip()
+
 _s3_client = None
 
 
@@ -89,6 +102,14 @@ def _safe_key(path: str) -> str:
     return f"{S3_PREFIX}/{p}" if S3_PREFIX else p
 
 
+def _is_private_path(path: str) -> bool:
+    return bool({"cv"} & {s.lower() for s in (path or "").split("/")})
+
+
+def _bucket_for(path: str) -> str:
+    return S3_PRIVATE_BUCKET if (S3_PRIVATE_BUCKET and _is_private_path(path)) else S3_BUCKET
+
+
 def _resolve(path: str) -> str:
     """Map a storage path to an absolute local file path, blocking traversal."""
     full = os.path.normpath(os.path.join(STORAGE_DIR, path))
@@ -100,8 +121,8 @@ def _resolve(path: str) -> str:
 def init_storage() -> Optional[str]:
     if _s3_enabled():
         log.info(
-            "Object storage: S3 bucket %s (region=%s, prefix=%r)",
-            S3_BUCKET, S3_REGION, S3_PREFIX,
+            "Object storage: S3 bucket %s (region=%s, prefix=%r, private bucket for CVs: %s)",
+            S3_BUCKET, S3_REGION, S3_PREFIX, S3_PRIVATE_BUCKET or "none",
         )
         return f"s3://{S3_BUCKET}"
     os.makedirs(STORAGE_DIR, exist_ok=True)
@@ -111,11 +132,17 @@ def init_storage() -> Optional[str]:
 
 def put_object(path: str, data: bytes, content_type: str) -> dict:
     if _s3_enabled():
+        extra = {}
+        if _bucket_for(path) == S3_PRIVATE_BUCKET and S3_PRIVATE_BUCKET:
+            # Belt and braces: the bucket should have default encryption on,
+            # but a CV must not depend on someone having ticked that box.
+            extra["ServerSideEncryption"] = "AES256"
         _s3().put_object(
-            Bucket=S3_BUCKET,
+            Bucket=_bucket_for(path),
             Key=_safe_key(path),
             Body=data,
             ContentType=content_type or "application/octet-stream",
+            **extra,
         )
     else:
         full = _resolve(path)
@@ -143,7 +170,13 @@ def delete_object(path: str) -> bool:
         return False
     try:
         if _s3_enabled():
-            _s3().delete_object(Bucket=S3_BUCKET, Key=_safe_key(path))
+            key = _safe_key(path)
+            _s3().delete_object(Bucket=_bucket_for(path), Key=key)
+            # A CV uploaded before the private bucket existed may still be in
+            # the main one. Deleting an absent key is a no-op in S3, so clear
+            # both rather than leave a copy behind.
+            if _bucket_for(path) != S3_BUCKET:
+                _s3().delete_object(Bucket=S3_BUCKET, Key=key)
             return True
         full = _resolve(path)
         if os.path.exists(full):
@@ -223,12 +256,29 @@ def _resolved_type(declared: str, path: str) -> str:
     return resolved
 
 
+def _s3_get(path: str):
+    """Read from the path's bucket; a private path not yet migrated falls back
+    to the main bucket, so old CVs keep downloading during the move."""
+    bucket = _bucket_for(path)
+    try:
+        return _s3().get_object(Bucket=bucket, Key=_safe_key(path))
+    except Exception as exc:  # noqa: BLE001
+        code = ""
+        try:
+            code = exc.response.get("Error", {}).get("Code", "")  # type: ignore[attr-defined]
+        except Exception:  # noqa: BLE001
+            pass
+        if bucket != S3_BUCKET and code in ("NoSuchKey", "NotFound", "404"):
+            return _s3().get_object(Bucket=S3_BUCKET, Key=_safe_key(path))
+        raise
+
+
 def get_object(path: str) -> tuple[bytes, str]:
     import mimetypes
 
     if _s3_enabled():
         try:
-            obj = _s3().get_object(Bucket=S3_BUCKET, Key=_safe_key(path))
+            obj = _s3_get(path)
         except Exception as exc:  # botocore ClientError (NoSuchKey / 404)
             err_code = ""
             try:

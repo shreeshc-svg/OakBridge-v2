@@ -692,6 +692,10 @@ PUBLIC_API_URL = (
 ).rstrip("/")
 
 
+PUBLIC_MEDIA_URL = (os.environ.get("PUBLIC_MEDIA_URL") or "").rstrip("/")
+_PUBLIC_MEDIA_RE = re.compile(r"^/api/files/oakbridge/(covers|media|authors|previews|docs|events)/")
+
+
 def media_url(u: str) -> str:
     """Absolute URL for an image about to be put in an email.
 
@@ -703,6 +707,11 @@ def media_url(u: str) -> str:
         return ""
     if u.startswith("http://") or u.startswith("https://"):
         return u
+    # Public folders load from CloudFront when PUBLIC_MEDIA_URL is set — same
+    # allowlist as mediaUrl() in frontend/src/lib/api.js. cv/ and ebooks/ never
+    # match, so they stay behind the API.
+    if PUBLIC_MEDIA_URL and _PUBLIC_MEDIA_RE.match(u):
+        return f"{PUBLIC_MEDIA_URL}{u[len('/api/files'):]}"
     if u.startswith("/"):
         return f"{PUBLIC_API_URL}{u}"
     # A bare filename is not something we can resolve, and a guess would just

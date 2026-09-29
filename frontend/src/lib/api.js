@@ -151,7 +151,32 @@ export const adminUploadDoc = (file) => {
 };
 export const adminUpdateCategoryImage = (id, image) =>
     api.patch(`/admin/categories/${id}`, { image }).then((r) => r.data);
-export const mediaUrl = (u) => (u && u.startsWith("/api/") ? `${BACKEND_URL}${u}` : u);
+/*
+ * Where an uploaded file is loaded from.
+ *
+ * Uploads are stored in S3 and recorded as "/api/files/oakbridge/<folder>/…".
+ * Without REACT_APP_MEDIA_BASE every one is fetched THROUGH the API server,
+ * which reads it from S3 on each request — every image on the site passing
+ * through a 512 MB Render instance.
+ *
+ * With REACT_APP_MEDIA_BASE set to the CloudFront domain, the public folders
+ * below load straight from CloudFront instead. Nothing stored changes: the
+ * same "/api/files/…" value is rewritten here at render time, and unsetting the
+ * variable is the rollback.
+ *
+ * ALLOWLIST, NOT A BLANKET REWRITE. The bucket also holds applicants' CVs
+ * (cv/) and gated eBook PDFs (ebooks/). Those must keep going through the API,
+ * where the admin session / purchase check lives — CloudFront is configured to
+ * serve only these folders, and this list must match it.
+ */
+const MEDIA_BASE = (process.env.REACT_APP_MEDIA_BASE || "").replace(/\/+$/, "");
+export const PUBLIC_MEDIA_FOLDERS = ["covers", "media", "authors", "previews", "docs", "events"];
+const PUBLIC_MEDIA_RE = new RegExp(`^/api/files/oakbridge/(${PUBLIC_MEDIA_FOLDERS.join("|")})/`);
+export const mediaUrl = (u) => {
+    if (!u || !u.startsWith("/api/")) return u;
+    if (MEDIA_BASE && PUBLIC_MEDIA_RE.test(u)) return `${MEDIA_BASE}${u.slice("/api/files".length)}`;
+    return `${BACKEND_URL}${u}`;
+};
 export const fetchSuggestIndex = () => api.get("/search/suggest-index").then((r) => r.data);
 export const logSearch = (q, results, category, correctedTo) =>
     api
