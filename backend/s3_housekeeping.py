@@ -61,8 +61,11 @@ def audit() -> int:
     bad = 0
     scanned = 0
     for folder in PUBLIC_FOLDERS:
+        print(f"… scanning {folder}/", flush=True)
         for o in _keys(s3, bucket, base + folder + "/"):
             scanned += 1
+            if scanned % 50 == 0:
+                print(f"  {scanned} checked", flush=True)
             key = o["Key"]
             ctype = (s3.head_object(Bucket=bucket, Key=key).get("ContentType") or "").split(";")[0].lower()
             if ctype in DANGEROUS or key.lower().endswith((".svg", ".html", ".htm", ".xml", ".js")):
