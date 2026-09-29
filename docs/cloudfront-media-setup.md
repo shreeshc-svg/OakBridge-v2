@@ -3,7 +3,21 @@
 Do the steps **in order**. Nothing changes on the live site until step 5 sets the two
 media environment variables, and removing them is the rollback.
 
-Placeholders — replace everywhere:
+**Status: live since 2026-09-29.** Current values (none of these are secrets):
+
+| What | Value |
+|---|---|
+| Main bucket | `oakbridge-media` (us-east-1, no `S3_PREFIX`) |
+| Private bucket | `oakbridge-private-docs` (SSE-S3, lifecycle `expire-cvs` 365 d) |
+| Distribution | `dar1iwb9u38et.cloudfront.net` — copy the ID from the console; it mixes `O` and `0` |
+| Behaviors | `/oakbridge/docs/*` → `oakbridge-docs` · `Default (*)` → `oakbridge-media` |
+| Vercel | `REACT_APP_MEDIA_BASE=https://dar1iwb9u38et.cloudfront.net` |
+| Render | `PUBLIC_MEDIA_URL=https://dar1iwb9u38et.cloudfront.net`, `S3_PRIVATE_BUCKET=oakbridge-private-docs` |
+
+Verified at go-live: cover via CloudFront 200; `cv/` and `ebooks/` AccessDenied; homepage
+`<img src>` points at CloudFront; Admin → Careers CV download works (served by the API).
+
+Placeholders — replace everywhere (kept for rebuilding from scratch):
 
 | Placeholder | Where to find it |
 |---|---|
@@ -99,13 +113,17 @@ CloudFront → Create distribution
 
 **Response headers policy `oakbridge-media`** — CloudFront → Policies → Response headers → Create
 - Security headers: **X-Content-Type-Options: nosniff** (override on)
-- Custom header: `Content-Security-Policy` = `default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; sandbox` (override on)
+- Security headers → **Content security policy** = `default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; sandbox` (override on).
+  Put it here, **not** under Custom headers — AWS rejects `Content-Security-Policy` as a custom header.
 - CORS: Access-Control-Allow-Origin = `https://www.oakbridge.in`, `https://oakbridge.in` · methods GET, HEAD · origin override on
 
 **Second behavior for PDFs** — the distribution → Behaviors → Create behavior
 - Path pattern: `/oakbridge/docs/*` · same origin, cache policy and HTTPS settings
 - Response headers policy: create `oakbridge-docs` with **only** `X-Content-Type-Options: nosniff`
   (the `sandbox` CSP stops Chrome's built-in PDF viewer, so downloads on the Media page would break)
+- The dropdown only lists policies that already exist: create the policy first (new tab), then
+  press the ⟳ next to the dropdown. Open **both** behaviors afterwards and confirm each has its
+  policy — the Behaviors list truncates names, so "oakbridge…" there may be the origin, not the policy.
 
 After it deploys (a few minutes), copy the distribution domain, e.g. `https://d1abcd2efgh3.cloudfront.net`.
 
@@ -117,6 +135,9 @@ S3 → `MAIN_BUCKET` → Permissions:
 - **Block public access: stays ON.** CloudFront with OAC does not need it off.
 - Bucket policy → Edit. **If a policy already exists, ADD the statement below to its
   `Statement` list — do not replace the file** (other apps, e.g. the eReader, may rely on it).
+- If the CloudFront wizard already wrote a statement (`AllowCloudFrontServicePrincipal`,
+  `Resource: …/*`), it grants the **whole bucket** — replace just its `Resource` with the
+  six-folder list below and keep its `Condition` as written.
 
 ```json
 {
