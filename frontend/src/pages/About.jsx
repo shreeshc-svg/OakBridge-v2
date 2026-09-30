@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect } from "react";
+import { useBootState } from "../lib/boot";
 import Breadcrumbs from "../components/Breadcrumbs";
 import Seo from "../components/Seo";
 import { Link } from "react-router-dom";
@@ -113,11 +114,13 @@ const DEFAULT_TEAM = [
 ];
 
 export default function About() {
-    const [site, setSite] = useState({});
-    const [settings, setSettings] = useState(null);
-    const [milestonesData, setMilestonesData] = useState(null);
-    const [columnsData, setColumnsData] = useState(null);
-    const [teamData, setTeamData] = useState(null);
+    // Boot state — prerendered page; the first render must match it or React
+    // #418 rebuilds the whole page on load. See lib/boot.js.
+    const [site, setSite] = useBootState("about:site", {});
+    const [settings, setSettings] = useBootState("about:settings", null);
+    const [milestonesData, setMilestonesData] = useBootState("about:milestones", null);
+    const [columnsData, setColumnsData] = useBootState("about:columns", null);
+    const [teamData, setTeamData] = useBootState("about:team", null);
 
     useEffect(() => {
         fetchSiteContent().then(setSite).catch(() => {});
@@ -125,7 +128,7 @@ export default function About() {
         fetchCollection("page_about_milestones").then(setMilestonesData).catch(() => {});
         fetchCollection("page_about_columns").then(setColumnsData).catch(() => {});
         fetchCollection("page_about_team").then(setTeamData).catch(() => {});
-    }, []);
+    }, [setSite, setSettings, setMilestonesData, setColumnsData, setTeamData]);
 
     const c = {
         overline: site.about_overline || DEFAULTS.overline,

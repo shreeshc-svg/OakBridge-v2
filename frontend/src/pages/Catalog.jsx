@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { bootHas, useBootState } from "../lib/boot";
 import Breadcrumbs from "../components/Breadcrumbs";
 import Seo from "../components/Seo";
 import { Link, useSearchParams } from "react-router-dom";
@@ -221,16 +222,28 @@ const ebooksOn = (site) => String(site?.ebook_enabled ?? "on").toLowerCase() !==
 
 export default function Catalog() {
     const [sp, setSp] = useSearchParams();
-    const [books, setBooks] = useState([]);
-    const [cats, setCats] = useState([]);
-    const [site, setSite] = useState({});
-    const [settings, setSettings] = useState(null);
-    const [loading, setLoading] = useState(true);       // initial page load
+    /*
+     * Boot state (lib/boot.js). /books is prerendered with the first page of
+     * books loaded; starting from [] / loading=true made the first client
+     * render a different page — React #418, the grid discarded and rebuilt.
+     *
+     * The book list is keyed by the query string: Vercel serves the same
+     * prerendered /books file for /books?category=law, and that visitor must
+     * NOT hydrate with the unfiltered list — no snapshot for their key, so
+     * they fall back to the normal empty start, exactly as before.
+     */
+    const listKey = `plp:${sp.toString()}`;
+    const warm = useRef(bootHas(`${listKey}:books`));
+    const [books, setBooks] = useBootState(`${listKey}:books`, []);
+    const [cats, setCats] = useBootState("plp:cats", []);
+    const [site, setSite] = useBootState("plp:site", {});
+    const [settings, setSettings] = useBootState("plp:settings", null);
+    const [loading, setLoading] = useBootState(`${listKey}:loading`, true);       // initial page load
     const [loadingMore, setLoadingMore] = useState(false); // subsequent pages
-    const [hasMore, setHasMore] = useState(true);
+    const [hasMore, setHasMore] = useBootState(`${listKey}:hasMore`, true);
     const [showFilters, setShowFilters] = useState(false);
 
-    const skipRef = useRef(0);       // how many we've loaded so far
+    const skipRef = useRef(books.length); // how many we've loaded so far (the snapshot's, when hydrating)
     const busyRef = useRef(false);   // guards against overlapping fetches
     const sentinelRef = useRef(null);
 
@@ -277,7 +290,7 @@ export default function Catalog() {
         fetchCategories().then(setCats).catch(() => {});
         fetchSiteContent().then(setSite).catch(() => {});
         fetchSettings().then(setSettings).catch(() => {});
-    }, []);
+    }, [setCats, setSite, setSettings]);
 
     // Build the query params (category / search / active collection filters).
     const buildParams = useCallback(() => {
@@ -296,20 +309,37 @@ export default function Catalog() {
     // returns nothing. Loaded lazily — only when we actually need it.
     const [indexBooks, setIndexBooks] = useState([]);
 
-    // Reset + load the first page whenever filters / sort / settings change.
+    /*
+     * Reset + load the first page whenever the REQUEST changes.
+     *
+     * Keyed on the params actually sent, not on [sp, settings] as before: the
+     * settings fetch always lands as a new object, so the old deps re-ran this
+     * effect — blanking the grid to "loading" and fetching the same page again
+     * — on every visit, a second or so after the page had drawn. Same request,
+     * same key, no second reset.
+     */
+    const paramsKey = JSON.stringify(buildParams());
     useEffect(() => {
         let cancelled = false;
         busyRef.current = true;
-        setLoading(true);
-        setBooks([]);
-        setHasMore(true);
-        skipRef.current = 0;
-        fetchBooksWithMeta({ ...buildParams(), skip: 0, limit: PAGE_SIZE })
+        // Hydrating with the grid already on screen: refresh it in place, at
+        // the size it was prerendered (the build may have scrolled past page 1),
+        // rather than emptying it first.
+        const quiet = warm.current;
+        warm.current = false;
+        const limit = quiet ? Math.max(PAGE_SIZE, skipRef.current) : PAGE_SIZE;
+        if (!quiet) {
+            setLoading(true);
+            setBooks([]);
+            setHasMore(true);
+            skipRef.current = 0;
+        }
+        fetchBooksWithMeta({ ...buildParams(), skip: 0, limit })
             .then(({ items: data, correctedTo }) => {
                 if (cancelled) return;
                 setBooks(data);
                 skipRef.current = data.length;
-                setHasMore(data.length === PAGE_SIZE);
+                setHasMore(data.length === limit);
                 /*
                  * Log the term AS TYPED with the count it TRULY matched.
                  *
@@ -351,7 +381,7 @@ export default function Catalog() {
             cancelled = true;
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [sp, settings]);
+    }, [paramsKey]);
 
     // Load the next page (called by the IntersectionObserver sentinel).
     const loadMore = useCallback(() => {
@@ -369,7 +399,7 @@ export default function Catalog() {
                 setLoadingMore(false);
                 busyRef.current = false;
             });
-    }, [buildParams, hasMore]);
+    }, [buildParams, hasMore, setBooks, setHasMore]);
 
     // Observe the sentinel; fetch the next page as it nears the viewport.
     useEffect(() => {

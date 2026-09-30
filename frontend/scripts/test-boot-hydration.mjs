@@ -124,5 +124,32 @@ ok(/const \[left, setLeft\] = useState\(null\);/.test(pre2), "useCountdown: no c
 ok(/if \(left === null \|\| isPrerender\(\)\) return PENDING;/.test(pre2), "useCountdown: placeholder on first render and in the build");
 ok(!/useState\(ms\)/.test(pre2), "useCountdown: old render-time clock is gone");
 
+// ── 8. Page-level snapshots (book, bookstore, about, authors) ────────────────
+// Search Console: 64 poor mobile URLs from mid-August, when every route began
+// to be prerendered. Each page below started at loading/empty and so failed
+// hydration on every visit.
+const pdp = code("src/pages/BookDetail.jsx");
+ok(/const \[book, setBook\] = useBootState\(`\$\{k\}:book`, null\)/.test(pdp), "BookDetail: book from the snapshot");
+ok(/const \[loading, setLoading\] = useBootState\(`\$\{k\}:loading`, true\)/.test(pdp), "BookDetail: loading from the snapshot, not a hard-coded true");
+ok(/if \(!quiet\) setLoading\(true\);/.test(pdp), "BookDetail: no Loading… flash on the hydrating mount");
+ok(/if \(!quiet\) setBook\(null\);/.test(pdp), "BookDetail: a failed quiet refresh keeps the page, not 'not found'");
+ok(pdp.lastIndexOf("warm.current = false") > pdp.indexOf("fetchBookPreview(id)"), "BookDetail: warm cleared only after every fetch effect has read it");
+const plp = code("src/pages/Catalog.jsx");
+ok(/const listKey = `plp:\$\{sp\.toString\(\)\}`;/.test(plp), "Catalog: list snapshot keyed by query string (a filtered URL never hydrates the unfiltered list)");
+ok(/\}, \[paramsKey\]\);/.test(plp) && !/\}, \[sp, settings\]\);/.test(plp), "Catalog: first-page fetch keyed on the request, not on the settings object");
+ok(/if \(!quiet\) \{\s*setLoading\(true\);\s*setBooks\(\[\]\);/.test(plp), "Catalog: no grid reset on the hydrating mount");
+ok(/const skipRef = useRef\(books\.length\);/.test(plp), "Catalog: infinite scroll continues after the snapshot's books");
+const about = code("src/pages/About.jsx");
+for (const k of ["about:site", "about:settings", "about:milestones", "about:columns", "about:team"]) {
+    ok(about.includes(`useBootState("${k}"`), `About: ${k}`);
+}
+const authorsPg = code("src/pages/Authors.jsx");
+ok(/useBootState\(`\$\{k\}:author`, null\)/.test(authorsPg) && /if \(!quiet\) setLoading\(true\);/.test(authorsPg), "AuthorDetail: snapshot + quiet refresh");
+ok(authorsPg.includes('useBootState("authors:list"'), "AuthorsIndex: roster from the snapshot");
+const reviews = code("src/components/ReviewsSection.jsx");
+ok(/useBootState\(`reviews:\$\{bookId\}`, \[\]\)/.test(reviews) && /if \(!quiet\) setLoading\(true\);/.test(reviews), "ReviewsSection: snapshot + quiet first load");
+const ebook = code("src/components/EbookCta.jsx");
+ok(/useBootState\(`ebookcta:\$\{variant\}`/.test(ebook), "EbookCta: snapshot per placement");
+
 console.log(failed ?`\n${failed} FAILED` : "\nAll boot-hydration checks passed.");
 process.exit(failed ? 1 : 0);

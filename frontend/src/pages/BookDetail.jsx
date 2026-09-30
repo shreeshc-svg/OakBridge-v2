@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { bootHas, useBootState } from "../lib/boot";
 import { track } from "../lib/analytics";
 import Breadcrumbs from "../components/Breadcrumbs";
 import HamperDetail from "./HamperDetail";
@@ -55,18 +56,32 @@ const badgeIcon = (label) =>
     (BADGE_ICONS.find(([re]) => re.test(label || "")) || [])[1] || null;
 
 export default function BookDetail() {
-    const [preview, setPreview] = useState({ pages: [], page_count: 0 });
-    const [previewOpen, setPreviewOpen] = useState(false);
     const { id } = useParams();
-    const [book, setBook] = useState(null);
-    const [related, setRelated] = useState([]);
+    /*
+     * Boot state (lib/boot.js). Every book page is prerendered with the book
+     * loaded, but this component used to start at loading=true, so its first
+     * client render was "Loading…" — React #418, the page discarded and rebuilt
+     * on every book URL. That rebuild is what Search Console reported as poor
+     * CLS on mobile from mid-August, when every route started being prerendered.
+     *
+     * `warm` marks a hydrating mount: the effects below then refresh quietly
+     * instead of first resetting to empty/Loading…, which would reproduce the
+     * same shift one step later. The first effect run consumes it (see the last
+     * effect in this group).
+     */
+    const k = `pdp:${id}`;
+    const warm = useRef(bootHas(`${k}:book`));
+    const [preview, setPreview] = useBootState(`${k}:preview`, { pages: [], page_count: 0 });
+    const [previewOpen, setPreviewOpen] = useState(false);
+    const [book, setBook] = useBootState(`${k}:book`, null);
+    const [related, setRelated] = useBootState(`${k}:related`, []);
     const relatedRef = useRef(null);
     const scrollRelated = (dir) => {
         const el = relatedRef.current;
         if (el) el.scrollBy({ left: dir * el.clientWidth * 0.85, behavior: "smooth" });
     };
     const [qty, setQty] = useState(1);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useBootState(`${k}:loading`, true);
     const [tab, setTab] = useState("description");
     // `site` for the eBook copy and toggles below — CartContext already fetches
     // site content once for the whole app, so this costs no extra request.
@@ -76,29 +91,35 @@ export default function BookDetail() {
     const [notifyEmail, setNotifyEmail] = useState("");
     const [notifyBusy, setNotifyBusy] = useState(false);
     const [notified, setNotified] = useState(false);
-    const [settings, setSettings] = useState(null);
+    const [settings, setSettings] = useBootState("pdp:settings", null);
     // Same hidden_sections setting every other page uses; the book page simply
     // was never listed in SECTION_REGISTRY.
-    const [binding, setBinding] = useState(null);
-    const [size, setSize] = useState(null);
+    const [binding, setBinding] = useBootState(`${k}:binding`, null);
+    const [size, setSize] = useBootState(`${k}:size`, null);
     // Author records behind this book. The book's own author_bio is a separate
     // copy that drifts from the author page, so the record wins wherever we
     // have one and author_bio is the fallback for books nobody in the roster
     // matches. Kept in its own request so a failure here cannot affect the
     // product itself, for the same reason the related-books call is separate.
-    const [bookAuthors, setBookAuthors] = useState([]);
+    const [bookAuthors, setBookAuthors] = useBootState(`${k}:authors`, []);
 
     useEffect(() => {
-        setBookAuthors([]);
+        const quiet = warm.current;
+        if (!quiet) setBookAuthors([]);
         // Back to Description on every book. The author tab is conditional now,
         // so arriving on a book that has no author content while `tab` still
         // reads "author" would render an empty panel under no visible tab.
         setTab("description");
-        fetchBookAuthors(id).then(setBookAuthors).catch(() => setBookAuthors([]));
-    }, [id]);
+        fetchBookAuthors(id)
+            .then(setBookAuthors)
+            .catch(() => {
+                if (!quiet) setBookAuthors([]);
+            });
+    }, [id, setBookAuthors]);
 
     useEffect(() => {
-        setLoading(true);
+        const quiet = warm.current;
+        if (!quiet) setLoading(true);
         /*
          * The two requests have SEPARATE error handling, and that is the point.
          *
@@ -135,31 +156,42 @@ export default function BookDetail() {
                 return fetchBooks({ category: b.category, limit: 20 }).catch(() => []);
             })
             .then((list) => setRelated(list.filter((x) => x.id !== id).slice(0, 12)))
-            .catch(() => setBook(null))
+            // On a quiet refresh the prerendered book stays up if the request
+            // fails; a blip must not turn a page on screen into "not found".
+            .catch(() => {
+                if (!quiet) setBook(null);
+            })
             .finally(() => setLoading(false));
-    }, [id]);
+    }, [id, setBook, setRelated, setLoading]);
 
     useEffect(() => {
         fetchSettings().then(setSettings).catch(() => {});
-    }, []);
+    }, [setSettings]);
 
     /* The books inside a pack, read live so a title or cover change in the
        catalogue shows here without re-saving the pack. Only fetched for packs. */
-    const [packItems, setPackItems] = useState([]);
+    const [packItems, setPackItems] = useBootState(`${k}:packItems`, []);
     const isPack = book?.product_type === "pack";
     useEffect(() => {
-        setPackItems([]);
+        if (!warm.current) setPackItems([]);
         if (!isPack) return;
         fetchPackItems(id)
             .then((d) => setPackItems(d?.items || []))
             .catch(() => {});
-    }, [id, isPack]);
+    }, [id, isPack, setPackItems]);
 
     useEffect(() => {
-        setPreview({ pages: [], page_count: 0 });
+        if (!warm.current) setPreview({ pages: [], page_count: 0 });
         fetchBookPreview(id)
             .then((p) => setPreview(p || { pages: [], page_count: 0 }))
             .catch(() => {});
+    }, [id, setPreview]);
+
+    // Last of the fetch effects on purpose: effects run in declaration order,
+    // so every one above has read `warm` before it is cleared here. Any later
+    // navigation to another book is then a normal, non-quiet load.
+    useEffect(() => {
+        warm.current = false;
     }, [id]);
 
     useEffect(() => {
@@ -171,7 +203,7 @@ export default function BookDetail() {
             setBinding(settings?.binding_options?.[0] ?? null);
             setSize(settings?.size_options?.[0] ?? null);
         }
-    }, [book, settings]);
+    }, [book, settings, setBinding, setSize]);
 
     /*
      * Above the early returns on purpose.

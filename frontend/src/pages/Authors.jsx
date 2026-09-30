@@ -7,6 +7,7 @@ import { ArrowLeft, ArrowUpRight, ChevronLeft, ChevronRight, Search, X } from "l
 import BookCard from "../components/BookCard";
 import { fetchAuthor, fetchAuthorBooks, fetchAuthors, fetchSiteContent, fetchSettings, mediaUrl } from "../lib/api";
 import { fold, fuzzySearch, didYouMean } from "../lib/fuzzy";
+import { bootHas, useBootState } from "../lib/boot";
 import { personLd, breadcrumbLd, metaDescription } from "../lib/schema";
 
 const AUTHORS_DEFAULTS = {
@@ -59,21 +60,31 @@ function fillAuthorTokens(template, fullName) {
 }
 
 function AuthorDetail({ id }) {
-    const [author, setAuthor] = useState(null);
-    const [books, setBooks] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [site, setSite] = useState({});
+    // Boot state: the author page is prerendered, so the first render must be
+    // the loaded page, not "Loading…". See lib/boot.js.
+    const k = `author:${id}`;
+    const [author, setAuthor] = useBootState(`${k}:author`, null);
+    const [books, setBooks] = useBootState(`${k}:books`, []);
+    const [loading, setLoading] = useBootState(`${k}:loading`, true);
+    const [site, setSite] = useBootState("authorpage:site", {});
+    const warm = useRef(bootHas(`${k}:author`));
 
     useEffect(() => {
-        setLoading(true);
+        // Hydrating with the page already on screen: refresh quietly, and keep
+        // what is shown if the refresh fails rather than flip to "not found".
+        const quiet = warm.current;
+        warm.current = false;
+        if (!quiet) setLoading(true);
         Promise.all([fetchAuthor(id), fetchAuthorBooks(id)])
             .then(([a, b]) => {
                 setAuthor(a);
                 setBooks(b);
             })
-            .catch(() => setAuthor(null))
+            .catch(() => {
+                if (!quiet) setAuthor(null);
+            })
             .finally(() => setLoading(false));
-    }, [id]);
+    }, [id, setAuthor, setBooks, setLoading]);
 
     /*
      * Site content is fetched separately, and deliberately NOT awaited with the
@@ -87,7 +98,7 @@ function AuthorDetail({ id }) {
      */
     useEffect(() => {
         fetchSiteContent().then(setSite).catch(() => {});
-    }, []);
+    }, [setSite]);
 
     if (loading) {
         return (
@@ -534,9 +545,10 @@ function AuthorSearch({ value, onChange, count, total, suggestion, onSuggestion 
 }
 
 function AuthorsIndex() {
-    const [authors, setAuthors] = useState([]);
-    const [site, setSite] = useState({});
-    const [settings, setSettings] = useState({});
+    // Boot state — prerendered page; see lib/boot.js.
+    const [authors, setAuthors] = useBootState("authors:list", []);
+    const [site, setSite] = useBootState("authors:site", {});
+    const [settings, setSettings] = useBootState("authors:settings", {});
     const [query, setQuery] = useState("");
     const { results, active: searching, suggestion } = useAuthorSearch(authors, query);
 
@@ -544,7 +556,7 @@ function AuthorsIndex() {
         fetchAuthors().then(setAuthors);
         fetchSiteContent().then(setSite).catch(() => {});
         fetchSettings().then(setSettings).catch(() => {});
-    }, []);
+    }, [setAuthors, setSite, setSettings]);
 
     const perRow = AUTHOR_GRID_COLS[settings.authors_per_row] ? settings.authors_per_row : 4;
     const gridRows = Number.isFinite(settings.authors_grid_rows) ? Math.max(0, settings.authors_grid_rows) : 2;

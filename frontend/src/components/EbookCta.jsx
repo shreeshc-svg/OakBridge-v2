@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect } from "react";
+import { useBootState } from "../lib/boot";
 import { track } from "../lib/analytics";
 import { Tablet, ArrowUpRight } from "lucide-react";
 import { fetchSiteContent } from "../lib/api";
@@ -19,7 +20,10 @@ import { fetchSiteContent } from "../lib/api";
 const DEFAULT_EBOOK_URL = "https://ebooks.oakbridge.in/";
 
 export default function EbookCta({ variant = "inline", site: siteProp, className = "" }) {
-    const [site, setSite] = useState(siteProp || null);
+    // Boot state, per placement: without a `site` prop this used to render the
+    // built-in wording first and the admin's wording after its fetch — on the
+    // prerendered book pages that was a hydration mismatch. See lib/boot.js.
+    const [site, setSite] = useBootState(`ebookcta:${variant}`, siteProp || null);
 
     useEffect(() => {
         if (siteProp) {
@@ -29,7 +33,7 @@ export default function EbookCta({ variant = "inline", site: siteProp, className
         fetchSiteContent()
             .then(setSite)
             .catch(() => setSite({}));
-    }, [siteProp]);
+    }, [siteProp, setSite]);
 
     // Explicit off switch, independent of the URL — so the buttons can be hidden
     // for a launch window without losing the configured destination.

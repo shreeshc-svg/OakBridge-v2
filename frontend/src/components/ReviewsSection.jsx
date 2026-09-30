@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { bootHas, useBootState } from "../lib/boot";
 import { Link } from "react-router-dom";
 import { Star } from "lucide-react";
 import { createReview, fetchReviews, formatApiError } from "../lib/api";
@@ -35,21 +36,28 @@ function StarRow({ value, onChange, readOnly = false }) {
 
 export default function ReviewsSection({ bookId }) {
     const { isAuthenticated, user } = useAuth();
-    const [reviews, setReviews] = useState([]);
-    const [loading, setLoading] = useState(true);
+    // Boot state — the reviews are part of every prerendered book page, so the
+    // first render must already hold them. See lib/boot.js.
+    const [reviews, setReviews] = useBootState(`reviews:${bookId}`, []);
+    const [loading, setLoading] = useBootState(`reviews:${bookId}:loading`, true);
+    const warm = useRef(bootHas(`reviews:${bookId}`));
     const [open, setOpen] = useState(false);
     const [form, setForm] = useState({ rating: 5, title: "", comment: "" });
     const [submitting, setSubmitting] = useState(false);
 
-    const load = () => {
-        setLoading(true);
+    // `quiet`: refresh without flipping to the loading state, for the
+    // hydrating mount where the reviews are already on screen.
+    const load = (quiet = false) => {
+        if (!quiet) setLoading(true);
         fetchReviews(bookId)
             .then(setReviews)
             .finally(() => setLoading(false));
     };
 
     useEffect(() => {
-        load();
+        const quiet = warm.current;
+        warm.current = false;
+        load(quiet);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [bookId]);
 

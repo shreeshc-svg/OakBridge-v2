@@ -64,6 +64,20 @@ export function bootRead(key) {
     return readSnapshot()[key];
 }
 
+/**
+ * True when this page arrived with a snapshot for `key` — i.e. the data is
+ * already on screen and this mount is a hydration, not a fresh load.
+ *
+ * Pages use it to skip the "reset and show Loading…" step their fetch effect
+ * normally starts with. Without that, a correct hydration was immediately
+ * followed by the page blanking itself to refetch what it already had — the
+ * same layout shift by another route. The fetch itself still runs, quietly,
+ * so live prices and stock replace the build-time copy.
+ */
+export function bootHas(key) {
+    return bootRead(key) !== undefined;
+}
+
 /** Record `value` for `key` — a no-op anywhere but the prerender pass. */
 export function bootWrite(key, value) {
     if (typeof window === "undefined" || !isPrerender()) return;
