@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { startAnalytics, stopAnalytics } from "../lib/analytics";
 import { ALL, NONE, readConsent, writeConsent } from "../lib/consent";
+import { isPrerender } from "../lib/runtime";
 
 /**
  * The cookie banner: a choice per purpose, not one switch for everything.
@@ -62,6 +63,11 @@ export default function CookieConsent() {
     }, []);
 
     useEffect(() => {
+        // Not during the build. The prerender has no saved consent, so this
+        // opened the banner and baked it into every static page, while a real
+        // visitor's first render has show=false — a hydration mismatch (#418)
+        // on every route. The visitor's own browser opens it a moment later.
+        if (isPrerender()) return;
         const saved = readConsent();
         // No decision, or one recorded against an older policy version — which
         // means a purpose has been added since, and the old yes does not cover it.

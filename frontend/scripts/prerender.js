@@ -397,7 +397,32 @@ async function renderTo(browser, base, route, budget = budgetFor()) {
          * banner title) can close the <script> element early. JSON.parse reads
          * < back as `<`, so the values round-trip unchanged.
          */
+        /*
+         * Adjacent text nodes need a separator, as React's own server renderer
+         * emits.
+         *
+         * JSX like `{pct}% off` renders TWO text nodes ("46", "% off").
+         * outerHTML writes them out as one run of text, the browser parses that
+         * back as ONE node ("46% off"), and hydration — expecting "46" — hits
+         * a text mismatch: React #418, page discarded and rebuilt. Measured
+         * on www.oakbridge.in: 93 such pairs on the homepage alone. An empty
+         * comment between them keeps them apart on parse, and React's hydrator
+         * skips plain comments.
+         */
         const html = "<!doctype html>\n" + (await page.evaluate(() => {
+            const rootEl = document.getElementById("root");
+            if (rootEl) {
+                const SKIP = new Set(["SCRIPT", "STYLE", "TEXTAREA", "TITLE"]);
+                const walker = document.createTreeWalker(rootEl, NodeFilter.SHOW_TEXT);
+                const split = [];
+                for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+                    const next = n.nextSibling;
+                    if (next && next.nodeType === Node.TEXT_NODE && !SKIP.has(n.parentNode.nodeName)) {
+                        split.push(n);
+                    }
+                }
+                for (const n of split) n.parentNode.insertBefore(document.createComment(" "), n.nextSibling);
+            }
             const old = document.getElementById("__BOOT__");
             if (old) old.remove();
             const data = window.__BOOT_DATA__;

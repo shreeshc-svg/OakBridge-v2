@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { MessageCircle, X, Send, ArrowRight } from "lucide-react";
 import { sendChat } from "../lib/api";
+import { isPrerender } from "../lib/runtime";
 
 const GREETING =
     "Hi! I'm Asterisk, the Oakbridge AI assistant. Ask me about ordering, shipping, returns, finding books — or say \"take me to the bookstore\" and I'll get you there.";
@@ -89,6 +90,11 @@ export default function ChatWidget() {
             setNudge(false);
             return;
         }
+        // Never during the build: the prerender waits long enough for the
+        // 1.2s timer, which baked the bubble into index.html while every real
+        // visitor's first render has no bubble — a hydration mismatch (#418)
+        // that made React rebuild the whole homepage. See lib/boot.js.
+        if (isPrerender()) return;
         const v = readNudges();
         if (v.done || v.count >= NUDGE_LIMIT) return;
         writeNudges({ ...v, count: v.count + 1 });

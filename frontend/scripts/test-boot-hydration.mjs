@@ -107,5 +107,22 @@ ok(!/\{count > 0 &&/.test(header), "Header: no ungated count left in markup");
 const tray = code("src/components/BottomTray.jsx");
 ok(/const count = useHydrated\(\) \? liveCount : 0;/.test(tray), "BottomTray: badge count gated");
 
-console.log(failed ? `\n${failed} FAILED` : "\nAll boot-hydration checks passed.");
+// ── 7. Other build-vs-visit differences found on the live homepage ───────────
+if (evalBlock) {
+    const b = evalBlock[0];
+    ok(/createTreeWalker\(rootEl, NodeFilter\.SHOW_TEXT\)/.test(b) && /createComment\(" "\)/.test(b),
+        "prerender: separates adjacent text nodes with a comment");
+    ok(b.indexOf("createComment") < b.indexOf("return document.documentElement.outerHTML"),
+        "prerender: separators inserted before the markup is read");
+}
+const chat = code("src/components/ChatWidget.jsx");
+ok(/if \(isPrerender\(\)\) return;\s*const v = readNudges\(\);/.test(chat), "ChatWidget: no nudge bubble baked into the build");
+const consent = code("src/components/CookieConsent.jsx");
+ok(/if \(isPrerender\(\)\) return;\s*const saved = readConsent\(\);/.test(consent), "CookieConsent: banner not baked into the build");
+const pre2 = code("src/lib/preorder.js");
+ok(/const \[left, setLeft\] = useState\(null\);/.test(pre2), "useCountdown: no clock computed during the first render");
+ok(/if \(left === null \|\| isPrerender\(\)\) return PENDING;/.test(pre2), "useCountdown: placeholder on first render and in the build");
+ok(!/useState\(ms\)/.test(pre2), "useCountdown: old render-time clock is gone");
+
+console.log(failed ?`\n${failed} FAILED` : "\nAll boot-hydration checks passed.");
 process.exit(failed ? 1 : 0);

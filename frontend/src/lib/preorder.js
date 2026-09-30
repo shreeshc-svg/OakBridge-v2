@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { isPrerender } from "./runtime";
 
 /**
  * Pre-orders: is this title still in the future, and how far.
@@ -69,9 +70,24 @@ const split = (ms) => {
  * cards, and two dozen timers running forever for books that published last
  * year is a background cost for nothing.
  */
+/*
+ * Before the first tick the clock reads "--".
+ *
+ * The build prerenders every page, so a clock computed during render was baked
+ * into the HTML as the time left AT BUILD TIME ("8d 10h 41m") while a visitor's
+ * first render computed it at visit time ("8d 05h 01m"). Different text, so
+ * React #418: hydration failed and the whole page was rebuilt on load — on
+ * every page showing a pre-order. A placeholder that is the same in both makes
+ * the first render match; the effect below fills in the real time straight
+ * after. See lib/boot.js.
+ *
+ * isPrerender() is also true on localhost, so `yarn start` shows "--" too;
+ * the same trade analytics and the marketing popup already make.
+ */
+const PENDING = { days: "--", hours: "--", minutes: "--", seconds: "--", done: false, pending: true };
+
 export const useCountdown = (target) => {
-    const ms = target ? target.getTime() - Date.now() : 0;
-    const [left, setLeft] = useState(ms);
+    const [left, setLeft] = useState(null);
 
     useEffect(() => {
         if (!target) return undefined;
@@ -82,5 +98,7 @@ export const useCountdown = (target) => {
         return () => clearInterval(id);
     }, [target && target.getTime()]); // eslint-disable-line react-hooks/exhaustive-deps
 
+    if (!target) return split(0);
+    if (left === null || isPrerender()) return PENDING;
     return split(left);
 };
