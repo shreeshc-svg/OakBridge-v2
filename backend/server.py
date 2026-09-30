@@ -774,13 +774,20 @@ async def sitemap():
 
     # Author pages, filtered — NOT the whole roster.
     #
-    # All ~143 are prerendered and indexable, but a sitemap is a recommendation,
-    # not an inventory: submitting pages with nothing on them invites Google to
-    # judge the site by its weakest URLs. Two conditions:
+    # All are prerendered and indexable, but a sitemap is a recommendation, not
+    # an inventory: submitting pages with nothing on them invites Google to
+    # judge the site by its weakest URLs. One condition:
     #
-    #   bio present   — otherwise the page is a name, a photo and whitespace.
     #   has a book    — an author with no live titles is a dead end for a
     #                   shopper, however good the bio.
+    #
+    # A bio USED to be required too (2026-09-30: dropped, owner's decision). It
+    # cost more than it protected: an author with a live book already renders
+    # a "Books by …" grid, so the page is never just a name and whitespace —
+    # but the rule kept Somesh Kumar Upadhyay, the site's top landing page, out
+    # of the sitemap for his blank bio, and later Mini Srivastava and Neeraj
+    # Nachiketa, both with books on sale. Bios are still worth adding; they
+    # are no longer a gate.
     #
     # The book test DELIBERATELY IGNORES the stored `title_count`. That field is
     # stale: it reads 0 for Sudhir Mishra, whose Climate Justice is live and on
@@ -793,12 +800,12 @@ async def sitemap():
     # Khandelwal's page was absent from the sitemap for months while his product
     # pages listed him fine. Same function, one answer.
     authors = await db.authors.find(
-        {"enabled": {"$ne": False}}, {"_id": 0, "id": 1, "name": 1, "bio": 1}
+        {"enabled": {"$ne": False}}, {"_id": 0, "id": 1, "name": 1}
     ).to_list(None)
     with_books = await books_for_authors()
     for a in authors:
         aid = escape(str(a.get("id", "")))
-        if not aid or not (a.get("bio") or "").strip():
+        if not aid:
             continue
         if not with_books.get(a.get("id")):
             continue

@@ -57,6 +57,7 @@ const app = code(join(SRC, "App.js"));
 const catalog = code(join(SRC, "pages", "Catalog.jsx"));
 const adminAuthors = code(join(SRC, "pages", "admin", "AdminAuthors.jsx"));
 const ext = code(join(ROOT, "backend", "extensions.py"));
+const srv = code(join(ROOT, "backend", "server.py"));
 const vercel = readFileSync(join(HERE, "..", "vercel.json"), "utf8");
 
 console.log("-- the old author URL is no longer a dead end --");
@@ -95,9 +96,17 @@ check(catalog.indexOf("authorHits.length > 0") < catalog.indexOf("didYouMean.len
       + "fuzzy match on a title");
 
 console.log("\n-- an author cannot silently fall out of the sitemap --");
-check(/a\["in_sitemap"\] = has_bio and has_books/.test(ext),
+check(/a\["in_sitemap"\] = has_books\b/.test(ext),
       "the admin roster carries whether each author is submitted");
-check(/a\["sitemap_reason"\] = "No bio"/.test(ext), "and why, when they are not");
+check(/a\["sitemap_reason"\] = "" if has_books else "No live titles"/.test(ext),
+      "and why, when they are not");
+// The bio gate was dropped on 2026-09-30 (owner's decision). Both the sitemap
+// and the admin status must agree on that — neither may test the bio.
+const sitemapFn = srv.split("async def sitemap")[1]?.split("\nasync def ")[0] || "";
+check(sitemapFn.includes("books_for_authors") && !/\.get\("bio"\)/.test(sitemapFn),
+      "the sitemap admits an author on live titles alone, not on a bio");
+check(!/has_bio/.test(ext.split("async def admin_list_authors")[1].split("async def")[0]),
+      "and the admin status no longer tests the bio either");
 check(/with_books = await books_for_authors\(\)/.test(ext),
       "asked of the LIVE matcher, the same question the sitemap and the author page ask");
 /* Scoped to a READ of the stored field, not to the substring.

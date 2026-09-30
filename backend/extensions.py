@@ -997,10 +997,11 @@ async def admin_list_authors():
 
     WHY EACH ROW CARRIES ITS SITEMAP STATUS
 
-    The sitemap advertises an author only if they have a bio AND at least one
-    live title — a deliberate rule, so Google is never handed a page that is a
-    name, a photo and whitespace. The rule is right. What was wrong is that its
-    cost was invisible.
+    The sitemap advertises an author only if they have at least one live title
+    — a deliberate rule, so Google is never handed a dead-end page. (A bio was
+    also required until 2026-09-30; see the sitemap in server.py for why that
+    was dropped.) What was wrong originally is that the rule's cost was
+    invisible.
 
     Somesh Kumar Upadhyay ranked 8th for a 260-a-month keyword and was the
     highest-traffic landing page on the site, and his page was not in the
@@ -1017,17 +1018,11 @@ async def admin_list_authors():
     authors = await db.authors.find({}, {"_id": 0}).to_list(None)
     with_books = await books_for_authors()
     for a in authors:
-        has_bio = bool((a.get("bio") or "").strip())
+        # Must mirror the sitemap rule in server.py exactly, or this screen
+        # reports a status the XML does not have.
         has_books = bool(with_books.get(a.get("id")))
-        a["in_sitemap"] = has_bio and has_books
-        if has_bio and has_books:
-            a["sitemap_reason"] = ""
-        elif not has_bio and not has_books:
-            a["sitemap_reason"] = "No bio, and no live titles"
-        elif not has_bio:
-            a["sitemap_reason"] = "No bio"
-        else:
-            a["sitemap_reason"] = "No live titles"
+        a["in_sitemap"] = has_books
+        a["sitemap_reason"] = "" if has_books else "No live titles"
         # What the matcher actually found, so a stale title_count is obvious
         # rather than quietly believed.
         a["live_title_count"] = len(with_books.get(a.get("id")) or [])

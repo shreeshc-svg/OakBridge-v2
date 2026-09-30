@@ -126,13 +126,12 @@ function AuthorRow({ a, index, count, mode, onChange, onSave, onDelete, onMove, 
 
                 {/* WHETHER GOOGLE IS EVEN TOLD THIS PAGE EXISTS.
 
-                    The sitemap advertises an author only with a bio AND a live
-                    title — right, because a page that is a name and whitespace
-                    is a page Google judges the site by. But the cost was
-                    invisible: Somesh Kumar Upadhyay ranked 8th for a keyword
-                    searched 260 times a month, was the site's top landing page,
-                    and was not in the sitemap because his bio is blank. Nothing
-                    said so. Finding it meant diffing 160 ids against the XML.
+                    The sitemap advertises an author only with a live title. (It
+                    also required a bio until 2026-09-30 — dropped, because
+                    Somesh Kumar Upadhyay ranked 8th for a keyword searched 260
+                    times a month, was the site's top landing page, and was not
+                    in the sitemap because his bio is blank. Nothing said so.
+                    Finding it meant diffing 160 ids against the XML.)
 
                     The count shown is what the LIVE matcher found, not the
                     stored title_count — that field is stale and reads 1 for
