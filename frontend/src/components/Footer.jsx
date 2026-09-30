@@ -124,7 +124,7 @@ export default function Footer() {
         fetchCollection("site_footer_socials")
             .then((d) => setSocials(visibleSocials(d?.items)))
             .catch(() => {});
-    }, []);
+    }, [setSite, setColumns, setLegal, setSocials]);
 
     const c = {
         est: site.footer_est || DEFAULTS.est,

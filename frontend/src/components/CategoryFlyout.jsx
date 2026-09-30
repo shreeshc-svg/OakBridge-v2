@@ -119,7 +119,7 @@ export function useCategoryFlyout() {
         return () => {
             live = false;
         };
-    }, []);
+    }, [setCats, setBest]);
 
     const clear = () => {
         clearTimeout(openT.current);

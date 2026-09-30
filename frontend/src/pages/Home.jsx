@@ -233,7 +233,7 @@ export default function Home() {
                 setBootPool([]);
             })
             .catch(() => {});
-    }, []);
+    }, [setSite, setSettings, setTestimonials, setHeroSlides]);
 
     // "What leaders are reading" shows ONLY the books the admin has explicitly
     // selected (home_bestsellers), in the admin's order — never the whole catalogue.

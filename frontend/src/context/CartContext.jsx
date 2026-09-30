@@ -55,7 +55,7 @@ export function CartProvider({ children }) {
     useEffect(() => {
         fetchSettings().then(setSettings).catch(() => {});
         fetchSiteContent().then(setSite).catch(() => {});
-    }, []);
+    }, [setSettings, setSite]);
 
     const { isAuthenticated } = useAuth();
     const cartLoaded = useRef(false);

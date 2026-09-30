@@ -80,7 +80,7 @@ export function useGiftingFlyout() {
         return () => {
             live = false;
         };
-    }, []);
+    }, [setHampers]);
 
     const clear = () => {
         clearTimeout(openT.current);

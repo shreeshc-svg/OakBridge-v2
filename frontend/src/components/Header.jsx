@@ -153,7 +153,7 @@ export default function Header() {
                 if (items.length) setNavItems(items);
             })
             .catch(() => {});
-    }, []);
+    }, [setNavItems]);
 
 
     return (
