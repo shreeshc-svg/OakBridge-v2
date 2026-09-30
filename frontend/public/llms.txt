@@ -1,16 +1,30 @@
 # Oakbridge Publishing
 
-> Independent scholarly press (est. 2017, New Delhi). Publishes authoritative
-> law, tax, business and academic titles, reference works, and children's and
-> test-prep books, and runs events and professional training.
+> Independent scholarly press (est. 2017, New Delhi). Publishes authoritative law, tax, business and academic titles, reference works, and children's and test-prep books, and runs events and professional training.
+
+Categories: Law, Taxation, Business & Management, Academic, Professional & STEM, Test Prep, Children, General & Reference.
 
 ## Key pages
-- Bookstore: https://oakbridge.in/books
-- Categories: Law, Taxation, Business & Management, Academic, Professional & STEM, Test Prep, Children, General & Reference
-- Authors: https://oakbridge.in/authors
-- Events: https://oakbridge.in/events
-- About: https://oakbridge.in/about
-- Contact: https://oakbridge.in/contact
 
-## Contact
+- [Bookstore](https://www.oakbridge.in/books): the full catalogue, filterable by category
+- [eBooks](https://www.oakbridge.in/ebooks): titles available as eBooks
+- [Authors](https://www.oakbridge.in/authors): the scholars and practitioners who write for Oakbridge
+- [What We Do](https://www.oakbridge.in/what-we-do): publishing, events, academy and digital solutions
+- [Events](https://www.oakbridge.in/events): conferences, launches and summits
+- [Academy](https://www.oakbridge.in/academy): professional training programmes
+- [Gifting](https://www.oakbridge.in/gifting): corporate and occasion book hampers
+- [Submissions](https://www.oakbridge.in/submissions): how to submit a manuscript
+- [About](https://www.oakbridge.in/about): the press and its team
+- [Contact](https://www.oakbridge.in/contact): enquiries and bulk orders
+
+## Policies
+
+- [Shipping policy](https://www.oakbridge.in/shipping-policy)
+- [Refund policy](https://www.oakbridge.in/refund-policy)
+- [Privacy policy](https://www.oakbridge.in/privacy)
+- [Terms](https://www.oakbridge.in/terms)
+
+## Optional
+
+- [Sitemap](https://www.oakbridge.in/sitemap.xml): every book and author page
 - Email: info@oakbridge.in

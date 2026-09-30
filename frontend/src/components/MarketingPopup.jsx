@@ -58,6 +58,18 @@ function alreadySeen(frequency, stamp) {
     }
 }
 
+// "https://www.oakbridge.events/x" -> "oakbridge.events"; a relative link
+// ("/events") is named by its path. Never throws on an admin typo.
+function linkHost(link) {
+    try {
+        const u = new URL(link, window.location.origin);
+        const bare = (h) => h.replace(/^www\./, "");
+        return bare(u.hostname) === bare(window.location.hostname) ? u.pathname : bare(u.hostname);
+    } catch {
+        return link;
+    }
+}
+
 function remember(frequency, stamp) {
     if (frequency === "always") return;
     try {
@@ -162,6 +174,13 @@ export default function MarketingPopup({ site }) {
                             remember(frequency, image);
                         }}
                         data-testid="marketing-popup-link"
+                        /* A link needs a name even when its image is
+                           decorative (alt=""): Lighthouse flagged this as
+                           "Links must have discernible text", and a screen
+                           reader announced it as just "link". The admin's alt
+                           wins; otherwise name where it goes, which is at
+                           least something a visitor can act on. */
+                        aria-label={alt || `Open promotion: ${linkHost(link)}`}
                     >
                         {art}
                     </a>

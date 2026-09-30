@@ -17,6 +17,7 @@
   ],
   "rewrites": [
     { "source": "/sitemap.xml", "destination": "https://api.oakbridge.in/api/sitemap.xml" },
+    { "source": "/.well-known/:path*", "destination": "https://api.oakbridge.in/api/.well-known/:path*" },
     { "source": "/(.*)", "destination": "/app-shell.html" }
   ]
 }
