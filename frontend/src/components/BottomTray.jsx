@@ -3,12 +3,16 @@ import { Link, useLocation } from "react-router-dom";
 import { Home, BookOpen, ShoppingBag, User, LogIn } from "lucide-react";
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
+import { useHydrated } from "../lib/boot";
 
 // Mobile-only bottom navigation tray. Hidden on md+ (desktop uses the header).
 export default function BottomTray() {
     const loc = useLocation();
-    const { count, setIsOpen } = useCart();
+    const { count: liveCount, setIsOpen } = useCart();
     const { isAuthenticated } = useAuth();
+    // Same as the header badge: the prerendered page has an empty cart, so the
+    // hydrating render must too. See lib/boot.js.
+    const count = useHydrated() ? liveCount : 0;
 
     const isActive = (p) =>
         p === "/" ? loc.pathname === "/" : loc.pathname.startsWith(p);

@@ -383,7 +383,33 @@ async function renderTo(browser, base, route, budget = budgetFor()) {
             { timeout: budget },
             expected,
         );
-        const html = "<!doctype html>\n" + (await page.evaluate(() => document.documentElement.outerHTML));
+        /*
+         * Embed the hydration snapshot (src/lib/boot.js) and read the markup in
+         * ONE evaluate() call.
+         *
+         * Two calls would leave a gap in which a late fetch could land and
+         * re-render: the snapshot would then describe one page and the HTML
+         * another, and hydration would fail exactly as it did before the
+         * snapshot existed. Inside a single synchronous callback nothing else
+         * can run between the two reads.
+         *
+         * `<` is escaped so that no string in the data (a book blurb, an admin
+         * banner title) can close the <script> element early. JSON.parse reads
+         * < back as `<`, so the values round-trip unchanged.
+         */
+        const html = "<!doctype html>\n" + (await page.evaluate(() => {
+            const old = document.getElementById("__BOOT__");
+            if (old) old.remove();
+            const data = window.__BOOT_DATA__;
+            if (data && Object.keys(data).length) {
+                const s = document.createElement("script");
+                s.type = "application/json";
+                s.id = "__BOOT__";
+                s.textContent = JSON.stringify(data).replace(/</g, "\\u003c");
+                document.body.appendChild(s);
+            }
+            return document.documentElement.outerHTML;
+        }));
 
         /*
          * Guard against writing an unrendered page.

@@ -11,6 +11,7 @@ import { useAuth } from "./AuthContext";
 import { saveCart, loadCart, fetchSettings, fetchSiteContent } from "../lib/api";
 import { track } from "../lib/analytics";
 import { preorderState } from "../lib/preorder";
+import { useBootState } from "../lib/boot";
 
 const CartContext = createContext(null);
 const STORAGE_KEY = "oakbridge_cart_v1";
@@ -33,7 +34,10 @@ export function CartProvider({ children }) {
     });
     const [isOpen, setIsOpen] = useState(false);
     const [coupon, setCouponState] = useState(null);
-    const [settings, setSettings] = useState(null);
+    // Boot state, not plain state: every BookCard reads these while rendering
+    // (delivery line, eBook label), so an empty first render here broke
+    // hydration on every page with a book grid. See lib/boot.js.
+    const [settings, setSettings] = useBootState("cart:settings", null);
     /*
      * Site content lives here beside settings so a book card can read it.
      *
@@ -42,7 +46,7 @@ export function CartProvider({ children }) {
      * and threading it down as a prop would mean touching every page that
      * renders a grid. One fetch, shared by everything under the provider.
      */
-    const [site, setSite] = useState(null);
+    const [site, setSite] = useBootState("cart:site", null);
 
     useEffect(() => {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(items));

@@ -4,6 +4,7 @@ import { subscribeNewsletter, fetchSiteContent, fetchCollection } from "../lib/a
 import { toast } from "sonner";
 import { useFormShield, HoneypotField } from "../lib/formShield";
 import { socialIcon, socialLabel, visibleSocials } from "../lib/socials";
+import { useBootState } from "../lib/boot";
 
 const DEFAULT_COLUMNS = [
     {
@@ -96,13 +97,15 @@ export default function Footer() {
     const { website, setWebsite, shield } = useFormShield();
     const [email, setEmail] = useState("");
     const [loading, setLoading] = useState(false);
-    const [site, setSite] = useState({});
-    const [columns, setColumns] = useState(DEFAULT_COLUMNS);
-    const [legal, setLegal] = useState(DEFAULT_LEGAL);
+    // Boot state: the footer is on every prerendered page, so starting these
+    // from their defaults broke hydration site-wide. See lib/boot.js.
+    const [site, setSite] = useBootState("footer:site", {});
+    const [columns, setColumns] = useBootState("footer:columns", DEFAULT_COLUMNS);
+    const [legal, setLegal] = useBootState("footer:legal", DEFAULT_LEGAL);
     // Starts empty rather than with defaults: the defaults carry no URLs, so
     // seeding them here would render nothing anyway, and an empty array keeps
     // the "have we loaded yet" question out of the markup below.
-    const [socials, setSocials] = useState([]);
+    const [socials, setSocials] = useBootState("footer:socials", []);
 
     useEffect(() => {
         fetchSiteContent().then(setSite).catch(() => {});

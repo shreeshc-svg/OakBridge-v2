@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useBootState } from "../lib/boot";
 import { Link } from "react-router-dom";
 import { fetchCategories, fetchBestsellers, formatINR, mediaUrl } from "../lib/api";
 import { OPEN_MS, CLOSE_MS } from "./GiftingFlyout";
@@ -104,8 +105,10 @@ export function browsableCategories(list) {
 /** Shared state for the trigger, the panel and the drawer section. */
 export function useCategoryFlyout() {
     const [open, setOpen] = useState(false);
-    const [cats, setCats] = useState(null);
-    const [best, setBest] = useState(null);
+    // Boot state: the panel is in the DOM (hidden) whenever categories exist,
+    // so the prerendered header already contains it. See lib/boot.js.
+    const [cats, setCats] = useBootState("nav:cats", null);
+    const [best, setBest] = useBootState("nav:best", null);
     const openT = useRef(null);
     const closeT = useRef(null);
 

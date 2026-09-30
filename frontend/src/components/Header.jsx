@@ -6,6 +6,7 @@ import { useAuth } from "../context/AuthContext";
 import CartSheet from "./CartSheet";
 import SearchBox from "./SearchBox";
 import { fetchCollection } from "../lib/api";
+import { useBootState, useHydrated } from "../lib/boot";
 import {
     useGiftingFlyout,
     GiftingTrigger,
@@ -45,7 +46,11 @@ export default function Header() {
     const [mobileOpen, setMobileOpen] = useState(false);
     const [searchOpen, setSearchOpen] = useState(false);
     const [accountOpen, setAccountOpen] = useState(false);
-    const [navItems, setNavItems] = useState(DEFAULT_NAV);
+    const [navItems, setNavItems] = useBootState("header:nav", DEFAULT_NAV);
+    // The build renders with an empty cart; a returning visitor's count comes
+    // from localStorage. Show the build's answer on the hydrating render.
+    const hydrated = useHydrated();
+    const badgeCount = hydrated ? count : 0;
     const fly = useGiftingFlyout();
     /*
      * Which nav link drops the hamper panel.
@@ -204,12 +209,12 @@ export default function Header() {
                             aria-label="Open cart"
                         >
                             <ShoppingBag size={18} strokeWidth={1.5} />
-                            {count > 0 && (
+                            {badgeCount > 0 && (
                                 <span
                                     data-testid="cart-count-badge"
                                     className="absolute -top-0.5 -right-0.5 bg-[#CC0033] text-white text-[10px] font-mono min-w-[16px] h-[16px] px-1 flex items-center justify-center"
                                 >
-                                    {count}
+                                    {badgeCount}
                                 </span>
                             )}
                         </button>

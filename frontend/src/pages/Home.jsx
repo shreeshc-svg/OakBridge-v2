@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { bootRead, bootWrite, useBootState } from "../lib/boot";
 import Seo from "../components/Seo";
 import HamperBanner from "../components/HamperBanner";
 import { Link } from "react-router-dom";
@@ -183,14 +184,26 @@ function TestimonialsCarousel({ items, overline, title }) {
 }
 
 export default function Home() {
+    /*
+     * Hydration snapshot (lib/boot.js). `/` is prerendered with all of this
+     * loaded, so the first client render has to start from the same data or
+     * React discards the markup and the page visibly rebuilds (CLS, NO_LCP).
+     *
+     * The book lists are NOT snapshotted raw — /books?limit=100 alone is
+     * ~220 KB, and the page already carries the cards it shows. Only what is
+     * rendered goes in: the Hot Off the Press row (seeded into `newRel`, which
+     * is what builds that row) and the carousel's resolved books (`bootPool`,
+     * a lookup pool only). Both are replaced by the live responses below.
+     */
     const [featured, setFeatured] = useState([]);
-    const [newRel, setNewRel] = useState([]);
+    const [newRel, setNewRel] = useState(() => bootRead("home:newRow") || []);
     const [fallback, setFallback] = useState([]);
     const [bestsellers, setBestsellers] = useState([]);
-    const [site, setSite] = useState({});
-    const [settings, setSettings] = useState(null);
-    const [testimonials, setTestimonials] = useState([]);
-    const [heroSlides, setHeroSlides] = useState([]);
+    const [bootPool, setBootPool] = useState(() => bootRead("home:carousel") || []);
+    const [site, setSite] = useBootState("home:site", {});
+    const [settings, setSettings] = useBootState("home:settings", null);
+    const [testimonials, setTestimonials] = useBootState("home:testimonials", []);
+    const [heroSlides, setHeroSlides] = useBootState("home:heroSlides", []);
     /*
      * Which business descriptions are expanded, on mobile only.
      *
@@ -212,7 +225,14 @@ export default function Home() {
         // top of the site, so an unfinished row is dropped rather than reserved.
         fetchCollection("home_hero_slides").then((d) => setHeroSlides((d?.items || []).filter((s) => s && s.enabled !== false && s.image))).catch(() => {});
         // Fallback feed in case bestseller / new-release flags are sparse (also the pool for the curated carousel)
-        fetchBooks({ sort: "featured", limit: 100 }).then(setFallback).catch(() => {});
+        // Once the full pool is here the build-time carousel books step aside,
+        // so a price or stock change since the deploy is never left showing.
+        fetchBooks({ sort: "featured", limit: 100 })
+            .then((d) => {
+                setFallback(d);
+                setBootPool([]);
+            })
+            .catch(() => {});
     }, []);
 
     // "What leaders are reading" shows ONLY the books the admin has explicitly
@@ -222,7 +242,9 @@ export default function Home() {
         const ids = Array.isArray(settings?.home_bestsellers) ? settings.home_bestsellers : [];
         if (!ids.length) return [];
         const pool = new Map(
-            [...bestsellers, ...featured, ...newRel, ...fallback].map((b) => [b.id, b]),
+            // bootPool first: a Map keeps the LAST value per id, so any live
+            // copy of the same book overrides the build-time one.
+            [...bootPool, ...bestsellers, ...featured, ...newRel, ...fallback].map((b) => [b.id, b]),
         );
         return ids.map((id) => pool.get(id)).filter(Boolean);
     })();
@@ -258,6 +280,14 @@ export default function Home() {
     // hundreds of cards and their covers into the DOM for a section nobody
     // scrolls to the end of.
     const newReleasesRow = (newRel.length ? newRel : fallback).slice(0, HOT_OFF_PRESS_MAX);
+
+    // Record exactly what this render shows, for the snapshot (prerender only;
+    // a no-op in every real browser). Layout effect, so it lands in the same
+    // task as the DOM it describes.
+    useLayoutEffect(() => {
+        bootWrite("home:newRow", newReleasesRow);
+        bootWrite("home:carousel", carouselBooks);
+    });
 
     return (
         <div data-testid="home-page" className="flex flex-col">

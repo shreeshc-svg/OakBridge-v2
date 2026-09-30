@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useBootState } from "../lib/boot";
 import { Link } from "react-router-dom";
 import { listHampers, formatINR, mediaUrl } from "../lib/api";
 
@@ -68,7 +69,8 @@ export function flyoutSavings(h) {
 /** Shared state for the trigger and the panel. */
 export function useGiftingFlyout() {
     const [open, setOpen] = useState(false);
-    const [hampers, setHampers] = useState(null);
+    // Boot state for the same reason as the category flyout. See lib/boot.js.
+    const [hampers, setHampers] = useBootState("nav:hampers", null);
     const openT = useRef(null);
     const closeT = useRef(null);
 
