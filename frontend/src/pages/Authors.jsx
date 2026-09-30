@@ -259,6 +259,16 @@ function initials(name) {
 
 function AuthorTile({ a, idx, hideSpecialty = false }) {
     const photo = mediaUrl(a.photo) || a.photo;
+    /*
+     * Label above the name: specialty, else category.
+     *
+     * 48 of 160 authors (live, 2026-09-30) came in from the author sheet with
+     * an empty specialty but a category, so their tiles had no label while
+     * the tile beside them did — the grid looked half-finished. Category is
+     * the same vocabulary ("Law, Tax & Professional"), so it is an honest
+     * fallback rather than an invented one.
+     */
+    const label = ((a.specialty || "").trim() || (a.category || "").trim());
     return (
         <Link
             to={`/authors/${a.id}`}
@@ -287,7 +297,7 @@ function AuthorTile({ a, idx, hideSpecialty = false }) {
                 </div>
             </div>
             <div className="mt-4">
-                {!hideSpecialty && a.specialty && <div className="overline !text-[10px]">{a.specialty}</div>}
+                {!hideSpecialty && label && <div className="overline !text-[10px]">{label}</div>}
                 <h3 className="font-serif text-lg xl:text-xl mt-1.5 text-[#002B5C] group-hover:text-[#CC0033] transition-colors leading-tight">
                     {a.name}
                 </h3>
