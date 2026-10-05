@@ -133,9 +133,23 @@ async def sync_stock_from_sheet(csv_text: Optional[str] = None) -> dict:
     return result
 
 
+async def _zoho_is_master() -> bool:
+    """While Zoho Inventory runs live, it owns books.stock and the sheet stands
+    down. Two masters writing the same field would simply overwrite each other
+    twice a day, and nobody could say which number was true."""
+    from zoho_inventory import zoho_owns_stock
+    return await zoho_owns_stock()
+
+
 @inventory_router.post("/admin/inventory/sync-from-sheet")
 async def admin_sync_from_sheet(_: dict = Depends(require_admin)):
     """Run a stock sync from the master sheet right now (admin-triggered)."""
+    if await _zoho_is_master():
+        raise HTTPException(
+            status_code=409,
+            detail="Zoho Inventory is live and now sets stock — the sheet sync is paused. "
+                   "Switch Zoho to Test mode or off to use the sheet again.",
+        )
     return await sync_stock_from_sheet()
 
 
@@ -157,6 +171,11 @@ async def task_inventory_sync(x_task_token: Optional[str] = Header(None)):
     token = os.environ.get("TASK_TOKEN")
     if not token or x_task_token != token:
         raise HTTPException(status_code=401, detail="Invalid task token")
+
+    # Not an error, so no alert email: the cron keeps firing twice a day and
+    # each run would otherwise mail the team about a deliberate setting.
+    if await _zoho_is_master():
+        return {"ok": True, "skipped": "Zoho Inventory is live and owns stock"}
 
     try:
         result = await sync_stock_from_sheet()

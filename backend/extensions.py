@@ -1628,6 +1628,12 @@ async def admin_update_order(order_id: str, payload: OrderStatusUpdate):
         raise HTTPException(status_code=404, detail="Order not found")
     order = await db.orders.find_one({"id": order_id}, {"_id": 0})
 
+    if payload.status == "cancelled":
+        # Release the copies in Zoho Inventory too (voids the sales order, or
+        # stops it being sent). No-op while the Zoho link is off; never raises.
+        from zoho_inventory import enqueue_void
+        await enqueue_void(order_id)
+
     sent = False
     if payload.notify:
         try:

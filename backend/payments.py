@@ -362,6 +362,17 @@ async def _apply_stock_decrement(order_id: str) -> None:
                 {"$addToSet": {"backorder_items": bid}, "$set": {"needs_attention": True}},
             )
 
+    # Zoho Inventory (Admin → Inventory). Queued here, at the one point that
+    # runs exactly once per paid order, with the exact copies just taken off
+    # the website's stock — so Zoho commits the same books. A queue, not a
+    # call: Zoho being slow or down must never touch the payment path, and
+    # enqueue_order never raises. It does nothing while the link is off.
+    from zoho_inventory import enqueue_order
+
+    full = await db.orders.find_one({"id": order_id}, {"_id": 0, "id": 1, "order_number": 1, "items": 1})
+    if full:
+        await enqueue_order(full, lines)
+
 
 class CreateOrderRequest(BaseModel):
     order_id: str = Field(..., description="Local Oakbridge order id (from db.orders)")

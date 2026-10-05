@@ -87,6 +87,20 @@ def load(db):
         def __getattr__(self, _):
             return lambda *a, **k: None
 
+    # The function now hands its lines to the Zoho queue (a no-op while the
+    # link is off). Stubbed here so this test stays about stock, and so the
+    # hand-off itself can be checked: Zoho must get the EXPANDED lines.
+    import types
+    zoho = types.ModuleType("zoho_inventory")
+    zoho.queued = []
+
+    async def enqueue_order(order, lines):
+        zoho.queued.append(list(lines))
+
+    zoho.enqueue_order = enqueue_order
+    sys.modules["zoho_inventory"] = zoho
+    db.zoho = zoho
+
     ns = {"db": db, "logger": Log()}
     exec(compile(ast.Module(body=fn, type_ignores=[]), "<payments>", "exec"), ns)
     return ns["_apply_stock_decrement"]
@@ -125,6 +139,16 @@ print("\n-- three hampers in one line --")
 db = run([{"book_id": "hamper-1", "quantity": 3}])
 check(dict(db.books.incs) == {"hamper-1": -3, "bk-a": -3, "bk-b": -6},
       f"component quantities multiply by the line quantity {dict(db.books.incs)}")
+
+print("\n-- the Zoho queue gets what the shelf lost --")
+check(db.zoho.queued == [[("hamper-1", 3), ("bk-a", 3), ("bk-b", 6)]],
+      f"queued lines match the decrement, hamper contents expanded {db.zoho.queued}")
+db2 = DB(BOOKS(), {"o1": {"id": "o1", "items": [{"book_id": "bk-c", "quantity": 1}]}})
+fn2 = load(db2)
+asyncio.run(fn2("o1"))
+asyncio.run(fn2("o1"))         # same stub, second call
+check(db2.zoho.queued == [[("bk-c", 1)]],
+      f"a repeat call (webhook + /verify) queues nothing new {db2.zoho.queued}")
 
 print("\n-- a hamper and a loose copy of a book inside it --")
 db = run([{"book_id": "hamper-1", "quantity": 1}, {"book_id": "bk-a", "quantity": 1}])
