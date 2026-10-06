@@ -114,15 +114,6 @@ export const resetPassword = (token, password) =>
     api.post("/auth/reset-password", { token, password }).then((r) => r.data);
 export const syncInventoryFromSheet = () =>
     api.post("/admin/inventory/sync-from-sheet").then((r) => r.data);
-// Zoho Inventory link (backend/zoho_inventory.py). Off until switched on.
-export const adminZohoStatus = () => api.get("/admin/inventory/zoho").then((r) => r.data);
-export const adminZohoSettings = (patch) =>
-    api.put("/admin/inventory/zoho/settings", patch).then((r) => r.data);
-export const adminZohoTestConnection = () =>
-    api.post("/admin/inventory/zoho/test-connection").then((r) => r.data);
-export const adminZohoSyncNow = () => api.post("/admin/inventory/zoho/sync-now").then((r) => r.data);
-export const adminZohoRetryFailed = () =>
-    api.post("/admin/inventory/zoho/retry-failed").then((r) => r.data);
 
 // My account
 export const fetchMyOrders = () => api.get("/my/orders").then((r) => r.data);

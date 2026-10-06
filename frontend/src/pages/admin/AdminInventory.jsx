@@ -5,7 +5,6 @@ import { adminLowStock, fetchBooks, adminUpdateBook, formatINR, mediaUrl,
          syncInventoryFromSheet, fetchSettings, adminSetSetting } from "../../lib/api";
 import { toast } from "sonner";
 import ExportButton from "../../components/admin/ExportButton";
-import ZohoInventoryPanel from "../../components/admin/ZohoInventoryPanel";
 
 export default function AdminInventory() {
     const [data, setData] = useState({ low_stock: [], out_of_stock: [], threshold: 10 });
@@ -138,13 +137,6 @@ export default function AdminInventory() {
                     </label>
                 </div>
             </div>
-
-            <ZohoInventoryPanel
-                onStockChanged={() => {
-                    loadBooks();
-                    loadAlerts();
-                }}
-            />
 
             {syncResult && (
                 <div

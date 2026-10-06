@@ -690,9 +690,6 @@ async def startup_event():
     await ensure_indexes()
     await ensure_feature_indexes()
     init_storage()
-    # Idles while the Zoho link is off (Admin → Inventory); see zoho_inventory.py.
-    from zoho_inventory import start_scheduler
-    start_scheduler()
 
 
 # ============== ROUTES ==============
@@ -1767,25 +1764,6 @@ async def create_order(payload: OrderCreate, user: Optional[dict] = Depends(get_
         avail = int(bdoc.get("stock", 0) or 0)
         if it.quantity > avail:
             shortages.append({"title": bdoc.get("title", "Item"), "requested": it.quantity, "available": avail})
-    if not shortages:
-        # Zoho Inventory, live mode only: ask Zoho about these books now, so a
-        # copy the warehouse has marked gone since the last 15-minute pull is
-        # not sold. Returns {} when the link is off, in test mode, or when Zoho
-        # is slow — the website's own count above then decides on its own.
-        from zoho_inventory import checkout_live_counts
-        import zoho_core
-
-        requested: dict = {}
-        for it in payload.items:
-            requested[it.book_id] = requested.get(it.book_id, 0) + it.quantity
-        live = await checkout_live_counts(list(requested))
-        if live:
-            shortages = zoho_core.shortages(
-                requested,
-                {bid: int(b.get("stock", 0) or 0) for bid, b in books_by_id.items()},
-                live,
-                {bid: b.get("title", "Item") for bid, b in books_by_id.items()},
-            )
     if shortages:
         raise HTTPException(
             status_code=409,
@@ -1908,9 +1886,7 @@ app.include_router(hampers_admin_router)
 app.include_router(packs_public_router)
 app.include_router(packs_admin_router)
 from inventory_sync import inventory_router  # noqa: E402
-from zoho_inventory import zoho_admin_router  # noqa: E402
 app.include_router(inventory_router)
-app.include_router(zoho_admin_router)
 
 # The production domains, Vercel preview and local dev are always allowed; any
 # extra origins in the CORS_ORIGINS env var (comma-separated) are merged in. This
