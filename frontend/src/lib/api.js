@@ -130,12 +130,18 @@ export const whConfirmDoc = (id, body) => api.post(`/warehouse/docs/${id}/confir
 export const whReport = (id, note, lineNo) =>
     api.post(`/warehouse/docs/${id}/report`, { note, line_no: lineNo ?? null }).then((r) => r.data);
 export const whMove = (body) => api.post("/warehouse/move", body).then((r) => r.data);
+export const whInbox = () => api.get("/warehouse/inbox").then((r) => r.data);
+export const whAck = (id, action) => api.post(`/warehouse/docs/${id}/ack`, { action }).then((r) => r.data);
+export const whReopen = (id) => api.post(`/warehouse/docs/${id}/reopen`).then((r) => r.data);
 export const whDocFile = (id, admin = false) =>
     api.get(admin ? `/admin/warehouse/docs/${id}/file` : `/warehouse/docs/${id}/file`, { responseType: "blob" })
         .then((r) => r.data);
 // … and the manager view.
 export const adminWhOverview = () => api.get("/admin/warehouse/overview").then((r) => r.data);
-export const adminWhDocs = () => api.get("/admin/warehouse/docs").then((r) => r.data);
+export const adminWhDocs = (status) =>
+    api.get("/admin/warehouse/docs", { params: status ? { status } : {} }).then((r) => r.data);
+export const adminWhReview = (id, action, note) =>
+    api.post(`/admin/warehouse/docs/${id}/review`, { action, note: note || null }).then((r) => r.data);
 export const adminWhDoc = (id) => api.get(`/admin/warehouse/docs/${id}`).then((r) => r.data);
 export const adminWhUndoDoc = (id) => api.post(`/admin/warehouse/docs/${id}/undo`).then((r) => r.data);
 export const adminWhTestCase = (id, on) =>

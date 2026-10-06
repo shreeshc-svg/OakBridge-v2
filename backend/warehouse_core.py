@@ -447,3 +447,53 @@ def match_order(parcel: dict, orders: list) -> Optional[dict]:
     if not scored or (len(scored) > 1 and scored[0][0] == scored[1][0]):
         return None
     return scored[0][1]
+
+
+# --------------------------------------------------- carton approval (out) ---
+# An outgoing carton goes: packed by the warehouse (copies come off the count
+# at once, so the website cannot sell copies already sitting in a carton) ->
+# checked by the order-management team -> approved (he may ship it) or sent
+# back (copies go back on the count; he repacks) or cancelled (copies go back;
+# he unpacks). These two pure functions hold the rules so they can be tested
+# without a database.
+
+def inbox_bucket(doc: dict) -> Optional[str]:
+    """Which list on the warehouse phone a carton belongs in, or None.
+
+    ready      approved, not yet marked shipped        -> "Shipped" button
+    sent_back  the team wants it repacked              -> "Pack again"
+    cancelled  not going; he has not confirmed unpacking -> "Unpacked"
+    waiting    packed, the team has not looked yet     (no action)
+    Practice runs and other document types never notify.
+    """
+    if doc.get("direction") != "out" or doc.get("practice"):
+        return None
+    st = doc.get("status")
+    if st == "awaiting_approval":
+        return "waiting"
+    if st == "sent_back":
+        return "sent_back"
+    if st == "cancelled" and not doc.get("wh_ack_at"):
+        return "cancelled"
+    # approved_at guards cartons packed before approval existed: they were
+    # never "approved", so they must not suddenly appear as ready to ship.
+    if st == "confirmed" and doc.get("approved_at") and not doc.get("shipped_at"):
+        return "ready"
+    return None
+
+
+def approval_refusal(role: str, sections: Iterable[str], approver: str, packer: str,
+                     superadmin: bool) -> Optional[str]:
+    """Why this person may NOT approve a carton (None = they may).
+
+    The point of approval is a second pair of eyes, so the person who packed
+    a carton cannot approve it (a superadmin can, so one absent colleague
+    never blocks shipping). The warehouse role never approves.
+    """
+    if role == "warehouse":
+        return "The warehouse login cannot approve cartons."
+    if not superadmin and "orders" not in set(sections):
+        return "Approving cartons needs access to Orders."
+    if not superadmin and approver and approver.lower() == (packer or "").lower():
+        return "Someone other than the packer must approve this carton."
+    return None

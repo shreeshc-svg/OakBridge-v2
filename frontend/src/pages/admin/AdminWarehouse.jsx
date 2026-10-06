@@ -3,7 +3,7 @@ import { Link, Navigate } from "react-router-dom";
 import { toast } from "sonner";
 import {
     adminWhOverview, adminWhDocs, adminWhDoc, adminWhUndoDoc, adminWhTestCase, adminWhAccuracy,
-    adminWhReplay, adminWhMode, adminWhMovements, adminWhUndoMove, whDocFile, formatApiError,
+    adminWhReplay, adminWhMode, adminWhMovements, adminWhUndoMove, adminWhReview, whDocFile, formatApiError,
 } from "../../lib/api";
 import { useAuth } from "../../context/AuthContext";
 import { isSuperadmin } from "../../lib/rbac";
@@ -18,16 +18,24 @@ import { isSuperadmin } from "../../lib/rbac";
  *   Accuracy   the error rate of the automatic reading, by document type and
  *              supplier, with the latest corrections and problem reports.
  *   Movements  the ledger, newest first, with Undo for single moves.
+ *   To approve cartons the warehouse has packed, waiting for the
+ *              order-management team: Approve (he may ship), Send back
+ *              (repack; copies return to stock) or Cancel (copies return).
  *
  * The warehouse role itself never lands here: it is sent to /warehouse.
  */
-const TABS = [["trial", "Trial & comparison"], ["docs", "Bills & invoices"], ["accuracy", "Accuracy"], ["moves", "Movements"]];
+const TABS = [["approve", "To approve"], ["trial", "Trial & comparison"], ["docs", "Bills & invoices"], ["accuracy", "Accuracy"], ["moves", "Movements"]];
 const pct = (x) => (x == null ? "—" : `${Math.round(x * 100)}%`);
 const when = (iso) => (iso ? new Date(iso).toLocaleString("en-IN") : "—");
 
 export default function AdminWarehouse() {
     const { user } = useAuth();
-    const [tab, setTab] = useState("trial");
+    const [tab, setTab] = useState("approve");
+    const [pending, setPending] = useState(null);
+    const refreshPending = useCallback(() => {
+        adminWhDocs("awaiting_approval").then((d) => setPending(d.length)).catch(() => {});
+    }, []);
+    useEffect(refreshPending, [refreshPending]);
     if (user?.role === "warehouse") return <Navigate to="/warehouse" replace />;
     return (
         <div data-testid="admin-warehouse-page">
@@ -42,13 +50,14 @@ export default function AdminWarehouse() {
                 {TABS.map(([k, l]) => (
                     <button key={k} type="button" onClick={() => setTab(k)}
                         className={`px-4 py-2 text-sm -mb-px border-b-2 ${tab === k ? "border-[#002B5C] text-[#002B5C] font-medium" : "border-transparent text-[#4B5563]"}`}>
-                        {l}
+                        {l}{k === "approve" && pending ? ` (${pending})` : ""}
                     </button>
                 ))}
             </div>
             <div className="mt-6">
                 {tab === "trial" && <TrialTab canSwitch={isSuperadmin(user?.role)} />}
-                {tab === "docs" && <DocsTab />}
+                {tab === "approve" && <DocsTab key="approve" status="awaiting_approval" onChange={refreshPending} />}
+                {tab === "docs" && <DocsTab key="docs" onChange={refreshPending} />}
                 {tab === "accuracy" && <AccuracyTab />}
                 {tab === "moves" && <MovesTab />}
             </div>
@@ -131,21 +140,51 @@ function TrialTab({ canSwitch }) {
     );
 }
 
-function DocsTab() {
+const STATUS_LABEL = {
+    awaiting_approval: "WAITING FOR APPROVAL", sent_back: "SENT BACK", cancelled: "CANCELLED",
+};
+
+function DocsTab({ status = null, onChange = () => {} }) {
     const [docs, setDocs] = useState(null);
     const [open, setOpen] = useState(null);
-    const load = useCallback(() => { adminWhDocs().then(setDocs).catch(() => setDocs([])); }, []);
+    const [busy, setBusy] = useState(false);
+    const load = useCallback(() => { adminWhDocs(status).then(setDocs).catch(() => setDocs([])); }, [status]);
     useEffect(load, [load]);
     const show = async (id) => { try { setOpen(await adminWhDoc(id)); } catch (e) { toast.error(formatApiError(e)); } };
     const undo = async (id) => {
         if (!window.confirm("Undo this sync? Its stock changes are reversed.")) return;
         try { await adminWhUndoDoc(id); toast.success("Undone."); load(); show(id); } catch (e) { toast.error(formatApiError(e)); }
     };
+    const review = async (id, action) => {
+        let note = "";
+        if (action === "send_back") {
+            note = window.prompt("What should the warehouse fix? (He sees this on his phone.)") || "";
+            if (!note.trim()) return;
+        } else if (action === "cancel") {
+            note = window.prompt("Why is this carton cancelled? The copies go back into stock.") || "";
+            if (!note.trim()) return;
+        } else if (!window.confirm("Approve this carton? The warehouse is told it is ready to ship.")) {
+            return;
+        }
+        setBusy(true);
+        try {
+            const r = await adminWhReview(id, action, note);
+            toast.success(action === "approve" ? "Approved — the warehouse has been told."
+                : `${action === "cancel" ? "Cancelled" : "Sent back"}. ${r.restored} cop${r.restored === 1 ? "y" : "ies"} back in stock.`);
+            load(); onChange();
+            if (status) setOpen(null); else show(id);
+        } catch (e) {
+            toast.error(formatApiError(e));
+        } finally {
+            setBusy(false);
+        }
+    };
     const test = async (id, on) => { try { await adminWhTestCase(id, on); load(); show(id); } catch (e) { toast.error(formatApiError(e)); } };
     const file = async (id) => {
         try { window.open(URL.createObjectURL(await whDocFile(id, true)), "_blank", "noopener"); } catch { toast.error("Could not open the file."); }
     };
     if (!docs) return <p className="text-sm text-[#4B5563]">Loading…</p>;
+    if (status && !docs.length) return <p className="text-sm text-[#4B5563]" data-testid="wh-approve-empty">Nothing waiting — every packed carton has been reviewed.</p>;
     return (
         <div className="grid lg:grid-cols-2 gap-6">
             <ul className="divide-y border border-[#E5E7EB] bg-white" data-testid="wh-docs">
@@ -154,7 +193,7 @@ function DocsTab() {
                         <button type="button" onClick={() => show(d.id)} className={`w-full text-left px-4 py-3 hover:bg-[#F5F7FA] ${open?.id === d.id ? "bg-[#F5F7FA]" : ""}`}>
                             <div className="flex justify-between gap-2 text-sm">
                                 <span className="font-medium text-[#002B5C]">{d.direction === "in" ? "📥 Printer bill" : d.direction === "courier" ? "🚚 Courier sheet" : d.party_kind === "author_copy" ? "📤 Author copy" : "📤 Carton out"} · {d.doc_number || "no number"}</span>
-                                <span className="text-xs">{d.practice ? "PRACTICE · " : ""}{d.status.toUpperCase()}</span>
+                                <span className={`text-xs ${d.status === "awaiting_approval" ? "text-[#B4750F] font-medium" : ""}`}>{d.practice ? "PRACTICE · " : ""}{STATUS_LABEL[d.status] || d.status.toUpperCase()}{d.shipped_at ? " · SHIPPED" : ""}</span>
                             </div>
                             <div className="text-xs text-[#4B5563] mt-0.5">
                                 {d.party_name || "—"} · {when(d.created_at)} · {d.source}
@@ -173,9 +212,47 @@ function DocsTab() {
                         {open.seconds_to_confirm != null ? ` · took ${open.seconds_to_confirm}s` : ""}
                         {open.total_matches === false ? " · ⚠️ lines did not add up to the total" : ""}
                     </div>
+                    {(open.approved_at || open.review_note) && (
+                        <div className="text-xs text-[#4B5563]">
+                            {open.approved_at ? `Approved ${when(open.approved_at)} by ${open.approved_by}` : `Reviewed ${when(open.reviewed_at)} by ${open.reviewed_by}`}
+                            {open.review_note ? ` · “${open.review_note}”` : ""}
+                            {open.shipped_at ? ` · shipped ${when(open.shipped_at)}` : ""}
+                        </div>
+                    )}
+                    {open.status === "awaiting_approval" && (
+                        <div className="border border-[#F59E0B] bg-[#F59E0B]/10 p-3 space-y-2" data-testid="wh-review">
+                            <div className="font-medium text-[#002B5C]">Packed by {open.confirmed_by} — check it against the invoice before it ships</div>
+                            {(open.lines_view || []).length > 0 && (
+                                <table className="w-full text-xs bg-white">
+                                    <thead><tr className="text-left text-[#4B5563]"><th className="py-1 px-2">Book</th><th className="text-right">On invoice</th><th className="text-right px-2">Packed</th></tr></thead>
+                                    <tbody>
+                                        {open.lines_view.map((l, i) => {
+                                            const short = l.invoiced != null && l.packed !== Number(l.invoiced);
+                                            return (
+                                                <tr key={i} className={`border-t ${short ? "bg-[#CC0033]/10" : ""}`}>
+                                                    <td className="py-1 px-2">{l.title} <span className="font-mono text-[#4B5563]">{l.isbn}</span></td>
+                                                    <td className="text-right">{l.invoiced ?? "—"}</td>
+                                                    <td className={`text-right px-2 ${short ? "text-[#CC0033] font-medium" : ""}`}>{l.packed}</td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            )}
+                            {open.approval_refusal ? (
+                                <p className="text-xs text-[#CC0033]">{open.approval_refusal}</p>
+                            ) : (
+                                <div className="flex flex-wrap gap-2">
+                                    <button type="button" disabled={busy} className="bg-[#15803D] text-white px-4 py-2 disabled:opacity-50" onClick={() => review(open.id, "approve")} data-testid="wh-approve">Approve — ready to ship</button>
+                                    <button type="button" disabled={busy} className="border border-[#B4750F] text-[#B4750F] px-4 py-2 disabled:opacity-50" onClick={() => review(open.id, "send_back")} data-testid="wh-send-back">Send back</button>
+                                    <button type="button" disabled={busy} className="border border-[#CC0033] text-[#CC0033] px-4 py-2 disabled:opacity-50" onClick={() => review(open.id, "cancel")} data-testid="wh-cancel">Cancel carton</button>
+                                </div>
+                            )}
+                        </div>
+                    )}
                     <div className="flex flex-wrap gap-2">
                         {open.file_path && <button type="button" className="border px-3 py-1" onClick={() => file(open.id)}>View file</button>}
-                        {open.status === "confirmed" && !open.practice && <button type="button" className="border border-[#CC0033] text-[#CC0033] px-3 py-1" onClick={() => undo(open.id)}>Undo</button>}
+                        {open.status === "confirmed" && !open.practice && !open.shipped_at && <button type="button" className="border border-[#CC0033] text-[#CC0033] px-3 py-1" onClick={() => undo(open.id)}>Undo</button>}
                         {open.status === "confirmed" && (
                             <button type="button" className="border px-3 py-1" onClick={() => test(open.id, !open.test_case)}>
                                 {open.test_case ? "Remove from test cases" : "Use as test case"}

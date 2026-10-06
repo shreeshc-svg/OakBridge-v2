@@ -1,9 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { ArrowLeft, Camera, FileText, PackagePlus, PackageMinus, Search, ScanBarcode, Truck } from "lucide-react";
 import {
-    whState, whLookup, whBooks, whUploadDoc, whConfirmDoc, whReport, whMove, whDocFile, formatApiError,
+    whState, whLookup, whBooks, whUploadDoc, whConfirmDoc, whReport, whMove, whDocFile, whInbox, whAck, whReopen,
+    formatApiError,
 } from "../../lib/api";
 import { useAuth } from "../../context/AuthContext";
 import NoIndex from "../../components/NoIndex";
@@ -38,7 +39,9 @@ export default function WarehouseApp() {
         whState().then(setState).catch(() => setState({ mode: "error" }));
     }, []);
 
-    const back = () => setScreen("home");
+    // A carton the team sent back, reopened for repacking in the "out" screen.
+    const [repack, setRepack] = useState(null);
+    const back = () => { setRepack(null); setScreen("home"); };
     const chip = !state ? "" : state.mode === "live" ? "LIVE" : state.mode === "trial" ? "TRIAL" : "NOT STARTED";
 
     return (
@@ -70,6 +73,7 @@ export default function WarehouseApp() {
             <main className="max-w-xl mx-auto p-4">
                 {screen === "home" && (
                     <div className="space-y-3">
+                        <Inbox onRepack={(d) => { setRepack(d); setScreen("out"); }} />
                         <p className="text-sm text-[#4B5563]">Hello {user?.name?.split(" ")[0] || ""}. What are you doing?</p>
                         <button type="button" className={`${BIG} border-[#15803D]`} onClick={() => setScreen("in")} data-testid="wh-go-in">
                             <PackagePlus size={30} className="text-[#15803D]" /> Books arrived from printer
@@ -89,13 +93,112 @@ export default function WarehouseApp() {
                     </div>
                 )}
                 {(screen === "in" || screen === "out") && (
-                    <DocFlow key={screen} direction={screen} practice={practice} onDone={back} />
+                    <DocFlow key={`${screen}-${repack?.id || ""}`} direction={screen} practice={practice} onDone={back}
+                        initialDoc={screen === "out" ? repack : null} />
                 )}
                 {screen === "courier" && <CourierFlow practice={practice} onDone={back} />}
                 {screen === "move" && <SingleMove practice={practice} />}
                 {screen === "check" && <CheckStock />}
             </main>
         </div>
+    );
+}
+
+/* --------------------------------------------------------------- inbox --- */
+// The warehouse person's notifications. Cartons he packs wait for the office
+// (order-management team) to approve; this is where he learns the answer.
+// Checked on open, every minute while the home screen shows, and whenever the
+// phone comes back to the tab — no push service or SMS template needed.
+const INBOX_POLL_MS = 60000;
+
+function Inbox({ onRepack }) {
+    const [box, setBox] = useState(null);
+    const [busy, setBusy] = useState("");
+    const seenReady = useRef(null);
+
+    const load = useCallback(() => {
+        whInbox().then((b) => {
+            // A new approval while he is looking: say so, and buzz the phone.
+            if (seenReady.current !== null && b.ready.length > seenReady.current) {
+                toast.success("A carton was approved — ready to ship.");
+                try { navigator.vibrate?.(200); } catch { /* not supported */ }
+            }
+            seenReady.current = b.ready.length;
+            setBox(b);
+        }).catch(() => {});
+    }, []);
+
+    useEffect(() => {
+        load();
+        const t = setInterval(load, INBOX_POLL_MS);
+        const onVis = () => { if (document.visibilityState === "visible") load(); };
+        document.addEventListener("visibilitychange", onVis);
+        return () => { clearInterval(t); document.removeEventListener("visibilitychange", onVis); };
+    }, [load]);
+
+    const act = async (id, fn) => {
+        setBusy(id);
+        try { await fn(); load(); } catch (e) { toast.error(formatApiError(e)); load(); } finally { setBusy(""); }
+    };
+    const repack = (id) => act(id, async () => onRepack(await whReopen(id)));
+
+    if (!box) return null;
+    const total = box.ready.length + box.sent_back.length + box.cancelled.length;
+    if (!total && !box.waiting.length) return null;
+
+    const Card = ({ d, tone, children }) => (
+        <div className={`border-2 ${tone} bg-white p-3`} data-testid="wh-inbox-card">
+            <div className="font-medium text-[#002B5C]">
+                {d.party_name || "—"}{d.doc_number ? ` · ${d.doc_number}` : ""}
+            </div>
+            <div className="text-sm text-[#4B5563]">
+                {d.units} cop{d.units === 1 ? "y" : "ies"}: {d.lines.map((l) => `${l.title} ×${l.packed}`).join(", ")}
+            </div>
+            {children}
+        </div>
+    );
+
+    return (
+        <section className="space-y-2" data-testid="wh-inbox">
+            {total > 0 && (
+                <div className="text-sm font-medium text-[#002B5C]">
+                    🔔 {total} carton{total === 1 ? "" : "s"} need{total === 1 ? "s" : ""} you
+                </div>
+            )}
+            {box.ready.map((d) => (
+                <Card key={d.id} d={d} tone="border-[#15803D]">
+                    <div className="text-sm text-[#15803D] font-medium mt-1">✅ Approved — ready to ship{d.approved_by ? ` (by ${d.approved_by})` : ""}</div>
+                    <button type="button" disabled={busy === d.id} className={`${BTN} mt-2 w-full bg-[#15803D] text-white`}
+                        onClick={() => act(d.id, () => whAck(d.id, "shipped"))} data-testid="wh-shipped">
+                        Shipped
+                    </button>
+                </Card>
+            ))}
+            {box.sent_back.map((d) => (
+                <Card key={d.id} d={d} tone="border-[#F59E0B]">
+                    <div className="text-sm text-[#B4750F] font-medium mt-1">↩️ Sent back: {d.review_note}</div>
+                    <button type="button" disabled={busy === d.id} className={`${BTN} mt-2 w-full bg-[#002B5C] text-white`}
+                        onClick={() => repack(d.id)} data-testid="wh-repack">
+                        Pack again
+                    </button>
+                </Card>
+            ))}
+            {box.cancelled.map((d) => (
+                <Card key={d.id} d={d} tone="border-[#CC0033]">
+                    <div className="text-sm text-[#CC0033] font-medium mt-1">✖ Cancelled — do not ship. {d.review_note}</div>
+                    <div className="text-xs text-[#4B5563]">The copies are back in stock. Put them back on the shelf.</div>
+                    <button type="button" disabled={busy === d.id} className={`${BTN} mt-2 w-full border-2 border-[#CC0033] text-[#CC0033]`}
+                        onClick={() => act(d.id, () => whAck(d.id, "unpacked"))} data-testid="wh-unpacked">
+                        Unpacked
+                    </button>
+                </Card>
+            ))}
+            {box.waiting.length > 0 && (
+                <div className="text-xs text-[#4B5563]">
+                    ⏳ Waiting for the office to approve: {box.waiting.map((d) => d.party_name || d.doc_number || "carton").join(", ")}. Don't ship these yet.
+                </div>
+            )}
+        </section>
     );
 }
 
@@ -114,12 +217,28 @@ function ScanBox({ onCode, placeholder = "Scan or type ISBN, then Enter", autoFo
 const isbnOf = (s) => String(s || "").replace(/[^0-9Xx]/g, "").toUpperCase();
 
 /* ------------------------------------------------------- bill / invoice --- */
-function DocFlow({ direction, practice, onDone }) {
+// Lines for a carton reopened after the team sent it back: what he confirmed
+// last time (books he fixed or added by hand included), back at the invoice
+// quantity and with nothing packed, since he repacks from scratch.
+const repackLines = (d) => {
+    const read = Object.fromEntries((d.read_lines || []).filter((r) => r.line_no != null).map((r) => [r.line_no, r]));
+    const prev = d.confirmed_lines || [];
+    if (!prev.length) return (d.read_lines || []).map((l) => ({ ...l, packed: 0 }));
+    return prev.map((c) => ({
+        ...(read[c.line_no] || { line_no: null, doc_title: "Added by hand", candidates: [] }),
+        book_id: c.book_id, include: c.include, qty: c.invoiced ?? read[c.line_no]?.qty ?? c.qty, packed: 0,
+    }));
+};
+
+function DocFlow({ direction, practice, onDone, initialDoc = null }) {
     const [busy, setBusy] = useState(false);
-    const [doc, setDoc] = useState(null);
-    const [lines, setLines] = useState([]);
+    const [doc, setDoc] = useState(initialDoc);
+    const [lines, setLines] = useState(() => (initialDoc ? repackLines(initialDoc) : []));
     const [books, setBooks] = useState([]);
-    const [head, setHead] = useState({ doc_number: "", party_name: "", party_kind: "sale_offline" });
+    const [head, setHead] = useState(() => ({
+        doc_number: initialDoc?.doc_number || "", party_name: initialDoc?.party_name || "",
+        party_kind: initialDoc?.party_kind || "sale_offline",
+    }));
     const cam = useRef(null);
     const fileIn = useRef(null);
     const isOut = direction === "out";
@@ -172,16 +291,23 @@ function DocFlow({ direction, practice, onDone }) {
                 const msg = short.map((l) => `${byId[l.book_id]?.title || "?"}: packed ${l.packed} of ${l.qty}`).join("\n");
                 if (!window.confirm(`Some books are short:\n\n${msg}\n\nSave only what is packed?`)) return;
             }
-            send = lines.map((l) => (l.include && l.book_id ? { ...l, qty: l.packed } : l));
+            // qty becomes what is packed; invoiced keeps the invoice number so
+            // the approver sees "packed 10 of 12".
+            send = lines.map((l) => (l.include && l.book_id ? { ...l, invoiced: Number(l.qty) || 0, qty: l.packed } : l));
         }
         setBusy(true);
         try {
             const res = await whConfirmDoc(doc.id, {
-                lines: send.map((l) => ({ line_no: l.line_no, book_id: l.book_id, qty: Number(l.qty) || 0, include: !!l.include })),
+                lines: send.map((l) => ({
+                    line_no: l.line_no, book_id: l.book_id, qty: Number(l.qty) || 0, include: !!l.include,
+                    invoiced: l.invoiced ?? null,
+                })),
                 doc_number: head.doc_number, party_name: head.party_name,
                 party_kind: isOut ? head.party_kind : undefined,
             });
-            toast.success(res.practice ? "Practice saved — stock not changed." : isOut ? "Carton packed. Stock updated." : "Synced. Stock updated.");
+            toast.success(res.practice ? "Practice saved — stock not changed."
+                : res.awaiting_approval ? "Carton packed. Waiting for the office to approve — don't ship yet."
+                : "Synced. Stock updated.");
             onDone();
         } catch (e) {
             toast.error(formatApiError(e));
@@ -231,6 +357,11 @@ function DocFlow({ direction, practice, onDone }) {
 
     return (
         <div className="space-y-4 pb-28">
+            {doc.review_note && (
+                <div className="border-2 border-[#F59E0B] bg-white p-3 text-[#B4750F] font-medium" data-testid="wh-review-note">
+                    ↩️ The office sent this back: {doc.review_note}
+                </div>
+            )}
             {doc.duplicate_of && (
                 <div className="border-2 border-[#CC0033] bg-white p-3 text-[#CC0033] font-medium">
                     ⚠️ This {isOut ? "invoice" : "bill"} was already synced before. Ask your manager before going on.

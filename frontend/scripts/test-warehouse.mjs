@@ -103,6 +103,18 @@ check(/"payment_status": "paid"[\s\S]{0,200}"warehouse_doc_id": \{"\$in": \[None
 check(/data-testid="wh-go-courier"/.test(screen) && /screen === "courier" && <CourierFlow/.test(screen), "courier button on the phone home screen");
 check(/disabled=\{v === "website_order" && !p\.order_id\}/.test(screen), "courier: website-order choice needs a matched order");
 
+// Carton approval (order-management team -> warehouse).
+const reviewFn = (wh.match(/async def adm_review\([\s\S]*?\n(?=\n\S)/) || [""])[0];
+check(/why = _approval_refusal\(user, doc\)\s*\n\s*if why:\s*\n\s*raise HTTPException\(status_code=403/.test(reviewFn), "approval: server re-checks who may approve");
+check(/update_one\(\{"id": doc_id, "status": "awaiting_approval"\}/.test(reviewFn) && /modified_count != 1/.test(reviewFn), "approval: two reviewers cannot both act");
+check(/if body\.action != "approve":[\s\S]*?_reverse\(mv, user\)/.test(reviewFn), "approval: send back / cancel put the copies back");
+check(/needs_approval = doc\["direction"\] == "out" and not doc\["practice"\]/.test(wh) && /"awaiting_approval" if needs_approval else "confirmed"/.test(wh), "approval: a packed carton waits instead of being final");
+check(/LIVE_STATUSES = \["confirmed", "awaiting_approval"\]/.test(wh) && (wh.match(/\$in": LIVE_STATUSES/g) || []).length === 2, "approval: a carton awaiting approval still counts for duplicate checks");
+check(/if doc\.get\("shipped_at"\):\s*\n\s*raise HTTPException/.test(wh), "approval: a shipped carton cannot be undone");
+check(/<Inbox onRepack=/.test(screen) && /setInterval\(load, INBOX_POLL_MS\)/.test(screen), "warehouse phone checks for approvals");
+check(/data-testid="wh-shipped"/.test(screen) && /data-testid="wh-repack"/.test(screen) && /data-testid="wh-unpacked"/.test(screen), "…and can mark shipped / repack / unpacked");
+check(/data-testid="wh-approve"/.test(admin) && /\["approve", "To approve"\]/.test(admin), "admin: To approve tab with Approve button");
+
 console.log();
 if (failed) {
     console.log(`${failed} assertion(s) failed`);

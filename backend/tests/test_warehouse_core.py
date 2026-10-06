@@ -191,6 +191,25 @@ check(w.match_line({"title": "LA LR Second"}, SHELF, {w.fold("LA LR Second"): "l
 check(w.match_line({"title": "LA LR Second"}, SHELF, {w.fold("LA LR Second"): "gone"})["method"] != "alias",
       "an alias to a deleted book is ignored")
 
+print("-- carton approval --")
+out = {"direction": "out", "practice": False}
+check(w.inbox_bucket({**out, "status": "awaiting_approval"}) == "waiting", "packed carton waits for the office")
+check(w.inbox_bucket({**out, "status": "confirmed", "approved_at": "t"}) == "ready", "approved -> ready to ship")
+check(w.inbox_bucket({**out, "status": "confirmed", "approved_at": "t", "shipped_at": "t"}) is None, "shipped -> gone from the inbox")
+check(w.inbox_bucket({**out, "status": "confirmed"}) is None, "carton packed before approvals existed never shows as ready")
+check(w.inbox_bucket({**out, "status": "sent_back"}) == "sent_back", "sent back -> repack")
+check(w.inbox_bucket({**out, "status": "cancelled"}) == "cancelled", "cancelled -> unpack")
+check(w.inbox_bucket({**out, "status": "cancelled", "wh_ack_at": "t"}) is None, "unpacked -> gone")
+check(w.inbox_bucket({**out, "practice": True, "status": "awaiting_approval"}) is None, "practice never notifies")
+check(w.inbox_bucket({"direction": "in", "practice": False, "status": "confirmed", "approved_at": "t"}) is None,
+      "printer bills are not cartons")
+R = w.approval_refusal
+check(R("fulfilment", ["orders", "warehouse"], "a@o.in", "b@o.in", False) is None, "order team approves someone else's carton")
+check(R("fulfilment", ["orders"], "A@o.in", "a@o.in", False) is not None, "nobody approves their own carton")
+check(R("superadmin", [], "a@o.in", "a@o.in", True) is None, "superadmin may (one absent colleague never blocks shipping)")
+check(R("warehouse", ["warehouse", "orders"], "a@o.in", "b@o.in", False) is not None, "the warehouse login never approves")
+check(R("editor", ["warehouse"], "a@o.in", "b@o.in", False) is not None, "warehouse access alone is not enough — needs Orders")
+
 print("-- helpers --")
 check(w.isbn13_valid("9788169999090") and not w.isbn13_valid("9788196413513"), "ISBN check digit")
 check(w.norm_isbn("978-81-6999-912-0") == "9788169999120", "hyphenated ISBN normalised")

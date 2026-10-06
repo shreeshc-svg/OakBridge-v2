@@ -64,6 +64,9 @@ log = logging.getLogger(__name__)
 MAX_FILE = 15 * 1024 * 1024
 STATE_KEY = "warehouse"
 UNDO_HOURS = 24
+# Documents whose stock change stands (or, for a carton awaiting approval, is
+# already taken off): uploading the same file/number again is a duplicate.
+LIVE_STATUSES = ["confirmed", "awaiting_approval"]
 TEXTRACT_REGION = os.environ.get("TEXTRACT_REGION") or os.environ.get("S3_REGION") or "us-east-1"
 
 IN_REASONS = {"printer", "return", "correction_in", "opening"}
@@ -392,7 +395,7 @@ async def wh_upload_doc(
             raise HTTPException(status_code=400, detail="Send a PDF or a photo (JPG/PNG).")
         sha = hashlib.sha256(data).hexdigest()
         dup = await db.warehouse_docs.find_one(
-            {"sha256": sha, "practice": False, "status": {"$in": ["confirmed"]}}, {"_id": 0, "id": 1, "doc_number": 1})
+            {"sha256": sha, "practice": False, "status": {"$in": LIVE_STATUSES}}, {"_id": 0, "id": 1, "doc_number": 1})
         ext = "pdf" if kind == "pdf" else sniff_image(data)
         path = f"{APP_NAME}/warehouse/{started:%Y/%m}/{doc['id']}.{ext}"
         await asyncio.to_thread(put_object, path, data, "application/pdf" if kind == "pdf" else f"image/{ext}")
@@ -426,7 +429,7 @@ async def wh_upload_doc(
         if doc.get("doc_number"):
             prior = await db.warehouse_docs.find_one(
                 {"doc_number": doc["doc_number"], "direction": direction, "practice": False,
-                 "status": "confirmed", "party_gstin": doc.get("party_gstin", "")},
+                 "status": {"$in": LIVE_STATUSES}, "party_gstin": doc.get("party_gstin", "")},
                 {"_id": 0, "id": 1, "confirmed_at": 1})
             if prior:
                 doc["duplicate_of"] = prior["id"]
@@ -444,6 +447,7 @@ class ConfirmLine(BaseModel):
     book_id: Optional[str] = None
     qty: int = 0
     include: bool = True
+    invoiced: Optional[int] = None   # out: copies on the invoice (qty = copies packed)
 
 
 class ConfirmParcel(BaseModel):
@@ -535,8 +539,13 @@ async def wh_confirm(doc_id: str, body: ConfirmBody, user: dict = Depends(requir
     if doc.get("total_qty"):
         total_ok = sum(ln.qty for ln in kept) == doc["total_qty"]
     now = _now()
+    # A real outgoing carton waits for the order-management team before it may
+    # ship; its copies are already off the count (applied above).
+    needs_approval = doc["direction"] == "out" and not doc["practice"]
     await db.warehouse_docs.update_one({"id": doc_id}, {"$set": {
-        "status": "confirmed", "confirmed_at": now.isoformat(), "confirmed_by": user.get("email", ""),
+        "status": "awaiting_approval" if needs_approval else "confirmed",
+        "confirmed_at": now.isoformat(), "confirmed_by": user.get("email", ""),
+        "review_note": "",
         "confirmed_lines": confirmed, "doc_number": doc_number, "party_name": party,
         "party_kind": party_kind, "metrics": metrics, "total_matches": total_ok,
         "confirmed_parcels": [p.model_dump() for p in body.parcels] if courier else None,
@@ -545,7 +554,84 @@ async def wh_confirm(doc_id: str, body: ConfirmBody, user: dict = Depends(requir
     await audit_log(db, "WAREHOUSE_DOC_CONFIRMED", email=user.get("email", ""), role=user.get("role", ""),
                     meta={"doc": doc_id, "direction": doc["direction"], "number": doc_number,
                           "practice": doc["practice"], "units": sum(ln.qty for ln in kept)})
-    return {"ok": True, "metrics": metrics, "total_matches": total_ok, "practice": doc["practice"]}
+    return {"ok": True, "metrics": metrics, "total_matches": total_ok, "practice": doc["practice"],
+            "awaiting_approval": needs_approval}
+
+
+async def _lines_view(doc: dict) -> list:
+    """Confirmed lines with titles, packed vs on the invoice — what the
+    approver checks and what the warehouse sees in his inbox."""
+    lines = [ln for ln in doc.get("confirmed_lines") or [] if ln.get("include") and ln.get("book_id")]
+    ids = list({ln["book_id"] for ln in lines})
+    books = {b["id"]: b async for b in db.books.find({"id": {"$in": ids}}, {"_id": 0, "id": 1, "title": 1, "isbn": 1})}
+    read = {r.get("line_no"): r for r in doc.get("read_lines") or [] if r.get("line_no") is not None}
+    out = []
+    for ln in lines:
+        b = books.get(ln["book_id"], {})
+        r = read.get(ln.get("line_no")) or {}
+        out.append({"book_id": ln["book_id"], "title": b.get("title", "?"), "isbn": b.get("isbn", ""),
+                    "packed": int(ln.get("qty") or 0),
+                    "invoiced": ln.get("invoiced") if ln.get("invoiced") is not None else r.get("qty")})
+    return out
+
+
+@wh_router.get("/inbox")
+async def wh_inbox(_: dict = Depends(require_warehouse)):
+    """The phone's notifications: cartons approved, sent back, or cancelled."""
+    since = (_now() - timedelta(days=60)).isoformat()
+    docs = await db.warehouse_docs.find(
+        {"direction": "out", "practice": False, "created_at": {"$gte": since},
+         "status": {"$in": ["awaiting_approval", "sent_back", "cancelled", "confirmed"]}},
+        {"_id": 0, "read_error": 0}).sort("confirmed_at", -1).to_list(300)
+    out = {"ready": [], "sent_back": [], "cancelled": [], "waiting": []}
+    for d in docs:
+        bucket = core.inbox_bucket(d)
+        if not bucket:
+            continue
+        lines = await _lines_view(d)
+        out[bucket].append({
+            "id": d["id"], "doc_number": d.get("doc_number", ""), "party_name": d.get("party_name", ""),
+            "party_kind": d.get("party_kind", ""), "units": sum(ln["packed"] for ln in lines), "lines": lines,
+            "packed_at": d.get("confirmed_at"), "approved_at": d.get("approved_at"),
+            "approved_by": d.get("approved_by", ""), "review_note": d.get("review_note", ""),
+        })
+    return out
+
+
+class AckBody(BaseModel):
+    action: str  # shipped | unpacked
+
+
+@wh_router.post("/docs/{doc_id}/ack")
+async def wh_ack(doc_id: str, body: AckBody, user: dict = Depends(require_warehouse)):
+    """He has shipped an approved carton, or unpacked a cancelled one."""
+    now = _now().isoformat()
+    if body.action == "shipped":
+        q = {"id": doc_id, "direction": "out", "status": "confirmed",
+             "approved_at": {"$nin": [None, ""]}, "shipped_at": {"$in": [None, ""]}}
+        upd = {"shipped_at": now, "shipped_by": user.get("email", "")}
+    elif body.action == "unpacked":
+        q = {"id": doc_id, "direction": "out", "status": "cancelled", "wh_ack_at": {"$in": [None, ""]}}
+        upd = {"wh_ack_at": now, "wh_ack_by": user.get("email", "")}
+    else:
+        raise HTTPException(status_code=400, detail="Unknown action")
+    res = await db.warehouse_docs.update_one(q, {"$set": upd})
+    if res.modified_count != 1:
+        raise HTTPException(status_code=409, detail="This carton has changed — pull down to refresh.")
+    await audit_log(db, f"WAREHOUSE_CARTON_{body.action.upper()}", email=user.get("email", ""),
+                    role=user.get("role", ""), meta={"doc": doc_id})
+    return {"ok": True}
+
+
+@wh_router.post("/docs/{doc_id}/reopen")
+async def wh_reopen(doc_id: str, user: dict = Depends(require_warehouse)):
+    """A carton sent back by the team goes back to the packing screen."""
+    res = await db.warehouse_docs.update_one(
+        {"id": doc_id, "direction": "out", "status": "sent_back"},
+        {"$set": {"status": "draft", "reopened_at": _now().isoformat(), "reopened_by": user.get("email", "")}})
+    if res.modified_count != 1:
+        raise HTTPException(status_code=409, detail="This carton is not waiting to be repacked.")
+    return await db.warehouse_docs.find_one({"id": doc_id}, {"_id": 0, "read_error": 0})
 
 
 class MoveBody(BaseModel):
@@ -615,22 +701,79 @@ async def adm_overview():
         for b in books if "wh_stock" in b and int(b.get("wh_stock") or 0) != int(b.get("stock") or 0)
     ]
     diffs.sort(key=lambda d: -abs(d["diff"]))
-    return {**state, "books": len(books), "differences": diffs[:300], "difference_count": len(diffs)}
+    awaiting = await db.warehouse_docs.count_documents({"status": "awaiting_approval", "practice": False})
+    return {**state, "books": len(books), "differences": diffs[:300], "difference_count": len(diffs),
+            "awaiting_approval": awaiting}
 
 
 @wh_admin_router.get("/docs")
-async def adm_docs(limit: int = 100):
+async def adm_docs(limit: int = 100, status: Optional[str] = None):
+    q = {"status": status, "practice": False} if status else {}
     return await db.warehouse_docs.find(
-        {}, {"_id": 0, "read_error": 0}).sort("created_at", -1).to_list(min(max(limit, 1), 500))
+        q, {"_id": 0, "read_error": 0}).sort("created_at", -1).to_list(min(max(limit, 1), 500))
+
+
+def _approval_refusal(user: dict, doc: dict) -> Optional[str]:
+    return core.approval_refusal(
+        user.get("role") or "", rbac.effective_sections(user), user.get("email", ""),
+        doc.get("confirmed_by", ""), rbac.is_superadmin(user.get("role")))
 
 
 @wh_admin_router.get("/docs/{doc_id}")
-async def adm_doc(doc_id: str):
+async def adm_doc(doc_id: str, user: dict = Depends(require_admin)):
     doc = await db.warehouse_docs.find_one({"id": doc_id}, {"_id": 0})
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
     doc["movements"] = await db.stock_movements.find({"doc_id": doc_id}, {"_id": 0}).to_list(500)
+    doc["lines_view"] = await _lines_view(doc)
+    # Shown to the UI so it can explain why there is no Approve button; the
+    # approve endpoint re-checks, this is never the control itself.
+    doc["approval_refusal"] = _approval_refusal(user, doc) if doc.get("status") == "awaiting_approval" else None
     return doc
+
+
+class ReviewBody(BaseModel):
+    action: str                 # approve | send_back | cancel
+    note: Optional[str] = None  # required for send_back / cancel: he must know why
+
+
+@wh_admin_router.post("/docs/{doc_id}/review")
+async def adm_review(doc_id: str, body: ReviewBody, user: dict = Depends(require_admin)):
+    """Order-management team: approve a packed carton for shipping, send it
+    back to be repacked, or cancel it. Copies were taken off at packing; send
+    back and cancel put them back on the count."""
+    if body.action not in ("approve", "send_back", "cancel"):
+        raise HTTPException(status_code=400, detail="Unknown action")
+    note = (body.note or "").strip()[:300]
+    if body.action != "approve" and not note:
+        raise HTTPException(status_code=400, detail="Write what the warehouse should fix or why it is cancelled.")
+    doc = await db.warehouse_docs.find_one({"id": doc_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    if doc.get("status") != "awaiting_approval":
+        raise HTTPException(status_code=409, detail="This carton is not waiting for approval.")
+    why = _approval_refusal(user, doc)
+    if why:
+        raise HTTPException(status_code=403, detail=why)
+    now = _now().isoformat()
+    new_status = {"approve": "confirmed", "send_back": "sent_back", "cancel": "cancelled"}[body.action]
+    upd = {"status": new_status, "reviewed_at": now, "reviewed_by": user.get("email", ""), "review_note": note}
+    if body.action == "approve":
+        upd.update({"approved_at": now, "approved_by": user.get("email", "")})
+    # Conditional on the status so two people clicking at once cannot both
+    # act (e.g. one approves while the other's send-back restores stock).
+    res = await db.warehouse_docs.update_one({"id": doc_id, "status": "awaiting_approval"}, {"$set": upd})
+    if res.modified_count != 1:
+        raise HTTPException(status_code=409, detail="Someone else has just reviewed this carton.")
+    restored = 0
+    if body.action != "approve":
+        for mv in await db.stock_movements.find({"doc_id": doc_id, "undone": False}, {"_id": 0}).to_list(500):
+            await _reverse(mv, user)
+            restored += -int(mv["qty"])
+    await audit_log(db, f"WAREHOUSE_CARTON_{body.action.upper()}", email=user.get("email", ""),
+                    role=user.get("role", ""),
+                    meta={"doc": doc_id, "number": doc.get("doc_number"), "note": note, "restored": restored})
+    return {"ok": True, "status": new_status, "restored": restored}
 
 
 @wh_admin_router.get("/docs/{doc_id}/file")
@@ -658,8 +801,11 @@ async def adm_undo_doc(doc_id: str, user: dict = Depends(require_admin)):
     doc = await db.warehouse_docs.find_one({"id": doc_id}, {"_id": 0})
     if not doc or doc["status"] != "confirmed":
         raise HTTPException(status_code=409, detail="Only a synced document can be undone.")
-    if _now() - datetime.fromisoformat(doc["confirmed_at"]) > timedelta(hours=UNDO_HOURS):
+    # An approved carton's clock starts at approval, not at packing.
+    if _now() - datetime.fromisoformat(doc.get("approved_at") or doc["confirmed_at"]) > timedelta(hours=UNDO_HOURS):
         raise HTTPException(status_code=409, detail=f"Undo is only possible within {UNDO_HOURS} hours.")
+    if doc.get("shipped_at"):
+        raise HTTPException(status_code=409, detail="This carton has been shipped — record a return instead.")
     for mv in await db.stock_movements.find({"doc_id": doc_id, "undone": False}, {"_id": 0}).to_list(500):
         await _reverse(mv, user)
     await db.warehouse_docs.update_one({"id": doc_id}, {"$set": {"status": "undone", "undone_by": user.get("email", "")}})
@@ -690,7 +836,8 @@ async def adm_accuracy(days: int = 30):
     """Error rate of the automated reading, from what people had to correct."""
     since = (_now() - timedelta(days=max(1, days))).isoformat()
     docs = await db.warehouse_docs.find(
-        {"status": {"$in": ["confirmed", "undone"]}, "confirmed_at": {"$gte": since}},
+        {"status": {"$in": ["confirmed", "undone", "awaiting_approval", "sent_back", "cancelled"]},
+         "confirmed_at": {"$gte": since}},
         {"_id": 0, "id": 1, "direction": 1, "source": 1, "party_name": 1, "metrics": 1,
          "seconds_to_confirm": 1, "confirmed_at": 1, "practice": 1, "doc_number": 1,
          "total_matches": 1, "reports": 1}).to_list(5000)
