@@ -1462,6 +1462,8 @@ def _finalise_volume_set(doc: dict) -> None:
 @admin_router.post("/books")
 async def admin_create_book(payload: BookAdminCreate):
     doc = {"id": str(uuid.uuid4()), **payload.model_dump()}
+    if doc.get("coming_soon"):
+        doc["stock"] = 0  # a pre-order has no copies yet (see admin_update_book)
     _finalise_volume_set(doc)
     # Without this a book added here can never appear under "Newest".
     #
@@ -1499,10 +1501,24 @@ async def admin_update_book(book_id: str, payload: BookAdminUpdate):
         raise HTTPException(status_code=400, detail="No updates provided")
     prev = await db.books.find_one(
         {"id": book_id},
-        {"_id": 0, "stock": 1, "release_rank": 1, "is_volume_set": 1, "volumes": 1},
+        {"_id": 0, "stock": 1, "release_rank": 1, "is_volume_set": 1, "volumes": 1, "coming_soon": 1},
     )
     if prev is None:
         raise HTTPException(status_code=404, detail="Book not found")
+
+    # A pre-order carries no stock: there are no printed copies, and any number
+    # here showed "Only N left in stock" on the storefront. Locked server-side
+    # too, because the Inventory screen edits stock directly and must not be a
+    # way round the Books form. Untick Pre-order once copies arrive.
+    is_preorder = updates.get("coming_soon", prev.get("coming_soon"))
+    if is_preorder:
+        if int(updates.get("stock") or 0) > 0 and "coming_soon" not in updates:
+            raise HTTPException(
+                status_code=400,
+                detail="This book is a pre-order, so its stock is locked at 0. "
+                       "Untick Pre-order in Books → Edit once copies arrive.",
+            )
+        updates["stock"] = 0
 
     # A PATCH carries only what changed, so the set has to be validated against
     # the MERGED state. Ticking the box without sending volumes, or editing the

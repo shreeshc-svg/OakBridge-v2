@@ -30,6 +30,25 @@ const eq = (n, got, want) => {
   console.log(`${ok ? 'ok  ' : 'FAIL'}  ${n}${ok ? '' : `  got ${JSON.stringify(got)} want ${JSON.stringify(want)}`}`);
 };
 
+// ── Pre-orders carry no stock (storefront, admin, server) ────────────────────
+{
+  const read = (p) => readFileSync(fileURLToPath(new URL(p, import.meta.url)), 'utf8');
+  const pdp = read('../src/pages/BookDetail.jsx');
+  const card = read('../src/components/BookCard.jsx');
+  const admin = read('../src/pages/admin/AdminBooks.jsx');
+  const ext = read('../../backend/extensions.py');
+  const srv = read('../../backend/server.py');
+  const ok = (n, c) => { if (!c) fail++; console.log(`${c ? 'ok  ' : 'FAIL'}  ${n}`); };
+  console.log('-- pre-order stock --');
+  ok('product page shows no "Only N left" on a pre-order', /const low = !oos && !preorder\.active && stock <= LOW_STOCK/.test(pdp));
+  ok('book tile shows no "Only N left" on a pre-order', /const low = !oos && !preorder\.active && stock <= LOW_STOCK/.test(card));
+  ok('admin stock field is locked while Pre-order is ticked', /const preorderStock = name === "stock" && !!form\.coming_soon/.test(admin));
+  ok('admin form saves a pre-order with 0 stock', /stock: form\.coming_soon \? 0 : Number\(form\.stock\)/.test(admin));
+  ok('server refuses stock on a pre-order (Inventory screen cannot bypass)', /stock is locked at 0/.test(ext) && /updates\["stock"\] = 0/.test(ext));
+  ok('checkout caps a live pre-order per order instead of refusing it as out of stock',
+     /avail = PREORDER_MAX_QTY if _preorder_active\(bdoc\) else/.test(srv));
+}
+
 const NOW = Date.parse('2026-08-19T12:00:00Z');
 const soon = { coming_soon: true, launch_at: '2026-09-14T00:00:00Z' };
 const past = { coming_soon: true, launch_at: '2026-08-01T00:00:00Z' };

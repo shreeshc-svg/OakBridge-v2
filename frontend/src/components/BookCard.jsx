@@ -128,7 +128,8 @@ export default function BookCard({ book, index = 0, compact = false, toEbook = f
     // Editor's pick. Ticked per book in Admin → Books; it drives no carousel and
     // no filter, it only dresses the tile.
     const starred = !!book.star_title;
-    const low = !oos && stock <= LOW_STOCK;
+    // A pre-order has no stock to run low on (same rule as the product page).
+    const low = !oos && !preorder.active && stock <= LOW_STOCK;
     const discount = book.original_price
         ? Math.round(100 - (book.price / book.original_price) * 100)
         : 0;

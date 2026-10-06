@@ -341,7 +341,10 @@ export default function BookDetail() {
     // Quantity is capped at stock everywhere below; a pre-order has none, so it
     // gets the same per-order limit the cart uses.
     const qtyCap = preorder.active ? 10 : stock;
-    const low = !oos && stock <= LOW_STOCK;
+    // No stock line on a pre-order: it has no copies by definition, so this
+    // read "Only 0 left in stock — order soon" right above the Pre-order
+    // button, contradicting it.
+    const low = !oos && !preorder.active && stock <= LOW_STOCK;
 
     /*
      * The line that earns the click, so it is not a hard character cut.

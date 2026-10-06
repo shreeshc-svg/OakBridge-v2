@@ -822,7 +822,8 @@ function BookForm({ initial, categories, onClose, onSaved }) {
                 coming_soon_label: (form.coming_soon_label || "").trim() || null,
                 publication_year:
                     Number(form.publication_year) || new Date().getFullYear(),
-                stock: Number(form.stock),
+                // Pre-orders are saved with no stock (the field is locked to 0).
+                stock: form.coming_soon ? 0 : Number(form.stock),
                 variants: (form.variants || []).map((v) => ({
                     binding: v.binding || "",
                     size: v.size || "",
@@ -895,20 +896,28 @@ function BookForm({ initial, categories, onClose, onSaved }) {
                            went, and leaving it editable would let them type a
                            number the server immediately overwrites. */
                         const derived = name === "pages" && !!form.is_volume_set;
+                        /* A pre-order has no printed copies, so its stock is
+                           locked at 0 rather than editable: a number here
+                           would show "Only N left" on the storefront for a
+                           book that does not exist yet. Untick Pre-order once
+                           copies arrive, then enter the real count. */
+                        const preorderStock = name === "stock" && !!form.coming_soon;
+                        const locked = derived || preorderStock;
                         return (
                             <div key={name} className={col === 2 ? "col-span-2" : "col-span-2 sm:col-span-1"}>
                                 <label className="overline !text-[10px] block mb-2">
-                                    {derived ? "Pages (total of all volumes)" : label}
+                                    {derived ? "Pages (total of all volumes)" : preorderStock ? "Stock (locked — pre-order)" : label}
                                 </label>
                                 <input
                                     type={type}
                                     name={name}
                                     required={req}
-                                    readOnly={derived}
-                                    value={derived ? volumeTotalPages(form.volumes) : (form[name] ?? "")}
+                                    readOnly={locked}
+                                    title={preorderStock ? "Pre-orders carry no stock. Untick Pre-order when copies arrive." : undefined}
+                                    value={derived ? volumeTotalPages(form.volumes) : preorderStock ? 0 : (form[name] ?? "")}
                                     onChange={onChange}
                                     data-testid={`book-form-${name}`}
-                                    className={`w-full border border-[#E5E7EB] px-3 py-2 text-sm outline-none focus:border-[#002B5C] ${derived ? "bg-[#F5F7FA] text-[#4B5563] cursor-not-allowed" : "bg-white"}`}
+                                    className={`w-full border border-[#E5E7EB] px-3 py-2 text-sm outline-none focus:border-[#002B5C] ${locked ? "bg-[#F5F7FA] text-[#4B5563] cursor-not-allowed" : "bg-white"}`}
                                 />
                             </div>
                         );

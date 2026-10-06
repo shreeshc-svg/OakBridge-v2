@@ -1735,6 +1735,30 @@ def _variant_price(bdoc: dict, binding, size) -> float:
     return base
 
 
+PREORDER_MAX_QTY = 10  # same per-order cap as the cart (CartContext.jsx)
+
+
+def _preorder_active(bdoc: dict) -> bool:
+    """Server copy of frontend/src/lib/preorder.js `preorderState().active`.
+
+    Flag AND a future launch date. A date-only value ("2026-10-22") is UTC
+    midnight, exactly as `new Date("2026-10-22")` reads it in the browser, so
+    the two sides flip from pre-order to ordinary title at the same moment.
+    """
+    if not bdoc.get("coming_soon"):
+        return False
+    raw = str(bdoc.get("launch_at") or "").strip()
+    if not raw:
+        return False
+    try:
+        at = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if at.tzinfo is None:
+        at = at.replace(tzinfo=timezone.utc)
+    return at > datetime.now(timezone.utc)
+
+
 @api_router.post("/orders", response_model=Order)
 async def create_order(payload: OrderCreate, user: Optional[dict] = Depends(get_current_user_optional)):
     # Fallback verification gate: a signed-in but unverified account must verify
@@ -1756,12 +1780,17 @@ async def create_order(payload: OrderCreate, user: Optional[dict] = Depends(get_
             raise HTTPException(status_code=400, detail="Invalid quantity")
         bdoc = await db.books.find_one(
             {"id": it.book_id},
-            {"_id": 0, "id": 1, "title": 1, "author": 1, "cover_image": 1, "price": 1, "stock": 1, "variants": 1},
+            {"_id": 0, "id": 1, "title": 1, "author": 1, "cover_image": 1, "price": 1, "stock": 1, "variants": 1,
+             "coming_soon": 1, "launch_at": 1},
         )
         if not bdoc:
             raise HTTPException(status_code=404, detail=f"Book not found: {it.book_id}")
         books_by_id[it.book_id] = bdoc
-        avail = int(bdoc.get("stock", 0) or 0)
+        # A live pre-order has no stock by design (locked at 0 in Admin), so it
+        # is capped per order instead of by stock — otherwise every pre-order
+        # was refused here as "out of stock" while the page offered to take it.
+        # payments._apply_stock_decrement already skips its decrement.
+        avail = PREORDER_MAX_QTY if _preorder_active(bdoc) else int(bdoc.get("stock", 0) or 0)
         if it.quantity > avail:
             shortages.append({"title": bdoc.get("title", "Item"), "requested": it.quantity, "available": avail})
     if shortages:

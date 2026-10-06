@@ -126,7 +126,9 @@ check(/volume-title-\$\{i\}/.test(adminBooks) && /volume-pages-\$\{i\}/.test(adm
 check(/no: i \+ 1/.test(adminBooks),
       "volumes are numbered by position on submit, matching the server's renumbering");
 check(/const derived = name === "pages" && !!form\.is_volume_set/.test(adminBooks)
-      && /readOnly=\{derived\}/.test(adminBooks),
+      // `locked` = derived OR a pre-order's stock field (same read-only treatment).
+      && (/readOnly=\{derived\}/.test(adminBooks)
+          || (/const locked = derived \|\|/.test(adminBooks) && /readOnly=\{locked\}/.test(adminBooks))),
       "the Pages field goes read-only for a set rather than letting the admin type a number "
       + "the server immediately overwrites");
 check(/data-testid="volume-total"/.test(adminBooks),
