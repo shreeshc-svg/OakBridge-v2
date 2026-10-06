@@ -23,7 +23,7 @@ import {
 import ExportButton from "../../components/admin/ExportButton";
 import PurchaseNudgeDialog from "../../components/admin/PurchaseNudgeDialog";
 
-const ASSIGNABLE = ["superadmin", "manager", "editor", "fulfilment", "customer"];
+const ASSIGNABLE = ["superadmin", "manager", "editor", "fulfilment", "warehouse", "customer"];
 const BLANK = {
     name: "", email: "", phone: "", password: "",
     role: "fulfilment", sections: ROLE_PRESETS.fulfilment,
@@ -344,6 +344,7 @@ export default function AdminUsers() {
                     { value: "manager", label: "Managers" },
                     { value: "editor", label: "Editors" },
                     { value: "fulfilment", label: "Fulfilment" },
+                    { value: "warehouse", label: "Warehouse" },
                     { value: "customer", label: "Customers" },
                 ]}
                 sort={sort}

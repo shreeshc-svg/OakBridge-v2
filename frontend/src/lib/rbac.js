@@ -13,6 +13,7 @@ export const SECTIONS = [
     "hampers",
     "packs",
     "inventory",
+    "warehouse",
     "authors",
     "page-bookstore",
     "page-book",
@@ -40,6 +41,7 @@ export const SECTION_LABELS = {
     hampers: "Gift Hampers",
     packs: "Packs",
     inventory: "Inventory",
+    warehouse: "Warehouse",
     authors: "Authors",
     "page-bookstore": "Bookstore Page",
     "page-book": "Book Page",
@@ -63,7 +65,7 @@ export const SECTION_LABELS = {
 
 /** Grouping for the permission picker only — not a security boundary. */
 export const SECTION_GROUPS = [
-    { label: "Catalogue", sections: ["books", "hampers", "packs", "authors", "inventory"] },
+    { label: "Catalogue", sections: ["books", "hampers", "packs", "authors", "inventory", "warehouse"] },
     {
         label: "Site content",
         sections: ["pages", "navigation", "media", "media-gallery", "careers", "page-bookstore", "page-book", "ebooks"],
@@ -100,9 +102,11 @@ export const ROLE_PRESETS = {
         "media", "media-gallery", "careers", "page-bookstore", "page-book", "ebooks",
     ],
     fulfilment: [
-        "dashboard", "inventory", "orders", "coupons",
+        "dashboard", "inventory", "warehouse", "orders", "coupons",
         "messages", "submissions", "waitlists",
     ],
+    // The warehouse person: the phone screen at /warehouse and nothing else.
+    warehouse: ["warehouse"],
 };
 
 export const ROLE_LABELS = {
@@ -111,6 +115,7 @@ export const ROLE_LABELS = {
     manager: "Manager — everything except users, legal and settings",
     editor: "Editor — site content, media and catalogue",
     fulfilment: "Fulfilment — orders, stock and enquiries",
+    warehouse: "Warehouse — the warehouse phone screen only",
     customer: "Customer — no admin access",
 };
 

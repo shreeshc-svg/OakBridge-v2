@@ -1915,7 +1915,10 @@ app.include_router(hampers_admin_router)
 app.include_router(packs_public_router)
 app.include_router(packs_admin_router)
 from inventory_sync import inventory_router  # noqa: E402
+from warehouse import wh_router, wh_admin_router  # noqa: E402
 app.include_router(inventory_router)
+app.include_router(wh_router)
+app.include_router(wh_admin_router)
 
 # The production domains, Vercel preview and local dev are always allowed; any
 # extra origins in the CORS_ORIGINS env var (comma-separated) are merged in. This

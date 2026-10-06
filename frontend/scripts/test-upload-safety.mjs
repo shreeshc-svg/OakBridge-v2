@@ -106,7 +106,8 @@ check(/ctype = _resolved_type\(""/.test(feat),
       + "production and is missing from the one place anybody tests by hand");
 
 console.log("\n-- CVs are not public --");
-check(/_PRIVATE_SEGMENTS = \{"cv"\}/.test(feat), "the cv/ prefix is marked private");
+// The set may grow (warehouse bills/invoices joined it); cv must stay in it.
+check(/_PRIVATE_SEGMENTS = \{"cv"(, "[\w-]+")*\}/.test(feat), "the cv/ prefix is marked private");
 check(/_PRIVATE_SEGMENTS & \{s\.lower\(\) for s in \(path or ""\)\.split\("\/"\)\}/.test(feat),
       "matched on the path SEGMENT, so no punctuation trick walks past it");
 check(/status_code=404, detail="File not found"/.test(feat),

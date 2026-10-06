@@ -34,6 +34,7 @@ SECTIONS: tuple[str, ...] = (
     "hampers",
     "packs",
     "inventory",
+    "warehouse",
     "authors",
     "page-bookstore",
     "page-book",
@@ -61,6 +62,7 @@ SECTION_LABELS: dict[str, str] = {
     "hampers": "Gift Hampers",
     "packs": "Packs",
     "inventory": "Inventory",
+    "warehouse": "Warehouse",
     "authors": "Authors",
     "page-bookstore": "Bookstore Page",
     "page-book": "Book Page",
@@ -104,6 +106,9 @@ SECTION_PATHS: dict[str, set[str]] = {
     "packs": {"packs", "uploads"},
     "authors": {"authors", "authors-order", "authors-order-mode", "uploads"},
     "inventory": {"inventory"},
+    # /api/admin/warehouse (manager view). The phone screen's own API,
+    # /api/warehouse, is gated by warehouse.require_warehouse on this section.
+    "warehouse": {"warehouse"},
     "orders": {"orders", "cart-reminders"},
     "coupons": {"coupons"},
     "messages": {"messages"},
@@ -182,14 +187,17 @@ ROLE_PRESETS: dict[str, tuple[str, ...]] = {
         "media", "media-gallery", "careers", "page-bookstore", "page-book", "ebooks",
     ),
     "fulfilment": (
-        "dashboard", "inventory", "orders", "coupons",
+        "dashboard", "inventory", "warehouse", "orders", "coupons",
         "messages", "submissions", "waitlists",
     ),
+    # The warehouse person: the phone screen and nothing else — no prices,
+    # pages, orders or settings.
+    "warehouse": ("warehouse",),
 }
 
 ADMIN_ROLES = frozenset(ROLE_PRESETS)
 SUPERADMIN_ROLES = frozenset({"superadmin", "admin"})
-ASSIGNABLE_ROLES = ("superadmin", "manager", "editor", "fulfilment", "customer")
+ASSIGNABLE_ROLES = ("superadmin", "manager", "editor", "fulfilment", "warehouse", "customer")
 
 
 def is_superadmin(role: str | None) -> bool:

@@ -87,6 +87,20 @@ def load(db):
         def __getattr__(self, _):
             return lambda *a, **k: None
 
+    # The function hands its lines to the warehouse ledger (a no-op until the
+    # trial starts). Stubbed so this test stays about stock — and so the
+    # hand-off itself is checked: the ledger must get the EXPANDED lines.
+    import types
+    wh = types.ModuleType("warehouse")
+    wh.recorded = []
+
+    async def record_website_sale(order, lines):
+        wh.recorded.append(list(lines))
+
+    wh.record_website_sale = record_website_sale
+    sys.modules["warehouse"] = wh
+    db.wh = wh
+
     ns = {"db": db, "logger": Log()}
     exec(compile(ast.Module(body=fn, type_ignores=[]), "<payments>", "exec"), ns)
     return ns["_apply_stock_decrement"]
@@ -125,6 +139,15 @@ print("\n-- three hampers in one line --")
 db = run([{"book_id": "hamper-1", "quantity": 3}])
 check(dict(db.books.incs) == {"hamper-1": -3, "bk-a": -3, "bk-b": -6},
       f"component quantities multiply by the line quantity {dict(db.books.incs)}")
+
+print("\n-- the warehouse ledger gets what the shelf lost --")
+check(db.wh.recorded == [[("hamper-1", 3), ("bk-a", 3), ("bk-b", 6)]],
+      f"recorded lines match the decrement, hamper contents expanded {db.wh.recorded}")
+db2 = DB(BOOKS(), {"o1": {"id": "o1", "items": [{"book_id": "bk-c", "quantity": 1}]}})
+fn2 = load(db2)
+asyncio.run(fn2("o1"))
+asyncio.run(fn2("o1"))         # webhook + /verify: same stub, second call
+check(db2.wh.recorded == [[("bk-c", 1)]], f"a repeat call records nothing new {db2.wh.recorded}")
 
 print("\n-- a hamper and a loose copy of a book inside it --")
 db = run([{"book_id": "hamper-1", "quantity": 1}, {"book_id": "bk-a", "quantity": 1}])

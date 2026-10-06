@@ -362,6 +362,15 @@ async def _apply_stock_decrement(order_id: str) -> None:
                 {"$addToSet": {"backorder_items": bid}, "$set": {"needs_attention": True}},
             )
 
+    # Warehouse ledger (warehouse.py): the same copies, once, as movements, so
+    # the warehouse count tracks website sales. Does nothing until the trial is
+    # started in Admin → Warehouse, and never raises.
+    from warehouse import record_website_sale
+
+    full = await db.orders.find_one({"id": order_id}, {"_id": 0, "id": 1, "order_number": 1})
+    if full:
+        await record_website_sale(full, lines)
+
 
 class CreateOrderRequest(BaseModel):
     order_id: str = Field(..., description="Local Oakbridge order id (from db.orders)")

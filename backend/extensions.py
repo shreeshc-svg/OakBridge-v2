@@ -1550,6 +1550,11 @@ async def admin_update_book(book_id: str, payload: BookAdminUpdate):
     # Back-in-stock: if stock crossed from 0 -> positive, notify everyone waiting.
     if int(prev.get("stock", 0) or 0) <= 0 and int((book or {}).get("stock", 0) or 0) > 0:
         await _notify_back_in_stock(book)
+    if "stock" in updates:
+        # Live warehouse system: a typed stock number becomes a ledger
+        # correction, so the warehouse count never silently disagrees.
+        from warehouse import record_admin_stock_edit
+        await record_admin_stock_edit(book_id, int(prev.get("stock", 0) or 0), int(updates["stock"] or 0))
     return book
 
 

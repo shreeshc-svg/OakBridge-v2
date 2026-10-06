@@ -165,9 +165,22 @@ async def sync_stock_from_sheet(csv_text: Optional[str] = None) -> dict:
     return result
 
 
+async def _warehouse_is_master() -> bool:
+    """Once the warehouse system is live (Admin → Warehouse), it owns stock and
+    the sheet stands down — two masters writing one field just overwrite each
+    other. During its TRIAL the sheet keeps running as normal."""
+    from warehouse import warehouse_is_master
+    return await warehouse_is_master()
+
+
 @inventory_router.post("/admin/inventory/sync-from-sheet")
 async def admin_sync_from_sheet(_: dict = Depends(require_admin)):
     """Run a stock sync from the master sheet right now (admin-triggered)."""
+    if await _warehouse_is_master():
+        raise HTTPException(
+            status_code=409,
+            detail="The warehouse system is live and now sets stock — the sheet sync is paused.",
+        )
     return await sync_stock_from_sheet()
 
 
@@ -189,6 +202,10 @@ async def task_inventory_sync(x_task_token: Optional[str] = Header(None)):
     token = os.environ.get("TASK_TOKEN")
     if not token or x_task_token != token:
         raise HTTPException(status_code=401, detail="Invalid task token")
+
+    # Deliberate, not a fault — so no alert email on every scheduled run.
+    if await _warehouse_is_master():
+        return {"ok": True, "skipped": "warehouse system is live and owns stock"}
 
     try:
         result = await sync_stock_from_sheet()

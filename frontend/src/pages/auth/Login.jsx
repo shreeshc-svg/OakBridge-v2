@@ -31,7 +31,9 @@ export default function Login() {
             // otherwise a new manager/editor/fulfilment login is sent to /account
             // and has no obvious way in. An explicit `next` still wins.
             const isStaff = ROLE_PRESETS[user.role] !== undefined;
-            const target = sp.get("next") || (isStaff ? "/admin" : from);
+            // The warehouse role has one screen, and it is not in the admin.
+            const home = user.role === "warehouse" ? "/warehouse" : "/admin";
+            const target = sp.get("next") || (isStaff ? home : from);
             nav(target, { replace: true });
         } catch (err) {
             setError(formatApiError(err));

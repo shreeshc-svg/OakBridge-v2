@@ -33,6 +33,8 @@ import AdminUsers from "@/pages/admin/AdminUsers";
 import AdminWaitlists from "@/pages/admin/AdminWaitlists";
 import AdminCoupons from "@/pages/admin/AdminCoupons";
 import AdminInventory from "@/pages/admin/AdminInventory";
+import AdminWarehouse from "@/pages/admin/AdminWarehouse";
+import WarehouseApp from "@/pages/warehouse/WarehouseApp";
 import AdminSubmissions from "@/pages/admin/AdminSubmissions";
 import AdminSpam from "@/pages/admin/AdminSpam";
 import AdminAudit from "@/pages/admin/AdminAudit";
@@ -218,6 +220,16 @@ function App() {
                                     rendered a blank page. */}
                                 <Route path="*" element={<NotFound />} />
                             </Route>
+                            {/* The warehouse phone screen: outside the shop layout and the
+                                admin shell — one person, one phone, big buttons. */}
+                            <Route
+                                path="/warehouse"
+                                element={
+                                    <ProtectedRoute requireAdmin>
+                                        <WarehouseApp />
+                                    </ProtectedRoute>
+                                }
+                            />
                             <Route
                                 path="/admin"
                                 element={
@@ -235,6 +247,7 @@ function App() {
                                 <Route path="waitlists" element={<AdminWaitlists />} />
                                 <Route path="coupons" element={<AdminCoupons />} />
                                 <Route path="inventory" element={<AdminInventory />} />
+                                <Route path="warehouse" element={<AdminWarehouse />} />
                                 <Route path="submissions" element={<AdminSubmissions />} />
                                 <Route path="spam" element={<AdminSpam />} />
                                 <Route path="audit" element={<AdminAudit />} />

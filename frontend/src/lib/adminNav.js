@@ -18,7 +18,7 @@ import {
     Navigation,
     Briefcase,
     Clapperboard,
-    Tablet, ShieldAlert } from "lucide-react";
+    Tablet, ShieldAlert, Warehouse } from "lucide-react";
 
 /**
  * The admin sidebar, in default order — the single source of truth.
@@ -37,6 +37,7 @@ export const ADMIN_NAV = [
     { to: "/admin/hampers", label: "Gift Hampers", icon: Gift },
     { to: "/admin/packs", label: "Packs", icon: Package },
     { to: "/admin/inventory", label: "Inventory", icon: PackageCheck },
+    { to: "/admin/warehouse", label: "Warehouse", icon: Warehouse },
     { to: "/admin/authors", label: "Authors", icon: Users },
     { to: "/admin/orders", label: "Orders", icon: ShoppingBag },
     { to: "/admin/coupons", label: "Coupons", icon: Tag },

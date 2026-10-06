@@ -115,6 +115,39 @@ export const resetPassword = (token, password) =>
 export const syncInventoryFromSheet = () =>
     api.post("/admin/inventory/sync-from-sheet").then((r) => r.data);
 
+// Warehouse system (backend/warehouse.py). Phone screen …
+export const whState = () => api.get("/warehouse/state").then((r) => r.data);
+export const whLookup = (code) => api.get("/warehouse/lookup", { params: { code } }).then((r) => r.data);
+export const whBooks = () => api.get("/warehouse/books").then((r) => r.data);
+export const whUploadDoc = (direction, file, practice) => {
+    const fd = new FormData();
+    fd.append("direction", direction);
+    fd.append("practice", practice ? "true" : "false");
+    if (file) fd.append("file", file);
+    return api.post("/warehouse/docs", fd, { timeout: 120000 }).then((r) => r.data);
+};
+export const whConfirmDoc = (id, body) => api.post(`/warehouse/docs/${id}/confirm`, body).then((r) => r.data);
+export const whReport = (id, note, lineNo) =>
+    api.post(`/warehouse/docs/${id}/report`, { note, line_no: lineNo ?? null }).then((r) => r.data);
+export const whMove = (body) => api.post("/warehouse/move", body).then((r) => r.data);
+export const whDocFile = (id, admin = false) =>
+    api.get(admin ? `/admin/warehouse/docs/${id}/file` : `/warehouse/docs/${id}/file`, { responseType: "blob" })
+        .then((r) => r.data);
+// … and the manager view.
+export const adminWhOverview = () => api.get("/admin/warehouse/overview").then((r) => r.data);
+export const adminWhDocs = () => api.get("/admin/warehouse/docs").then((r) => r.data);
+export const adminWhDoc = (id) => api.get(`/admin/warehouse/docs/${id}`).then((r) => r.data);
+export const adminWhUndoDoc = (id) => api.post(`/admin/warehouse/docs/${id}/undo`).then((r) => r.data);
+export const adminWhTestCase = (id, on) =>
+    api.post(`/admin/warehouse/docs/${id}/test-case`, { on }).then((r) => r.data);
+export const adminWhMovements = (bookId) =>
+    api.get("/admin/warehouse/movements", { params: bookId ? { book_id: bookId } : {} }).then((r) => r.data);
+export const adminWhUndoMove = (id) => api.post(`/admin/warehouse/movements/${id}/undo`).then((r) => r.data);
+export const adminWhAccuracy = (days = 30) =>
+    api.get("/admin/warehouse/accuracy", { params: { days } }).then((r) => r.data);
+export const adminWhReplay = () => api.post("/admin/warehouse/replay", null, { timeout: 300000 }).then((r) => r.data);
+export const adminWhMode = (mode) => api.post("/admin/warehouse/mode", { mode }).then((r) => r.data);
+
 // My account
 export const fetchMyOrders = () => api.get("/my/orders").then((r) => r.data);
 export const saveCart = (items) =>

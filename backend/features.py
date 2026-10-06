@@ -103,7 +103,8 @@ def _safe_key(path: str) -> str:
 
 
 def _is_private_path(path: str) -> bool:
-    return bool({"cv"} & {s.lower() for s in (path or "").split("/")})
+    # cv = job applicants; warehouse = printer bills and Tally invoices (bank details).
+    return bool({"cv", "warehouse"} & {s.lower() for s in (path or "").split("/")})
 
 
 def _bucket_for(path: str) -> str:
@@ -539,7 +540,10 @@ async def validate_coupon(payload: CouponValidateRequest):
 # Matched on the path SEGMENT rather than a prefix string, so neither
 # "oakbridge/cv/x.pdf" nor any ../ walk arriving here can slip past on
 # punctuation.
-_PRIVATE_SEGMENTS = {"cv"}
+# "warehouse": printer bills and Tally invoices — they carry bank details and
+# supplier terms, and are served only through authenticated endpoints in
+# warehouse.py.
+_PRIVATE_SEGMENTS = {"cv", "warehouse"}
 
 
 @public_router.get("/files/{path:path}")
