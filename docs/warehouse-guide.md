@@ -2,7 +2,7 @@
 
 ## For the warehouse person (print this page)
 
-Open **oakbridge.in/warehouse** on your phone and sign in. You see four big buttons.
+Open **oakbridge.in/warehouse** on your phone and sign in. You see five big buttons.
 
 ### 1. 📥 Books arrived from printer
 1. Tap **Books arrived from printer** → **Take a photo** of the printer's bill (or **Choose PDF or photo** if it came on WhatsApp/email).
@@ -21,10 +21,20 @@ Open **oakbridge.in/warehouse** on your phone and sign in. You see four big butt
    - No scanner? Tap **All packed** on each line instead.
 4. When everything is in the carton, tap **Packed**. If something is short, it asks you first.
 
-### 3. 📦 One book in or out
+### 3. 🚚 Courier sheet (parcels out)
+The courier sheet lists several parcels — website orders and free copies.
+1. Tap **Courier sheet** → **Choose PDF or photo** (or take a photo of the printed sheet).
+2. Each parcel shows as a card: who it goes to, and the books inside.
+   - **Website order (paid)** — chosen automatically when the parcel matches a paid order (same phone, or same name + pin code). Stock is **not** taken off again: it was already taken off when the customer paid.
+   - **Free copy** — anything that does not match an order. These copies **are** taken off stock.
+   - **Skip** — the parcel is not going today.
+3. Check each book and number of copies; fix the book from the list if it is wrong. A title you fix once is remembered next time.
+4. Tap **Done**.
+
+### 4. 📦 One book in or out
 For returns, damaged copies, samples, a single author copy, or correcting a count: scan the book → **IN** or **OUT** → reason → number of copies → **Save**.
 
-### 4. 🔍 Check stock
+### 5. 🔍 Check stock
 Scan a book to see its count and the last 10 things that happened to it.
 
 ### Good to know

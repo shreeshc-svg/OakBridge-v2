@@ -92,6 +92,17 @@ check(/Disallow: \/warehouse/.test(robots), "kept out of search engines");
 check(/app\.include_router\(wh_router\)/.test(srv) && /app\.include_router\(wh_admin_router\)/.test(srv), "routers included");
 check(/Enter by hand instead/.test(screen) && /Add a book/.test(screen), "manual entry always available on the phone");
 
+// Courier sheet: website-order parcels were already deducted at payment, so
+// only free copies may move stock — double-deducting would undersell.
+const courierBranch = (wh.match(/if not doc\["practice"\] and courier:([\s\S]*?)\n    elif not doc\["practice"\]:/) || [])[1] || "";
+check(/p\.kind == "free_copy"[\s\S]*?_apply\(ln\.book_id, -ln\.qty, "sample"/.test(courierBranch), "courier: free copy -> 'sample' movement out");
+const webBranch = (courierBranch.match(/elif p\.kind == "website_order"([\s\S]*)/) || [])[1] || "";
+check(webBranch.includes("warehouse_doc_id") && !webBranch.includes("_apply("), "courier: website order is linked, never deducted again");
+check(/"payment_status": "paid"/.test(webBranch), "courier: only a paid order can be linked");
+check(/"payment_status": "paid"[\s\S]{0,200}"warehouse_doc_id": \{"\$in": \[None, ""\]\}/.test(wh), "courier: an order already packed is not offered again");
+check(/data-testid="wh-go-courier"/.test(screen) && /screen === "courier" && <CourierFlow/.test(screen), "courier button on the phone home screen");
+check(/disabled=\{v === "website_order" && !p\.order_id\}/.test(screen), "courier: website-order choice needs a matched order");
+
 console.log();
 if (failed) {
     console.log(`${failed} assertion(s) failed`);

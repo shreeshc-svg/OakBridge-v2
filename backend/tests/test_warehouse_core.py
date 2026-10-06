@@ -135,6 +135,62 @@ check(s2["wrong_qty"] == 1 and s2["accuracy"] == 0.0, "a changed quantity counts
 s3 = w.score_corrections(read[:1], [{"line_no": 1, "book_id": "gcf", "qty": 150, "include": False}])
 check(s3["extra"] == 1, "a suggested line the person untick is an 'extra' read")
 
+print("-- courier sheet (parcels out) --")
+# Same layout as the real "Courier 05.10.pdf"; names, phones and addresses are
+# invented so no customer's details live in the repository.
+COURIER_TEXT = (
+    "In-House Matters -1\r\nMs. Asha Verma \r\nC-1, 2nd floor, \r\nGreen Park Apartment, \r\n"
+    "New Delhi - 110068, \r\nTel 9000000001\r\nFrom \r\nOakbridge Publishing Pvt. Ltd. \r\n"
+    "934, 9th Floor, Tower B3, Spaze Itech Park, Sector 49, Gurgaon 122018 \r\n"
+    "Ph. +91 124 430 5970, +91 8800337299\r\n"
+    "Compulsory English, 6th ed- 1 copy\r\nLA/LR, 2nd Ed- 1 copy\r\n"
+    "Mr Ravi Kumar, Director\r\nSample Law Academy\r\nHouse Number 05, \r\nAnand- 388001\r\nGujarat\r\n"
+    "Mob-90 0000 0002\r\nFrom \r\nOakbridge Publishing Pvt. Ltd. \r\n"
+    "934, 9th Floor, Tower B3, Spaze Itech Park, Sector 49, Gurgaon 122018 \r\n"
+    "Compulsory English, 6th ed- 1 copy\r\nUGC-NET, 7th ed- 1 copy\r\nLA/LR, 2nd Ed- 1 copy\r\n"
+    "International Relations (Achal Priyadarshy)-1st edition- 1 copy\r\n"
+    "Mr Vikas Rao\r\nSAMPLE CLASSES \r\nMadhav Market,\r\nVaranasi- 221005 \r\nUttar Pradesh \r\n"
+    "Mob- 9000000003\r\nFrom \r\nOakbridge Publishing Pvt. Ltd. \r\n"
+)
+SHELF = [
+    {"id": "ce", "title": "Compulsory English for IAS (Mains) Examination 6/e", "author": "A P Bhardwaj"},
+    {"id": "la2", "title": "Legal Aptitude & Reasoning LA/LR  2/e (2026-27)", "author": "Vishrut Jain"},
+    {"id": "la1", "title": "Legal Aptitude & Reasoning LA/LR", "author": "Vishrut Jain"},
+    {"id": "ugc7", "title": "Master Guide to NTA UGC NET | SET | JRF | PhD Paper 1 (Teaching and Research Aptitude),7/e",
+     "author": "Harpreet Kaur"},
+    {"id": "ugcp", "title": "UGC-NET Solved PYQs on Psychology", "author": "Dr Farah Shoaib"},
+    {"id": "ir1", "title": "International Relations – Essential Handbook for UPSC and State Civil Services Examinations",
+     "author": "Achal Priyadarshy"},
+    {"id": "ir2", "title": "International Relations", "author": "Yashi Dhariwal"},
+    {"id": "ihm", "title": "In-House Matters", "author": "Pramod Rao, Ritvik Lukose & Balanand Menon"},
+]
+parcels = w.parse_courier_text(COURIER_TEXT)
+check(len(parcels) == 3, "three parcels")
+check([sum(l["qty"] for l in p["lines"]) for p in parcels] == [1, 2, 4], "copies per parcel")
+check(parcels[1]["name"] == "Mr Ravi Kumar" and parcels[1]["org"] == "Sample Law Academy", "recipient and organisation")
+check(parcels[1]["phone"] == "9000000002" and parcels[1]["pincode"] == "388001", "phone and pin code")
+check(not any(l["title"].startswith(("Anand", "Varanasi", "New Delhi")) for p in parcels for l in p["lines"]),
+      "'Varanasi- 221005' and 'New Delhi - 110068' are addresses, not books")
+want = {"In-House Matters": "ihm", "Compulsory English, 6th ed": "ce", "LA/LR, 2nd Ed": "la2",
+        "UGC-NET, 7th ed": "ugc7", "International Relations (Achal Priyadarshy)-1st edition": "ir1"}
+for t, bid in want.items():
+    check(w.match_line({"title": t}, SHELF)["book_id"] == bid, f"'{t}' -> the right edition")
+
+orders = [
+    {"id": "o1", "order_number": "OAK-1", "full_name": "Ravi Kumar", "phone": "+91 90000 00002", "pincode": "388001"},
+    {"id": "o2", "order_number": "OAK-2", "full_name": "Someone Else", "phone": "9111111111", "pincode": "560001"},
+]
+check(w.match_order(parcels[1], orders)["order_number"] == "OAK-1", "parcel matched to its paid website order by phone")
+check(w.match_order(parcels[0], orders) is None, "no order -> free copy")
+twins = [{"id": "a", "full_name": "Vikas Rao", "pincode": "221005"}, {"id": "b", "full_name": "Vikas Rao", "pincode": "221005"}]
+check(w.match_order(parcels[2], twins) is None, "two equally likely orders -> not guessed")
+
+print("-- learned aliases --")
+check(w.match_line({"title": "LA LR Second"}, SHELF, {w.fold("LA LR Second"): "la2"})["method"] == "alias",
+      "a title resolved once by hand is matched by alias next time")
+check(w.match_line({"title": "LA LR Second"}, SHELF, {w.fold("LA LR Second"): "gone"})["method"] != "alias",
+      "an alias to a deleted book is ignored")
+
 print("-- helpers --")
 check(w.isbn13_valid("9788169999090") and not w.isbn13_valid("9788196413513"), "ISBN check digit")
 check(w.norm_isbn("978-81-6999-912-0") == "9788169999120", "hyphenated ISBN normalised")

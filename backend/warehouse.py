@@ -208,7 +208,19 @@ def _pdf_text_and_pages(data: bytes) -> tuple[str, list]:
 
 
 async def read_document(data: bytes, kind: str, direction: str) -> dict:
-    """bytes -> {source, text, rows}. kind: pdf|image."""
+    """bytes -> {source, text, rows | parcels}. kind: pdf|image."""
+    if direction == "courier":
+        # Label sheets are plain text, not tables: the PDF's own text, or
+        # Textract's LINE output for a photo, read in order.
+        if kind == "pdf":
+            text, images = await asyncio.to_thread(_pdf_text_and_pages, data)
+            if not images:
+                return {"source": "pdf_text", "text": text, "parcels": core.parse_courier_text(text)}
+            _, ttext = await asyncio.to_thread(_textract, images)
+            return {"source": "textract_pdf", "text": ttext, "parcels": core.parse_courier_text(ttext)}
+        img = await asyncio.to_thread(_shrink_image, data)
+        _, ttext = await asyncio.to_thread(_textract, [img])
+        return {"source": "textract_photo", "text": ttext, "parcels": core.parse_courier_text(ttext)}
     if kind == "pdf":
         text, images = await asyncio.to_thread(_pdf_text_and_pages, data)
         if not images:
@@ -232,15 +244,47 @@ async def read_document(data: bytes, kind: str, direction: str) -> dict:
 
 async def _catalogue() -> list:
     return await db.books.find(
-        {}, {"_id": 0, "id": 1, "title": 1, "isbn": 1, "pages": 1, "stock": 1, "wh_stock": 1,
-             "coming_soon": 1, "product_type": 1},
+        {}, {"_id": 0, "id": 1, "title": 1, "author": 1, "isbn": 1, "pages": 1, "stock": 1,
+             "wh_stock": 1, "coming_soon": 1, "product_type": 1},
     ).to_list(5000)
 
 
-async def _suggest(rows: list, books: list) -> list:
+async def _aliases() -> dict:
+    return {a["key"]: a["book_id"] async for a in db.warehouse_aliases.find({}, {"_id": 0, "key": 1, "book_id": 1})}
+
+
+async def _learn_aliases(read_lines: list, confirmed: list, user: dict) -> int:
+    """A title the person had to resolve by hand is remembered for next time.
+
+    "LA/LR, 2nd Ed" picked as the LA/LR 2/e book once -> matched automatically
+    on every later sheet (method "alias"). Only for lines that were NOT already
+    right, and never from practice runs.
+    """
+    by_no = {r["line_no"]: r for r in read_lines}
+    learned = 0
+    for c in confirmed:
+        r = by_no.get(c.get("line_no"))
+        if not r or not c.get("include") or not c.get("book_id") or not r.get("doc_title"):
+            continue
+        if r.get("book_id") == c["book_id"] and r.get("match") in ("isbn", "alias"):
+            continue
+        key = core.fold(r["doc_title"])
+        if len(key) < 3:
+            continue
+        await db.warehouse_aliases.update_one(
+            {"key": key},
+            {"$set": {"key": key, "book_id": c["book_id"], "example": r["doc_title"][:120],
+                      "by": user.get("email", ""), "at": _now().isoformat()}},
+            upsert=True)
+        learned += 1
+    return learned
+
+
+async def _suggest(rows: list, books: list, start: int = 1, aliases: Optional[dict] = None) -> list:
     out = []
-    for i, r in enumerate(rows, start=1):
-        m = core.match_line(r, books)
+    aliases = aliases if aliases is not None else await _aliases()
+    for i, r in enumerate(rows, start=start):
+        m = core.match_line(r, books, aliases)
         out.append({
             "line_no": i, "raw": r.get("raw", ""), "doc_title": r.get("title", ""),
             "doc_isbn": r.get("isbn", ""), "pages": r.get("pages"),
@@ -249,6 +293,42 @@ async def _suggest(rows: list, books: list) -> list:
             # Unmatched lines (Box Charge, tax rows that slipped through) start
             # unticked: the person adds them deliberately, never by accident.
             "include": bool(m["book_id"]),
+        })
+    return out
+
+
+async def _open_web_orders() -> list:
+    """Paid website orders not yet shipped (last 60 days): what a courier
+    parcel may be fulfilling."""
+    since = (_now() - timedelta(days=60)).isoformat()
+    orders = await db.orders.find(
+        {"payment_status": "paid", "status": {"$nin": ["shipped", "delivered", "cancelled"]},
+         "created_at": {"$gte": since}, "warehouse_doc_id": {"$in": [None, ""]}},
+        {"_id": 0, "id": 1, "order_number": 1, "full_name": 1, "phone": 1, "pincode": 1,
+         "delivery_name": 1, "delivery_phone": 1, "delivery_pincode": 1, "items": 1},
+    ).to_list(2000)
+    return orders
+
+
+async def _suggest_parcels(parcels: list) -> list:
+    """Courier parcels -> book suggestions per line + website-order match.
+
+    A parcel that matches a paid website order is suggested as "website_order":
+    its copies left the website's stock when the customer paid, so syncing it
+    must not take them off again. Anything else is suggested as a free copy.
+    """
+    books, aliases, orders = await _catalogue(), await _aliases(), await _open_web_orders()
+    out, n = [], 1
+    for p in parcels:
+        lines = await _suggest(p["lines"], books, start=n, aliases=aliases)
+        n += len(lines)
+        o = core.match_order(p, orders)
+        out.append({
+            "no": p["no"], "name": p.get("name", ""), "org": p.get("org", ""),
+            "phone": p.get("phone", ""), "pincode": p.get("pincode", ""),
+            "address": p.get("address", [])[:8], "lines": lines,
+            "kind": "website_order" if o else "free_copy",
+            "order_id": (o or {}).get("id", ""), "order_number": (o or {}).get("order_number", ""),
         })
     return out
 
@@ -295,8 +375,8 @@ async def wh_upload_doc(
     user: dict = Depends(require_warehouse),
 ):
     """Upload a bill/invoice (or none, for manual entry) -> draft with suggested lines."""
-    if direction not in ("in", "out"):
-        raise HTTPException(status_code=400, detail="direction must be in or out")
+    if direction not in ("in", "out", "courier"):
+        raise HTTPException(status_code=400, detail="direction must be in, out or courier")
     started = _now()
     doc = {
         "id": str(uuid.uuid4()), "direction": direction, "practice": bool(practice),
@@ -320,11 +400,18 @@ async def wh_upload_doc(
                     "duplicate_of": (dup or {}).get("id", "")})
         try:
             res = await read_document(data, kind, direction)
-            hdr = core.header_fields(res["text"], direction)
-            doc.update({"source": res["source"], **hdr})
-            doc["read_lines"] = await _suggest(res["rows"], await _catalogue())
-            if not res["rows"]:
-                doc["error"] = "No book lines could be read — enter them by hand."
+            if direction == "courier":
+                doc["source"] = res["source"]
+                doc["parcels"] = await _suggest_parcels(res["parcels"])
+                doc["read_lines"] = [ln for p in doc["parcels"] for ln in p["lines"]]
+                if not doc["parcels"]:
+                    doc["error"] = "No parcels could be read — enter them by hand."
+            else:
+                hdr = core.header_fields(res["text"], direction)
+                doc.update({"source": res["source"], **hdr})
+                doc["read_lines"] = await _suggest(res["rows"], await _catalogue())
+                if not res["rows"]:
+                    doc["error"] = "No book lines could be read — enter them by hand."
         except Exception as e:  # noqa: BLE001
             # Reading failed (Textract not permitted, blurry photo, odd layout):
             # the photo is kept and the person carries on by hand.
@@ -346,6 +433,8 @@ async def wh_upload_doc(
         doc["read_ms"] = int((_now() - started).total_seconds() * 1000)
     if direction == "out" and not doc["party_kind"]:
         doc["party_kind"] = "sale_offline"
+    if direction == "courier" and "parcels" not in doc:
+        doc["parcels"] = []
     await db.warehouse_docs.insert_one(dict(doc))
     return doc
 
@@ -357,8 +446,16 @@ class ConfirmLine(BaseModel):
     include: bool = True
 
 
+class ConfirmParcel(BaseModel):
+    no: int
+    kind: str                       # website_order | free_copy | skip
+    order_id: Optional[str] = None
+    lines: list[ConfirmLine] = []
+
+
 class ConfirmBody(BaseModel):
-    lines: list[ConfirmLine]
+    lines: list[ConfirmLine] = []
+    parcels: Optional[list[ConfirmParcel]] = None
     doc_number: Optional[str] = None
     party_name: Optional[str] = None
     party_kind: Optional[str] = None   # out: sale_offline | author_copy
@@ -376,8 +473,21 @@ async def wh_confirm(doc_id: str, body: ConfirmBody, user: dict = Depends(requir
         raise HTTPException(status_code=409, detail="This document was already synced.")
     if doc.get("duplicate_of") and not doc["practice"] and not body.allow_duplicate:
         raise HTTPException(status_code=409, detail="This bill/invoice was already synced once. Ask a manager before adding it again.")
-    kept = [ln for ln in body.lines if ln.include and ln.book_id and ln.qty > 0]
-    if not kept and not doc["practice"]:
+    courier = doc["direction"] == "courier"
+    if courier:
+        if body.parcels is None:
+            raise HTTPException(status_code=400, detail="Send the parcels.")
+        for p in body.parcels:
+            if p.kind not in ("website_order", "free_copy", "skip"):
+                raise HTTPException(status_code=400, detail="Unknown parcel type")
+        body.lines = [ln for p in body.parcels for ln in p.lines]
+        # Only free copies move stock: a website order's copies already left
+        # when the customer paid (payments.py), and a skipped parcel is none.
+        kept = [ln for p in body.parcels if p.kind == "free_copy"
+                for ln in p.lines if ln.include and ln.book_id and ln.qty > 0]
+    else:
+        kept = [ln for ln in body.lines if ln.include and ln.book_id and ln.qty > 0]
+    if not kept and not doc["practice"] and not courier:
         raise HTTPException(status_code=400, detail="Tick at least one book with a quantity.")
     if any(ln.qty > 100000 for ln in kept):
         raise HTTPException(status_code=400, detail="That quantity looks wrong (over 1,00,000).")
@@ -389,7 +499,21 @@ async def wh_confirm(doc_id: str, body: ConfirmBody, user: dict = Depends(requir
 
     if not doc["practice"] and (await get_state())["mode"] == "off":
         raise HTTPException(status_code=409, detail="The warehouse trial has not been started yet — use Practice, or ask a manager.")
-    if not doc["practice"]:
+    if not doc["practice"] and courier:
+        read_parcels = {p["no"]: p for p in doc.get("parcels") or []}
+        for p in body.parcels:
+            rp = read_parcels.get(p.no, {})
+            who = ", ".join(x for x in (rp.get("name"), rp.get("org")) if x) or f"Parcel {p.no}"
+            if p.kind == "free_copy":
+                for ln in p.lines:
+                    if ln.include and ln.book_id and ln.qty > 0:
+                        await _apply(ln.book_id, -ln.qty, "sample", actor=user, doc_id=doc_id,
+                                     party=who, note="Courier sheet")
+            elif p.kind == "website_order" and p.order_id:
+                await db.orders.update_one(
+                    {"id": p.order_id, "payment_status": "paid"},
+                    {"$set": {"warehouse_doc_id": doc_id, "warehouse_packed_at": _now().isoformat()}})
+    elif not doc["practice"]:
         sign = 1 if doc["direction"] == "in" else -1
         reason = "printer" if doc["direction"] == "in" else party_kind
         for ln in kept:
@@ -401,6 +525,12 @@ async def wh_confirm(doc_id: str, body: ConfirmBody, user: dict = Depends(requir
     confirmed = [ln.model_dump() for ln in body.lines]
     automated = doc.get("source") != "manual"
     metrics = core.score_corrections(read, confirmed) if automated else None
+    if metrics is not None and courier:
+        suggested = {p["no"]: p.get("kind") for p in doc.get("parcels") or []}
+        metrics["parcel_kind_changed"] = sum(
+            1 for p in body.parcels if suggested.get(p.no) and suggested[p.no] != p.kind)
+    if automated and not doc["practice"]:
+        await _learn_aliases(doc.get("read_lines") or [], confirmed, user)
     total_ok = None
     if doc.get("total_qty"):
         total_ok = sum(ln.qty for ln in kept) == doc["total_qty"]
@@ -409,6 +539,7 @@ async def wh_confirm(doc_id: str, body: ConfirmBody, user: dict = Depends(requir
         "status": "confirmed", "confirmed_at": now.isoformat(), "confirmed_by": user.get("email", ""),
         "confirmed_lines": confirmed, "doc_number": doc_number, "party_name": party,
         "party_kind": party_kind, "metrics": metrics, "total_matches": total_ok,
+        "confirmed_parcels": [p.model_dump() for p in body.parcels] if courier else None,
         "seconds_to_confirm": int((now - datetime.fromisoformat(doc["created_at"])).total_seconds()),
     }})
     await audit_log(db, "WAREHOUSE_DOC_CONFIRMED", email=user.get("email", ""), role=user.get("role", ""),
@@ -595,7 +726,10 @@ async def adm_replay(user: dict = Depends(require_admin)):
         try:
             data, _ = await asyncio.to_thread(get_object, d["file_path"])
             res = await read_document(data, d.get("file_type") or "pdf", d["direction"])
-            sugg = await _suggest(res["rows"], await _catalogue())
+            if d["direction"] == "courier":
+                sugg = [ln for p in await _suggest_parcels(res["parcels"]) for ln in p["lines"]]
+            else:
+                sugg = await _suggest(res["rows"], await _catalogue())
             m = core.score_corrections(
                 [{"line_no": s["line_no"], "book_id": s["book_id"], "qty": s["qty"], "include": s["include"]} for s in sugg],
                 d.get("confirmed_lines") or [])

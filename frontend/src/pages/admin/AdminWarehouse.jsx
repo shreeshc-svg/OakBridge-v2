@@ -153,7 +153,7 @@ function DocsTab() {
                     <li key={d.id}>
                         <button type="button" onClick={() => show(d.id)} className={`w-full text-left px-4 py-3 hover:bg-[#F5F7FA] ${open?.id === d.id ? "bg-[#F5F7FA]" : ""}`}>
                             <div className="flex justify-between gap-2 text-sm">
-                                <span className="font-medium text-[#002B5C]">{d.direction === "in" ? "📥 Printer bill" : d.party_kind === "author_copy" ? "📤 Author copy" : "📤 Carton out"} · {d.doc_number || "no number"}</span>
+                                <span className="font-medium text-[#002B5C]">{d.direction === "in" ? "📥 Printer bill" : d.direction === "courier" ? "🚚 Courier sheet" : d.party_kind === "author_copy" ? "📤 Author copy" : "📤 Carton out"} · {d.doc_number || "no number"}</span>
                                 <span className="text-xs">{d.practice ? "PRACTICE · " : ""}{d.status.toUpperCase()}</span>
                             </div>
                             <div className="text-xs text-[#4B5563] mt-0.5">
@@ -199,6 +199,22 @@ function DocsTab() {
                             })}
                         </tbody>
                     </table>
+                    {open.direction === "courier" && (open.confirmed_parcels || open.parcels || []).length > 0 && (
+                        <div>
+                            <div className="font-medium">Parcels</div>
+                            <ul className="list-disc pl-5">
+                                {(open.confirmed_parcels || open.parcels).map((p) => {
+                                    const read = (open.parcels || []).find((x) => x.no === p.no) || {};
+                                    return (
+                                        <li key={p.no}>
+                                            {p.no}. {read.name || "—"}{read.org ? `, ${read.org}` : ""} — {p.kind === "website_order" ? `website order ${read.order_number || ""} (not deducted)` : p.kind === "free_copy" ? "free copy (deducted)" : "not sent"}
+                                            {read.kind && read.kind !== p.kind ? " · changed by hand" : ""}
+                                        </li>
+                                    );
+                                })}
+                            </ul>
+                        </div>
+                    )}
                     {(open.reports || []).length > 0 && (
                         <div><div className="font-medium">Reported problems</div>
                             <ul className="list-disc pl-5">{open.reports.map((r, i) => <li key={i}>{r.note} — {r.by}, {when(r.at)}</li>)}</ul></div>
@@ -222,7 +238,8 @@ function AccuracyTab() {
     if (!a) return <p className="text-sm text-[#4B5563]">Loading…</p>;
     const label = (k) => k === "all" ? "All documents" : k.startsWith("party:") ? k.slice(6) :
         { "in:textract_photo": "Printer bills (photo)", "in:textract_pdf": "Printer bills (PDF)", "in:pdf_text": "Printer bills (text PDF)",
-          "out:pdf_text": "Tally invoices (PDF)", "out:textract_photo": "Invoices (photo)", "out:textract_pdf": "Invoices (scanned PDF)" }[k] || k;
+          "out:pdf_text": "Tally invoices (PDF)",
+          "courier:pdf_text": "Courier sheets (PDF)", "courier:textract_photo": "Courier sheets (photo)", "courier:textract_pdf": "Courier sheets (scanned PDF)", "out:textract_photo": "Invoices (photo)", "out:textract_pdf": "Invoices (scanned PDF)" }[k] || k;
     const rows = Object.entries(a.groups || {});
     return (
         <div className="space-y-6" data-testid="wh-accuracy">

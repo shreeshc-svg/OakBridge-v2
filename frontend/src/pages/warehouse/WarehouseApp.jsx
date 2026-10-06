@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowLeft, Camera, FileText, PackagePlus, PackageMinus, Search, ScanBarcode } from "lucide-react";
+import { ArrowLeft, Camera, FileText, PackagePlus, PackageMinus, Search, ScanBarcode, Truck } from "lucide-react";
 import {
     whState, whLookup, whBooks, whUploadDoc, whConfirmDoc, whReport, whMove, whDocFile, formatApiError,
 } from "../../lib/api";
@@ -77,6 +77,9 @@ export default function WarehouseApp() {
                         <button type="button" className={`${BIG} border-[#002B5C]`} onClick={() => setScreen("out")} data-testid="wh-go-out">
                             <PackageMinus size={30} className="text-[#002B5C]" /> Pack an invoice (carton out)
                         </button>
+                        <button type="button" className={`${BIG} border-[#7C3AED]`} onClick={() => setScreen("courier")} data-testid="wh-go-courier">
+                            <Truck size={30} className="text-[#7C3AED]" /> Courier sheet (parcels out)
+                        </button>
                         <button type="button" className={`${BIG} border-[#F59E0B]`} onClick={() => setScreen("move")} data-testid="wh-go-move">
                             <ScanBarcode size={30} className="text-[#B4750F]" /> One book in or out
                         </button>
@@ -88,6 +91,7 @@ export default function WarehouseApp() {
                 {(screen === "in" || screen === "out") && (
                     <DocFlow key={screen} direction={screen} practice={practice} onDone={back} />
                 )}
+                {screen === "courier" && <CourierFlow practice={practice} onDone={back} />}
                 {screen === "move" && <SingleMove practice={practice} />}
                 {screen === "check" && <CheckStock />}
             </main>
@@ -324,6 +328,173 @@ function DocFlow({ direction, practice, onDone }) {
                 <button type="button" disabled={busy} onClick={confirm} data-testid="wh-confirm"
                     className={`w-full ${BTN} text-lg text-white ${practice ? "bg-[#B4750F]" : "bg-[#15803D]"}`}>
                     {busy ? "Saving…" : practice ? "Save practice (no stock change)" : isOut ? `Packed — remove ${packedUnits} from stock` : `Sync — add ${units} to stock`}
+                </button>
+            </div>
+        </div>
+    );
+}
+
+/* ------------------------------------------------------- courier sheet --- */
+/**
+ * One courier run: a sheet of address labels, several parcels, each with its
+ * own books. A sheet mixes PAID WEBSITE ORDERS (their copies already left the
+ * website stock at payment, so they must not be deducted again) with FREE
+ * COPIES to teachers and academies (deducted here). The system suggests which
+ * is which by matching phone / pin code / name to unshipped website orders;
+ * he can switch any parcel with one tap.
+ */
+const PARCEL_KINDS = [
+    ["free_copy", "Free copy — remove from stock"],
+    ["website_order", "Website order — already removed"],
+    ["skip", "Not sending"],
+];
+
+function CourierFlow({ practice, onDone }) {
+    const [busy, setBusy] = useState(false);
+    const [doc, setDoc] = useState(null);
+    const [parcels, setParcels] = useState([]);
+    const [books, setBooks] = useState([]);
+    const cam = useRef(null);
+    const fileIn = useRef(null);
+
+    useEffect(() => { whBooks().then(setBooks).catch(() => {}); }, []);
+    const byId = useMemo(() => Object.fromEntries(books.map((b) => [b.id, b])), [books]);
+
+    const start = async (file) => {
+        setBusy(true);
+        try {
+            const d = await whUploadDoc("courier", file, practice);
+            setDoc(d);
+            setParcels(d.parcels || []);
+            if (d.error) toast.error(d.error);
+            else if (file) toast.success(`Read ${d.parcels.length} parcel(s). Check each one.`);
+        } catch (e) {
+            toast.error(formatApiError(e));
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const setParcel = (i, patch) => setParcels((ps) => ps.map((p, k) => (k === i ? { ...p, ...patch } : p)));
+    const setLine = (pi, li, patch) =>
+        setParcels((ps) => ps.map((p, k) => (k !== pi ? p : { ...p, lines: p.lines.map((l, j) => (j === li ? { ...l, ...patch } : l)) })));
+    const addLine = (pi, bookId) => {
+        if (!bookId) return;
+        setParcels((ps) => ps.map((p, k) => (k !== pi ? p : {
+            ...p, lines: [...p.lines, { line_no: null, book_id: bookId, qty: 1, include: true, doc_title: "Added by hand", candidates: [] }],
+        })));
+    };
+    const addParcel = () => setParcels((ps) => [...ps, {
+        no: (ps.reduce((m, p) => Math.max(m, p.no), 0) || 0) + 1, name: "", org: "", pincode: "",
+        kind: "free_copy", order_id: "", order_number: "", lines: [],
+    }]);
+
+    const freeCopies = parcels.filter((p) => p.kind === "free_copy")
+        .reduce((s, p) => s + p.lines.filter((l) => l.include && l.book_id).reduce((a, l) => a + Number(l.qty || 0), 0), 0);
+
+    const confirm = async () => {
+        setBusy(true);
+        try {
+            const res = await whConfirmDoc(doc.id, {
+                parcels: parcels.map((p) => ({
+                    no: p.no, kind: p.kind, order_id: p.kind === "website_order" ? p.order_id || null : null,
+                    lines: p.lines.map((l) => ({ line_no: l.line_no, book_id: l.book_id, qty: Number(l.qty) || 0, include: !!l.include })),
+                })),
+            });
+            toast.success(res.practice ? "Practice saved — stock not changed." : `Done. ${freeCopies} free copies removed from stock.`);
+            onDone();
+        } catch (e) {
+            toast.error(formatApiError(e));
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    if (!doc) {
+        return (
+            <div className="space-y-3">
+                <h1 className="font-serif text-2xl text-[#002B5C]">Courier sheet</h1>
+                <p className="text-sm text-[#4B5563]">The sheet of address labels for today's parcels — PDF from WhatsApp/email, or a photo.</p>
+                <input ref={cam} type="file" accept="image/*" capture="environment" hidden
+                    onChange={(e) => e.target.files[0] && start(e.target.files[0])} />
+                <input ref={fileIn} type="file" accept="image/*,application/pdf" hidden
+                    onChange={(e) => e.target.files[0] && start(e.target.files[0])} />
+                <button type="button" disabled={busy} className={`${BIG} border-[#7C3AED]`} onClick={() => fileIn.current.click()} data-testid="wh-courier-file">
+                    <FileText size={28} /> {busy ? "Reading…" : "Choose PDF or photo"}
+                </button>
+                <button type="button" disabled={busy} className={`${BIG} border-[#E5E7EB]`} onClick={() => cam.current.click()}>
+                    <Camera size={28} /> Take a photo
+                </button>
+                <button type="button" disabled={busy} className="w-full underline text-[#002B5C] py-3" onClick={() => start(null)}>
+                    Enter by hand instead
+                </button>
+            </div>
+        );
+    }
+
+    return (
+        <div className="space-y-4 pb-28">
+            {doc.duplicate_of && (
+                <div className="border-2 border-[#CC0033] bg-white p-3 text-[#CC0033] font-medium">
+                    ⚠️ This courier sheet was already synced before. Ask your manager before going on.
+                </div>
+            )}
+            {doc.error && <div className="border border-[#F59E0B] bg-white p-3 text-sm">{doc.error}</div>}
+            {parcels.map((p, pi) => (
+                <div key={p.no} className={`bg-white border-2 p-3 space-y-3 ${p.kind === "skip" ? "border-[#E5E7EB] opacity-70" : "border-[#7C3AED]"}`} data-testid="wh-parcel">
+                    <div>
+                        <div className="text-xs font-mono text-[#4B5563]">PARCEL {p.no}</div>
+                        <input value={p.name} onChange={(e) => setParcel(pi, { name: e.target.value })} placeholder="Sent to"
+                            className="w-full text-lg font-semibold text-[#002B5C] border-b px-1 py-1" />
+                        <div className="text-sm text-[#4B5563] mt-1">{[p.org, p.pincode].filter(Boolean).join(" · ")}</div>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                        {PARCEL_KINDS.map(([v, label]) => (
+                            <button key={v} type="button" onClick={() => setParcel(pi, { kind: v })}
+                                disabled={v === "website_order" && !p.order_id}
+                                className={`text-left px-3 py-2 text-sm border-2 disabled:opacity-40 ${p.kind === v ? "border-[#002B5C] bg-[#002B5C] text-white" : "border-[#E5E7EB] bg-white"}`}>
+                                {v === "website_order" && p.order_number ? `Website order ${p.order_number} — already removed` : label}
+                            </button>
+                        ))}
+                        {!p.order_id && (
+                            <div className="text-xs text-[#4B5563]">No paid website order found for this address. If it IS a website order, choose “Not sending” and tell your manager.</div>
+                        )}
+                    </div>
+                    {p.lines.map((l, li) => {
+                        const book = byId[l.book_id];
+                        return (
+                            <div key={li} className="border-t pt-2">
+                                <div className="flex items-start gap-3">
+                                    <input type="checkbox" checked={!!l.include} onChange={(e) => setLine(pi, li, { include: e.target.checked })}
+                                        className="w-6 h-6 mt-1" aria-label="Include this book" />
+                                    <div className="flex-1 min-w-0">
+                                        {book ? <div className="text-base font-semibold text-[#002B5C]">{book.title}</div>
+                                            : <div className="text-base font-semibold text-[#CC0033]">Which book is this?</div>}
+                                        <div className="text-xs text-[#4B5563]">On the sheet: “{l.doc_title}”{l.match === "title" ? " · matched by title — check it" : ""}</div>
+                                        <select value={l.book_id || ""} onChange={(e) => setLine(pi, li, { book_id: e.target.value || null, include: !!e.target.value })}
+                                            className="mt-1 w-full border px-2 py-2 text-base bg-white">
+                                            <option value="">— Not a book / skip —</option>
+                                            {(l.candidates || []).map((c) => <option key={`c-${c.book_id}`} value={c.book_id}>★ {c.title}</option>)}
+                                            {books.map((b) => <option key={b.id} value={b.id}>{b.title} ({b.isbn})</option>)}
+                                        </select>
+                                    </div>
+                                    <input type="number" min={0} value={l.qty} onChange={(e) => setLine(pi, li, { qty: Number(e.target.value) })}
+                                        className="w-16 border-2 px-2 py-2 text-base font-mono" aria-label="Copies" />
+                                </div>
+                            </div>
+                        );
+                    })}
+                    <select value="" onChange={(e) => addLine(pi, e.target.value)} className="w-full border px-2 py-2 text-base bg-white">
+                        <option value="">+ Add a book to this parcel</option>
+                        {books.map((b) => <option key={b.id} value={b.id}>{b.title} ({b.isbn})</option>)}
+                    </select>
+                </div>
+            ))}
+            <button type="button" onClick={addParcel} className="w-full border-2 border-dashed py-3 text-[#002B5C]">+ Add a parcel</button>
+            <div className="fixed bottom-0 left-0 right-0 bg-white border-t p-3">
+                <button type="button" disabled={busy} onClick={confirm} data-testid="wh-courier-confirm"
+                    className={`w-full ${BTN} text-lg text-white ${practice ? "bg-[#B4750F]" : "bg-[#15803D]"}`}>
+                    {busy ? "Saving…" : practice ? "Save practice (no stock change)" : `Done — remove ${freeCopies} free copies from stock`}
                 </button>
             </div>
         </div>

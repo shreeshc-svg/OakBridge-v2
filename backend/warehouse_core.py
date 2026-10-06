@@ -61,11 +61,15 @@ def fold(s: str) -> str:
     s = unicodedata.normalize("NFKD", s or "").encode("ascii", "ignore").decode()
     s = s.lower().replace("&", " and ")
     s = re.sub(r"(\d)\s*/\s*e\b", r"\1e", s)  # "12 /e", "2/E" -> "12e", "2e"
+    # Courier sheets write editions out: "6th ed", "2nd Ed", "1st edition".
+    s = re.sub(r"(\d+)\s*(?:st|nd|rd|th)\s*(?:edn|ed|edition)\b\.?", r"\1e", s)
     return re.sub(r"[^a-z0-9]+", " ", s).strip()
 
 
 def tokens(s: str) -> list:
-    return [t for t in fold(s).split() if t not in _STOP and len(t) > 1]
+    # "1e" (first edition) is the default and never printed in titles, so it
+    # cannot be required for a match.
+    return [t for t in fold(s).split() if t not in _STOP and len(t) > 1 and t != "1e"]
 
 
 def to_int(s) -> Optional[int]:
@@ -240,26 +244,37 @@ def parse_goods_tables(tables: list) -> list:
 
 
 # ---------------------------------------------------------------- match ---
-def match_line(line: dict, books: list) -> dict:
+def match_line(line: dict, books: list, aliases: Optional[dict] = None) -> dict:
     """Pick the catalogue book for one document line.
 
     books: [{id, title, isbn, pages?}]. Returns
       {book_id, method: isbn|title|none, score, candidates:[{book_id,title,score}]}
     A line is only auto-matched when the choice is clear; anything ambiguous
     comes back unmatched with candidates, for the person to pick.
+
+    aliases: fold(title as written on a document) -> book_id, learned from
+    earlier confirmations ("LA/LR, 2nd Ed" -> the LA/LR 2/e book). Checked
+    after ISBN and before fuzzy matching, so a title someone has already
+    resolved once is never asked about again.
     """
     isbn = norm_isbn(line.get("isbn"))
     if isbn:
         hit = next((b for b in books if norm_isbn(b.get("isbn")) == isbn), None)
         if hit:
             return {"book_id": hit["id"], "method": "isbn", "score": 1.0, "candidates": []}
+    if aliases:
+        bid = aliases.get(fold(line.get("title") or ""))
+        if bid and any(b["id"] == bid for b in books):
+            return {"book_id": bid, "method": "alias", "score": 1.0, "candidates": []}
     want = tokens(line.get("title") or "")
     if not want:
         return {"book_id": None, "method": "none", "score": 0.0, "candidates": []}
     wf = fold(line.get("title") or "")
     scored = []
     for b in books:
-        have = set(tokens(b.get("title") or ""))
+        # Author included: courier sheets name a book by its author when two
+        # share a title ("International Relations (Achal Priyadarshy)").
+        have = set(tokens(f'{b.get("title") or ""} {b.get("author") or ""}'))
         if not have:
             continue
         cover = sum(1 for t in want if t in have) / len(want)
@@ -337,3 +352,98 @@ def score_corrections(read: list, confirmed: list) -> dict:
     out["lines"] = total
     out["accuracy"] = round(out["correct"] / total, 4) if total else None
     return out
+
+
+# ------------------------------------------------------------ courier sheet ---
+# A sheet of address labels for one courier run (e.g. "Courier 05.10.pdf"):
+# per parcel, the book lines come FIRST ("Compulsory English, 6th ed- 1 copy",
+# "In-House Matters -1"), then the recipient's address, then a "From" block
+# with Oakbridge's own address. One sheet mixes paid website orders with free
+# copies to teachers and academies.
+COURIER_BOOK_RE = re.compile(r"^(?P<title>.+?)\s*[-\u2013\u2014]\s*(?P<qty>\d{1,3})\s*(?:cop(?:y|ies)|nos?\.?|pcs\.?)?\s*$", re.I)
+PHONE_LINE_RE = re.compile(r"\b(?:mob(?:ile)?|tel|ph(?:one)?|m)\b\.?\s*[:\-]?\s*([+\d][\d\s-]{7,})", re.I)
+PIN_RE = re.compile(r"\b(\d{6})\b")
+
+
+def _is_book_line(ln: str) -> Optional[dict]:
+    m = COURIER_BOOK_RE.match(ln.strip())
+    if not m:
+        return None
+    title, qty = m.group("title").strip(" ,-"), int(m.group("qty"))
+    # "Varanasi- 221010" and "New Delhi - 110068" end in a number too; a pin
+    # code is six digits and a city is not a book.
+    if not (0 < qty <= 500) or len(tokens(title)) == 0 or re.search(r"\d{5,}", ln):
+        return None
+    return {"title": title, "qty": qty, "raw": ln.strip()}
+
+
+def parse_courier_text(text: str) -> list:
+    """Courier label sheet -> parcels [{no, lines, name, org, phone, pincode, address}]."""
+    parcels, cur, state = [], None, "books"
+    for raw in (text or "").splitlines():
+        ln = raw.strip()
+        if not ln:
+            continue
+        book = _is_book_line(ln)
+        if book:
+            if cur is None or state != "books":
+                cur = {"lines": [], "address": [], "name": "", "org": "", "phone": "", "pincode": ""}
+                parcels.append(cur)
+                state = "books"
+            cur["lines"].append(book)
+            continue
+        if cur is None:
+            continue
+        if re.match(r"^from\b", ln, re.I):
+            state = "from"
+            continue
+        if state == "from":
+            continue  # our own return address
+        state = "address"
+        ph = PHONE_LINE_RE.search(ln)
+        if ph:
+            cur["phone"] = re.sub(r"\D", "", ph.group(1))[-10:]
+            continue
+        pin = PIN_RE.search(ln)
+        if pin and not cur["pincode"]:
+            cur["pincode"] = pin.group(1)
+        if not cur["name"]:
+            cur["name"] = re.sub(r",\s*(director|principal|owner|manager)\b.*$", "", ln, flags=re.I).strip(" ,")
+        elif not cur["org"] and not re.search(r"\d", ln):
+            cur["org"] = ln.strip(" ,")
+        cur["address"].append(ln.strip(" ,"))
+    for i, p in enumerate(parcels, start=1):
+        p["no"] = i
+    return parcels
+
+
+def match_order(parcel: dict, orders: list) -> Optional[dict]:
+    """The paid website order a parcel ships, or None (then it is a free copy).
+
+    orders: paid, not yet shipped — [{id, order_number, full_name, phone,
+    pincode, delivery_*, item_book_ids}]. A phone number match is decisive;
+    otherwise the pin code AND part of the name must agree. Ambiguity (two
+    orders fit equally) returns None: a parcel wrongly treated as a website
+    order would leave its copies on the shelf in the count.
+    """
+    phone = (parcel.get("phone") or "")[-10:]
+    pin = parcel.get("pincode") or ""
+    name_toks = set(tokens(parcel.get("name") or "")) - {"mr", "ms", "mrs", "dr"}
+    scored = []
+    for o in orders:
+        phones = {re.sub(r"\D", "", o.get(k) or "")[-10:] for k in ("phone", "delivery_phone")} - {""}
+        pins = {o.get(k) or "" for k in ("pincode", "delivery_pincode")} - {""}
+        names = set(tokens(f'{o.get("full_name") or ""} {o.get("delivery_name") or ""}'))
+        score = 0
+        if phone and phone in phones:
+            score += 3
+        if pin and pin in pins:
+            score += 1
+            if name_toks & names:
+                score += 1
+        if score >= 2:
+            scored.append((score, o))
+    scored.sort(key=lambda x: -x[0])
+    if not scored or (len(scored) > 1 and scored[0][0] == scored[1][0]):
+        return None
+    return scored[0][1]
