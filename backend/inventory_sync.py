@@ -92,6 +92,7 @@ async def sync_stock_from_sheet(csv_text: Optional[str] = None) -> dict:
     restocked = 0
     invalid = 0
     unmatched: list = []
+    released: list = []  # pre-orders that became ordinary books this run
     for row in reader:
         isbn = _norm_isbn(row.get(isbn_col, ""))
         raw = (row.get(stock_col, "") or "").strip().replace(",", "")
@@ -102,11 +103,33 @@ async def sync_stock_from_sheet(csv_text: Optional[str] = None) -> dict:
         except (ValueError, TypeError):
             invalid += 1
             continue
-        book = await db.books.find_one({"isbn": isbn}, {"_id": 0, "id": 1, "stock": 1})
+        book = await db.books.find_one(
+            {"isbn": isbn}, {"_id": 0, "id": 1, "stock": 1, "coming_soon": 1, "title": 1}
+        )
         if not book:
             unmatched.append(isbn)
             continue
         prev = int(book.get("stock", 0) or 0)
+
+        # Copies have arrived for a pre-order: the sheet now has stock for it.
+        # Release it to an ordinary listed book with that stock, in the same
+        # write — a pre-order has its stock locked at 0 (Admin → Books), so the
+        # sheet is how printed copies reach the shop. Checked BEFORE the
+        # unchanged-stock shortcut: a pre-order that already holds this number
+        # from an older sync must still be released, not skipped as "no change".
+        # The launch date is kept on record; with the flag off it is inert.
+        if book.get("coming_soon") and qty > 0:
+            await db.books.update_one(
+                {"id": book["id"]}, {"$set": {"stock": qty, "coming_soon": False}}
+            )
+            released.append({"isbn": isbn, "title": (book.get("title") or "")[:80], "stock": qty})
+            updated += 1
+            full = await db.books.find_one({"id": book["id"]}, {"_id": 0})
+            if full:
+                await _notify_back_in_stock(full)
+            restocked += 1
+            continue
+
         if prev == qty:
             continue
         await db.books.update_one({"id": book["id"]}, {"$set": {"stock": qty}})
@@ -126,10 +149,19 @@ async def sync_stock_from_sheet(csv_text: Optional[str] = None) -> dict:
         "invalid_rows": invalid,
         "unmatched_count": len(unmatched),
         "unmatched_isbns": unmatched[:50],
+        "released_preorders": released,
         "synced_at": datetime.now(timezone.utc).isoformat(),
     }
-    log.info("inventory sync: updated=%s restocked=%s unmatched=%s invalid=%s",
-             updated, restocked, len(unmatched), invalid)
+    if released:
+        # A listing changed state without anyone opening its edit form, so it
+        # is recorded where admins look for "who changed this book".
+        from audit import audit_log
+        await audit_log(
+            db, "PREORDER_RELEASED_BY_SHEET", email="stock-sheet-sync",
+            meta={"books": [f'{r["isbn"]} ({r["stock"]})' for r in released[:30]]},
+        )
+    log.info("inventory sync: updated=%s restocked=%s unmatched=%s invalid=%s released=%s",
+             updated, restocked, len(unmatched), invalid, len(released))
     return result
 
 

@@ -68,7 +68,10 @@ export default function AdminInventory() {
             const res = await syncInventoryFromSheet();
             setSyncResult(res);
             toast.success(
-                `Synced from sheet — ${res.updated} updated, ${res.restocked} restocked.`,
+                `Synced from sheet — ${res.updated} updated, ${res.restocked} restocked` +
+                    ((res.released_preorders || []).length
+                        ? `, ${res.released_preorders.length} pre-order(s) now on sale.`
+                        : "."),
             );
             loadBooks();
             loadAlerts();
@@ -148,6 +151,12 @@ export default function AdminInventory() {
                     {syncResult.unmatched_count} unmatched ISBN
                     {syncResult.unmatched_count === 1 ? "" : "s"}
                     {syncResult.invalid_rows ? ` · ${syncResult.invalid_rows} bad rows` : ""}
+                    {(syncResult.released_preorders || []).length > 0 && (
+                        <span data-testid="inventory-sync-released" className="block mt-1 text-xs text-[#15803D]">
+                            Pre-orders now on sale (stock arrived):{" "}
+                            {syncResult.released_preorders.map((r) => `${r.title} (${r.stock})`).join(", ")}
+                        </span>
+                    )}
                     {syncResult.unmatched_count > 0 && (
                         <span className="block mt-1 text-xs text-[#4B5563]/80">
                             Unmatched: {(syncResult.unmatched_isbns || []).join(", ")}
