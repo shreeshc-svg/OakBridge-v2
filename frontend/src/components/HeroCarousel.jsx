@@ -48,10 +48,18 @@ const DEFAULT_HEIGHTS = "h-[300px] sm:h-[420px] lg:h-[520px]";
  * 375px phone a 300px frame is 1.25:1 and it cut more than half the width,
  * text included (measured on the live banners, 2026-10-07).
  *
- * With `aspect` the frame takes the banner's own shape from CSS aspect-ratio,
- * so it scales with the screen instead of cropping. The space is still
- * reserved before any image loads, which is what the fixed heights were for
- * (CLS on the prerendered `/`). A banner of a different shape (e.g. 3:1) is
+ * With `aspect` the frame takes the banner's own shape — its height is the
+ * width × 9/20 — so it scales with the screen instead of cropping. The space
+ * is still reserved before any image loads, which is what the fixed heights
+ * were for (CLS on the prerendered `/`).
+ *
+ * The height is set directly, NOT with CSS aspect-ratio + max-height: the
+ * browser transfers a max-height through aspect-ratio into a max-WIDTH, so on
+ * a wide screen the track came out ~1420px wide inside a 1900px frame, the next
+ * slide showed as a strip on the right, and translateX(-100%) no longer lined
+ * the slides up (reported 2026-10-07). The carousel is full-bleed, so the
+ * frame width is the viewport width (vw); the few px of a desktop scrollbar
+ * are absorbed by object-contain. A banner of a different shape (e.g. 3:1) is
  * shown whole over a blurred copy of itself rather than letterboxed in navy
  * or cropped. An explicit `fit: "cover"` on a slide is still honoured.
  */
@@ -109,6 +117,12 @@ function Slide({ slide, index, heights, priority, whole }) {
     );
 }
 
+// "20 / 9" -> 45 (height as a percentage of the width).
+const aspectVw = (aspect) => {
+    const [w, h] = String(aspect).split("/").map((x) => parseFloat(x));
+    return w > 0 && h > 0 ? +((100 * h) / w).toFixed(3) : 45;
+};
+
 export default function HeroCarousel({
     slides = [],
     testId = "hero-carousel",
@@ -160,7 +174,7 @@ export default function HeroCarousel({
                 className="flex transition-transform duration-500 ease-out"
                 style={{
                     transform: `translateX(-${idx * 100}%)`,
-                    ...(aspect ? { aspectRatio: aspect, maxHeight } : {}),
+                    ...(aspect ? { height: `min(${maxHeight}, ${aspectVw(aspect)}vw)` } : {}),
                 }}
             >
                 {(n ? slides : [{ id: "fallback" }]).map((s, k) => (
