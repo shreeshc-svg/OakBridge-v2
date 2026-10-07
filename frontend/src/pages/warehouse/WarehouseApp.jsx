@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { ArrowLeft, Camera, FileText, PackagePlus, PackageMinus, Search, ScanBarcode, Truck } from "lucide-react";
 import {
-    whState, whLookup, whBooks, whUploadDoc, whConfirmDoc, whReport, whMove, whDocFile, whInbox, whAck, whReopen, whCancelledParcel,
+    whState, whLookup, whBooks, whUploadDoc, whConfirmDoc, whReport, whMove, whDocFile, whInbox, whAck, whReopen, whCancelledParcel, whGetDoc,
     formatApiError,
 } from "../../lib/api";
 import { useAuth } from "../../context/AuthContext";
@@ -73,7 +73,8 @@ export default function WarehouseApp() {
             <main className="max-w-xl mx-auto p-4">
                 {screen === "home" && (
                     <div className="space-y-3">
-                        <Inbox onRepack={(d) => { setRepack(d); setScreen("out"); }} />
+                        <Inbox onRepack={(d) => { setRepack(d); setScreen("out"); }}
+                            onOpenJob={(d) => { setRepack(d); setScreen(d.direction); }} />
                         <p className="text-sm text-[#4B5563]">Hello {user?.name?.split(" ")[0] || ""}. What are you doing?</p>
                         <button type="button" className={`${BIG} border-[#15803D]`} onClick={() => setScreen("in")} data-testid="wh-go-in">
                             <PackagePlus size={30} className="text-[#15803D]" /> Books arrived from printer
@@ -94,9 +95,12 @@ export default function WarehouseApp() {
                 )}
                 {(screen === "in" || screen === "out") && (
                     <DocFlow key={`${screen}-${repack?.id || ""}`} direction={screen} practice={practice} onDone={back}
-                        initialDoc={screen === "out" ? repack : null} />
+                        initialDoc={repack?.direction === screen ? repack : null} />
                 )}
-                {screen === "courier" && <CourierFlow practice={practice} onDone={back} />}
+                {screen === "courier" && (
+                    <CourierFlow key={repack?.id || "new"} practice={practice} onDone={back}
+                        initialDoc={repack?.direction === "courier" ? repack : null} />
+                )}
                 {screen === "move" && <SingleMove practice={practice} />}
                 {screen === "check" && <CheckStock />}
             </main>
@@ -111,7 +115,7 @@ export default function WarehouseApp() {
 // phone comes back to the tab — no push service or SMS template needed.
 const INBOX_POLL_MS = 60000;
 
-function Inbox({ onRepack }) {
+function Inbox({ onRepack, onOpenJob }) {
     const [box, setBox] = useState(null);
     const [busy, setBusy] = useState("");
     const seenReady = useRef(null);
@@ -144,7 +148,10 @@ function Inbox({ onRepack }) {
 
     if (!box) return null;
     const cancelledOrders = box.cancelled_orders || [];
-    const total = box.ready.length + box.sent_back.length + box.cancelled.length + cancelledOrders.length;
+    const toDo = box.to_do || [];
+    const total = box.ready.length + box.sent_back.length + box.cancelled.length + cancelledOrders.length + toDo.length;
+    const openJob = (id) => act(id, async () => onOpenJob(await whGetDoc(id)));
+    const JOB = { out: "📤 Carton to pack", in: "📥 Books arriving — check them in", courier: "🚚 Courier sheet to do" };
     if (!total && !box.waiting.length) return null;
 
     const Card = ({ d, tone, children }) => (
@@ -166,6 +173,18 @@ function Inbox({ onRepack }) {
                     🔔 {total} carton{total === 1 ? "" : "s"} need{total === 1 ? "s" : ""} you
                 </div>
             )}
+            {toDo.map((d) => (
+                <div key={d.id} className="border-2 border-[#002B5C] bg-white p-3" data-testid="wh-job">
+                    <div className="font-medium text-[#002B5C]">{JOB[d.direction]}</div>
+                    <div className="text-sm text-[#4B5563]">
+                        {d.party_name || "—"}{d.doc_number ? ` · ${d.doc_number}` : ""} · {d.direction === "courier" ? `${d.parcels} parcel(s)` : `${d.lines} line(s)`} · sent by the office
+                    </div>
+                    <button type="button" disabled={busy === d.id} className={`${BTN} mt-2 w-full bg-[#002B5C] text-white`}
+                        onClick={() => openJob(d.id)} data-testid="wh-open-job">
+                        Open
+                    </button>
+                </div>
+            ))}
             {box.ready.map((d) => (
                 <Card key={d.id} d={d} tone="border-[#15803D]">
                     <div className="text-sm text-[#15803D] font-medium mt-1">✅ Approved — ready to ship{d.approved_by ? ` (by ${d.approved_by})` : ""}</div>
@@ -506,10 +525,10 @@ const PARCEL_KINDS = [
     ["skip", "Not sending"],
 ];
 
-function CourierFlow({ practice, onDone }) {
+function CourierFlow({ practice, onDone, initialDoc = null }) {
     const [busy, setBusy] = useState(false);
-    const [doc, setDoc] = useState(null);
-    const [parcels, setParcels] = useState([]);
+    const [doc, setDoc] = useState(initialDoc);
+    const [parcels, setParcels] = useState(initialDoc?.parcels || []);
     const [books, setBooks] = useState([]);
     const cam = useRef(null);
     const fileIn = useRef(null);

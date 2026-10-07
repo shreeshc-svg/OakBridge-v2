@@ -226,6 +226,22 @@ check(D([{"book_id": "a", "qty": 2, "reason": "website_return", "note": ""}], [(
 pre = [{"book_id": "p", "qty": -1, "reason": "website_order", "note": ""}]
 check(D(pre, [], out=False) == {"p": 1}, "a pre-order line the website never took is still reversed in the ledger")
 
+print("-- admin line corrections --")
+L = w.line_corrections
+bill = [{"book_id": "a", "qty": 10}, {"book_id": "b", "qty": 5}]
+check(L(bill, [("a", 8), ("b", 5)], 1) == {"a": -2}, "printer bill 10 -> 8: one -2 correction")
+check(L(bill + [{"book_id": "a", "qty": -2}], [("a", 8), ("b", 5)], 1) == {}, "same correction twice: nothing more")
+check(L(bill, [("a", 10)], 1) == {"b": -5}, "a book removed from the bill goes back to zero")
+check(L(bill, [("a", 10), ("b", 5), ("c", 3)], 1) == {"c": 3}, "a book added to the bill is booked in")
+carton = [{"book_id": "a", "qty": -4}]
+check(L(carton, [("a", 6)], -1) == {"a": -2}, "carton 4 -> 6: two more copies out")
+check(L(carton, [("a", 0)], -1) == {"a": 4}, "carton line set to 0: copies back")
+
+print("-- Tally header from a photo --")
+photo = "TAX INVOICE\nConsignee (Ship to)\nTerms of Delivery\nDispatched through\nAcme Book House\n12 MG Road"
+check(w.header_fields(photo, "out")["party_name"] == "Acme Book House",
+      "column label after 'Consignee' is skipped ('Terms of Delivery' is not a party)")
+
 print("-- helpers --")
 check(w.isbn13_valid("9788169999090") and not w.isbn13_valid("9788196413513"), "ISBN check digit")
 check(w.norm_isbn("978-81-6999-912-0") == "9788169999120", "hyphenated ISBN normalised")

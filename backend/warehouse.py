@@ -44,6 +44,7 @@ import hashlib
 import io
 import logging
 import os
+import re
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -56,7 +57,7 @@ import rbac
 import warehouse_core as core
 from audit import audit_log
 from extensions import _notify_back_in_stock, db, get_current_user, require_admin, require_superadmin
-from features import APP_NAME, get_object, put_object
+from features import APP_NAME, delete_object, get_object, put_object
 from uploads_guard import is_pdf, read_limited, sniff_image
 
 log = logging.getLogger(__name__)
@@ -405,17 +406,25 @@ async def wh_books(_: dict = Depends(require_warehouse)):
 
 @wh_router.post("/docs")
 async def wh_upload_doc(
-    direction: str = Form(...),           # in (printer bill) | out (invoice to pack)
+    direction: str = Form(...),           # in (printer bill) | out (invoice to pack) | courier
     practice: bool = Form(False),
     file: Optional[UploadFile] = File(None),
     user: dict = Depends(require_warehouse),
 ):
     """Upload a bill/invoice (or none, for manual entry) -> draft with suggested lines."""
+    return await _create_doc(direction, practice, file, user)
+
+
+async def _create_doc(direction: str, practice: bool, file: Optional[UploadFile], user: dict,
+                      from_office: bool = False) -> dict:
+    """Store + read a document as a draft. Shared by the phone and by Admin's
+    "New document" (from_office: it then waits on the phone as a job to do)."""
     if direction not in ("in", "out", "courier"):
         raise HTTPException(status_code=400, detail="direction must be in, out or courier")
     started = _now()
     doc = {
         "id": str(uuid.uuid4()), "direction": direction, "practice": bool(practice),
+        "from_office": bool(from_office), "archived": False,
         "status": "draft", "created_at": started.isoformat(), "created_by": user.get("email", ""),
         "source": "manual", "file_path": "", "file_type": "", "sha256": "",
         "doc_number": "", "party_name": "", "party_gstin": "", "party_kind": "",
@@ -603,7 +612,11 @@ async def wh_confirm(doc_id: str, body: ConfirmBody, user: dict = Depends(requir
              "include": r.get("include")} for r in doc.get("read_lines") or []]
     confirmed = [ln.model_dump() for ln in body.lines]
     automated = doc.get("source") != "manual"
-    metrics = core.score_corrections(read, confirmed) if automated else None
+    # A carton's qty is what he packed; the reader read the invoice. Scoring
+    # packed against read counted every short or unscanned carton as a reading
+    # error (practice cartons showed "read 0% right").
+    scored = [{**c, "qty": c["invoiced"]} if c.get("invoiced") is not None else c for c in confirmed]
+    metrics = core.score_corrections(read, scored) if automated else None
     if metrics is not None and courier:
         suggested = {p["no"]: p.get("kind") for p in doc.get("parcels") or []}
         metrics["parcel_kind_changed"] = sum(
@@ -655,7 +668,7 @@ async def wh_inbox(_: dict = Depends(require_warehouse)):
     """The phone's notifications: cartons approved, sent back, or cancelled."""
     since = (_now() - timedelta(days=60)).isoformat()
     docs = await db.warehouse_docs.find(
-        {"direction": "out", "practice": False, "created_at": {"$gte": since},
+        {"direction": "out", "practice": False, "created_at": {"$gte": since}, "archived": {"$ne": True},
          "status": {"$in": ["awaiting_approval", "sent_back", "cancelled", "confirmed"]}},
         {"_id": 0, "read_error": 0}).sort("confirmed_at", -1).to_list(300)
     out = {"ready": [], "sent_back": [], "cancelled": [], "waiting": []}
@@ -670,6 +683,16 @@ async def wh_inbox(_: dict = Depends(require_warehouse)):
             "packed_at": d.get("confirmed_at"), "approved_at": d.get("approved_at"),
             "approved_by": d.get("approved_by", ""), "review_note": d.get("review_note", ""),
         })
+    # Documents the office uploaded in Admin for him to do (pack / book in).
+    out["to_do"] = [
+        {"id": d["id"], "direction": d["direction"], "doc_number": d.get("doc_number", ""),
+         "party_name": d.get("party_name", ""), "created_by": d.get("created_by", ""),
+         "lines": len(d.get("read_lines") or []), "parcels": len(d.get("parcels") or [])}
+        async for d in db.warehouse_docs.find(
+            {"from_office": True, "status": "draft", "practice": False, "archived": {"$ne": True}},
+            {"_id": 0, "id": 1, "direction": 1, "doc_number": 1, "party_name": 1, "created_by": 1,
+             "read_lines": 1, "parcels": 1}).sort("created_at", 1).limit(100)
+    ]
     # Website orders cancelled after he packed them onto a courier sheet. Only
     # he knows whether the parcel is still on the floor or already with the
     # courier, so stock waits for his answer (order_stock.py).
@@ -735,6 +758,16 @@ async def wh_ack(doc_id: str, body: AckBody, user: dict = Depends(require_wareho
     await audit_log(db, f"WAREHOUSE_CARTON_{body.action.upper()}", email=user.get("email", ""),
                     role=user.get("role", ""), meta={"doc": doc_id})
     return {"ok": True}
+
+
+@wh_router.get("/docs/{doc_id}")
+async def wh_get_doc(doc_id: str, _: dict = Depends(require_warehouse)):
+    """Open a draft (e.g. one the office sent) on the phone."""
+    doc = await db.warehouse_docs.find_one(
+        {"id": doc_id, "status": "draft", "archived": {"$ne": True}}, {"_id": 0, "read_error": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="This document is no longer waiting — pull down to refresh.")
+    return doc
 
 
 @wh_router.post("/docs/{doc_id}/reopen")
@@ -819,10 +852,36 @@ async def adm_overview():
 
 
 @wh_admin_router.get("/docs")
-async def adm_docs(limit: int = 100, status: Optional[str] = None):
-    q = {"status": status, "practice": False} if status else {}
+async def adm_docs(limit: int = 100, status: Optional[str] = None, q: Optional[str] = None,
+                   direction: Optional[str] = None, practice: Optional[str] = None,
+                   date_from: Optional[str] = None, date_to: Optional[str] = None,
+                   archived: bool = False):
+    """Search documents. Archived (deleted) ones only when asked for."""
+    flt: dict = {"archived": True} if archived else {"archived": {"$ne": True}}
+    if status:
+        flt["status"] = status
+        if status == "awaiting_approval":
+            flt["practice"] = False
+    if direction in ("in", "out", "courier"):
+        flt["direction"] = direction
+    if practice in ("real", "practice"):
+        flt["practice"] = practice == "practice"
+    if date_from or date_to:
+        rng = {}
+        if date_from:
+            rng["$gte"] = date_from[:10]
+        if date_to:
+            rng["$lte"] = date_to[:10] + "T23:59:59.999999+99:99"
+        flt["created_at"] = rng
+    text = (q or "").strip()[:80]
+    if text:
+        # Escaped: the search box is user input and must never be a regex.
+        rx = {"$regex": re.escape(text), "$options": "i"}
+        flt["$or"] = [{"doc_number": rx}, {"party_name": rx}, {"party_author": rx}, {"created_by": rx},
+                      {"confirmed_by": rx}, {"parcels.name": rx}, {"parcels.org": rx},
+                      {"read_lines.doc_title": rx}]
     return await db.warehouse_docs.find(
-        q, {"_id": 0, "read_error": 0}).sort("created_at", -1).to_list(min(max(limit, 1), 500))
+        flt, {"_id": 0, "read_error": 0}).sort("created_at", -1).to_list(min(max(limit, 1), 500))
 
 
 def _approval_refusal(user: dict, doc: dict) -> Optional[str]:
@@ -888,6 +947,198 @@ async def adm_review(doc_id: str, body: ReviewBody, user: dict = Depends(require
     return {"ok": True, "status": new_status, "restored": restored}
 
 
+# ------------------------------------------- admin: create / edit / delete ---
+def _office_only(user: dict) -> None:
+    """The warehouse login holds the "warehouse" section, which also opens
+    /api/admin/warehouse. Changing the record from the office side (edit,
+    correct, delete, undo) is the office's job, not the phone's."""
+    if user.get("role") == "warehouse":
+        raise HTTPException(status_code=403, detail="The warehouse login cannot change documents here.")
+
+
+@wh_admin_router.post("/docs")
+async def adm_create_doc(
+    direction: str = Form(...),
+    file: Optional[UploadFile] = File(None),
+    user: dict = Depends(require_admin),
+):
+    """Office uploads a Tally invoice / printer bill / courier sheet. It is read
+    like a phone upload and waits on the warehouse phone as a job to do."""
+    _office_only(user)
+    doc = await _create_doc(direction, False, file, user, from_office=True)
+    await audit_log(db, "WAREHOUSE_DOC_CREATED_BY_OFFICE", email=user.get("email", ""), role=user.get("role", ""),
+                    meta={"doc": doc["id"], "direction": direction})
+    return doc
+
+
+class DocDetailsBody(BaseModel):
+    doc_number: Optional[str] = None
+    party_name: Optional[str] = None
+    party_kind: Optional[str] = None   # out: sale_offline | author_copy
+    note: Optional[str] = None
+
+
+@wh_admin_router.patch("/docs/{doc_id}")
+async def adm_edit_details(doc_id: str, body: DocDetailsBody, user: dict = Depends(require_admin)):
+    """Correct a document's details. Stock does not change."""
+    _office_only(user)
+    doc = await db.warehouse_docs.find_one({"id": doc_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    upd: dict = {}
+    if body.doc_number is not None:
+        upd["doc_number"] = body.doc_number.strip()[:60]
+    if body.party_name is not None:
+        upd["party_name"] = body.party_name.strip()[:160]
+    if body.note is not None:
+        upd["office_note"] = body.note.strip()[:500]
+    if body.party_kind is not None:
+        if doc["direction"] != "out" or body.party_kind not in ("sale_offline", "author_copy"):
+            raise HTTPException(status_code=400, detail="Sale / author copy applies to outgoing invoices only.")
+        upd["party_kind"] = body.party_kind
+    if not upd:
+        return doc
+    before = {k: doc.get(k) for k in upd}
+    upd.update({"edited_at": _now().isoformat(), "edited_by": user.get("email", "")})
+    await db.warehouse_docs.update_one({"id": doc_id}, {"$set": upd})
+    # Movement labels follow the document, so ledger reports agree with it.
+    mv_set = {}
+    if "party_name" in upd and doc["direction"] != "courier":
+        mv_set["party"] = upd["party_name"][:120]
+    if mv_set:
+        await db.stock_movements.update_many({"doc_id": doc_id}, {"$set": mv_set})
+    if "party_kind" in upd:
+        await db.stock_movements.update_many(
+            {"doc_id": doc_id, "reason": {"$in": ["sale_offline", "author_copy"]}},
+            {"$set": {"reason": upd["party_kind"]}})
+    await audit_log(db, "WAREHOUSE_DOC_EDITED", email=user.get("email", ""), role=user.get("role", ""),
+                    meta={"doc": doc_id, "before": before, "after": {k: upd[k] for k in before}})
+    return await db.warehouse_docs.find_one({"id": doc_id}, {"_id": 0, "read_error": 0})
+
+
+class LineFix(BaseModel):
+    book_id: str
+    qty: int
+
+
+class LinesBody(BaseModel):
+    lines: list[LineFix]
+    note: str
+
+
+@wh_admin_router.post("/docs/{doc_id}/lines")
+async def adm_edit_lines(doc_id: str, body: LinesBody, user: dict = Depends(require_admin)):
+    """Correct the books / quantities of a synced bill or carton.
+
+    The stock already moved, so the change is posted as correction movements
+    for the difference (core.line_corrections) — the history keeps both the
+    original and the fix, with who and why. The accuracy score is left alone:
+    it measures the reader against what the person confirmed at the time.
+    """
+    _office_only(user)
+    note = (body.note or "").strip()[:300]
+    if not note:
+        raise HTTPException(status_code=400, detail="Write why the lines are being corrected.")
+    doc = await db.warehouse_docs.find_one({"id": doc_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    if doc.get("practice") or doc.get("archived") or doc["direction"] not in ("in", "out") \
+            or doc["status"] not in ("confirmed", "awaiting_approval"):
+        raise HTTPException(status_code=409, detail=(
+            "Only a synced printer bill or carton can be corrected here "
+            "(practice runs, drafts, courier sheets and undone documents cannot)."))
+    if any(ln.qty < 0 or ln.qty > 100000 for ln in body.lines):
+        raise HTTPException(status_code=400, detail="Quantities must be between 0 and 1,00,000.")
+    ids = {ln.book_id for ln in body.lines}
+    found = {b["id"] async for b in db.books.find({"id": {"$in": list(ids)}}, {"_id": 0, "id": 1})}
+    if ids - found:
+        raise HTTPException(status_code=400, detail="One of the books no longer exists.")
+    moves = await db.stock_movements.find({"doc_id": doc_id, "undone": False},
+                                          {"_id": 0, "book_id": 1, "qty": 1}).to_list(1000)
+    sign = 1 if doc["direction"] == "in" else -1
+    diffs = core.line_corrections(moves, [(ln.book_id, ln.qty) for ln in body.lines], sign)
+    for bid, d in diffs.items():
+        await _apply(bid, d, "correction_in" if d > 0 else "correction_out", actor=user, doc_id=doc_id,
+                     party=doc.get("party_name", ""), note=f"Edited in Admin: {note}")
+    new_lines = [{"line_no": None, "book_id": ln.book_id, "qty": ln.qty, "include": ln.qty > 0}
+                 for ln in body.lines]
+    upd = {"confirmed_lines": new_lines, "lines_edited_at": _now().isoformat(),
+           "lines_edited_by": user.get("email", ""), "lines_edit_note": note}
+    if not doc.get("original_confirmed_lines"):
+        upd["original_confirmed_lines"] = doc.get("confirmed_lines") or []
+    await db.warehouse_docs.update_one({"id": doc_id}, {"$set": upd})
+    await audit_log(db, "WAREHOUSE_DOC_LINES_CORRECTED", email=user.get("email", ""), role=user.get("role", ""),
+                    meta={"doc": doc_id, "diffs": diffs, "note": note})
+    return {"ok": True, "changes": diffs}
+
+
+@wh_admin_router.delete("/docs/{doc_id}")
+async def adm_delete_doc(doc_id: str, user: dict = Depends(require_admin)):
+    """Safe delete (superadmin — require_admin enforces that for DELETE).
+
+    Practice runs and unfinished drafts never moved stock: removed for good,
+    file included. Anything that moved stock is reversed and ARCHIVED, never
+    erased, so every past stock number still traces to a document.
+    """
+    _office_only(user)
+    doc = await db.warehouse_docs.find_one({"id": doc_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    if doc.get("shipped_at"):
+        raise HTTPException(status_code=409, detail=(
+            "This carton has been shipped — its copies are not on the shelf. Record a return instead."))
+    live = await db.stock_movements.find({"doc_id": doc_id, "undone": False}, {"_id": 0}).to_list(1000)
+    if (doc.get("practice") or doc["status"] == "draft") and not live:
+        res = await db.warehouse_docs.delete_one({"id": doc_id, "status": doc["status"]})
+        if res.deleted_count != 1:
+            raise HTTPException(status_code=409, detail="This document has just changed — refresh.")
+        if doc.get("file_path"):
+            try:
+                await asyncio.to_thread(delete_object, doc["file_path"])
+            except Exception:  # noqa: BLE001 — record is gone; an orphan file is harmless
+                log.warning("warehouse: could not delete file %s", doc["file_path"])
+        await audit_log(db, "WAREHOUSE_DOC_DELETED", email=user.get("email", ""), role=user.get("role", ""),
+                        meta={"doc": doc_id, "practice": doc.get("practice"), "status": doc["status"]})
+        return {"ok": True, "deleted": True, "reversed": 0}
+    # Claim first (conditional on the status we read) so a concurrent review
+    # or a second click cannot reverse the same movements twice.
+    claim = await db.warehouse_docs.update_one(
+        {"id": doc_id, "status": doc["status"], "archived": {"$ne": True}},
+        {"$set": {"archived": True, "archived_at": _now().isoformat(), "archived_by": user.get("email", ""),
+                  "status_before_archive": doc["status"],
+                  # Anything that held its invoice (synced, awaiting, sent back)
+                  # becomes UNDONE, so the same file can be uploaded again.
+                  "status": "undone" if live or doc["status"] in TAKEN_STATUSES else doc["status"]}})
+    if claim.modified_count != 1:
+        raise HTTPException(status_code=409, detail="This document has just changed — refresh.")
+    reversed_units = 0
+    for mv in live:
+        await _reverse(mv, user)
+        reversed_units += -int(mv["qty"])
+    if doc["direction"] == "courier":
+        # Website orders linked by this sheet are no longer "packed".
+        await db.orders.update_many({"warehouse_doc_id": doc_id},
+                                    {"$set": {"warehouse_doc_id": "", "warehouse_packed_at": ""}})
+    await audit_log(db, "WAREHOUSE_DOC_ARCHIVED", email=user.get("email", ""), role=user.get("role", ""),
+                    meta={"doc": doc_id, "number": doc.get("doc_number"), "movements_reversed": len(live),
+                          "net_units_reversed": reversed_units})
+    return {"ok": True, "deleted": False, "archived": True, "reversed": len(live)}
+
+
+@wh_admin_router.post("/docs/{doc_id}/restore")
+async def adm_restore_doc(doc_id: str, user: dict = Depends(require_superadmin)):
+    """Bring an archived document back into the list. Its stock stays
+    reversed (it shows as UNDONE); re-upload it if it should count again."""
+    res = await db.warehouse_docs.update_one(
+        {"id": doc_id, "archived": True},
+        {"$set": {"archived": False, "restored_at": _now().isoformat(), "restored_by": user.get("email", "")}})
+    if res.modified_count != 1:
+        raise HTTPException(status_code=409, detail="This document is not archived.")
+    await audit_log(db, "WAREHOUSE_DOC_RESTORED", email=user.get("email", ""), role=user.get("role", ""),
+                    meta={"doc": doc_id})
+    return {"ok": True}
+
+
 @wh_admin_router.get("/docs/{doc_id}/file")
 async def adm_file(doc_id: str):
     return await _file_response(doc_id)
@@ -910,6 +1161,7 @@ async def _reverse(mv: dict, user: dict) -> None:
 
 @wh_admin_router.post("/docs/{doc_id}/undo")
 async def adm_undo_doc(doc_id: str, user: dict = Depends(require_admin)):
+    _office_only(user)
     doc = await db.warehouse_docs.find_one({"id": doc_id}, {"_id": 0})
     if not doc or doc["status"] != "confirmed":
         raise HTTPException(status_code=409, detail="Only a synced document can be undone.")
@@ -928,6 +1180,7 @@ async def adm_undo_doc(doc_id: str, user: dict = Depends(require_admin)):
 
 @wh_admin_router.post("/movements/{mv_id}/undo")
 async def adm_undo_move(mv_id: str, user: dict = Depends(require_admin)):
+    _office_only(user)
     mv = await db.stock_movements.find_one({"id": mv_id}, {"_id": 0})
     # Website order/return movements follow the order's status (order_stock.py);
     # undoing one here would leave the ledger disagreeing with the order.
@@ -940,7 +1193,8 @@ async def adm_undo_move(mv_id: str, user: dict = Depends(require_admin)):
 
 
 @wh_admin_router.post("/docs/{doc_id}/test-case")
-async def adm_test_case(doc_id: str, payload: dict):
+async def adm_test_case(doc_id: str, payload: dict, user: dict = Depends(require_admin)):
+    _office_only(user)
     await db.warehouse_docs.update_one({"id": doc_id}, {"$set": {"test_case": bool(payload.get("on"))}})
     return {"ok": True}
 

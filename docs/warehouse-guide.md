@@ -82,6 +82,13 @@ Who can approve: anyone with **Orders** and **Warehouse** access (e.g. the Fulfi
 - Changed back from Cancelled → the copies are taken off again. If they have been sold meanwhile, the order is flagged as a backorder.
 - Only what payment actually took comes back (pre-order lines and short-stock lines took nothing).
 
+## Managing documents (Admin → Warehouse → Bills & invoices)
+- **Search** by number, party, author, person or book title; filter by type, status, real/practice, dates; tick **Archived** to see deleted ones.
+- **+ New document**: upload a Tally invoice, printer bill or courier sheet. It appears on the warehouse phone as a job (🔔) until he does it.
+- **Edit details**: number, party, sale/author copy, office note. Stock does not change.
+- **Correct books / quantities** (synced bills and cartons): the difference is posted as a correction with your name and reason. The original stays in the history.
+- **Delete** (superadmin): practice runs and unfinished drafts are removed for good. Anything that changed stock is **reversed and archived**, never erased. Shipped cartons can't be deleted — record a return. **Restore** puts an archived document back in the list; its stock stays reversed.
+
 ## The trial week
 - Admin → Warehouse → **Trial & comparison** shows every book where the warehouse count and the website (sheet) count differ, and by how much.
 - **Bills & invoices** shows each document with its photo/PDF, what was read vs what was confirmed, **Undo** (24 h), and **Use as test case**.

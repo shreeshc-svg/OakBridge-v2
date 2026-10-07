@@ -89,6 +89,15 @@ def clean_title(desc: str) -> str:
     return SPEC_CUT_RE.sub("", t).strip(" -,:")
 
 
+# Tally invoice header labels (right-hand column and box titles) — never a
+# party name.
+TALLY_LABEL_RE = re.compile(
+    r"^(terms of delivery|terms of payment|mode/terms|dispatch(ed)?\s|delivery note|reference no|"
+    r"other references?|buyer'?s order|buyer \(bill to\)|bill to|ship to|dated?\b|destination|"
+    r"bill of lading|motor vehicle|invoice no|e-way|gstin|state name|place of supply|contact|e-?mail|"
+    r"consignee|supplier'?s ref)", re.I)
+
+
 def header_fields(text: str, direction: str) -> dict:
     """Invoice number, other party, total quantity — from the document's text."""
     out = {"doc_number": "", "party_gstin": "", "party_name": "", "total_qty": None}
@@ -102,7 +111,11 @@ def header_fields(text: str, direction: str) -> dict:
     if direction == "out":
         for i, ln in enumerate(lines):
             if re.match(r"consignee", ln, re.I):
-                nxt = next((x for x in lines[i + 1:i + 4] if x and not re.match(r"\d", x)), "")
+                # A photo read by Textract interleaves Tally's two columns, so
+                # the line after "Consignee" can be a right-hand label ("Terms
+                # of Delivery", "Dispatched through") — skip those.
+                nxt = next((x for x in lines[i + 1:i + 8]
+                            if x and not re.match(r"\d", x) and not TALLY_LABEL_RE.match(x)), "")
                 out["party_name"] = nxt
                 break
     else:
@@ -541,3 +554,29 @@ def order_ledger_diffs(moves: list, lines: list, *, out: bool) -> dict:
         if d:
             out_diffs[bid] = d
     return out_diffs
+
+
+# ---------------------------------------------- admin line corrections ---
+def line_corrections(moves: list, lines: list, sign: int) -> dict:
+    """Correction movements needed so a synced document's stock matches the
+    corrected lines.
+
+    moves  the document's movements still standing ({book_id, qty} signed)
+    lines  corrected (book_id, qty) — qty as on the document, unsigned
+    sign   +1 printer bill (copies in), -1 carton (copies out)
+    Returns {book_id: signed qty to apply}. Books dropped from the lines are
+    brought back to zero; earlier corrections are already in moves, so
+    correcting twice to the same lines changes nothing.
+    """
+    want: dict = {}
+    for bid, q in lines:
+        want[bid] = want.get(bid, 0) + sign * int(q)
+    have: dict = {}
+    for mv in moves:
+        have[mv["book_id"]] = have.get(mv["book_id"], 0) + int(mv["qty"])
+    out = {}
+    for bid in set(want) | set(have):
+        d = want.get(bid, 0) - have.get(bid, 0)
+        if d:
+            out[bid] = d
+    return out

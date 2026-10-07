@@ -78,7 +78,7 @@ check(/if any\(ln\.qty > 100000 for ln in kept\)/.test(wh), "absurd quantities r
 check(/UNDO_HOURS = 24/.test(wh) && /def adm_undo_doc/.test(wh), "manager undo within 24 hours");
 
 console.log("-- measured --");
-check(/metrics = core\.score_corrections\(read, confirmed\) if automated else None/.test(wh), "every automated document is scored");
+check(/metrics = core\.score_corrections\(read, scored\) if automated else None/.test(wh), "every automated document is scored");
 check(/@wh_admin_router\.get\("\/accuracy"\)/.test(wh) && /@wh_admin_router\.post\("\/replay"\)/.test(wh), "accuracy report and test-case replay");
 
 console.log("-- access --");
@@ -100,7 +100,7 @@ const webBranch = (courierBranch.match(/elif p\.kind == "website_order"([\s\S]*)
 check(webBranch.includes("warehouse_doc_id") && !webBranch.includes("_apply("), "courier: website order is linked, never deducted again");
 check(/"payment_status": "paid"/.test(webBranch), "courier: only a paid order can be linked");
 check(/"payment_status": "paid"[\s\S]{0,200}"warehouse_doc_id": \{"\$in": \[None, ""\]\}/.test(wh), "courier: an order already packed is not offered again");
-check(/data-testid="wh-go-courier"/.test(screen) && /screen === "courier" && <CourierFlow/.test(screen), "courier button on the phone home screen");
+check(/data-testid="wh-go-courier"/.test(screen) && /screen === "courier" && \(\s*<CourierFlow/.test(screen), "courier button on the phone home screen");
 check(/disabled=\{v === "website_order" && !p\.order_id\}/.test(screen), "courier: website-order choice needs a matched order");
 
 // Carton approval (order-management team -> warehouse).
@@ -131,6 +131,25 @@ check(/"stock_taken": taken/.test(pay) && /if res\.modified_count == 1:\s*\n\s*t
 check(/data-testid=\{`order-restock-\$\{o\.id\}`\}/.test(code("frontend/src/pages/admin/AdminOrders.jsx")), "admin: Returned — put back in stock");
 check(/data-testid="wh-parcel-here"/.test(screen) && /data-testid="wh-parcel-gone"/.test(screen), "warehouse asked whether a cancelled parcel is still there");
 check(/"website_return", "opening"\)/.test(wh), "website order/return movements cannot be undone one by one");
+
+// Admin SCRUD on documents.
+const fnOf = (name) => (wh.match(new RegExp(`async def ${name}\\([\\s\\S]*?\\n(?=\\n\\S)`)) || [""])[0];
+check(/"\$regex": re\.escape\(text\)/.test(fnOf("adm_docs")), "search: the search box is escaped, never a raw regex");
+check(/\{"archived": True\} if archived else \{"archived": \{"\$ne": True\}\}/.test(fnOf("adm_docs")), "search: archived documents hidden unless asked for");
+const del = fnOf("adm_delete_doc");
+check(/if \(doc\.get\("practice"\) or doc\["status"\] == "draft"\) and not live:/.test(del) && /delete_one/.test(del), "delete: only practice / drafts that never moved stock are erased");
+check(/"archived": True/.test(del) && /await _reverse\(mv, user\)/.test(del) && del.indexOf("claim = await") < del.indexOf("_reverse(mv"), "delete: anything that moved stock is reversed and archived, claim first");
+check(/if doc\.get\("shipped_at"\):\s*\n\s*raise HTTPException\(status_code=409/.test(del), "delete: a shipped carton cannot be deleted");
+check(/@wh_admin_router\.delete\("\/docs\/\{doc_id\}"\)/.test(wh), "delete is an HTTP DELETE (superadmin via require_admin)");
+check(/async def adm_restore_doc\(doc_id: str, user: dict = Depends\(require_superadmin\)\)/.test(wh), "restore: superadmin only");
+const lines = fnOf("adm_edit_lines");
+check(/if not note:\s*\n\s*raise HTTPException\(status_code=400/.test(lines) && /core\.line_corrections\(/.test(lines), "correct lines: reason required, difference posted as corrections");
+check(/"original_confirmed_lines"/.test(lines), "correct lines: the original lines are kept");
+for (const n of ["adm_create_doc", "adm_edit_details", "adm_edit_lines", "adm_delete_doc", "adm_undo_doc", "adm_undo_move", "adm_test_case"]) {
+    check(/^\s*_office_only\(user\)/m.test(fnOf(n)), `${n}: the warehouse login cannot use it`);
+}
+check(/"from_office": True, "status": "draft"/.test(wh) && /data-testid="wh-open-job"/.test(screen), "office upload waits on the phone as a job");
+check(/scored = \[\{\*\*c, "qty": c\["invoiced"\]\}/.test(wh), "carton accuracy scored against the invoice, not what was packed");
 
 console.log();
 if (failed) {

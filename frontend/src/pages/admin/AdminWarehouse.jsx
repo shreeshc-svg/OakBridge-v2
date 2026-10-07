@@ -3,7 +3,8 @@ import { Link, Navigate } from "react-router-dom";
 import { toast } from "sonner";
 import {
     adminWhOverview, adminWhDocs, adminWhDoc, adminWhUndoDoc, adminWhTestCase, adminWhAccuracy,
-    adminWhReplay, adminWhMode, adminWhMovements, adminWhUndoMove, adminWhReview, whDocFile, formatApiError,
+    adminWhReplay, adminWhMode, adminWhMovements, adminWhUndoMove, adminWhReview, adminWhCreateDoc, adminWhEditDoc,
+    adminWhEditLines, adminWhDeleteDoc, adminWhRestoreDoc, whBooks, whDocFile, formatApiError,
 } from "../../lib/api";
 import { useAuth } from "../../context/AuthContext";
 import { isSuperadmin } from "../../lib/rbac";
@@ -57,7 +58,7 @@ export default function AdminWarehouse() {
             <div className="mt-6">
                 {tab === "trial" && <TrialTab canSwitch={isSuperadmin(user?.role)} />}
                 {tab === "approve" && <DocsTab key="approve" status="awaiting_approval" onChange={refreshPending} />}
-                {tab === "docs" && <DocsTab key="docs" onChange={refreshPending} />}
+                {tab === "docs" && <DocsTab key="docs" onChange={refreshPending} canDelete={isSuperadmin(user?.role)} />}
                 {tab === "accuracy" && <AccuracyTab />}
                 {tab === "moves" && <MovesTab />}
             </div>
@@ -144,12 +145,36 @@ const STATUS_LABEL = {
     awaiting_approval: "WAITING FOR APPROVAL", sent_back: "SENT BACK", cancelled: "CANCELLED",
 };
 
-function DocsTab({ status = null, onChange = () => {} }) {
+const NO_FILTER = { q: "", direction: "", status: "", practice: "", date_from: "", date_to: "", archived: false };
+const DIRECTIONS = [["out", "Carton out (Tally invoice)"], ["in", "Printer bill (books arriving)"], ["courier", "Courier sheet"]];
+
+function DocsTab({ status = null, onChange = () => {}, canDelete = false }) {
     const [docs, setDocs] = useState(null);
     const [open, setOpen] = useState(null);
     const [busy, setBusy] = useState(false);
-    const load = useCallback(() => { adminWhDocs(status).then(setDocs).catch(() => setDocs([])); }, [status]);
+    const [f, setF] = useState(NO_FILTER);
+    const [q, setQ] = useState(NO_FILTER);   // f, applied after typing pauses
+    const [creating, setCreating] = useState(false);
+    useEffect(() => { const t = setTimeout(() => setQ(f), 300); return () => clearTimeout(t); }, [f]);
+    const load = useCallback(() => {
+        adminWhDocs(status || q).then(setDocs).catch(() => setDocs([]));
+    }, [status, q]);
     useEffect(load, [load]);
+    const remove = async (d) => {
+        const msg = d.practice || d.status === "draft"
+            ? "Delete this document for good? It never changed stock."
+            : "Delete this document?\n\nIts stock changes are reversed and it is ARCHIVED, not erased — the stock history keeps it. A superadmin can bring it back into the list (its stock stays reversed).";
+        if (!window.confirm(msg)) return;
+        setBusy(true);
+        try {
+            const r = await adminWhDeleteDoc(d.id);
+            toast.success(r.deleted ? "Deleted." : `Archived. ${r.reversed} stock movement(s) reversed.`);
+            setOpen(null); load(); onChange();
+        } catch (e) { toast.error(formatApiError(e)); } finally { setBusy(false); }
+    };
+    const restore = async (id) => {
+        try { await adminWhRestoreDoc(id); toast.success("Back in the list (stock stays reversed)."); setOpen(null); load(); } catch (e) { toast.error(formatApiError(e)); }
+    };
     const show = async (id) => { try { setOpen(await adminWhDoc(id)); } catch (e) { toast.error(formatApiError(e)); } };
     const undo = async (id) => {
         if (!window.confirm("Undo this sync? Its stock changes are reversed.")) return;
@@ -185,7 +210,32 @@ function DocsTab({ status = null, onChange = () => {} }) {
     };
     if (!docs) return <p className="text-sm text-[#4B5563]">Loading…</p>;
     if (status && !docs.length) return <p className="text-sm text-[#4B5563]" data-testid="wh-approve-empty">Nothing waiting — every packed carton has been reviewed.</p>;
+    const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value }));
+    const inp = "border border-[#E5E7EB] bg-white px-2 py-1.5 text-sm";
     return (
+        <div className="space-y-4">
+        {!status && (
+            <div className="flex flex-wrap items-end gap-2" data-testid="wh-doc-search">
+                <input value={f.q} onChange={set("q")} placeholder="Search number, party, author, person, title…" className={`${inp} flex-1 min-w-[220px]`} />
+                <select value={f.direction} onChange={set("direction")} className={inp}>
+                    <option value="">All types</option>
+                    {DIRECTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                </select>
+                <select value={f.status} onChange={set("status")} className={inp}>
+                    <option value="">Any status</option>
+                    {["draft", "awaiting_approval", "confirmed", "sent_back", "cancelled", "undone"].map((v) => <option key={v} value={v}>{STATUS_LABEL[v] || v.toUpperCase()}</option>)}
+                </select>
+                <select value={f.practice} onChange={set("practice")} className={inp}>
+                    <option value="">Real + practice</option><option value="real">Real only</option><option value="practice">Practice only</option>
+                </select>
+                <input type="date" value={f.date_from} onChange={set("date_from")} className={inp} aria-label="From" />
+                <input type="date" value={f.date_to} onChange={set("date_to")} className={inp} aria-label="To" />
+                <label className="text-sm flex items-center gap-1"><input type="checkbox" checked={f.archived} onChange={set("archived")} /> Archived</label>
+                {JSON.stringify(f) !== JSON.stringify(NO_FILTER) && <button type="button" className="text-sm underline" onClick={() => setF(NO_FILTER)}>Clear</button>}
+                <button type="button" className="bg-[#002B5C] text-white px-3 py-1.5 text-sm" onClick={() => setCreating((c) => !c)} data-testid="wh-new-doc">+ New document</button>
+            </div>
+        )}
+        {creating && <NewDocForm onDone={(d) => { setCreating(false); load(); if (d) show(d.id); }} />}
         <div className="grid lg:grid-cols-2 gap-6">
             <ul className="divide-y border border-[#E5E7EB] bg-white" data-testid="wh-docs">
                 {docs.map((d) => (
@@ -212,6 +262,12 @@ function DocsTab({ status = null, onChange = () => {} }) {
                         {open.seconds_to_confirm != null ? ` · took ${open.seconds_to_confirm}s` : ""}
                         {open.total_matches === false ? " · ⚠️ lines did not add up to the total" : ""}
                     </div>
+                    {open.archived && (
+                        <div className="border border-[#CC0033] text-[#CC0033] p-2 text-xs">Archived {when(open.archived_at)} by {open.archived_by}{open.status === "undone" ? " — its stock changes were reversed" : ""}.</div>
+                    )}
+                    {open.lines_edited_at && (
+                        <div className="text-xs text-[#B4750F]">Lines corrected {when(open.lines_edited_at)} by {open.lines_edited_by}: “{open.lines_edit_note}”</div>
+                    )}
                     {(open.approved_at || open.review_note) && (
                         <div className="text-xs text-[#4B5563]">
                             {open.approved_at ? `Approved ${when(open.approved_at)} by ${open.approved_by}` : `Reviewed ${when(open.reviewed_at)} by ${open.reviewed_by}`}
@@ -297,8 +353,143 @@ function DocsTab({ status = null, onChange = () => {} }) {
                             <ul className="list-disc pl-5">{open.reports.map((r, i) => <li key={i}>{r.note} — {r.by}, {when(r.at)}</li>)}</ul></div>
                     )}
                     <div className="text-xs text-[#4B5563]">{(open.movements || []).length} stock movement(s) recorded.</div>
+                    {!open.archived && !status && <EditDetails doc={open} onSaved={(d) => { setOpen({ ...open, ...d }); load(); }} />}
+                    {!open.archived && !status && !open.practice && ["in", "out"].includes(open.direction) && ["confirmed", "awaiting_approval"].includes(open.status) && (
+                        <EditLines doc={open} onSaved={() => { load(); show(open.id); }} />
+                    )}
+                    {canDelete && !status && (
+                        <div className="pt-2 border-t border-[#E5E7EB] flex flex-wrap gap-2">
+                            {open.archived
+                                ? <button type="button" className="border px-3 py-1" onClick={() => restore(open.id)} data-testid="wh-restore">Restore to the list</button>
+                                : <button type="button" disabled={busy || !!open.shipped_at} className="border border-[#CC0033] text-[#CC0033] px-3 py-1 disabled:opacity-50" onClick={() => remove(open)} data-testid="wh-delete"
+                                    title={open.shipped_at ? "Shipped — record a return instead" : ""}>Delete</button>}
+                        </div>
+                    )}
                 </div>
             )}
+        </div>
+        </div>
+    );
+}
+
+/* Office uploads a document; it waits on the warehouse phone as a job. */
+function NewDocForm({ onDone }) {
+    const [direction, setDirection] = useState("out");
+    const [file, setFile] = useState(null);
+    const [busy, setBusy] = useState(false);
+    const go = async () => {
+        setBusy(true);
+        try {
+            const d = await adminWhCreateDoc(direction, file);
+            if (d.error) toast.warning(d.error);
+            if (d.duplicate_of) toast.warning("This document was already done once — the warehouse will be stopped from adding it twice.");
+            toast.success("Sent to the warehouse phone — it waits there until he does it.");
+            onDone(d);
+        } catch (e) { toast.error(formatApiError(e)); } finally { setBusy(false); }
+    };
+    return (
+        <div className="border border-[#E5E7EB] bg-white p-4 flex flex-wrap items-end gap-3 text-sm" data-testid="wh-new-doc-form">
+            <label className="flex flex-col gap-1">Type
+                <select value={direction} onChange={(e) => setDirection(e.target.value)} className="border border-[#E5E7EB] px-2 py-1.5">
+                    {DIRECTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                </select>
+            </label>
+            <label className="flex flex-col gap-1">PDF or photo (leave empty to type it on the phone)
+                <input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={(e) => setFile(e.target.files?.[0] || null)} />
+            </label>
+            <button type="button" disabled={busy} className="bg-[#002B5C] text-white px-4 py-2 disabled:opacity-50" onClick={go}>
+                {busy ? "Reading…" : "Send to warehouse"}
+            </button>
+            <button type="button" className="underline" onClick={() => onDone(null)}>Cancel</button>
+        </div>
+    );
+}
+
+/* Details only — never stock. */
+function EditDetails({ doc, onSaved }) {
+    const [editing, setEditing] = useState(false);
+    const [v, setV] = useState({});
+    const startEdit = () => {
+        setV({ doc_number: doc.doc_number || "", party_name: doc.party_name || "", party_kind: doc.party_kind || "sale_offline", note: doc.office_note || "" });
+        setEditing(true);
+    };
+    const save = async () => {
+        const body = { doc_number: v.doc_number, party_name: v.party_name, note: v.note };
+        if (doc.direction === "out") body.party_kind = v.party_kind;
+        try { const d = await adminWhEditDoc(doc.id, body); toast.success("Saved. Stock not changed."); setEditing(false); onSaved(d); } catch (e) { toast.error(formatApiError(e)); }
+    };
+    if (!editing) {
+        return (
+            <div className="text-xs text-[#4B5563] flex flex-wrap gap-2 items-center">
+                {doc.office_note ? <span>Note: {doc.office_note}</span> : null}
+                {doc.edited_at ? <span>· edited {when(doc.edited_at)} by {doc.edited_by}</span> : null}
+                <button type="button" className="border px-3 py-1 text-[#002B5C]" onClick={startEdit} data-testid="wh-edit-details">Edit details</button>
+            </div>
+        );
+    }
+    const box = "border border-[#E5E7EB] px-2 py-1.5 w-full";
+    return (
+        <div className="border border-[#E5E7EB] p-3 space-y-2" data-testid="wh-edit-details-form">
+            <div className="grid sm:grid-cols-2 gap-2">
+                <label>Number<input className={box} value={v.doc_number} onChange={(e) => setV({ ...v, doc_number: e.target.value })} /></label>
+                <label>{doc.direction === "in" ? "Printer" : "Sent to"}<input className={box} value={v.party_name} onChange={(e) => setV({ ...v, party_name: e.target.value })} /></label>
+                {doc.direction === "out" && (
+                    <label>Type<select className={box} value={v.party_kind} onChange={(e) => setV({ ...v, party_kind: e.target.value })}>
+                        <option value="sale_offline">Sale / shop</option><option value="author_copy">Author copy</option>
+                    </select></label>
+                )}
+                <label className="sm:col-span-2">Office note<input className={box} value={v.note} onChange={(e) => setV({ ...v, note: e.target.value })} /></label>
+            </div>
+            <div className="flex gap-2"><button type="button" className="bg-[#002B5C] text-white px-3 py-1" onClick={save}>Save</button>
+                <button type="button" className="underline" onClick={() => setEditing(false)}>Cancel</button></div>
+        </div>
+    );
+}
+
+/* Correct books / quantities after sync: posted as correction movements. */
+function EditLines({ doc, onSaved }) {
+    const [rows, setRows] = useState(null);
+    const [books, setBooks] = useState([]);
+    const [note, setNote] = useState("");
+    const [busy, setBusy] = useState(false);
+    const startEdit = async () => {
+        try { setBooks(await whBooks()); } catch { /* list stays empty; picker shows ids */ }
+        setRows((doc.confirmed_lines || []).filter((l) => l.include && l.book_id).map((l) => ({ book_id: l.book_id, qty: l.qty })));
+    };
+    const save = async () => {
+        if (!note.trim()) return toast.error("Write why the lines are being corrected.");
+        setBusy(true);
+        try {
+            const r = await adminWhEditLines(doc.id, rows.filter((x) => x.book_id).map((x) => ({ book_id: x.book_id, qty: Number(x.qty) || 0 })), note);
+            const n = Object.keys(r.changes || {}).length;
+            toast.success(n ? `Corrected — ${n} book(s) adjusted in stock.` : "No stock change needed.");
+            setRows(null); setNote(""); onSaved();
+        } catch (e) { toast.error(formatApiError(e)); } finally { setBusy(false); }
+    };
+    if (!rows) {
+        return <button type="button" className="border px-3 py-1 text-xs text-[#002B5C]" onClick={startEdit} data-testid="wh-edit-lines">Correct books / quantities</button>;
+    }
+    const setRow = (i, patch) => setRows((rs) => rs.map((r, k) => (k === i ? { ...r, ...patch } : r)));
+    return (
+        <div className="border border-[#F59E0B] bg-[#F59E0B]/5 p-3 space-y-2" data-testid="wh-edit-lines-form">
+            <div className="text-xs text-[#4B5563]">Stock already moved for this document. Saving posts the <b>difference</b> as a correction (e.g. +2 / −2) with your name and reason; the original stays in the history.</div>
+            {rows.map((r, i) => (
+                <div key={i} className="flex gap-2 items-center">
+                    <select className="border border-[#E5E7EB] px-2 py-1 flex-1 min-w-0" value={r.book_id} onChange={(e) => setRow(i, { book_id: e.target.value })}>
+                        <option value="">— pick a book —</option>
+                        {!books.some((b) => b.id === r.book_id) && r.book_id && <option value={r.book_id}>{r.book_id}</option>}
+                        {books.map((b) => <option key={b.id} value={b.id}>{b.title}{b.isbn ? ` · ${b.isbn}` : ""}</option>)}
+                    </select>
+                    <input type="number" min="0" className="border border-[#E5E7EB] px-2 py-1 w-20" value={r.qty} onChange={(e) => setRow(i, { qty: e.target.value })} />
+                    <button type="button" className="text-[#CC0033] px-2" aria-label="Remove line" onClick={() => setRows((rs) => rs.filter((_, k) => k !== i))}>✕</button>
+                </div>
+            ))}
+            <button type="button" className="text-xs underline" onClick={() => setRows((rs) => [...rs, { book_id: "", qty: 1 }])}>+ Add a book</button>
+            <input className="border border-[#E5E7EB] px-2 py-1 w-full" placeholder="Why? (required — e.g. printer short-shipped 2 copies)" value={note} onChange={(e) => setNote(e.target.value)} />
+            <div className="flex gap-2">
+                <button type="button" disabled={busy} className="bg-[#B4750F] text-white px-3 py-1 disabled:opacity-50" onClick={save}>Save correction</button>
+                <button type="button" className="underline" onClick={() => setRows(null)}>Cancel</button>
+            </div>
         </div>
     );
 }

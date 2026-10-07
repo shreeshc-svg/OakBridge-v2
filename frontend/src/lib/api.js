@@ -132,6 +132,7 @@ export const whReport = (id, note, lineNo) =>
 export const whMove = (body) => api.post("/warehouse/move", body).then((r) => r.data);
 export const whInbox = () => api.get("/warehouse/inbox").then((r) => r.data);
 export const whAck = (id, action) => api.post(`/warehouse/docs/${id}/ack`, { action }).then((r) => r.data);
+export const whGetDoc = (id) => api.get(`/warehouse/docs/${id}`).then((r) => r.data);
 export const whReopen = (id) => api.post(`/warehouse/docs/${id}/reopen`).then((r) => r.data);
 export const whCancelledParcel = (orderId, stillHere) =>
     api.post(`/warehouse/orders/${orderId}/cancelled-parcel`, { still_here: stillHere }).then((r) => r.data);
@@ -140,8 +141,23 @@ export const whDocFile = (id, admin = false) =>
         .then((r) => r.data);
 // … and the manager view.
 export const adminWhOverview = () => api.get("/admin/warehouse/overview").then((r) => r.data);
-export const adminWhDocs = (status) =>
-    api.get("/admin/warehouse/docs", { params: status ? { status } : {} }).then((r) => r.data);
+// adminWhDocs("awaiting_approval") or adminWhDocs({ q, direction, practice, status, date_from, date_to, archived })
+export const adminWhDocs = (filter) => {
+    const raw = typeof filter === "string" ? { status: filter } : filter || {};
+    const params = Object.fromEntries(Object.entries(raw).filter(([, v]) => v !== "" && v != null && v !== false));
+    return api.get("/admin/warehouse/docs", { params }).then((r) => r.data);
+};
+export const adminWhCreateDoc = (direction, file) => {
+    const fd = new FormData();
+    fd.append("direction", direction);
+    if (file) fd.append("file", file);
+    return api.post("/admin/warehouse/docs", fd, { timeout: 120000 }).then((r) => r.data);
+};
+export const adminWhEditDoc = (id, body) => api.patch(`/admin/warehouse/docs/${id}`, body).then((r) => r.data);
+export const adminWhEditLines = (id, lines, note) =>
+    api.post(`/admin/warehouse/docs/${id}/lines`, { lines, note }).then((r) => r.data);
+export const adminWhDeleteDoc = (id) => api.delete(`/admin/warehouse/docs/${id}`).then((r) => r.data);
+export const adminWhRestoreDoc = (id) => api.post(`/admin/warehouse/docs/${id}/restore`).then((r) => r.data);
 export const adminWhReview = (id, action, note) =>
     api.post(`/admin/warehouse/docs/${id}/review`, { action, note: note || null }).then((r) => r.data);
 export const adminWhDoc = (id) => api.get(`/admin/warehouse/docs/${id}`).then((r) => r.data);
