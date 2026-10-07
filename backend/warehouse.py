@@ -67,6 +67,9 @@ UNDO_HOURS = 24
 # Documents whose stock change stands (or, for a carton awaiting approval, is
 # already taken off): uploading the same file/number again is a duplicate.
 LIVE_STATUSES = ["confirmed", "awaiting_approval"]
+# ...plus a carton sent back to be repacked: it is still that invoice's carton,
+# and the way forward is "Pack again", not a second copy of the invoice.
+TAKEN_STATUSES = LIVE_STATUSES + ["sent_back"]
 TEXTRACT_REGION = os.environ.get("TEXTRACT_REGION") or os.environ.get("S3_REGION") or "us-east-1"
 
 IN_REASONS = {"printer", "return", "correction_in", "opening"}
@@ -152,6 +155,36 @@ async def record_website_sale(order: dict, lines: list) -> None:
                          doc_id=order.get("order_number", ""), touch_stock=False)
     except Exception:  # noqa: BLE001
         log.exception("warehouse: could not record website order %s", order.get("order_number"))
+
+
+RETAKE_NOTE = core.RETAKE_NOTE
+
+
+async def sync_order_ledger(order: dict, *, out: bool, lines: Optional[list] = None,
+                            by: str = "", note: str = "") -> None:
+    """Bring the warehouse count for one website order to where it should be.
+
+    out=False: the order was cancelled and its copies are back.
+    out=True:  it was un-cancelled and the copies are out again.
+    The arithmetic is core.order_ledger_diffs. Worked out from the order's own movements rather than replayed, so calling
+    it twice, or after a partial failure, lands in the same place. Never
+    raises (it runs after website stock has already changed).
+    """
+    try:
+        if (await get_state())["mode"] == "off" or not order.get("order_number"):
+            return
+        moves = await db.stock_movements.find(
+            {"doc_id": order["order_number"], "reason": {"$in": ["website_order", "website_return"]},
+             "undone": False}, {"_id": 0, "book_id": 1, "qty": 1, "reason": 1, "note": 1}).to_list(500)
+        actor = {"email": by or "website"}
+        for bid, diff in core.order_ledger_diffs(moves, lines or [], out=out).items():
+            await _apply(bid, diff, "website_return" if diff > 0 else "website_order", actor=actor,
+                         doc_id=order["order_number"], touch_stock=False,
+                         # A re-take must carry RETAKE_NOTE: it is how the next
+                         # run tells it apart from the original sale.
+                         note=(RETAKE_NOTE if diff < 0 else (note or ""))[:300])
+    except Exception:  # noqa: BLE001
+        log.exception("warehouse: could not sync ledger for order %s", order.get("order_number"))
 
 
 async def record_admin_stock_edit(book_id: str, prev: int, new: int) -> None:
@@ -395,7 +428,7 @@ async def wh_upload_doc(
             raise HTTPException(status_code=400, detail="Send a PDF or a photo (JPG/PNG).")
         sha = hashlib.sha256(data).hexdigest()
         dup = await db.warehouse_docs.find_one(
-            {"sha256": sha, "practice": False, "status": {"$in": LIVE_STATUSES}}, {"_id": 0, "id": 1, "doc_number": 1})
+            {"sha256": sha, "practice": False, "status": {"$in": TAKEN_STATUSES}}, {"_id": 0, "id": 1, "doc_number": 1})
         ext = "pdf" if kind == "pdf" else sniff_image(data)
         path = f"{APP_NAME}/warehouse/{started:%Y/%m}/{doc['id']}.{ext}"
         await asyncio.to_thread(put_object, path, data, "application/pdf" if kind == "pdf" else f"image/{ext}")
@@ -429,10 +462,21 @@ async def wh_upload_doc(
         if doc.get("doc_number"):
             prior = await db.warehouse_docs.find_one(
                 {"doc_number": doc["doc_number"], "direction": direction, "practice": False,
-                 "status": {"$in": LIVE_STATUSES}, "party_gstin": doc.get("party_gstin", "")},
+                 "status": {"$in": TAKEN_STATUSES}, "party_gstin": doc.get("party_gstin", "")},
                 {"_id": 0, "id": 1, "confirmed_at": 1})
             if prior:
                 doc["duplicate_of"] = prior["id"]
+        if not practice:
+            # Not blocking: the first photo may have been blurry. He is told
+            # another screen has it open; the real check runs at confirm.
+            open_q = [{"sha256": sha}]
+            if doc.get("doc_number"):
+                open_q.append({"doc_number": doc["doc_number"], "party_gstin": doc.get("party_gstin", "")})
+            other = await db.warehouse_docs.find_one(
+                {"direction": direction, "practice": False, "status": "draft", "$or": open_q},
+                {"_id": 0, "id": 1, "created_by": 1, "created_at": 1})
+            if other:
+                doc["open_draft_of"] = other
         doc["read_ms"] = int((_now() - started).total_seconds() * 1000)
     if direction == "out" and not doc["party_kind"]:
         doc["party_kind"] = "sale_offline"
@@ -465,6 +509,25 @@ class ConfirmBody(BaseModel):
     party_kind: Optional[str] = None   # out: sale_offline | author_copy
     allow_duplicate: bool = False
     note: Optional[str] = None
+
+
+async def _taken_twin(doc: dict, doc_number: str) -> Optional[dict]:
+    """Another real document for the same file or the same number from the
+    same party that has already moved stock (or is a carton in progress)."""
+    ors = []
+    if doc.get("sha256"):
+        ors.append({"sha256": doc["sha256"]})
+    # Our Tally invoice numbers are one series, so the number alone is the
+    # invoice. Printer bill numbers repeat across printers: only with the
+    # printer's GSTIN is the number evidence of a duplicate.
+    if doc_number and (doc["direction"] != "in" or doc.get("party_gstin")):
+        ors.append({"doc_number": doc_number, "party_gstin": doc.get("party_gstin", "")})
+    if not ors:
+        return None
+    return await db.warehouse_docs.find_one(
+        {"id": {"$ne": doc["id"]}, "direction": doc["direction"], "practice": False,
+         "status": {"$in": TAKEN_STATUSES}, "$or": ors},
+        {"_id": 0, "id": 1, "status": 1, "confirmed_by": 1, "confirmed_at": 1})
 
 
 @wh_router.post("/docs/{doc_id}/confirm")
@@ -503,6 +566,18 @@ async def wh_confirm(doc_id: str, body: ConfirmBody, user: dict = Depends(requir
 
     if not doc["practice"] and (await get_state())["mode"] == "off":
         raise HTTPException(status_code=409, detail="The warehouse trial has not been started yet — use Practice, or ask a manager.")
+    if not doc["practice"] and not body.allow_duplicate:
+        # Checked again here, not only at upload: two drafts of one invoice
+        # both pass the upload check (neither was synced yet), and the first
+        # to be confirmed must stop the second.
+        twin = await _taken_twin(doc, doc_number)
+        if twin:
+            raise HTTPException(status_code=409, detail=(
+                f"This {'bill' if doc['direction'] == 'in' else 'invoice'} "
+                f"{('(' + doc_number + ') ') if doc_number else ''}is already done — "
+                f"{twin['status'].replace('_', ' ')} by {twin.get('confirmed_by') or '?'}"
+                f"{' at ' + twin['confirmed_at'][11:16] if twin.get('confirmed_at') else ''}. "
+                "Not added again. Ask a manager if it really is a second delivery."))
     if not doc["practice"] and courier:
         read_parcels = {p["no"]: p for p in doc.get("parcels") or []}
         for p in body.parcels:
@@ -595,7 +670,46 @@ async def wh_inbox(_: dict = Depends(require_warehouse)):
             "packed_at": d.get("confirmed_at"), "approved_at": d.get("approved_at"),
             "approved_by": d.get("approved_by", ""), "review_note": d.get("review_note", ""),
         })
+    # Website orders cancelled after he packed them onto a courier sheet. Only
+    # he knows whether the parcel is still on the floor or already with the
+    # courier, so stock waits for his answer (order_stock.py).
+    out["cancelled_orders"] = [
+        {"id": o["id"], "order_number": o.get("order_number", ""),
+         "name": o.get("delivery_name") or o.get("full_name", ""),
+         "lines": [{"title": it.get("title", "?"), "qty": it.get("quantity", 0)} for it in o.get("items") or []],
+         "cancel_reason": o.get("cancel_reason", "")}
+        async for o in db.orders.find(
+            {"wh_cancel_pending": True, "stock_restored": {"$ne": True}, "status": "cancelled"},
+            {"_id": 0, "id": 1, "order_number": 1, "full_name": 1, "delivery_name": 1, "items": 1,
+             "cancel_reason": 1}).sort("created_at", -1).limit(100)
+    ]
     return out
+
+
+class CancelledParcelBody(BaseModel):
+    still_here: bool
+
+
+@wh_router.post("/orders/{order_id}/cancelled-parcel")
+async def wh_cancelled_parcel(order_id: str, body: CancelledParcelBody, user: dict = Depends(require_warehouse)):
+    """A cancelled website order he had packed: still here (unpack, copies
+    back in stock) or already gone with the courier (wait for the return)."""
+    from order_stock import restore_order_stock
+
+    order = await db.orders.find_one({"id": order_id, "wh_cancel_pending": True, "status": "cancelled"},
+                                     {"_id": 0, "id": 1, "order_number": 1})
+    if not order:
+        raise HTTPException(status_code=409, detail="This order has changed — pull down to refresh.")
+    copies = 0
+    if body.still_here:
+        copies = (await restore_order_stock(db, order_id, by=user.get("email", ""),
+                                            why="Cancelled — unpacked at the warehouse"))["copies"]
+    await db.orders.update_one({"id": order_id}, {"$set": {
+        "wh_cancel_pending": False, "wh_parcel_gone": not body.still_here,
+        "wh_cancel_answered_at": _now().isoformat(), "wh_cancel_answered_by": user.get("email", "")}})
+    await audit_log(db, "WAREHOUSE_CANCELLED_PARCEL", email=user.get("email", ""), role=user.get("role", ""),
+                    meta={"order": order.get("order_number"), "still_here": body.still_here, "copies": copies})
+    return {"ok": True, "copies": copies}
 
 
 class AckBody(BaseModel):
@@ -701,9 +815,7 @@ async def adm_overview():
         for b in books if "wh_stock" in b and int(b.get("wh_stock") or 0) != int(b.get("stock") or 0)
     ]
     diffs.sort(key=lambda d: -abs(d["diff"]))
-    awaiting = await db.warehouse_docs.count_documents({"status": "awaiting_approval", "practice": False})
-    return {**state, "books": len(books), "differences": diffs[:300], "difference_count": len(diffs),
-            "awaiting_approval": awaiting}
+    return {**state, "books": len(books), "differences": diffs[:300], "difference_count": len(diffs)}
 
 
 @wh_admin_router.get("/docs")
@@ -817,7 +929,9 @@ async def adm_undo_doc(doc_id: str, user: dict = Depends(require_admin)):
 @wh_admin_router.post("/movements/{mv_id}/undo")
 async def adm_undo_move(mv_id: str, user: dict = Depends(require_admin)):
     mv = await db.stock_movements.find_one({"id": mv_id}, {"_id": 0})
-    if not mv or mv.get("undone") or mv.get("reason") in ("website_order", "opening"):
+    # Website order/return movements follow the order's status (order_stock.py);
+    # undoing one here would leave the ledger disagreeing with the order.
+    if not mv or mv.get("undone") or mv.get("reason") in ("website_order", "website_return", "opening"):
         raise HTTPException(status_code=409, detail="This movement cannot be undone here.")
     if _now() - datetime.fromisoformat(mv["at"]) > timedelta(hours=UNDO_HOURS):
         raise HTTPException(status_code=409, detail=f"Undo is only possible within {UNDO_HOURS} hours.")

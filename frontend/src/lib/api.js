@@ -133,6 +133,8 @@ export const whMove = (body) => api.post("/warehouse/move", body).then((r) => r.
 export const whInbox = () => api.get("/warehouse/inbox").then((r) => r.data);
 export const whAck = (id, action) => api.post(`/warehouse/docs/${id}/ack`, { action }).then((r) => r.data);
 export const whReopen = (id) => api.post(`/warehouse/docs/${id}/reopen`).then((r) => r.data);
+export const whCancelledParcel = (orderId, stillHere) =>
+    api.post(`/warehouse/orders/${orderId}/cancelled-parcel`, { still_here: stillHere }).then((r) => r.data);
 export const whDocFile = (id, admin = false) =>
     api.get(admin ? `/admin/warehouse/docs/${id}/file` : `/warehouse/docs/${id}/file`, { responseType: "blob" })
         .then((r) => r.data);
@@ -370,6 +372,8 @@ export const adminListOrders = () =>
  */
 export const adminWriteOffOrder = (id, { written_off = true, note = "" } = {}) =>
     api.post(`/admin/orders/${id}/write-off`, { written_off, note }).then((r) => r.data);
+// "Returned — put back in stock" for a cancelled order whose parcel had left.
+export const adminRestockOrder = (id) => api.post(`/admin/orders/${id}/restock`).then((r) => r.data);
 export const adminUpdateOrder = (id, status, opts = {}) =>
     api
         .patch(`/admin/orders/${id}`, {

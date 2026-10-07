@@ -326,27 +326,21 @@ async def _apply_stock_decrement(order_id: str) -> None:
     # single point that already runs exactly once per paid order, guarded by the
     # stock_decremented claim above; doing it earlier would decrement on carts
     # that are never paid for.
-    lines: list = []
-    for it in order.get("items", []):
-        bid = it.get("book_id")
-        qty = int(it.get("quantity", 0) or 0)
-        if not bid or qty <= 0:
-            continue
-        lines.append((bid, qty))
-        hamper = await db.books.find_one(
-            {"id": bid, "product_type": "hamper"}, {"_id": 0, "hamper_items": 1}
-        )
-        for comp in (hamper or {}).get("hamper_items", []):
-            cid = comp.get("book_id")
-            if not cid:
-                continue  # a bookmark or a carry bag: no catalogue stock to move
-            lines.append((cid, qty * int(comp.get("qty", 1) or 1)))
+    from order_stock import expand_order_lines
 
+    lines = await expand_order_lines(db, order.get("items", []))
+
+    # What actually came off, line by line — the guarded decrement can miss
+    # (pre-order, short stock). A cancellation puts back exactly this and
+    # nothing more (order_stock.restore_order_stock).
+    taken: list = []
     for bid, qty in lines:
         res = await db.books.update_one(
             {"id": bid, "stock": {"$gte": qty}},
             {"$inc": {"stock": -qty}},
         )
+        if res.modified_count == 1:
+            taken.append({"book_id": bid, "qty": qty})
         if res.modified_count == 0:
             # A pre-order has no stock by definition, so the miss is expected
             # and must not raise the backorder alarm — the whole point is that
@@ -361,6 +355,8 @@ async def _apply_stock_decrement(order_id: str) -> None:
                 {"id": order_id},
                 {"$addToSet": {"backorder_items": bid}, "$set": {"needs_attention": True}},
             )
+
+    await db.orders.update_one({"id": order_id}, {"$set": {"stock_taken": taken}})
 
     # Warehouse ledger (warehouse.py): the same copies, once, as movements, so
     # the warehouse count tracks website sales. Does nothing until the trial is

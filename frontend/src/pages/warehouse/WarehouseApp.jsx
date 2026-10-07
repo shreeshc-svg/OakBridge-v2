@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { ArrowLeft, Camera, FileText, PackagePlus, PackageMinus, Search, ScanBarcode, Truck } from "lucide-react";
 import {
-    whState, whLookup, whBooks, whUploadDoc, whConfirmDoc, whReport, whMove, whDocFile, whInbox, whAck, whReopen,
+    whState, whLookup, whBooks, whUploadDoc, whConfirmDoc, whReport, whMove, whDocFile, whInbox, whAck, whReopen, whCancelledParcel,
     formatApiError,
 } from "../../lib/api";
 import { useAuth } from "../../context/AuthContext";
@@ -143,7 +143,8 @@ function Inbox({ onRepack }) {
     const repack = (id) => act(id, async () => onRepack(await whReopen(id)));
 
     if (!box) return null;
-    const total = box.ready.length + box.sent_back.length + box.cancelled.length;
+    const cancelledOrders = box.cancelled_orders || [];
+    const total = box.ready.length + box.sent_back.length + box.cancelled.length + cancelledOrders.length;
     if (!total && !box.waiting.length) return null;
 
     const Card = ({ d, tone, children }) => (
@@ -192,6 +193,26 @@ function Inbox({ onRepack }) {
                         Unpacked
                     </button>
                 </Card>
+            ))}
+            {cancelledOrders.map((o) => (
+                <div key={o.id} className="border-2 border-[#CC0033] bg-white p-3" data-testid="wh-cancelled-order">
+                    <div className="font-medium text-[#002B5C]">Website order {o.order_number} · {o.name}</div>
+                    <div className="text-sm text-[#4B5563]">{o.lines.map((l) => `${l.title} ×${l.qty}`).join(", ")}</div>
+                    <div className="text-sm text-[#CC0033] font-medium mt-1">✖ Cancelled. {o.cancel_reason} Is the parcel still here?</div>
+                    <div className="grid grid-cols-2 gap-2 mt-2">
+                        <button type="button" disabled={busy === o.id} className={`${BTN} bg-[#002B5C] text-white`}
+                            onClick={() => act(o.id, async () => {
+                                const r = await whCancelledParcel(o.id, true);
+                                toast.success(`Unpack it — ${r.copies} cop${r.copies === 1 ? "y" : "ies"} back in stock.`);
+                            })} data-testid="wh-parcel-here">
+                            Still here — unpack
+                        </button>
+                        <button type="button" disabled={busy === o.id} className={`${BTN} border-2 border-[#4B5563] text-[#4B5563]`}
+                            onClick={() => act(o.id, () => whCancelledParcel(o.id, false))} data-testid="wh-parcel-gone">
+                            Already gone
+                        </button>
+                    </div>
+                </div>
             ))}
             {box.waiting.length > 0 && (
                 <div className="text-xs text-[#4B5563]">
@@ -362,9 +383,14 @@ function DocFlow({ direction, practice, onDone, initialDoc = null }) {
                     ↩️ The office sent this back: {doc.review_note}
                 </div>
             )}
+            {doc.open_draft_of && (
+                <div className="border-2 border-[#F59E0B] bg-white p-3 text-[#B4750F] font-medium" data-testid="wh-open-draft">
+                    ⚠️ This document is already open on another screen ({doc.open_draft_of.created_by}). Finish that one, or carry on here if that photo was bad — it can only be added once.
+                </div>
+            )}
             {doc.duplicate_of && (
                 <div className="border-2 border-[#CC0033] bg-white p-3 text-[#CC0033] font-medium">
-                    ⚠️ This {isOut ? "invoice" : "bill"} was already synced before. Ask your manager before going on.
+                    ⚠️ This {isOut ? "invoice" : "bill"} is already done (packed, waiting for approval, or sent back — use “Pack again” on the home screen for that one). It will not be added twice; ask your manager if it really is a second delivery.
                 </div>
             )}
             {doc.error && <div className="border border-[#F59E0B] bg-white p-3 text-sm">{doc.error}</div>}
@@ -565,6 +591,11 @@ function CourierFlow({ practice, onDone }) {
 
     return (
         <div className="space-y-4 pb-28">
+            {doc.open_draft_of && (
+                <div className="border-2 border-[#F59E0B] bg-white p-3 text-[#B4750F] font-medium" data-testid="wh-open-draft">
+                    ⚠️ This document is already open on another screen ({doc.open_draft_of.created_by}). Finish that one, or carry on here if that photo was bad — it can only be added once.
+                </div>
+            )}
             {doc.duplicate_of && (
                 <div className="border-2 border-[#CC0033] bg-white p-3 text-[#CC0033] font-medium">
                     ⚠️ This courier sheet was already synced before. Ask your manager before going on.

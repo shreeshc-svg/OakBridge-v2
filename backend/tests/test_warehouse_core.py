@@ -210,6 +210,22 @@ check(R("superadmin", [], "a@o.in", "a@o.in", True) is None, "superadmin may (on
 check(R("warehouse", ["warehouse", "orders"], "a@o.in", "b@o.in", False) is not None, "the warehouse login never approves")
 check(R("editor", ["warehouse"], "a@o.in", "b@o.in", False) is not None, "warehouse access alone is not enough — needs Orders")
 
+print("-- website order cancel / un-cancel in the ledger --")
+D = w.order_ledger_diffs
+sale = [{"book_id": "a", "qty": -2, "reason": "website_order", "note": ""}]
+check(D(sale, [("a", 2)], out=False) == {"a": 2}, "cancel during the trial: +2 back")
+back = sale + [{"book_id": "a", "qty": 2, "reason": "website_return", "note": "x"}]
+check(D(back, [("a", 2)], out=False) == {}, "cancel twice: nothing more")
+check(D(back, [("a", 2)], out=True) == {"a": -2}, "un-cancel: -2 again")
+again = back + [{"book_id": "a", "qty": -2, "reason": "website_order", "note": w.RETAKE_NOTE}]
+check(D(again, [("a", 2)], out=True) == {}, "un-cancel twice: nothing more (re-take is not a second sale)")
+check(D(again, [("a", 2)], out=False) == {"a": 2}, "cancel after un-cancel: +2, not +4")
+check(D([], [("a", 2)], out=False) == {"a": 2}, "sale from before the trial: cancelling brings the copies in")
+check(D([{"book_id": "a", "qty": 2, "reason": "website_return", "note": ""}], [("a", 2)], out=True) == {"a": -2},
+      "…and un-cancelling takes them out again")
+pre = [{"book_id": "p", "qty": -1, "reason": "website_order", "note": ""}]
+check(D(pre, [], out=False) == {"p": 1}, "a pre-order line the website never took is still reversed in the ledger")
+
 print("-- helpers --")
 check(w.isbn13_valid("9788169999090") and not w.isbn13_valid("9788196413513"), "ISBN check digit")
 check(w.norm_isbn("978-81-6999-912-0") == "9788169999120", "hyphenated ISBN normalised")

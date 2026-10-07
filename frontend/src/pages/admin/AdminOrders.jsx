@@ -12,6 +12,7 @@ import {
     adminSetTracking,
     adminDownloadInvoice,
     adminUpdateOrder,
+    adminRestockOrder,
     adminWriteOffOrder,
     formatApiError,
     formatINR,
@@ -123,6 +124,19 @@ export default function AdminOrders() {
             // swallowed server-side so it cannot block dispatch, and claiming
             // "notified" when nothing left the building is how a customer ends
             // up never hearing that their order shipped.
+            // What the status change did to stock (order_stock.py) — said out
+            // loud, because a cancel that does NOT put copies back (parcel
+            // already gone) is exactly what someone would otherwise assume.
+            const sr = saved?.stock_result || {};
+            const n = sr.copies || 0;
+            const copies = `${n} cop${n === 1 ? "y" : "ies"}`;
+            if (sr.action === "restored") toast.info(`${copies} put back in stock.`);
+            else if (sr.action === "held_shipped") toast.info("Already shipped — stock not put back. Use “Returned” when the parcel comes back.");
+            else if (sr.action === "ask_warehouse") toast.info("Packed by the warehouse — they've been asked whether the parcel is still there.");
+            else if (sr.action === "retaken") {
+                toast.info(`${copies} taken off stock again.`);
+                if (sr.short?.length) toast.warning("Some copies were no longer in stock — flagged as backorder.");
+            }
             if (!notify) {
                 toast.success(`Marked ${nextStatus}. No email sent.`);
             } else if (saved?.email_sent) {
@@ -136,6 +150,9 @@ export default function AdminOrders() {
                         ? {
                               ...o,
                               status: nextStatus,
+                              stock_restored: saved?.stock_restored,
+                              wh_cancel_pending: saved?.wh_cancel_pending,
+                              stock_decremented: saved?.stock_decremented,
                               ...(hasTracking
                                   ? {
                                         courier: courier || "",
@@ -152,6 +169,21 @@ export default function AdminOrders() {
             toast.error(formatApiError(err));
         } finally {
             setSavingStatus(false);
+        }
+    };
+
+    const [restocking, setRestocking] = useState(null);
+    const onRestock = async (o) => {
+        if (!window.confirm(`Has the parcel for ${o.order_number} come back? Its copies go back into stock.`)) return;
+        setRestocking(o.id);
+        try {
+            const r = await adminRestockOrder(o.id);
+            toast.success(`${r.copies} cop${r.copies === 1 ? "y" : "ies"} put back in stock.`);
+            setOrders((prev) => prev.map((x) => (x.id === o.id ? { ...x, stock_restored: true } : x)));
+        } catch (err) {
+            toast.error(formatApiError(err));
+        } finally {
+            setRestocking(null);
         }
     };
 
@@ -578,6 +610,26 @@ export default function AdminOrders() {
                                             <MailCheck size={12} strokeWidth={1.5} />
                                             {resending === o.id ? "Sending…" : "Resend"}
                                         </button>
+                                        {/* Cancelled after the parcel left: stock
+                                            waits until it actually comes back.
+                                            Same conditions the endpoint checks. */}
+                                        {o.status === "cancelled" &&
+                                            o.payment_status === "paid" &&
+                                            o.stock_decremented &&
+                                            !o.stock_restored && (
+                                                <button
+                                                    onClick={() => onRestock(o)}
+                                                    disabled={restocking === o.id}
+                                                    data-testid={`order-restock-${o.id}`}
+                                                    title={o.wh_cancel_pending
+                                                        ? "The warehouse has not said yet whether this parcel is still there"
+                                                        : "The parcel came back — put its copies back in stock"}
+                                                    className="inline-flex items-center gap-1.5 border border-[#15803D] text-[#15803D] hover:bg-[#15803D]/5 px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50"
+                                                >
+                                                    <Undo2 size={12} strokeWidth={1.5} />
+                                                    {restocking === o.id ? "Saving…" : "Returned — put back in stock"}
+                                                </button>
+                                            )}
                                         {/* Superadmin only, bounced only, unpaid
                                             only — the same three conditions the
                                             endpoint enforces. Shown as "Put

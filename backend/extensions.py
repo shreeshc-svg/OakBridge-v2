@@ -1602,7 +1602,7 @@ async def admin_list_orders():
 
 
 @admin_router.patch("/orders/{order_id}")
-async def admin_update_order(order_id: str, payload: OrderStatusUpdate):
+async def admin_update_order(order_id: str, payload: OrderStatusUpdate, actor: dict = Depends(require_admin)):
     # "bounced" is the checkout that was started and left at the payment page.
     # It is a fulfilment state like the rest — payment_status still says pending,
     # and only Razorpay can change that — but it lets the team mark the ones
@@ -1644,10 +1644,41 @@ async def admin_update_order(order_id: str, payload: OrderStatusUpdate):
         if updates["tracking_id"]:
             updates["tracking_set_at"] = datetime.now(timezone.utc).isoformat()
 
+    # The status before this change decides what happens to stock: an order
+    # cancelled before it shipped puts its copies back; one cancelled after it
+    # shipped waits for the parcel to return (order_stock.py).
+    before = await db.orders.find_one({"id": order_id}, {"_id": 0, "status": 1})
+    prev_status = (before or {}).get("status", "")
+
     result = await db.orders.update_one({"id": order_id}, {"$set": updates})
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Order not found")
     order = await db.orders.find_one({"id": order_id}, {"_id": 0})
+
+    stock_result = {"action": "none", "copies": 0}
+    who = actor.get("email", "")
+    from order_stock import cancel_restock_decision, restore_order_stock, retake_order_stock
+    if payload.status == "cancelled" and prev_status != "cancelled":
+        decision = cancel_restock_decision(prev_status, order)
+        if decision == "restore":
+            r = await restore_order_stock(db, order_id, by=who, why="Cancelled before shipping")
+            stock_result = {"action": "restored", "copies": r["copies"]}
+        elif decision == "hold_warehouse":
+            await db.orders.update_one({"id": order_id}, {"$set": {"wh_cancel_pending": True}})
+            stock_result = {"action": "ask_warehouse", "copies": 0}
+        elif decision == "hold_shipped":
+            stock_result = {"action": "held_shipped", "copies": 0}
+    elif prev_status == "cancelled" and payload.status != "cancelled":
+        await db.orders.update_one({"id": order_id}, {"$set": {"wh_cancel_pending": False}})
+        if order.get("stock_restored"):
+            r = await retake_order_stock(db, order_id, by=who)
+            stock_result = {"action": "retaken", "copies": r["copies"], "short": r["short"]}
+    if stock_result["action"] != "none":
+        await audit_log(db, "ORDER_STOCK_" + stock_result["action"].upper(), email=who,
+                        role=actor.get("role", ""),
+                        meta={"order": order.get("order_number"), "from": prev_status,
+                              "to": payload.status, "copies": stock_result["copies"]})
+        order = await db.orders.find_one({"id": order_id}, {"_id": 0})
 
     sent = False
     if payload.notify:
@@ -1716,7 +1747,28 @@ async def admin_update_order(order_id: str, payload: OrderStatusUpdate):
     order = await db.orders.find_one({"id": order_id}, {"_id": 0})
     # Not persisted — lets the admin toast say what actually happened.
     order["email_sent"] = bool(sent)
+    order["stock_result"] = stock_result
     return order
+
+
+@admin_router.post("/orders/{order_id}/restock")
+async def admin_restock_order(order_id: str, actor: dict = Depends(require_admin)):
+    """"Returned — put back in stock": a cancelled order whose parcel had
+    already left (shipped, or gone with the courier) has come back."""
+    from order_stock import restore_order_stock
+
+    order = await db.orders.find_one({"id": order_id}, {"_id": 0, "status": 1, "payment_status": 1,
+                                                         "stock_restored": 1, "order_number": 1})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    if order.get("status") != "cancelled":
+        raise HTTPException(status_code=400, detail="Only a cancelled order can be put back in stock.")
+    if order.get("payment_status") != "paid" or order.get("stock_restored"):
+        raise HTTPException(status_code=409, detail="Nothing to put back — this order's stock is already back, or none was taken.")
+    r = await restore_order_stock(db, order_id, by=actor.get("email", ""), why="Returned parcel")
+    await audit_log(db, "ORDER_STOCK_RETURNED", email=actor.get("email", ""), role=actor.get("role", ""),
+                    meta={"order": order.get("order_number"), "copies": r["copies"]})
+    return {"ok": True, "copies": r["copies"]}
 
 
 @admin_router.post("/orders/{order_id}/write-off")

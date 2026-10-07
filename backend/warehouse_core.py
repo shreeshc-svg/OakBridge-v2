@@ -497,3 +497,47 @@ def approval_refusal(role: str, sections: Iterable[str], approver: str, packer: 
     if not superadmin and approver and approver.lower() == (packer or "").lower():
         return "Someone other than the packer must approve this carton."
     return None
+
+
+# ------------------------------------------- website order cancel / re-take ---
+RETAKE_NOTE = "Order un-cancelled"
+
+
+def order_ledger_diffs(moves: list, lines: list, *, out: bool) -> dict:
+    """Movements still needed so one website order's ledger is right.
+
+    moves  this order's website_order / website_return movements (not undone)
+    lines  (book_id, qty) the order took off website stock
+    out    True = the order stands (copies out); False = cancelled (copies back)
+
+    Worked out from what is already recorded rather than replayed, so running
+    it twice, or after a half-finished run, changes nothing more.
+
+    A sale made before the warehouse trial started has no movement: the
+    opening count was taken after it, so those copies are already outside the
+    count. Cancelling it brings them in (+q); un-cancelling takes them out
+    again (back to 0).
+    """
+    sold: dict = {}
+    net: dict = {}
+    for mv in moves:
+        bid, q = mv["book_id"], int(mv["qty"])
+        net[bid] = net.get(bid, 0) + q
+        # Only the original sale counts as "sold"; a re-take is also a
+        # website_order movement but carries RETAKE_NOTE.
+        if mv.get("reason") == "website_order" and mv.get("note") != RETAKE_NOTE:
+            sold[bid] = sold.get(bid, 0) - q
+    pre_trial: dict = {}
+    for bid, q in lines:
+        if bid not in sold:
+            pre_trial[bid] = pre_trial.get(bid, 0) + int(q)
+    out_diffs = {}
+    for bid in set(sold) | set(net) | set(pre_trial):
+        if bid in pre_trial:
+            target = 0 if out else pre_trial[bid]
+        else:
+            target = -sold.get(bid, 0) if out else 0
+        d = target - net.get(bid, 0)
+        if d:
+            out_diffs[bid] = d
+    return out_diffs

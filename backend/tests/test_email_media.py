@@ -24,10 +24,12 @@ EMAILER = os.path.join(BACKEND, "emailer.py")
 
 # Pull just the function and the constant it reads, so this runs without the
 # email provider, the database or any of emailer.py's imports.
-ns = {"os": os}
+import re  # noqa: E402
+
+ns = {"os": os, "re": re}
 tree = ast.parse(open(EMAILER, encoding="utf-8").read())
 for node in tree.body:
-    if isinstance(node, ast.Assign) and getattr(node.targets[0], "id", "") == "PUBLIC_API_URL":
+    if isinstance(node, ast.Assign) and getattr(node.targets[0], "id", "") in ("PUBLIC_API_URL", "PUBLIC_MEDIA_URL", "_PUBLIC_MEDIA_RE"):
         exec(compile(ast.Module([node], []), EMAILER, "exec"), ns)
     if isinstance(node, ast.FunctionDef) and node.name == "media_url":
         exec(compile(ast.Module([node], []), EMAILER, "exec"), ns)

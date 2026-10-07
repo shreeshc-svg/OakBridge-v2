@@ -109,11 +109,28 @@ check(/why = _approval_refusal\(user, doc\)\s*\n\s*if why:\s*\n\s*raise HTTPExce
 check(/update_one\(\{"id": doc_id, "status": "awaiting_approval"\}/.test(reviewFn) && /modified_count != 1/.test(reviewFn), "approval: two reviewers cannot both act");
 check(/if body\.action != "approve":[\s\S]*?_reverse\(mv, user\)/.test(reviewFn), "approval: send back / cancel put the copies back");
 check(/needs_approval = doc\["direction"\] == "out" and not doc\["practice"\]/.test(wh) && /"awaiting_approval" if needs_approval else "confirmed"/.test(wh), "approval: a packed carton waits instead of being final");
-check(/LIVE_STATUSES = \["confirmed", "awaiting_approval"\]/.test(wh) && (wh.match(/\$in": LIVE_STATUSES/g) || []).length === 2, "approval: a carton awaiting approval still counts for duplicate checks");
+check(/LIVE_STATUSES = \["confirmed", "awaiting_approval"\]/.test(wh) && (wh.match(/\$in": TAKEN_STATUSES/g) || []).length === 3, "approval: a carton awaiting approval still counts for duplicate checks (upload x2, confirm)");
 check(/if doc\.get\("shipped_at"\):\s*\n\s*raise HTTPException/.test(wh), "approval: a shipped carton cannot be undone");
 check(/<Inbox onRepack=/.test(screen) && /setInterval\(load, INBOX_POLL_MS\)/.test(screen), "warehouse phone checks for approvals");
 check(/data-testid="wh-shipped"/.test(screen) && /data-testid="wh-repack"/.test(screen) && /data-testid="wh-unpacked"/.test(screen), "…and can mark shipped / repack / unpacked");
 check(/data-testid="wh-approve"/.test(admin) && /\["approve", "To approve"\]/.test(admin), "admin: To approve tab with Approve button");
+
+// Same invoice twice: re-checked when he confirms, not only at upload.
+const confirmFn = (wh.match(/async def wh_confirm\([\s\S]*?\n(?=\n\S)/) || [""])[0];
+check(/twin = await _taken_twin\(doc, doc_number\)\s*\n\s*if twin:\s*\n\s*raise HTTPException\(status_code=409/.test(confirmFn), "duplicate: second copy of an invoice refused at confirm");
+check(confirmFn.indexOf("_taken_twin") > -1 && confirmFn.indexOf("_taken_twin") < confirmFn.indexOf("await _apply("), "duplicate: …before any stock moves");
+check(/TAKEN_STATUSES = LIVE_STATUSES \+ \["sent_back"\]/.test(wh) && /"status": \{"\$in": TAKEN_STATUSES\}, "\$or": ors/.test(wh), "duplicate: a carton sent back still owns its invoice");
+
+// Cancelled website orders.
+const ext2 = code("backend/extensions.py");
+const updFn = (ext2.match(/async def admin_update_order\([\s\S]*?\n(?=\n\S)/) || [""])[0];
+check(updFn.indexOf('before = await db.orders.find_one') > -1 && updFn.indexOf('before = await') < updFn.indexOf('result = await db.orders.update_one'), "cancel: previous status read before it is overwritten");
+check(/cancel_restock_decision\(prev_status, order\)/.test(updFn) && /restore_order_stock\(db, order_id/.test(updFn), "cancel: stock put back by the rules in order_stock.py");
+check(/prev_status == "cancelled" and payload\.status != "cancelled"[\s\S]*?retake_order_stock/.test(updFn), "un-cancel takes the copies off again");
+check(/"stock_taken": taken/.test(pay) && /if res\.modified_count == 1:\s*\n\s*taken\.append/.test(pay), "payment records exactly what came off");
+check(/data-testid=\{`order-restock-\$\{o\.id\}`\}/.test(code("frontend/src/pages/admin/AdminOrders.jsx")), "admin: Returned — put back in stock");
+check(/data-testid="wh-parcel-here"/.test(screen) && /data-testid="wh-parcel-gone"/.test(screen), "warehouse asked whether a cancelled parcel is still there");
+check(/"website_return", "opening"\)/.test(wh), "website order/return movements cannot be undone one by one");
 
 console.log();
 if (failed) {

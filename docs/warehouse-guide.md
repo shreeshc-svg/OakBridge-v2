@@ -36,6 +36,10 @@ The courier sheet lists several parcels — website orders and free copies.
 3. Check each book and number of copies; fix the book from the list if it is wrong. A title you fix once is remembered next time.
 4. Tap **Done**.
 
+**A website order on your courier sheet was cancelled?** A red card asks *Is the parcel still here?*
+- **Still here — unpack** → take the books out and put them back on the shelf. They go back into stock.
+- **Already gone** → nothing changes now. When the parcel comes back, the office presses **Returned — put back in stock**.
+
 ### 4. 📦 One book in or out
 For returns, damaged copies, samples, a single author copy, or correcting a count: scan the book → **IN** or **OUT** → reason → number of copies → **Save**.
 
@@ -70,6 +74,13 @@ Admin → Warehouse → **To approve** lists every carton the warehouse has pack
 - **Cancel carton** (with a note): it is not going; the copies go back into stock.
 
 Who can approve: anyone with **Orders** and **Warehouse** access (e.g. the Fulfilment role) — but not the person who packed the carton. A superadmin always can. The Warehouse login never can.
+
+## Cancelled website orders (Admin → Orders)
+- Cancelled **before shipping** → its copies go back into stock automatically (the message says how many).
+- Cancelled **after shipping** → stock is not put back yet. When the parcel returns, press **Returned — put back in stock** on the order.
+- Cancelled after the warehouse **packed it on a courier sheet** → the warehouse phone asks whether the parcel is still there.
+- Changed back from Cancelled → the copies are taken off again. If they have been sold meanwhile, the order is flagged as a backorder.
+- Only what payment actually took comes back (pre-order lines and short-stock lines took nothing).
 
 ## The trial week
 - Admin → Warehouse → **Trial & comparison** shows every book where the warehouse count and the website (sheet) count differ, and by how much.

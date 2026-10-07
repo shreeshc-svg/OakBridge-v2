@@ -15,6 +15,8 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BACKEND = os.path.dirname(HERE)
+# order_stock is imported for real (it has no heavy imports; db is passed in).
+sys.path.insert(0, BACKEND)
 
 failures = []
 
@@ -148,6 +150,12 @@ fn2 = load(db2)
 asyncio.run(fn2("o1"))
 asyncio.run(fn2("o1"))         # webhook + /verify: same stub, second call
 check(db2.wh.recorded == [[("bk-c", 1)]], f"a repeat call records nothing new {db2.wh.recorded}")
+
+print("\n-- the order records exactly what came off --")
+db = run([{"book_id": "bk-a", "quantity": 2}, {"book_id": "bk-c", "quantity": 500}])
+taken = [p["$set"]["stock_taken"] for f, p in db.orders.updates if "stock_taken" in p.get("$set", {})]
+check(taken == [[{"book_id": "bk-a", "qty": 2}]],
+      f"a short line is not recorded as taken, so a cancel cannot put it back {taken}")
 
 print("\n-- a hamper and a loose copy of a book inside it --")
 db = run([{"book_id": "hamper-1", "quantity": 1}, {"book_id": "bk-a", "quantity": 1}])

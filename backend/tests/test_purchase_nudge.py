@@ -55,7 +55,7 @@ print("-- covers: the content type S3 hands back --")
 # A browser sniffs past that and shows the image, so the site looks fine; Gmail's
 # image proxy refuses it and shows a grey box. This is the failure that only
 # appears in the inbox.
-ft = extract("features.py", {"_resolved_type", "_GENERIC_TYPES", "_IMAGE_TYPES"})
+ft = extract("features.py", {"_resolved_type", "_GENERIC_TYPES", "_IMAGE_TYPES", "_NEVER_INLINE"})
 rt = ft["_resolved_type"]
 
 for declared in ("application/octet-stream", "binary/octet-stream", "",
@@ -84,7 +84,7 @@ check('"application/octet-stream"' not in _get_obj.split("_s3_enabled")[1].split
 
 # --------------------------------------------------------------------------
 print("\n-- covers: the URL that goes in the <img> --")
-em = extract("emailer.py", {"media_url", "PUBLIC_API_URL"})
+em = extract("emailer.py", {"media_url", "PUBLIC_API_URL", "PUBLIC_MEDIA_URL", "_PUBLIC_MEDIA_RE"}, {"os": os, "re": re})
 media_url = em["media_url"]
 check(media_url("/api/files/oakbridge/covers/x.jpg")
       == "https://api.oakbridge.in/api/files/oakbridge/covers/x.jpg",
@@ -101,7 +101,7 @@ print("\n-- covers: the rendered markup --")
 render = extract(
     "emailer.py",
     {"_nudge_book_row", "render_purchase_nudge_html", "_money", "media_url",
-     "PUBLIC_API_URL", "SITE_URL", "BRAND_NAVY", "BRAND_RED", "BRAND_AMBER",
+     "PUBLIC_API_URL", "PUBLIC_MEDIA_URL", "_PUBLIC_MEDIA_RE", "SITE_URL", "BRAND_NAVY", "BRAND_RED", "BRAND_AMBER",
      "BRAND_GREY", "_NUDGE_PREHEADER"},
     # emailer.py has `from __future__ import annotations`, so these are strings
     # in the real module; the extracted AST has no such import, so the
@@ -166,7 +166,7 @@ print("\n-- opt-out tokens --")
 tok_ns = extract(
     "emailer.py",
     {"unsubscribe_token", "email_from_unsubscribe_token", "_unsub_secret",
-     "unsubscribe_url", "_unsub_headers", "_UNSUB_MAILTO", "PUBLIC_API_URL"},
+     "unsubscribe_url", "_unsub_headers", "_UNSUB_MAILTO", "PUBLIC_API_URL", "PUBLIC_MEDIA_URL", "_PUBLIC_MEDIA_RE"},
 )
 mk, read = tok_ns["unsubscribe_token"], tok_ns["email_from_unsubscribe_token"]
 addr = "Rahul.Kumar+news@Gmail.com"
