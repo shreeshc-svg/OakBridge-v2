@@ -614,10 +614,28 @@ a {
   .hx-counter{display:none}
 }
 /* short screens: landscape phones, small laptops, browser zoomed in */
-@media (max-height:700px) and (max-width:767px){ .hx-visual{display:none} }
-@media (max-height:780px) and (max-width:767px){ .hx-visual{--w:clamp(80px, min(22vw, 14vh), 130px)} }
-/* phones: an event already shows its date in the label and the countdown */
-@media (max-width:767px){ .hx-visual-date{display:none} }
+/* Phones: the book cover ALWAYS shows, sized by the height actually
+   available. Real phone browsers are much shorter than the device spec —
+   an iPhone 17 in Safari, with its address bar and toolbar, leaves ~402×683 —
+   so hiding the cover below 700px tall (the first version) hid it on most
+   phones. Measured fit (cover visible, text clear of the dock) from 320×568
+   to 430×932. svh, -webkit-line-clamp and backdrop-filter all have the
+   prefixes/fallbacks Safari, Firefox and Chrome need. */
+@media (max-width:767px){
+  .hx-visual{display:grid; --w:clamp(64px, min(28vw, 12.5vh), 150px); max-height:none; padding:.5vh 0 1vh}
+  .hx-visual-date{display:none}   /* an event shows its date in the label and countdown */
+  .hx-h1{font-size:clamp(1.7rem, min(8.4vw, 5.4vh), 2.9rem); margin-top:clamp(10px,1.6vh,18px)}
+  .hx-sub{margin-top:clamp(8px,1.4vh,16px)}
+  .hx-ctas{margin-top:clamp(12px,2vh,20px)}
+  .hx-content{gap:1.2vh}
+}
+@media (max-width:767px) and (max-height:760px){ .hx-sub{-webkit-line-clamp:2; line-clamp:2} }
+@media (max-width:767px) and (max-height:720px){
+  .hx-hero{--dock-h:104px}
+  .hx-booklabel,.hx-chev{display:none}
+  .hx-orb{width:50px}
+  .hx-dock{gap:8px; padding-bottom:10px}
+}
 @media (max-height:640px) and (min-width:768px){
   .hx-chips{display:none}
   .hx-sub{display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden}

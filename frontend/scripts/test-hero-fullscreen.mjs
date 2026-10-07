@@ -113,6 +113,8 @@ check(/height:calc\(100svh - 80px\)/.test(css) && /height:calc\(100svh - 80px - 
       "fills the screen under the header; on phones also clears the bottom tray");
 check(/min-height:560px/.test(css) && /min-height:520px/.test(css), "never collapses on a tiny or zoomed window");
 check(/@media \(prefers-reduced-motion: reduce\)\{\s*\.hx-hero \*/.test(css), "reduced motion: everything still");
+check(!/max-width:767px\)[^{]*\{\s*\.hx-visual\{display:none\}/.test(css) && /\.hx-visual\{display:grid; --w:clamp\(64px/.test(css),
+      "phones never hide the book cover (Safari's toolbars leave ~683px on an iPhone 17)");
 check((src.match(/isPrerender\(\)/g) || []).length >= 3, "autoplay, countdown and particles stay off during the prerender");
 check(/filter\(\(el\) => !el\.contains\(hero\)/.test(src) && /t >= bottom - 2/.test(src), "book button scrolls to the next section on screen (CSS order aware)");
 
