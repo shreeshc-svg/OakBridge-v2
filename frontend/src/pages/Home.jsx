@@ -319,7 +319,7 @@ export default function Home() {
                 so that ties break in its favour. */}
             {showHeroCarousel && (
                 <section style={{ order: heroCarouselOrd }} data-testid="home-hero-carousel">
-                    <HeroCarousel slides={heroSlides} testId="home-hero-carousel-frame" priority />
+                    <HeroCarousel slides={heroSlides} testId="home-hero-carousel-frame" priority aspect="20 / 9" />
                 </section>
             )}
 
