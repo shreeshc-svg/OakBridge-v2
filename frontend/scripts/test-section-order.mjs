@@ -177,8 +177,8 @@ check(/prefers-reduced-motion/.test(carousel),
       "and it holds still for anyone who asked their device to reduce motion");
 check(/alt=\{extra\.decorative \? "" : slide\.alt \|\| ""\}/.test(carousel), "every slide image carries an alt attribute (the blurred backdrop copy an empty one)");
 check(/"aria-hidden": true/.test(carousel), "the blurred backdrop copy is hidden from screen readers");
-check(/aspect="20 \/ 9"/.test(home) && /height: `min\(\$\{maxHeight\}, \$\{aspectVw\(aspect\)\}vw\)`/.test(carousel),
-      "homepage banners take the banner's shape (20:9) instead of a fixed height that crops");
+check(/height: `min\(\$\{maxHeight\}, \$\{aspectVw\(aspect\)\}vw\)`/.test(carousel),
+      "HeroCarousel's aspect mode sets its height directly (the homepage now uses HeroFullscreen; see test-hero-fullscreen.mjs)");
 check(!/aspectRatio/.test(carousel),
       "no aspect-ratio + max-height on the track: the browser turns it into a max-width and the next slide peeks in");
 check(/media="\(max-width: 767px\)"/.test(carousel),

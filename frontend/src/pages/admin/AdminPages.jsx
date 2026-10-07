@@ -180,33 +180,64 @@ export default function AdminPages() {
                         </p>
                     </div>
 
-                    <div className="overline !text-[10px] mt-6 mb-2">Hero banner carousel</div>
+                    <div className="overline !text-[10px] mt-6 mb-2">Hero banners (full screen)</div>
                     <MediaListEditor
                         collectionKey="home_hero_slides"
-                        addLabel="Add banner"
+                        addLabel="Add highlight"
                         max={6}
                         help={
-                            "Full-width banners at the very top of the homepage, above the main hero. " +
-                            "They rotate every 6 seconds, swipe on a phone, and hold still for anyone who has " +
-                            "asked their device to reduce motion. Wide artwork around 2000×900 works best. " +
-                            "The carousel stays off the site until at least one banner has an image, and it can " +
-                            "be hidden or dragged lower in “Section order & visibility” — drag it below another " +
-                            "section and it moves under the main hero instead of above it."
+                            "The full-screen highlights at the top of the homepage — they fill the first screen on every " +
+                            "phone, tablet and monitor. Type a HEADLINE and the words are shown as real text over your " +
+                            "background, so nothing is ever cut off (put *stars* around the word to light up). With no " +
+                            "headline, the image is treated as a finished banner and shown whole. Background: a wide photo, " +
+                            "at least 2400px across; pick the part that must always stay visible under “Keep in view”. " +
+                            "Rotates every 7 seconds; hidden or moved in “Section order & visibility”."
                         }
                         fields={[
-                            { key: "image", label: "Banner image (wide, about 2000×900)", type: "image" },
-                            { key: "image_mobile", label: "Phone image (optional — a wide banner crops badly on a phone)", type: "image" },
-                            { key: "alt", label: "Alt text (what the banner says, for screen readers)" },
-                            { key: "link", label: "Opens (e.g. /books?category=law, or a full https:// address). Leave blank for a banner that isn’t clickable" },
+                            { key: "image", label: "Background image (wide photo, 2400px+; or a finished banner if no headline)", type: "image" },
+                            { key: "image_mobile", label: "Phone background (optional — a tall photo for phones)", type: "image" },
                             {
-                                key: "fit",
-                                label: "How it fills the frame",
+                                key: "focus",
+                                label: "Keep in view when cropped",
                                 type: "select",
                                 options: [
-                                    { value: "cover", label: "Fill the frame — may crop (photos)" },
-                                    { value: "contain", label: "Show the whole image (designed banners)" },
+                                    { value: "50% 50%", label: "Centre" },
+                                    { value: "50% 20%", label: "Top" },
+                                    { value: "50% 80%", label: "Bottom" },
+                                    { value: "25% 50%", label: "Left" },
+                                    { value: "75% 50%", label: "Right" },
+                                    { value: "25% 25%", label: "Top left" },
+                                    { value: "75% 25%", label: "Top right" },
+                                    { value: "25% 75%", label: "Bottom left" },
+                                    { value: "75% 75%", label: "Bottom right" },
                                 ],
                             },
+                            { key: "eyebrow", label: "Label (e.g. New release, Event · 28 Nov 2026)" },
+                            { key: "title", label: "Headline — *stars* light up a word (e.g. Gendering Climate *Futures*)" },
+                            { key: "subtitle", label: "Subtitle (one or two sentences)", type: "textarea" },
+                            { key: "chips", label: "Info chips, separated by | (e.g. Puneet Bhasin | 2nd edition)" },
+                            { key: "cover", label: "Floating book cover (optional — shown in 3D beside the text)", type: "image" },
+                            { key: "cta_label", label: "Main button text (e.g. Order now)" },
+                            { key: "link", label: "Main button opens (e.g. /books/…, or a full https:// address)" },
+                            { key: "cta2_label", label: "Second button text (optional)" },
+                            { key: "cta2_link", label: "Second button opens (optional)" },
+                            {
+                                key: "accent",
+                                label: "Accent colour",
+                                type: "select",
+                                options: [
+                                    { value: "#38bdf8", label: "Sky blue" },
+                                    { value: "#F59E0B", label: "Amber" },
+                                    { value: "#fb7185", label: "Rose" },
+                                    { value: "#34d399", label: "Emerald" },
+                                    { value: "#a78bfa", label: "Violet" },
+                                    { value: "#22d3ee", label: "Cyan" },
+                                ],
+                            },
+                            { key: "event_date", label: "Event date & time for a countdown (optional, e.g. 2026-11-28 09:30)" },
+                            { key: "starts_at", label: "Show from (optional, YYYY-MM-DD)" },
+                            { key: "ends_at", label: "Show until (optional, YYYY-MM-DD — hides itself after)" },
+                            { key: "alt", label: "Alt text (finished banners only: what the banner says)" },
                         ]}
                     />
 

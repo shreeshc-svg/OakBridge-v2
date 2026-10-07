@@ -19,7 +19,7 @@ import {
 import { responsiveImage } from "../lib/img";
 import { hiddenSet, resolveSectionOrder, HOME_DEFAULT_ORDER } from "../lib/sections";
 import EbookCta from "../components/EbookCta";
-import HeroCarousel from "../components/HeroCarousel";
+import HeroFullscreen, { parseIst } from "../components/HeroFullscreen";
 import MarketingPopup from "../components/MarketingPopup";
 
 // How many titles the "Hot Off the Press" rail will hold. The API is asked for
@@ -93,6 +93,18 @@ const VERTICALS = [
 ];
 
 // Renders admin copy where *text* becomes the red accent, and \n a line break.
+/* A hero highlight with "show from" / "show until" dates (YYYY-MM-DD, or a
+   full date-time) is live only inside that window. "Until" is inclusive of the
+   whole day. A date that does not parse is ignored rather than hiding the
+   slide — a typo must not silently take a banner down. */
+function slideLive(s, now = Date.now()) {
+    const from = parseIst(s.starts_at);
+    const until = parseIst(s.ends_at, true);
+    if (Number.isFinite(from) && now < from) return false;
+    if (Number.isFinite(until) && now > until) return false;
+    return true;
+}
+
 function renderRich(text) {
     return String(text || "")
         .split(/(\*[^*]+\*)/g)
@@ -223,7 +235,13 @@ export default function Home() {
         fetchCollection("home_testimonials").then((d) => setTestimonials((d?.items || []).filter((t) => t && t.enabled !== false && t.quote))).catch(() => {});
         // A slide with no image would render an empty coloured frame at the very
         // top of the site, so an unfinished row is dropped rather than reserved.
-        fetchCollection("home_hero_slides").then((d) => setHeroSlides((d?.items || []).filter((s) => s && s.enabled !== false && s.image))).catch(() => {});
+        //
+        // Show-from / until dates are applied HERE, where the slides arrive,
+        // never while rendering: the boot snapshot then holds exactly what the
+        // prerender showed, and the first client render matches it (#418).
+        fetchCollection("home_hero_slides")
+            .then((d) => setHeroSlides((d?.items || []).filter((s) => s && s.enabled !== false && s.image && slideLive(s))))
+            .catch(() => {});
         // Fallback feed in case bestseller / new-release flags are sparse (also the pool for the curated carousel)
         // Once the full pool is here the build-time carousel books step aside,
         // so a price or stock change since the deploy is never left showing.
@@ -319,7 +337,7 @@ export default function Home() {
                 so that ties break in its favour. */}
             {showHeroCarousel && (
                 <section style={{ order: heroCarouselOrd }} data-testid="home-hero-carousel">
-                    <HeroCarousel slides={heroSlides} testId="home-hero-carousel-frame" priority aspect="20 / 9" />
+                    <HeroFullscreen slides={heroSlides} testId="home-hero-carousel-frame" priority />
                 </section>
             )}
 
