@@ -240,7 +240,7 @@ export default function Home() {
         // never while rendering: the boot snapshot then holds exactly what the
         // prerender showed, and the first client render matches it (#418).
         fetchCollection("home_hero_slides")
-            .then((d) => setHeroSlides((d?.items || []).filter((s) => s && s.enabled !== false && s.image && slideLive(s))))
+            .then((d) => setHeroSlides((d?.items || []).filter((s) => s && s.enabled !== false && (s.image || (s.title && s.cover)) && slideLive(s))))
             .catch(() => {});
         // Fallback feed in case bestseller / new-release flags are sparse (also the pool for the curated carousel)
         // Once the full pool is here the build-time carousel books step aside,

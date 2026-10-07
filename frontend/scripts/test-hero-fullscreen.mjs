@@ -70,6 +70,10 @@ check((a.match(/hx-slide is-on/g) || []).length === 1 && a.indexOf("hx-slide is-
 check(a.includes("––") && !/<b>\d\d<\/b><span>days/.test(a), "countdown starts as a placeholder (filled in by an effect)");
 check((a.match(/<img[^>]*fetchpriority="high"/gi) || []).length === 1, "only the first background is high priority");
 
+check(!/loading="lazy"/.test(a), "no lazy images in the hero (hidden slides never loaded them)");
+check((a.match(/src="https:\/\/cdn\.test\/files\/oakbridge\/media\/c\.png"/g) || []).length === 0,
+      "slide 3 (not current, not next) fetches nothing yet");
+
 print("-- live text vs finished artwork --");
 check(/<h2 class="hx-h1">/.test(a) && a.includes("<em>2023</em>"), "headline is real text; *starred* words light up");
 check(a.includes('href="/books/542f"'), "own-site links (https://www.oakbridge.in/...) stay in-site");
@@ -81,6 +85,15 @@ check(a.includes("object-position:50% 20%"), "focal point applied");
 check(!a.includes("javascript:alert") && !a.includes("url(evil)"), "accent and focal point are validated, not injected");
 check(a.includes(">28<") && a.includes("NOV 2026"), "event date tile in Indian time, formatted by hand");
 check(a.includes('data-testid="hero-scroll-book"') && a.includes('aria-label="Scroll to the next section"'), "the book button is there and labelled");
+
+print("-- glow from the book cover --");
+const g = renderToString(React.createElement(MemoryRouter, null, React.createElement(Hero, { slides: [
+    { id: "g", bg: "cover", image: "/api/files/oakbridge/media/artwork-with-words.png", cover: "/api/files/oakbridge/covers/c.jpg", title: "Gendering Climate *Futures*", link: "/books/1" },
+] })));
+check(g.includes("hx-bg-cover") && /hx-bg-cover"[^>]*>|src="https:\/\/cdn\.test\/files\/oakbridge\/covers\/c\.jpg"[^>]*hx-bg-cover/.test(g),
+      "bg = cover: the backdrop is the book cover, glowing");
+check(!g.includes("artwork-with-words"), "…and the old artwork (with its baked-in words) is not drawn under the headline");
+check(g.includes("hx-book-front"), "…while the cover still floats in 3D beside the text");
 
 print("-- dates --");
 const { parseIst, localise } = mod;
@@ -94,7 +107,8 @@ const home = readFileSync(join(FE, "src", "pages", "Home.jsx"), "utf8");
 const css = readFileSync(join(FE, "src", "index.css"), "utf8");
 const src = readFileSync(join(FE, "src", "components", "HeroFullscreen.jsx"), "utf8");
 check(/<HeroFullscreen slides=\{heroSlides\}/.test(home), "homepage uses the full-screen hero");
-check(/s\.image && slideLive\(s\)/.test(home) && /function slideLive/.test(home), "show-from/until applied where slides are fetched, not in render");
+check(/\(s\.image \|\| \(s\.title && s\.cover\)\) && slideLive\(s\)/.test(home) && /function slideLive/.test(home),
+      "show-from/until applied where slides are fetched; a headline + cover is enough to show");
 check(/height:calc\(100svh - 80px\)/.test(css) && /height:calc\(100svh - 80px - var\(--tray-h\)\)/.test(css),
       "fills the screen under the header; on phones also clears the bottom tray");
 check(/min-height:560px/.test(css) && /min-height:520px/.test(css), "never collapses on a tiny or zoomed window");

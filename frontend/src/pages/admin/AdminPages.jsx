@@ -194,6 +194,15 @@ export default function AdminPages() {
                             "Rotates every 7 seconds; hidden or moved in “Section order & visibility”."
                         }
                         fields={[
+                            {
+                                key: "bg",
+                                label: "Background",
+                                type: "select",
+                                options: [
+                                    { value: "photo", label: "My background image (below)" },
+                                    { value: "cover", label: "Glow from the book cover (no photo needed)" },
+                                ],
+                            },
                             { key: "image", label: "Background image (wide photo, 2400px+; or a finished banner if no headline)", type: "image" },
                             { key: "image_mobile", label: "Phone background (optional — a tall photo for phones)", type: "image" },
                             {

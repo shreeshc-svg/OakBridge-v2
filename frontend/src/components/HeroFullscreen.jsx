@@ -117,6 +117,12 @@ function Countdown({ at }) {
     );
 }
 
+// The cover to glow from, when the slide asks for it (or has no photo at all).
+const coverGlow = (slide) => {
+    const c = slide.cover ? mediaUrl(slide.cover) || slide.cover : null;
+    return c && (slide.bg === "cover" || !slide.image) ? c : null;
+};
+
 function Background({ slide, eager, priority, artwork }) {
     const src = mediaUrl(slide.image) || slide.image;
     const mobile = slide.image_mobile ? mediaUrl(slide.image_mobile) || slide.image_mobile : null;
@@ -127,7 +133,6 @@ function Background({ slide, eager, priority, artwork }) {
             // Live-text slides: the photo is decoration, the heading says it.
             alt={decorative || !artwork ? "" : slide.alt || ""}
             {...(decorative ? { "aria-hidden": true } : {})}
-            loading={eager ? "eager" : "lazy"}
             decoding="async"
             {...(eager && priority && !decorative ? { fetchPriority: "high" } : {})}
             className={cls}
@@ -151,10 +156,28 @@ function Background({ slide, eager, priority, artwork }) {
             </div>
         );
     }
+    /* "Glow from the book cover": no photo needed. The cover itself, hugely
+       blurred, saturated and darkened, becomes a backdrop in the book's own
+       colours — so a highlight can go live with nothing but its cover. */
+    const cover = coverGlow(slide);
+    if (cover) {
+        return (
+            <div className="hx-bg hx-kb">
+                <img
+                    src={cover}
+                    alt=""
+                    aria-hidden="true"
+                    decoding="async"
+                    {...(eager && priority ? { fetchPriority: "high" } : {})}
+                    className="hx-bg-photo hx-bg-cover"
+                />
+            </div>
+        );
+    }
     return <div className="hx-bg hx-kb">{pic("hx-bg-photo")}</div>;
 }
 
-function Visual({ slide }) {
+function Visual({ slide, warm }) {
     const cover = slide.cover ? mediaUrl(slide.cover) || slide.cover : null;
     if (cover) {
         return (
@@ -162,7 +185,7 @@ function Visual({ slide }) {
                 <div className="hx-ring" />
                 <div className="hx-glow" />
                 <div className="hx-book" data-tilt>
-                    <img className="hx-book-front" src={cover} alt="" loading="lazy" decoding="async" />
+                    {warm && <img className="hx-book-front" src={cover} alt="" decoding="async" />}
                     <div className="hx-book-spine" />
                     <div className="hx-book-pages" />
                 </div>
@@ -194,7 +217,7 @@ function Visual({ slide }) {
     return null;
 }
 
-function Slide({ slide, index, active, priority }) {
+function Slide({ slide, index, active, priority, warm }) {
     const artwork = !String(slide.title || "").trim();
     const accent = HEX.test(slide.accent || "") ? slide.accent : DEFAULT_ACCENT;
     const link = localise(slide.link);
@@ -205,7 +228,7 @@ function Slide({ slide, index, active, priority }) {
         .slice(0, 4);
     const body = (
         <>
-            <Background slide={slide} eager={index === 0} priority={priority} artwork={artwork} />
+            {warm && <Background slide={slide} eager={index === 0} priority={priority} artwork={artwork} />}
             {!artwork && <div className="hx-scrim" />}
             {!artwork && (
                 <div className={`hx-content ${slide.cover || slide.event_date ? "" : "hx-solo"}`}>
@@ -241,7 +264,7 @@ function Slide({ slide, index, active, priority }) {
                             </div>
                         )}
                     </div>
-                    <Visual slide={slide} />
+                    <Visual slide={slide} warm={warm} />
                 </div>
             )}
         </>
@@ -364,6 +387,14 @@ export default function HeroFullscreen({ slides = [], priority = false, testId =
     const [i, setI] = useState(0);
     const [paused, setPaused] = useState(false);
     const [cycle, setCycle] = useState(0); // restarts the progress bar animation
+    /* Which slides may load their images: the one showing and the next one.
+       NOT loading="lazy" — browsers do not reliably lazy-load images inside a
+       visibility:hidden slide, so a cover could stay blank after its slide
+       appeared (seen in testing). Instead a slide gets its <img> only when it
+       is current or next, eagerly; covers are full-size uploads (up to
+       ~1.6 MB), so nothing further ahead is fetched. Starts as {0, 1} in both
+       the prerender and the first browser render. */
+    const [warm, setWarm] = useState(() => new Set([0, 1]));
     const heroRef = useRef(null);
     const canvasRef = useRef(null);
     const touch = useRef(null);
@@ -376,6 +407,10 @@ export default function HeroFullscreen({ slides = [], priority = false, testId =
         setI(((k % n) + n) % n);
         setCycle((c) => c + 1);
     }, [n]);
+    useEffect(() => {
+        if (!n) return;
+        setWarm((w) => (w.has(idx) && w.has((idx + 1) % n) ? w : new Set([...w, idx, (idx + 1) % n])));
+    }, [idx, n]);
 
     // Autoplay — effect only. Held for reduced motion, hover/focus, hidden tab.
     useEffect(() => {
@@ -458,7 +493,7 @@ export default function HeroFullscreen({ slides = [], priority = false, testId =
             <canvas ref={canvasRef} className="hx-particles" aria-hidden="true" />
 
             {slides.map((s, k) => (
-                <Slide key={s.id || k} slide={s} index={k} active={k === idx} priority={priority} />
+                <Slide key={s.id || k} slide={s} index={k} active={k === idx} priority={priority} warm={warm.has(k)} />
             ))}
 
             <div className="hx-dock">

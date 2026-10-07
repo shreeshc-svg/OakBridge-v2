@@ -459,6 +459,10 @@ a {
 .hx-kb{translate:calc(var(--tx,0) * -14px) calc(var(--ty,0) * -10px); transition:translate .3s ease-out}
 .hx-bg-photo{inset:0; width:100%; height:100%; object-fit:cover; transform:scale(1.04)}
 .hx-slide.is-on .hx-bg-photo{animation:hx-kenburns 9s ease-out forwards}
+/* backdrop made from the book cover: only its colours survive */
+.hx-bg-cover{filter:blur(70px) saturate(1.5) brightness(.55); transform:scale(1.6)}
+.hx-slide.is-on .hx-bg-cover{animation:hx-coverglow 12s ease-in-out infinite alternate}
+@keyframes hx-coverglow{from{transform:scale(1.6) rotate(0deg)}to{transform:scale(1.9) rotate(8deg)}}
 @keyframes hx-kenburns{from{transform:scale(1.04)}to{transform:scale(1.13)}}
 /* finished artwork: whole, above the dock, over a blurred copy of itself */
 .hx-bg-blur{inset:0; width:100%; height:100%; object-fit:cover; transform:scale(1.15); filter:blur(40px) saturate(1.15); opacity:.75}
@@ -597,7 +601,7 @@ a {
 }
 /* ---- phones ---- */
 @media (max-width:767px){
-  .hx-content{align-content:end; padding-bottom:calc(var(--dock-h) + 1vh)}
+  .hx-content{align-content:end; padding-bottom:calc(var(--dock-h) + 2.5vh)}
   .hx-visual{--w:clamp(86px, min(26vw, 18vh), 160px); max-height:26vh; padding:1vh 0}
   .hx-h1{font-size:clamp(1.85rem, 8.6vw, 3rem)}
   .hx-chips{display:none}
