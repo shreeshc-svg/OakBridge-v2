@@ -45,6 +45,26 @@ export default function Header() {
     const { isAuthenticated, isAdmin, user, logout } = useAuth();
     const [mobileOpen, setMobileOpen] = useState(false);
     const [searchOpen, setSearchOpen] = useState(false);
+    /*
+     * Scrolled past the very top? On the homepage, while the full-screen hero
+     * is the first section, the header is drawn transparent over it (index.css,
+     * "header over the hero"). That look is CSS-only — `body:has(.hx-top)` —
+     * so the prerendered page and the first browser render agree (#418).
+     * This flag only takes it back to the normal header: the moment the page
+     * scrolls, or a menu/search panel opens. Starts false on both sides.
+     */
+    const [scrolled, setScrolled] = useState(false);
+    useEffect(() => {
+        let raf = 0;
+        const read = () => {
+            raf = 0;
+            setScrolled(window.scrollY > 10);
+        };
+        const onScroll = () => { if (!raf) raf = requestAnimationFrame(read); };
+        read();
+        window.addEventListener("scroll", onScroll, { passive: true });
+        return () => { window.removeEventListener("scroll", onScroll); cancelAnimationFrame(raf); };
+    }, []);
     const [accountOpen, setAccountOpen] = useState(false);
     const [navItems, setNavItems] = useBootState("header:nav", DEFAULT_NAV);
     // The build renders with an empty cart; a returning visitor's count comes
@@ -160,7 +180,7 @@ export default function Header() {
         <>
             <header
                 data-testid="site-header"
-                className="sticky top-0 z-40 border-b border-[#002B5C]/10 bg-[#FFFFFF]/85 backdrop-blur-xl"
+                className={`hdr sticky top-0 z-40 border-b border-[#002B5C]/10 bg-[#FFFFFF]/85 backdrop-blur-xl ${scrolled || mobileOpen || searchOpen ? "is-solid" : ""}`}
             >
                 <div className="flex items-center justify-between gap-4 px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 h-20">
                     <Link

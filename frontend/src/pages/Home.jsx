@@ -336,7 +336,9 @@ export default function Home() {
                 team uploads one. Placed first in the DOM as well as by `order`
                 so that ties break in its favour. */}
             {showHeroCarousel && (
-                <section style={{ order: heroCarouselOrd }} data-testid="home-hero-carousel">
+                /* hx-top: the hero is the first thing on the page, so it slides up
+                   under the header, which turns transparent over it (index.css). */
+                <section style={{ order: heroCarouselOrd }} data-testid="home-hero-carousel" className={heroCarouselOrd === -3 ? "hx-top" : undefined}>
                     <HeroFullscreen slides={heroSlides} testId="home-hero-carousel-frame" priority />
                 </section>
             )}

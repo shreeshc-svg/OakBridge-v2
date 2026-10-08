@@ -114,6 +114,17 @@ check(/\.hx-dock\{column-gap:clamp\(32px, 4vw, 88px\); padding-right:max\(var\(-
 check(/\.hx-hero \.hx-progress button\{flex:none; width:10px; height:10px/.test(readFileSync(join(FE, "src", "index.css"), "utf8")) && /aria-label=\{`Highlight \$\{k \+ 1\}/.test(hsrc),
       "progress shown as dots; each dot still names its highlight for screen readers");
 
+{
+    const css2 = readFileSync(join(FE, "src", "index.css"), "utf8");
+    const hdr = readFileSync(join(FE, "src", "components", "Header.jsx"), "utf8");
+    check(/className=\{heroCarouselOrd === -3 \? "hx-top" : undefined\}/.test(readFileSync(join(FE, "src", "pages", "Home.jsx"), "utf8")), "header-over-hero only when the hero is the first section");
+    check(/body:has\(\.hx-top\) \.hdr:not\(\.is-solid\):not\(:hover\):not\(:focus-within\)\{\s*background-color:transparent/.test(css2),
+          "transparent header is CSS-only (right from the prerendered first paint), and solid again on hover/focus");
+    check(/useState\(false\);\s*useEffect\(\(\) => \{\s*let raf = 0;[\s\S]*?window\.scrollY > 10/.test(hdr) && /scrolled \|\| mobileOpen \|\| searchOpen \? "is-solid" : ""/.test(hdr),
+          "header turns back to normal the moment the page scrolls or a menu/search opens");
+    check(/\.hx-top\{margin-top:-81px\}/.test(css2) && /\.hx-top \.hx-hero\{height:100vh; height:100svh/.test(css2), "hero slides under the header and fills the whole screen");
+}
+
 print("-- dates --");
 const { parseIst, localise } = mod;
 check(parseIst("2026-11-28 09:30") === Date.parse("2026-11-28T04:00:00Z"), "'2026-11-28 09:30' is IST (Safari-safe, no space form)");

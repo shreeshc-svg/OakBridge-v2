@@ -687,6 +687,36 @@ a {
 .hx-hero .hx-progress button.is-done i{width:0}
 @media (max-width:767px){ .hx-hero .hx-progress{width:auto; justify-content:center} }
 
+/* ---- header over the hero ----
+   When the hero is the FIRST section (.hx-top on its section, Home.jsx), it
+   slides up under the 80px sticky header and fills the whole screen; the
+   header goes transparent with white type. It returns to the normal white
+   header the moment the page scrolls or a menu/search panel opens (.is-solid,
+   Header.jsx), and while the pointer or keyboard focus is in it — so the
+   dropdowns (white panels) always sit under a normal header. CSS-only via
+   :has(), so it is right from the first paint, prerender included. Browsers
+   without :has() (Firefox < 121) keep the normal header; the hero still
+   works, its top 80px simply sit under the white bar. */
+.hx-top{margin-top:-81px}   /* the header: 80px bar + 1px border */
+.hx-top .hx-hero{height:100vh; height:100svh; min-height:600px}
+@media (max-width:767px){ .hx-top .hx-hero{height:calc(100vh - var(--tray-h)); height:calc(100svh - var(--tray-h)); min-height:600px} }
+.hx-top .hx-content{padding-top:81px}
+.hx-top .hx-hero::after{content:""; position:absolute; left:0; right:0; top:0; height:180px; z-index:4; pointer-events:none;
+  background:linear-gradient(rgba(4,12,28,.6), rgba(4,12,28,0))}
+.hdr{transition:background-color .35s ease, border-color .35s ease, backdrop-filter .35s ease, box-shadow .35s ease}
+body:has(.hx-top) .hdr:not(.is-solid):not(:hover):not(:focus-within){
+  background-color:transparent; border-color:transparent; -webkit-backdrop-filter:none; backdrop-filter:none}
+body:has(.hx-top) .hdr:not(.is-solid):not(:hover):not(:focus-within) > div:first-child > nav > a,
+body:has(.hx-top) .hdr:not(.is-solid):not(:hover):not(:focus-within) > div:first-child > nav > div > a,
+body:has(.hx-top) .hdr:not(.is-solid):not(:hover):not(:focus-within) > div:first-child > div:last-child > a,
+body:has(.hx-top) .hdr:not(.is-solid):not(:hover):not(:focus-within) > div:first-child > div:last-child > button,
+body:has(.hx-top) .hdr:not(.is-solid):not(:hover):not(:focus-within) > div:first-child > div:last-child > div > button{
+  color:rgba(255,255,255,.92)}
+body:has(.hx-top) .hdr:not(.is-solid):not(:hover):not(:focus-within) [data-testid="search-box"] > form{
+  background:rgba(255,255,255,.08); border-color:rgba(255,255,255,.28)}
+body:has(.hx-top) .hdr:not(.is-solid):not(:hover):not(:focus-within) [data-testid="search-box"] > form :is(svg, input){color:#fff}
+body:has(.hx-top) .hdr:not(.is-solid):not(:hover):not(:focus-within) [data-testid="search-box"] > form input::placeholder{color:rgba(255,255,255,.65)}
+
 @media (prefers-reduced-motion: reduce){
   .hx-hero *,.hx-hero *::before,.hx-hero *::after{animation:none !important; transition:none !important}
   .hx-w,.hx-reveal{opacity:1 !important; transform:none !important; filter:none !important}

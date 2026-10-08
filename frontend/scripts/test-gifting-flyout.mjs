@@ -50,7 +50,7 @@ const iDrawer = at('<div className="lg:hidden border-t');
 const iHeaderClose = at("</header>");
 check(iPanel > iNavClose && iPanel < iDrawer && iPanel < iHeaderClose,
       `outside both navs but inside the header (nav closes ${iNavClose}, panel ${iPanel}, drawer ${iDrawer}, header ends ${iHeaderClose})`);
-check(/className="sticky top-0 z-40/.test(header),
+check(/className=[{"`]+(hdr )?sticky top-0 z-40/.test(header),
       "and the header is positioned, so it IS the containing block");
 
 console.log("\n-- nothing invisible joins the nav's flex layout --");
