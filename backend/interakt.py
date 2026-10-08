@@ -44,6 +44,7 @@ import logging
 import os
 import re
 import uuid
+from urllib.parse import quote
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -419,11 +420,15 @@ async def adm_status(user: dict = Depends(require_admin)):
     from rbac import is_superadmin
     cfg = await get_cfg()
     secret = _secret()
-    url = f"{PUBLIC_API}/api/interakt/webhook/{secret}" if secret else ""
+    # Percent-encoded: a "#" or "/" typed into the secret would otherwise cut
+    # the address short (everything after "#" is never sent), and every
+    # webhook would be refused. The route receives it decoded again.
+    url = f"{PUBLIC_API}/api/interakt/webhook/{quote(secret, safe='')}" if secret else ""
+    weak = bool(secret) and (len(secret) < 32 or not re.fullmatch(r"[A-Za-z0-9_-]+", secret))
     if url and not is_superadmin(user.get("role")):
         url = f"{PUBLIC_API}/api/interakt/webhook/••••••"   # only a superadmin pastes it into Interakt
     last = await db.wa_events.find_one({}, {"_id": 0, "at": 1, "type": 1, "sig_ok": 1}, sort=[("at", -1)])
-    return {**cfg, "api_key_set": bool(_api_key()), "webhook_secret_set": bool(secret), "webhook_url": url,
+    return {**cfg, "api_key_set": bool(_api_key()), "webhook_secret_set": bool(secret), "webhook_secret_weak": weak, "webhook_url": url,
             "last_webhook": last}
 
 

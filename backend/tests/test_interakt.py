@@ -212,6 +212,11 @@ SENT.clear()
 run(ns["on_cart_reminder"]("u1", [{"title": "IR"}], "t1"))
 check(not SENT, "no cart reminder after STOP")
 
+print("-- webhook URL --")
+src_txt = open(SRC, encoding="utf-8").read()
+check("quote(secret, safe='')" in src_txt and '"webhook_secret_weak": weak' in src_txt,
+      "a secret with # or @ is percent-encoded in the URL, and a short/symbol secret is flagged in Admin")
+
 print()
 if failed:
     print(f"{failed} assertion(s) failed")

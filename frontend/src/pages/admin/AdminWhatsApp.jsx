@@ -298,6 +298,12 @@ function SettingsTab({ status, reload, canEdit }) {
                 <div className="font-medium text-[#002B5C]">Webhook (delivery reports + replies)</div>
                 <div>API key on server: <b className={status.api_key_set ? "text-[#15803D]" : "text-[#CC0033]"}>{status.api_key_set ? "set" : "missing"}</b> ·
                     Webhook secret: <b className={status.webhook_secret_set ? "text-[#15803D]" : "text-[#CC0033]"}>{status.webhook_secret_set ? "set" : "missing"}</b></div>
+                {status.webhook_secret_weak && (
+                    <div className="border border-[#CC0033] text-[#CC0033] p-2 text-xs" data-testid="wa-weak-secret">
+                        The webhook secret is short or has symbols. Replace INTERAKT_WEBHOOK_SECRET in Render with 64 random letters and
+                        numbers (never a password you use anywhere else), then paste the new URL and secret into Interakt.
+                    </div>
+                )}
                 {status.webhook_url && (
                     <div>Paste into Interakt → Developer Settings → Webhook URL:
                         <code className="block mt-1 p-2 bg-[#F5F7FA] break-all text-xs" data-testid="wa-webhook-url">{status.webhook_url}</code>
