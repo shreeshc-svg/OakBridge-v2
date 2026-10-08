@@ -198,10 +198,10 @@ function StatsTab() {
                 {[7, 30, 90].map((d) => (
                     <button key={d} type="button" onClick={() => setDays(d)} className={`px-2 py-1 border ${days === d ? "border-[#002B5C] text-[#002B5C]" : "border-[#E5E7EB]"}`}>{d} days</button>
                 ))}
-                <span className="ml-auto text-[#4B5563]">{s.messages} messages · {s.replies} replies</span>
+                <span className="ml-auto text-[#4B5563]">{s.messages} messages · {s.replies} replies · spend ₹{(s.spend || 0).toFixed(2)}</span>
             </div>
             <table className="w-full text-sm bg-white border border-[#E5E7EB]">
-                <thead><tr className="text-left text-[#4B5563]"><th className="p-2">Message</th><th className="text-right">Sent</th><th className="text-right">Delivered</th><th className="text-right">Read</th><th className="text-right p-2">Failed</th></tr></thead>
+                <thead><tr className="text-left text-[#4B5563]"><th className="p-2">Message</th><th className="text-right">Sent</th><th className="text-right">Delivered</th><th className="text-right">Read</th><th className="text-right">Failed</th><th className="text-right p-2">Cost</th></tr></thead>
                 <tbody>
                     {Object.entries(s.by_kind || {}).map(([k, v]) => {
                         const deliv = (v.delivered || 0) + (v.read || 0);
@@ -211,13 +211,15 @@ function StatsTab() {
                                 <td className="text-right">{v.total}</td>
                                 <td className="text-right">{deliv} <span className="text-xs text-[#4B5563]">({pct(deliv, v.total)})</span></td>
                                 <td className="text-right">{v.read || 0} <span className="text-xs text-[#4B5563]">({pct(v.read || 0, v.total)})</span></td>
-                                <td className="text-right p-2 text-[#CC0033]">{v.failed || 0}</td>
+                                <td className="text-right text-[#CC0033]">{v.failed || 0}</td>
+                                <td className="text-right p-2">₹{(v.cost || 0).toFixed(2)}</td>
                             </tr>
                         );
                     })}
-                    {!Object.keys(s.by_kind || {}).length && <tr><td className="p-3 text-[#4B5563]" colSpan={5}>Nothing sent in this period (test sends are not counted).</td></tr>}
+                    {!Object.keys(s.by_kind || {}).length && <tr><td className="p-3 text-[#4B5563]" colSpan={6}>Nothing sent in this period (test sends are not counted).</td></tr>}
                 </tbody>
             </table>
+            <CategoryWarnings list={s.category_warnings} />
             {days_.length > 0 && (
                 <div className="bg-white border border-[#E5E7EB] p-4">
                     <div className="text-sm font-medium text-[#002B5C] mb-3">By day</div>
@@ -232,6 +234,23 @@ function StatsTab() {
                     <div className="text-xs text-[#4B5563] mt-2">Green = delivered or read · light = not (yet) delivered. Hover a bar for the day.</div>
                 </div>
             )}
+        </div>
+    );
+}
+
+/* A template Meta approved under the wrong category (seen: order_cancelled
+   approved as MARKETING — billed at the marketing rate, and not delivered to
+   people who opted out of marketing). Taken from the delivery reports. */
+function CategoryWarnings({ list }) {
+    if (!list?.length) return null;
+    return (
+        <div className="border border-[#CC0033] bg-[#CC0033]/5 p-3 text-sm text-[#CC0033] space-y-1" data-testid="wa-category-warnings">
+            {list.map((w) => (
+                <div key={w.kind}>
+                    <b>{w.template}</b> is approved as <b>{w.category}</b> but should be <b>{w.expected}</b>.
+                    {w.expected === "UTILITY" ? " It is billed at the marketing rate and is not delivered to people who opted out of marketing. Re-create it in Interakt as Utility with “allow category change” off." : ""}
+                </div>
+            ))}
         </div>
     );
 }
@@ -262,6 +281,7 @@ function SettingsTab({ status, reload, canEdit }) {
     const ro = !canEdit;
     return (
         <div className="space-y-6 max-w-3xl" data-testid="wa-settings">
+            <CategoryWarnings list={status.category_warnings} />
             <div className="bg-white border border-[#E5E7EB] p-5 space-y-3">
                 <div className="font-medium text-[#002B5C]">Sending</div>
                 <div className="flex flex-wrap gap-2">

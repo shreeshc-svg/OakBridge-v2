@@ -366,15 +366,33 @@ async def handle_event(etype: str, data: dict) -> None:
         rec = None
         if iid:
             rec = await db.wa_messages.find_one({"interakt_id": iid}, {"_id": 0, "id": 1, "status": 1})
+        meta = msg.get("meta_data") or {}
         if not rec:
+            # Interakt nests our callbackData at message.meta_data.source_data
+            # (seen in a real delivery report, 2026-10-08), not at message.*.
+            cb_raw = ((meta.get("source_data") or {}).get("callback_data")) or msg.get("callback_data") or "{}"
             try:
-                cb = json.loads(msg.get("callback_data") or "{}")
+                cb = json.loads(cb_raw) if isinstance(cb_raw, str) else (cb_raw or {})
                 rec = await db.wa_messages.find_one({"id": cb.get("m")}, {"_id": 0, "id": 1, "status": 1}) if cb.get("m") else None
-            except (ValueError, TypeError):
+            except (ValueError, TypeError, AttributeError):
                 rec = None
         if not rec:
             return  # a campaign message sent from Interakt itself, not by us
         upd = {f"{st}_at": _now()}
+        # What the message actually cost and how Meta classified the template.
+        # A utility message approved as MARKETING costs several times more.
+        cost = (meta.get("message_cost") or {}).get("actual_message_cost")
+        try:
+            if cost is not None:
+                upd["cost"] = round(float(cost), 4)
+        except (TypeError, ValueError):
+            pass
+        try:
+            tpl = json.loads(msg.get("raw_template") or "{}") if isinstance(msg.get("raw_template"), str) else (msg.get("raw_template") or {})
+            if tpl.get("category"):
+                upd["template_category"] = str(tpl["category"]).upper()[:20]
+        except (ValueError, TypeError):
+            pass
         if st == "failed":
             upd.update({"status": "failed", "error": str(msg.get("channel_failure_reason") or msg.get("failure_reason") or "failed")[:300]})
         elif _RANK.get(st, 0) > _RANK.get(rec.get("status"), 0) and rec.get("status") != "failed":
@@ -429,6 +447,7 @@ async def adm_status(user: dict = Depends(require_admin)):
         url = f"{PUBLIC_API}/api/interakt/webhook/••••••"   # only a superadmin pastes it into Interakt
     last = await db.wa_events.find_one({}, {"_id": 0, "at": 1, "type": 1, "sig_ok": 1}, sort=[("at", -1)])
     return {**cfg, "api_key_set": bool(_api_key()), "webhook_secret_set": bool(secret), "webhook_secret_weak": weak, "webhook_url": url,
+            "category_warnings": await _category_warnings(),
             "last_webhook": last}
 
 
@@ -516,13 +535,14 @@ async def adm_messages(q: Optional[str] = None, kind: Optional[str] = None, stat
 async def adm_stats(days: int = 30):
     since = (datetime.now(timezone.utc) - timedelta(days=max(1, min(days, 365)))).isoformat()
     rows = await db.wa_messages.find({"created_at": {"$gte": since}, "mode": {"$ne": "test"}},
-                                     {"_id": 0, "kind": 1, "status": 1, "created_at": 1}).to_list(50000)
+                                     {"_id": 0, "kind": 1, "status": 1, "created_at": 1, "cost": 1}).to_list(50000)
     by_kind: dict = {}
     by_day: dict = {}
     for r in rows:
         k = by_kind.setdefault(r["kind"], {"total": 0, "failed": 0, "accepted": 0, "sent": 0, "delivered": 0, "read": 0, "queued": 0})
         k["total"] += 1
         k[r.get("status") or "queued"] = k.get(r.get("status") or "queued", 0) + 1
+        k["cost"] = round(k.get("cost", 0) + float(r.get("cost") or 0), 2)
         d = by_day.setdefault(r["created_at"][:10], {"total": 0, "delivered_or_read": 0, "read": 0, "failed": 0})
         d["total"] += 1
         if r.get("status") in ("delivered", "read"):
@@ -532,7 +552,24 @@ async def adm_stats(days: int = 30):
         if r.get("status") == "failed":
             d["failed"] += 1
     replies = await db.wa_replies.count_documents({"at": {"$gte": since}})
-    return {"days": days, "by_kind": by_kind, "by_day": dict(sorted(by_day.items())), "replies": replies, "messages": len(rows)}
+    return {"days": days, "by_kind": by_kind, "by_day": dict(sorted(by_day.items())), "replies": replies, "messages": len(rows),
+            "spend": round(sum(float(r.get("cost") or 0) for r in rows), 2), "category_warnings": await _category_warnings()}
+
+
+# Order messages are UTILITY by nature; the cart reminder is MARKETING.
+EXPECTED_CATEGORY = {"order_confirmed": "UTILITY", "order_shipped": "UTILITY", "order_cancelled": "UTILITY", "cart_reminder": "MARKETING"}
+
+
+async def _category_warnings() -> list:
+    """Templates whose latest delivery report shows a different category than
+    the message should have (e.g. an order update approved as MARKETING)."""
+    out = []
+    for kind, want in EXPECTED_CATEGORY.items():
+        last = await db.wa_messages.find_one({"kind": kind, "template_category": {"$exists": True}},
+                                             {"_id": 0, "template_category": 1, "template": 1}, sort=[("created_at", -1)])
+        if last and last.get("template_category") and last["template_category"] != want:
+            out.append({"kind": kind, "template": last.get("template", kind), "category": last["template_category"], "expected": want})
+    return out
 
 
 @admin_router.get("/replies")

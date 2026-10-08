@@ -212,6 +212,19 @@ SENT.clear()
 run(ns["on_cart_reminder"]("u1", [{"title": "IR"}], "t1"))
 check(not SENT, "no cart reminder after STOP")
 
+print("-- real Interakt delivery report (2026-10-08) --")
+db2 = ns["db"]
+db2.wa_messages.docs.append({"id": "41fe98a2", "kind": "order_cancelled", "status": "accepted", "interakt_id": "something-else"})
+real = {"customer": {"channel_phone_number": "918796811392", "phone_number": "8796811392", "country_code": "+91"},
+        "message": {"id": "c78ba698-not-ours", "message_status": "Delivered", "channel_failure_reason": None,
+                    "raw_template": json.dumps({"name": "order_cancelled", "category": "MARKETING"}),
+                    "meta_data": {"source_data": {"callback_data": json.dumps({"m": "41fe98a2", "k": "order_cancelled", "o": ""})},
+                                  "message_cost": {"whatsapp_cost": "0.86", "interakt_markup": "0.1", "actual_message_cost": "0.958041"}}}}
+run(he("message_api_delivered", real))
+m = next(d for d in db2.wa_messages.docs if d["id"] == "41fe98a2")
+check(m["status"] == "delivered", "matched through meta_data.source_data.callback_data when the id differs")
+check(m.get("cost") == 0.958 and m.get("template_category") == "MARKETING", "cost and Meta's template category stored")
+
 print("-- webhook URL --")
 src_txt = open(SRC, encoding="utf-8").read()
 check("quote(secret, safe='')" in src_txt and '"webhook_secret_weak": weak' in src_txt,
