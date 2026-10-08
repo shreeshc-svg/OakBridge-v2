@@ -111,6 +111,9 @@ check(/pointerenter/.test(hsrc) && /is-hover/.test(hsrc) && /\.hx-render\.is-hov
 check(/\.hx-dock\{column-gap:clamp\(32px, 4vw, 88px\); padding-right:max\(var\(--hx-pad\), 128px\)\}/.test(readFileSync(join(FE, "src", "index.css"), "utf8")),
       "dock keeps the progress bars off the book button and the arrows clear of the chat button");
 
+check(/\.hx-hero \.hx-progress button\{flex:none; width:10px; height:10px/.test(readFileSync(join(FE, "src", "index.css"), "utf8")) && /aria-label=\{`Highlight \$\{k \+ 1\}/.test(hsrc),
+      "progress shown as dots; each dot still names its highlight for screen readers");
+
 print("-- dates --");
 const { parseIst, localise } = mod;
 check(parseIst("2026-11-28 09:30") === Date.parse("2026-11-28T04:00:00Z"), "'2026-11-28 09:30' is IST (Safari-safe, no space form)");
