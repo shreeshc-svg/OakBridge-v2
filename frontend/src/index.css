@@ -542,6 +542,22 @@ a {
 .hx-book-spine{position:absolute; top:0; bottom:0; left:0; width:calc(var(--w) * .12); transform-origin:left; transform:rotateY(90deg); background:var(--accent); filter:brightness(.55)}
 .hx-book-pages{position:absolute; top:2%; bottom:2%; right:0; width:calc(var(--w) * .11); transform-origin:right; transform:rotateY(90deg);
   background:repeating-linear-gradient(90deg, #f3efe6 0 2px, #d9d2c3 2px 3px)}
+/* uploaded 3D render (admin "3D cover"): floats; on hover it lifts, grows and
+   turns towards the mouse, with a light that follows the pointer */
+.hx-render{position:relative; height:calc(var(--w) * 1.62); aspect-ratio:3/4; max-width:100%; display:grid; place-items:center;
+  grid-template:minmax(0,1fr) / minmax(0,1fr);   /* a definite cell, so the image's max-height:100% applies */
+  perspective:1200px; opacity:0; transition:opacity .5s ease; animation:hx-float 6s ease-in-out infinite}
+.hx-render.is-ready{opacity:1}
+.hx-render-img,.hx-render-glare{grid-area:1/1; max-width:100%; max-height:100%; transform-style:preserve-3d;
+  transform:rotateY(calc(var(--tx,0) * 10deg + var(--bx,0) * 22deg)) rotateX(calc(var(--by,0) * -16deg)) translateY(var(--lift,0px)) scale(var(--s,1));
+  transition:transform .35s cubic-bezier(.2,.8,.2,1)}
+.hx-render-img{display:block; width:100%; height:100%; object-fit:contain; filter:drop-shadow(0 30px 40px rgba(0,0,0,.55)) drop-shadow(0 0 30px color-mix(in srgb, var(--accent) 25%, transparent));
+  -webkit-user-drag:none; user-select:none}
+.hx-render-glare{width:100%; height:100%; pointer-events:none; opacity:0; transition:opacity .35s, transform .35s cubic-bezier(.2,.8,.2,1);
+  background:radial-gradient(circle at calc(50% + var(--bx,0) * 120%) calc(50% + var(--by,0) * 120%), rgba(255,255,255,.38), transparent 42%);
+  -webkit-mask-size:contain; mask-size:contain; -webkit-mask-repeat:no-repeat; mask-repeat:no-repeat; -webkit-mask-position:center; mask-position:center}
+.hx-render.is-hover{--s:1.06; --lift:-10px; cursor:pointer}
+.hx-render.is-hover .hx-render-glare{opacity:1}
 .hx-glow{position:absolute; width:calc(var(--w) * 1.6); aspect-ratio:1; border-radius:50%; filter:blur(40px); opacity:.55; z-index:-1;
   background:radial-gradient(circle, var(--accent), transparent 65%)}
 .hx-ring{position:absolute; width:calc(var(--w) * 1.9); aspect-ratio:1; border-radius:50%; border:1px solid rgba(255,255,255,.12); animation:hx-spin 30s linear infinite}
@@ -595,6 +611,17 @@ a {
   .hx-visual{order:-1; --w:clamp(110px, min(26vw, 22vh), 260px); height:auto; max-height:34vh; padding:2vh 0}
   .hx-solo .hx-text{max-width:100%}
   .hx-scrim{background:linear-gradient(0deg, rgba(4,12,28,.95) 0%, rgba(4,12,28,.78) 50%, rgba(4,12,28,.35) 80%, rgba(4,12,28,.5) 100%)}
+}
+/* Dock spacing (desktop/tablet). The progress bars stop well short of the
+   book button, and the counter + arrows keep clear of the chat button, which
+   is fixed 20px from the right/bottom edge and 56px wide (ChatWidget.jsx):
+   so the dock's right padding is at least 20 + 56 + ~48px of air. */
+@media (min-width:768px){
+  .hx-dock{column-gap:clamp(32px, 4vw, 88px); padding-right:max(var(--hx-pad), 128px)}
+  .hx-progress{max-width:560px; width:100%}
+  .hx-progress button{max-width:128px}
+  .hx-counter{gap:8px}
+  .hx-counter button{width:38px; height:38px; border-color:rgba(255,255,255,.22)}
 }
 @media (max-width:1100px){
   .hx-progress button{font-size:0; max-width:56px; padding-top:6px}

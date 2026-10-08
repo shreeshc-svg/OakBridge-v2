@@ -95,6 +95,22 @@ check(g.includes("hx-bg-cover") && /hx-bg-cover"[^>]*>|src="https:\/\/cdn\.test\
 check(!g.includes("artwork-with-words"), "…and the old artwork (with its baked-in words) is not drawn under the headline");
 check(g.includes("hx-book-front"), "…while the cover still floats in 3D beside the text");
 
+print("-- uploaded 3D render --");
+const r3 = renderToString(React.createElement(MemoryRouter, null, React.createElement(Hero, { slides: [
+    { id: "r", bg: "cover", cover: "/api/files/oakbridge/covers/flat.jpg", cover3d: "/api/files/oakbridge/media/render3d.png", title: "International *Relations*", link: "/books/1" },
+] })));
+check(r3.includes('class="hx-render "') && !r3.includes("hx-book-front") && !r3.includes("render3d.png"),
+      "a 3D render replaces the CSS book; nothing drawn until it is prepared (no white flash, same markup server and browser)");
+check(r3.includes("covers/flat.jpg") && r3.includes("hx-bg-cover"), "the glow background still comes from the flat cover");
+const hsrc = readFileSync(join(FE, "src", "components", "HeroFullscreen.jsx"), "utf8");
+check(/corners\.every\(whiteish\)/.test(hsrc) && /\.catch\(\(\) => live && setShown\(src\)\)/.test(hsrc),
+      "white background removed only when all four corners are white; any failure shows the upload as-is");
+check(/pointerenter/.test(hsrc) && /is-hover/.test(hsrc) && /\.hx-render\.is-hover\{--s:1\.06; --lift:-10px/.test(readFileSync(join(FE, "src", "index.css"), "utf8")),
+      "hovering the render lifts it and turns it towards the mouse");
+
+check(/\.hx-dock\{column-gap:clamp\(32px, 4vw, 88px\); padding-right:max\(var\(--hx-pad\), 128px\)\}/.test(readFileSync(join(FE, "src", "index.css"), "utf8")),
+      "dock keeps the progress bars off the book button and the arrows clear of the chat button");
+
 print("-- dates --");
 const { parseIst, localise } = mod;
 check(parseIst("2026-11-28 09:30") === Date.parse("2026-11-28T04:00:00Z"), "'2026-11-28 09:30' is IST (Safari-safe, no space form)");
@@ -107,7 +123,7 @@ const home = readFileSync(join(FE, "src", "pages", "Home.jsx"), "utf8");
 const css = readFileSync(join(FE, "src", "index.css"), "utf8");
 const src = readFileSync(join(FE, "src", "components", "HeroFullscreen.jsx"), "utf8");
 check(/<HeroFullscreen slides=\{heroSlides\}/.test(home), "homepage uses the full-screen hero");
-check(/\(s\.image \|\| \(s\.title && s\.cover\)\) && slideLive\(s\)/.test(home) && /function slideLive/.test(home),
+check(/\(s\.image \|\| \(s\.title && \(s\.cover \|\| s\.cover3d\)\)\) && slideLive\(s\)/.test(home) && /function slideLive/.test(home),
       "show-from/until applied where slides are fetched; a headline + cover is enough to show");
 check(/height:calc\(100svh - 80px\)/.test(css) && /height:calc\(100svh - 80px - var\(--tray-h\)\)/.test(css),
       "fills the screen under the header; on phones also clears the bottom tray");

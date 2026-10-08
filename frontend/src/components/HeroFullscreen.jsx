@@ -119,7 +119,8 @@ function Countdown({ at }) {
 
 // The cover to glow from, when the slide asks for it (or has no photo at all).
 const coverGlow = (slide) => {
-    const c = slide.cover ? mediaUrl(slide.cover) || slide.cover : null;
+    const raw = slide.cover || slide.cover3d;
+    const c = raw ? mediaUrl(raw) || raw : null;
     return c && (slide.bg === "cover" || !slide.image) ? c : null;
 };
 
@@ -177,7 +178,148 @@ function Background({ slide, eager, priority, artwork }) {
     return <div className="hx-bg hx-kb">{pic("hx-bg-photo")}</div>;
 }
 
+/* Make an uploaded 3D render ready to float on a dark hero.
+
+   Renders arrive as PNGs, often on a WHITE background and with wide empty
+   margins (the sample: a 1500×1170 canvas with the book in the middle ~45%).
+   Drawn as-is that is a white rectangle on navy. So, once, in the browser:
+     1. scale to at most 1600px (the book is shown up to ~700px tall);
+     2. if all four corners are opaque near-white, flood-fill the white that is
+        CONNECTED TO THE EDGES to transparent (white inside the cover art,
+        e.g. title text, is not connected to the edge and is kept);
+     3. crop to the book's own outline, so every render sits at the same size.
+   Needs CORS on the image (CloudFront serves it); if the canvas is tainted or
+   anything fails, the original is shown unchanged. Effect-only, never in the
+   prerender, so hydration is untouched. */
+const NEAR_WHITE = 236;
+async function prepareRender(src) {
+    const img = new window.Image();
+    img.crossOrigin = "anonymous";
+    img.decoding = "async";
+    // Own cache key: if the same URL was already loaded WITHOUT CORS (e.g. as
+    // the glow background), the browser would reuse that opaque copy and the
+    // canvas would refuse to be read.
+    img.src = src.startsWith("data:") ? src : `${src}${src.includes("?") ? "&" : "?"}r3d=1`;
+    await img.decode();
+    const k = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
+    const W = Math.max(1, Math.round(img.naturalWidth * k));
+    const H = Math.max(1, Math.round(img.naturalHeight * k));
+    const cv = document.createElement("canvas");
+    cv.width = W;
+    cv.height = H;
+    const ctx = cv.getContext("2d", { willReadFrequently: true });
+    ctx.drawImage(img, 0, 0, W, H);
+    const data = ctx.getImageData(0, 0, W, H); // throws if tainted -> caller keeps original
+    const px = data.data;
+    const at = (x, y) => (y * W + x) * 4;
+    const whiteish = (i) => px[i + 3] > 200 && px[i] >= NEAR_WHITE && px[i + 1] >= NEAR_WHITE && px[i + 2] >= NEAR_WHITE;
+    const corners = [at(0, 0), at(W - 1, 0), at(0, H - 1), at(W - 1, H - 1)];
+    if (corners.every(whiteish)) {
+        const seen = new Uint8Array(W * H);
+        const stack = [];
+        for (let x = 0; x < W; x++) stack.push(x, x + (H - 1) * W);
+        for (let y = 0; y < H; y++) stack.push(y * W, y * W + W - 1);
+        while (stack.length) {
+            const p = stack.pop();
+            if (seen[p]) continue;
+            seen[p] = 1;
+            const i = p * 4;
+            // Soft shadows under the book are light grey, not white: fade them
+            // by brightness instead of cutting, so the edge stays smooth.
+            const lum = (px[i] + px[i + 1] + px[i + 2]) / 3;
+            if (lum < 200 || px[i + 3] < 8) continue;
+            px[i + 3] = lum >= NEAR_WHITE ? 0 : Math.round(px[i + 3] * (1 - (lum - 200) / (NEAR_WHITE - 200)));
+            const x = p % W;
+            if (x > 0) stack.push(p - 1);
+            if (x < W - 1) stack.push(p + 1);
+            if (p >= W) stack.push(p - W);
+            if (p < W * (H - 1)) stack.push(p + W);
+        }
+        ctx.putImageData(data, 0, 0);
+    }
+    // Crop to what is left.
+    let x0 = W, y0 = H, x1 = -1, y1 = -1;
+    for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+            if (px[at(x, y) + 3] > 16) {
+                if (x < x0) x0 = x;
+                if (x > x1) x1 = x;
+                if (y < y0) y0 = y;
+                if (y > y1) y1 = y;
+            }
+        }
+    }
+    if (x1 < x0 || y1 < y0) return src; // nothing left — keep the original
+    const out = document.createElement("canvas");
+    out.width = x1 - x0 + 1;
+    out.height = y1 - y0 + 1;
+    out.getContext("2d").drawImage(cv, x0, y0, out.width, out.height, 0, 0, out.width, out.height);
+    return out.toDataURL("image/png");
+}
+
+/* The admin-uploaded 3D render, floating; it follows the mouse while hovered. */
+function Render3D({ src, warm }) {
+    const [shown, setShown] = useState(null); // null until prepared: no white flash
+    const ref = useRef(null);
+    useEffect(() => {
+        if (!warm || !src) return undefined;
+        let live = true;
+        prepareRender(src)
+            .then((u) => live && setShown(u))
+            .catch(() => live && setShown(src)); // CORS/decoding trouble: show it as uploaded
+        return () => { live = false; };
+    }, [src, warm]);
+    useEffect(() => {
+        const el = ref.current;
+        if (!el || !window.matchMedia?.("(pointer: fine)").matches) return undefined;
+        let raf = 0, x = 0, y = 0;
+        const apply = () => {
+            raf = 0;
+            el.style.setProperty("--bx", x.toFixed(3));
+            el.style.setProperty("--by", y.toFixed(3));
+        };
+        const move = (e) => {
+            const r = el.getBoundingClientRect();
+            x = Math.max(-0.5, Math.min(0.5, (e.clientX - r.left) / r.width - 0.5));
+            y = Math.max(-0.5, Math.min(0.5, (e.clientY - r.top) / r.height - 0.5));
+            if (!raf) raf = requestAnimationFrame(apply);
+        };
+        const enter = () => el.classList.add("is-hover");
+        const leave = () => { el.classList.remove("is-hover"); x = 0; y = 0; if (!raf) raf = requestAnimationFrame(apply); };
+        el.addEventListener("pointermove", move);
+        el.addEventListener("pointerenter", enter);
+        el.addEventListener("pointerleave", leave);
+        return () => {
+            el.removeEventListener("pointermove", move);
+            el.removeEventListener("pointerenter", enter);
+            el.removeEventListener("pointerleave", leave);
+            cancelAnimationFrame(raf);
+        };
+    }, []);
+    return (
+        <div ref={ref} className={`hx-render ${shown ? "is-ready" : ""}`}>
+            {shown && (
+                <>
+                    <img className="hx-render-img" src={shown} alt="" decoding="async" draggable="false" />
+                    {/* light that follows the mouse, clipped to the book's own outline */}
+                    <span className="hx-render-glare" style={{ WebkitMaskImage: `url("${shown}")`, maskImage: `url("${shown}")` }} />
+                </>
+            )}
+        </div>
+    );
+}
+
 function Visual({ slide, warm }) {
+    const render = slide.cover3d ? mediaUrl(slide.cover3d) || slide.cover3d : null;
+    if (render) {
+        return (
+            <div className="hx-visual hx-reveal" style={{ "--d": ".4s" }} aria-hidden="true">
+                <div className="hx-ring" />
+                <div className="hx-glow" />
+                <Render3D src={render} warm={warm} />
+            </div>
+        );
+    }
     const cover = slide.cover ? mediaUrl(slide.cover) || slide.cover : null;
     if (cover) {
         return (
@@ -231,7 +373,7 @@ function Slide({ slide, index, active, priority, warm }) {
             {warm && <Background slide={slide} eager={index === 0} priority={priority} artwork={artwork} />}
             {!artwork && <div className="hx-scrim" />}
             {!artwork && (
-                <div className={`hx-content ${slide.cover || slide.event_date ? "" : "hx-solo"}`}>
+                <div className={`hx-content ${slide.cover || slide.cover3d || slide.event_date ? "" : "hx-solo"}`}>
                     <div className="hx-text">
                         {slide.eyebrow && (
                             <span className="hx-eyebrow hx-reveal" style={{ "--d": ".1s" }}>

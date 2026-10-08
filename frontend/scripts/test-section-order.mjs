@@ -149,7 +149,7 @@ check(/order:\s*-1/.test(home) && /order:\s*heroCarouselOrd/.test(home),
 console.log("\n-- it renders nothing until there is something to show --");
 check(home.includes('fetchCollection("home_hero_slides")'),
       "slides come from the home_hero_slides collection");
-check(/enabled\s*!==\s*false\s*&&\s*\(s\.image \|\| \(s\.title && s\.cover\)\)/.test(home),
+check(/enabled\s*!==\s*false\s*&&\s*\(s\.image \|\| \(s\.title && \(s\.cover \|\| s\.cover3d\)\)\)/.test(home),
       "a disabled slide, or one with nothing to show (no image, and no headline + cover), is dropped rather than shown as an empty frame");
 check(/heroSlides\.length\s*>\s*0/.test(home),
       "and with no slides at all the section does not render, so the page is unchanged until the team uploads one");
