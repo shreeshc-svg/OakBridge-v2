@@ -151,6 +151,14 @@ for (const n of ["adm_create_doc", "adm_edit_details", "adm_edit_lines", "adm_de
 check(/"from_office": True, "status": "draft"/.test(wh) && /data-testid="wh-open-job"/.test(screen), "office upload waits on the phone as a job");
 check(/scored = \[\{\*\*c, "qty": c\["invoiced"\]\}/.test(wh), "carton accuracy scored against the invoice, not what was packed");
 
+// Movements search (Admin → Warehouse → Movements).
+const mvFn = fnOf("adm_movements");
+check(/"\$regex": re\.escape\(text\)/.test(mvFn), "movements search: input is escaped, never a raw regex");
+check(/db\.categories\.find\(\{"\$or": \[\{"id": rx\}, \{"name": rx\}\]\}/.test(mvFn) && /\{"author": rx\}/.test(mvFn) && /\{"by": rx\}, \{"party": rx\}/.test(mvFn) && /\{"doc_number": rx\}/.test(mvFn),
+      "movements search covers book, ISBN, author, category (id or name), person, party, reason, note and invoice number");
+check(/m\["category"\] = cats\.get\(c, c\)/.test(mvFn) && /<th>Category<\/th>/.test(admin), "each movement shows its book's category");
+check(/data-testid="wh-moves-search"/.test(admin) && /tab === "moves" && \(/.test(admin), "search box sits in the tab row on the Movements tab");
+
 console.log();
 if (failed) {
     console.log(`${failed} assertion(s) failed`);

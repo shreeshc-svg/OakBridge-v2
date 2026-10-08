@@ -164,8 +164,10 @@ export const adminWhDoc = (id) => api.get(`/admin/warehouse/docs/${id}`).then((r
 export const adminWhUndoDoc = (id) => api.post(`/admin/warehouse/docs/${id}/undo`).then((r) => r.data);
 export const adminWhTestCase = (id, on) =>
     api.post(`/admin/warehouse/docs/${id}/test-case`, { on }).then((r) => r.data);
-export const adminWhMovements = (bookId) =>
-    api.get("/admin/warehouse/movements", { params: bookId ? { book_id: bookId } : {} }).then((r) => r.data);
+export const adminWhMovements = (bookId, q) =>
+    api.get("/admin/warehouse/movements", {
+        params: { ...(bookId ? { book_id: bookId } : {}), ...(q ? { q } : {}) },
+    }).then((r) => r.data);
 export const adminWhUndoMove = (id) => api.post(`/admin/warehouse/movements/${id}/undo`).then((r) => r.data);
 export const adminWhAccuracy = (days = 30) =>
     api.get("/admin/warehouse/accuracy", { params: { days } }).then((r) => r.data);

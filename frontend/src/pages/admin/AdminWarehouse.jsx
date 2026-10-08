@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Link, Navigate } from "react-router-dom";
 import { toast } from "sonner";
+import { Search, X } from "lucide-react";
 import {
     adminWhOverview, adminWhDocs, adminWhDoc, adminWhUndoDoc, adminWhTestCase, adminWhAccuracy,
     adminWhReplay, adminWhMode, adminWhMovements, adminWhUndoMove, adminWhReview, adminWhCreateDoc, adminWhEditDoc,
@@ -33,6 +34,7 @@ export default function AdminWarehouse() {
     const { user } = useAuth();
     const [tab, setTab] = useState("approve");
     const [pending, setPending] = useState(null);
+    const [moveQ, setMoveQ] = useState("");
     const refreshPending = useCallback(() => {
         adminWhDocs("awaiting_approval").then((d) => setPending(d.length)).catch(() => {});
     }, []);
@@ -47,20 +49,38 @@ export default function AdminWarehouse() {
                 </div>
                 <Link to="/warehouse" className="bg-[#002B5C] text-white px-4 py-2 text-sm">Open the warehouse screen</Link>
             </div>
-            <div className="mt-6 flex gap-2 border-b border-[#E5E7EB]">
+            <div className="mt-6 flex flex-wrap items-end gap-2 border-b border-[#E5E7EB]">
                 {TABS.map(([k, l]) => (
                     <button key={k} type="button" onClick={() => setTab(k)}
                         className={`px-4 py-2 text-sm -mb-px border-b-2 ${tab === k ? "border-[#002B5C] text-[#002B5C] font-medium" : "border-transparent text-[#4B5563]"}`}>
                         {l}{k === "approve" && pending ? ` (${pending})` : ""}
                     </button>
                 ))}
+                {tab === "moves" && (
+                    <div className="ml-auto mb-1.5 relative w-full sm:w-80" data-testid="wh-moves-search">
+                        <Search size={15} strokeWidth={1.5} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#4B5563]" />
+                        <input
+                            value={moveQ}
+                            onChange={(e) => setMoveQ(e.target.value)}
+                            placeholder="Search book, ISBN, category, person, party, invoice…"
+                            aria-label="Search stock movements"
+                            className="w-full border border-[#E5E7EB] bg-white pl-9 pr-8 py-2 text-sm focus:border-[#002B5C] outline-none"
+                        />
+                        {moveQ && (
+                            <button type="button" aria-label="Clear search" onClick={() => setMoveQ("")}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 text-[#4B5563] hover:text-[#CC0033]">
+                                <X size={15} strokeWidth={1.5} />
+                            </button>
+                        )}
+                    </div>
+                )}
             </div>
             <div className="mt-6">
                 {tab === "trial" && <TrialTab canSwitch={isSuperadmin(user?.role)} />}
                 {tab === "approve" && <DocsTab key="approve" status="awaiting_approval" onChange={refreshPending} />}
                 {tab === "docs" && <DocsTab key="docs" onChange={refreshPending} canDelete={isSuperadmin(user?.role)} />}
                 {tab === "accuracy" && <AccuracyTab />}
-                {tab === "moves" && <MovesTab />}
+                {tab === "moves" && <MovesTab q={moveQ} />}
             </div>
         </div>
     );
@@ -547,9 +567,13 @@ function AccuracyTab() {
     );
 }
 
-function MovesTab() {
+function MovesTab({ q = "" }) {
     const [moves, setMoves] = useState(null);
-    const load = useCallback(() => { adminWhMovements().then(setMoves).catch(() => setMoves([])); }, []);
+    const [term, setTerm] = useState(q);   // q, applied once typing pauses
+    useEffect(() => { const t = setTimeout(() => setTerm(q.trim()), 300); return () => clearTimeout(t); }, [q]);
+    const load = useCallback(() => {
+        adminWhMovements(null, term).then(setMoves).catch(() => setMoves([]));
+    }, [term]);
     useEffect(load, [load]);
     const undo = async (id) => {
         if (!window.confirm("Undo this movement?")) return;
@@ -558,11 +582,12 @@ function MovesTab() {
     if (!moves) return <p className="text-sm text-[#4B5563]">Loading…</p>;
     return (
         <table className="w-full text-sm bg-white border border-[#E5E7EB]" data-testid="wh-moves">
-            <thead><tr className="text-left text-[#4B5563]"><th className="p-2">When</th><th>Book</th><th>Reason</th><th>Who / party</th><th className="text-right">Qty</th><th className="p-2"></th></tr></thead>
+            <thead><tr className="text-left text-[#4B5563]"><th className="p-2">When</th><th>Book</th><th>Category</th><th>Reason</th><th>Who / party</th><th className="text-right">Qty</th><th className="p-2"></th></tr></thead>
             <tbody>
                 {moves.map((m) => (
                     <tr key={m.id} className={`border-t ${m.undone ? "opacity-50 line-through" : ""}`}>
-                        <td className="p-2 text-xs">{when(m.at)}</td><td>{m.title}</td><td>{m.reason}</td>
+                        <td className="p-2 text-xs">{when(m.at)}</td><td>{m.title}{m.isbn ? <span className="block text-[11px] font-mono text-[#4B5563]">{m.isbn}</span> : null}</td>
+                        <td className="text-xs text-[#4B5563]">{m.category || "—"}</td><td>{m.reason}</td>
                         <td className="text-xs">{m.by}{m.party ? ` → ${m.party}` : ""}</td>
                         <td className={`text-right font-mono ${m.qty > 0 ? "text-[#15803D]" : "text-[#CC0033]"}`}>{m.qty > 0 ? `+${m.qty}` : m.qty}</td>
                         <td className="p-2 text-right">
@@ -572,7 +597,7 @@ function MovesTab() {
                         </td>
                     </tr>
                 ))}
-                {!moves.length && <tr><td className="p-3 text-[#4B5563]" colSpan={6}>No movements yet.</td></tr>}
+                {!moves.length && <tr><td className="p-3 text-[#4B5563]" colSpan={7}>{term ? `Nothing matches “${term}”.` : "No movements yet."}</td></tr>}
             </tbody>
         </table>
     );

@@ -1145,9 +1145,38 @@ async def adm_file(doc_id: str):
 
 
 @wh_admin_router.get("/movements")
-async def adm_movements(book_id: Optional[str] = None, limit: int = 200):
-    q = {"book_id": book_id} if book_id else {}
-    return await db.stock_movements.find(q, {"_id": 0}).sort("at", -1).to_list(min(max(limit, 1), 1000))
+async def adm_movements(book_id: Optional[str] = None, limit: int = 200, q: Optional[str] = None):
+    """The ledger, newest first. `q` searches everything a person would look
+    for: the book (title, ISBN, author), its category (id or name), who made
+    the movement, the party, the reason, the note, and the document or order
+    number it belongs to. Each row comes back with its book's category."""
+    flt: dict = {"book_id": book_id} if book_id else {}
+    text = (q or "").strip()[:80]
+    if text:
+        # Escaped: the search box is user input and must never be a regex.
+        rx = {"$regex": re.escape(text), "$options": "i"}
+        cat_ids = [c["id"] async for c in db.categories.find({"$or": [{"id": rx}, {"name": rx}]}, {"_id": 0, "id": 1})]
+        book_ids = [b["id"] async for b in db.books.find(
+            {"$or": [{"title": rx}, {"isbn": rx}, {"author": rx}, {"category": rx},
+                     *([{"category": {"$in": cat_ids}}] if cat_ids else [])]},
+            {"_id": 0, "id": 1}).limit(2000)]
+        doc_ids = [d["id"] async for d in db.warehouse_docs.find(
+            {"$or": [{"doc_number": rx}, {"party_name": rx}]}, {"_id": 0, "id": 1}).limit(2000)]
+        ors = [{"title": rx}, {"isbn": rx}, {"by": rx}, {"party": rx}, {"reason": rx}, {"note": rx}, {"doc_id": rx}]
+        if book_ids:
+            ors.append({"book_id": {"$in": book_ids}})
+        if doc_ids:
+            ors.append({"doc_id": {"$in": doc_ids}})
+        flt["$or"] = ors
+    moves = await db.stock_movements.find(flt, {"_id": 0}).sort("at", -1).to_list(min(max(limit, 1), 1000))
+    ids = list({m["book_id"] for m in moves if m.get("book_id")})
+    cats = {c["id"]: c.get("name") or c["id"] async for c in db.categories.find({}, {"_id": 0, "id": 1, "name": 1})}
+    book_cat = {b["id"]: b.get("category") or "" async for b in db.books.find(
+        {"id": {"$in": ids}}, {"_id": 0, "id": 1, "category": 1})}
+    for m in moves:
+        c = book_cat.get(m.get("book_id"), "")
+        m["category"] = cats.get(c, c)
+    return moves
 
 
 async def _reverse(mv: dict, user: dict) -> None:
