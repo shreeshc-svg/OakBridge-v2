@@ -617,3 +617,13 @@ export const formatApiError = (err) => {
     if (d && typeof d.msg === "string") return d.msg;
     return String(d);
 };
+
+// Admin → WhatsApp (Interakt) — backend/interakt.py
+export const adminWaStatus = () => api.get("/admin/interakt/status").then((r) => r.data);
+export const adminWaConfig = (body) => api.put("/admin/interakt/config", body).then((r) => r.data);
+export const adminWaTest = (kind) => api.post("/admin/interakt/test", { kind }).then((r) => r.data);
+export const adminWaMessages = (params = {}) => api.get("/admin/interakt/messages", { params }).then((r) => r.data);
+export const adminWaStats = (days = 30) => api.get("/admin/interakt/stats", { params: { days } }).then((r) => r.data);
+export const adminWaReplies = (params = {}) => api.get("/admin/interakt/replies", { params }).then((r) => r.data);
+export const adminWaReplyRead = (id) => api.post(`/admin/interakt/replies/${id}/read`).then((r) => r.data);
+export const adminWaEvents = () => api.get("/admin/interakt/events").then((r) => r.data);

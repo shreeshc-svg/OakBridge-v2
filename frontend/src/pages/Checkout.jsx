@@ -75,6 +75,12 @@ export default function Checkout() {
         delivery_pincode: "",
         gift_message: "",
         gift_recipient: "",
+        // WhatsApp consent (backend/interakt.py). Order updates are on by
+        // default and can be unticked; reminders/news are marketing, so off
+        // until ticked, and only offered to signed-in customers (it is stored
+        // on their account).
+        wa_optin: true,
+        wa_marketing_optin: false,
     });
     const [deliverElsewhere, setDeliverElsewhere] = useState(false);
     const [couponCode, setCouponCode] = useState("");
@@ -417,6 +423,21 @@ export default function Checkout() {
                                     </div>
                                 </div>
                             </div>
+                        )}
+                    </section>
+
+                    <section className="space-y-2" data-testid="checkout-whatsapp">
+                        <label className="flex items-start gap-2 text-sm text-[#1F2937]">
+                            <input type="checkbox" className="mt-1" checked={!!form.wa_optin} data-testid="checkout-wa-optin"
+                                onChange={(e) => setForm((f) => ({ ...f, wa_optin: e.target.checked }))} />
+                            <span>WhatsApp me order updates (confirmation, dispatch with tracking) on the number above.</span>
+                        </label>
+                        {user && (
+                            <label className="flex items-start gap-2 text-sm text-[#4B5563]">
+                                <input type="checkbox" className="mt-1" checked={!!form.wa_marketing_optin} data-testid="checkout-wa-marketing"
+                                    onChange={(e) => setForm((f) => ({ ...f, wa_marketing_optin: e.target.checked }))} />
+                                <span>Also WhatsApp me cart reminders and new-release news. You can reply STOP at any time.</span>
+                            </label>
                         )}
                     </section>
 

@@ -320,6 +320,10 @@ class OrderCreate(BaseModel):
     delivery_pincode: Optional[str] = ""
     gift_message: Optional[str] = ""
     gift_recipient: Optional[str] = ""
+    # Checkout ticks: order updates on WhatsApp (utility), and reminders /
+    # new-release news on WhatsApp (marketing — stored on the account).
+    wa_optin: bool = False
+    wa_marketing_optin: bool = False
     # {utm_source, utm_medium, utm_campaign, utm_term, utm_content, referrer,
     # landed_at} -- whichever of those the landing URL carried. Free-form
     # because campaign tags are whatever the person building the link typed,
@@ -367,6 +371,8 @@ class Order(BaseModel):
     delivery_pincode: str = ""
     gift_message: str = ""
     gift_recipient: str = ""
+    # WhatsApp consent (interakt.py). Declared, or response_model=Order drops it.
+    wa_optin: bool = False
     # Declared here or response_model=Order drops it and the campaign that
     # earned the sale is lost between creating the order and reading it back.
     attribution: dict = Field(default_factory=dict)
@@ -1867,6 +1873,7 @@ async def create_order(payload: OrderCreate, user: Optional[dict] = Depends(get_
         delivery_pincode=(payload.delivery_pincode or "").strip(),
         gift_message=(payload.gift_message or "").strip()[:200],
         gift_recipient=(payload.gift_recipient or "").strip()[:120],
+        wa_optin=bool(payload.wa_optin),
         # Trusted only as far as it is useful: keys we know, values clipped.
         # This arrives from the browser, so it is somebody's input, not a fact.
         attribution={
@@ -1878,6 +1885,10 @@ async def create_order(payload: OrderCreate, user: Optional[dict] = Depends(get_
     )
     doc = order.model_dump()
     await db.orders.insert_one({**doc})
+    if user and payload.wa_marketing_optin:
+        await db.users.update_one({"id": user["id"]}, {"$set": {
+            "wa_marketing_optin": True, "wa_marketing_optin_at": datetime.now(timezone.utc).isoformat(),
+            "phone": (payload.phone or "").strip()}})
     if user:
         await db.carts.update_one(
             {"user_id": user["id"]},
@@ -1919,6 +1930,9 @@ from warehouse import wh_router, wh_admin_router  # noqa: E402
 app.include_router(inventory_router)
 app.include_router(wh_router)
 app.include_router(wh_admin_router)
+from interakt import admin_router as interakt_admin_router, webhook_router as interakt_webhook_router  # noqa: E402
+app.include_router(interakt_webhook_router)
+app.include_router(interakt_admin_router)
 
 # The production domains, Vercel preview and local dev are always allowed; any
 # extra origins in the CORS_ORIGINS env var (comma-separated) are merged in. This

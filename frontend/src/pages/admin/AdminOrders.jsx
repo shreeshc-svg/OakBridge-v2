@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { MailCheck, FileDown, Send, Truck, SearchCheck, BanknoteX, Undo2 } from "lucide-react";
 import PaymentBadge from "../../components/admin/PaymentBadge";
 import StatusChangeDialog from "../../components/admin/StatusChangeDialog";
@@ -136,6 +137,10 @@ export default function AdminOrders() {
             else if (sr.action === "retaken") {
                 toast.info(`${copies} taken off stock again.`);
                 if (sr.short?.length) toast.warning("Some copies were no longer in stock — flagged as backorder.");
+            }
+            if (saved?.whatsapp) {
+                if (saved.whatsapp.status === "failed") toast.warning(`WhatsApp not sent: ${saved.whatsapp.error || "rejected"}`);
+                else toast.info("WhatsApp sent — delivery shows in Admin → WhatsApp.");
             }
             if (!notify) {
                 toast.success(`Marked ${nextStatus}. No email sent.`);
@@ -430,6 +435,14 @@ export default function AdminOrders() {
                                     <div className="mt-1.5">
                                         <PaymentBadge status={o.payment_status} />
                                     </div>
+                                    {/* Customer WhatsApp replies (interakt.py), linked by phone. */}
+                                    {o.wa_replies > 0 && (
+                                        <Link to={`/admin/whatsapp?order=${encodeURIComponent(o.order_number || o.id)}`}
+                                            data-testid={`order-wa-replies-${o.id}`}
+                                            className="mt-1 inline-block font-sans text-[11px] text-[#15803D] underline">
+                                            💬 {o.wa_replies} WhatsApp repl{o.wa_replies === 1 ? "y" : "ies"}
+                                        </Link>
+                                    )}
                                     {/* The row still shows the full amount in
                                         the Total column, because that is what
                                         the customer owes. This says the

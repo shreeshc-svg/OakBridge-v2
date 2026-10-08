@@ -24,6 +24,7 @@ export const SECTIONS = [
     "ebooks",
     "careers",
     "orders",
+    "whatsapp",
     "coupons",
     "messages",
     "submissions",
@@ -52,6 +53,7 @@ export const SECTION_LABELS = {
     ebooks: "E-Books",
     careers: "Careers",
     orders: "Orders",
+    whatsapp: "WhatsApp",
     coupons: "Coupons",
     messages: "Messages",
     submissions: "Submissions",
@@ -70,7 +72,7 @@ export const SECTION_GROUPS = [
         label: "Site content",
         sections: ["pages", "navigation", "media", "media-gallery", "careers", "page-bookstore", "page-book", "ebooks"],
     },
-    { label: "Fulfilment", sections: ["orders", "coupons"] },
+    { label: "Fulfilment", sections: ["orders", "whatsapp", "coupons"] },
     { label: "Enquiries", sections: ["messages", "submissions", "waitlists", "spam"] },
     { label: "Governance", sections: ["users", "audit", "legal", "settings"] },
 ];
@@ -102,7 +104,7 @@ export const ROLE_PRESETS = {
         "media", "media-gallery", "careers", "page-bookstore", "page-book", "ebooks",
     ],
     fulfilment: [
-        "dashboard", "inventory", "warehouse", "orders", "coupons",
+        "dashboard", "inventory", "warehouse", "orders", "whatsapp", "coupons",
         "messages", "submissions", "waitlists",
     ],
     // The warehouse person: the phone screen at /warehouse and nothing else.

@@ -276,6 +276,18 @@ async def _deliver_paid_order(order_id: str) -> None:
     except Exception:  # noqa: BLE001
         logger.exception("Paid-order email failed for order %s", order_id)
 
+    # WhatsApp (interakt.py): "order confirmed" + customer sync, once per order,
+    # independent of the emails above so a mail outage cannot stop it (or the
+    # other way round). Off until switched on in Admin → WhatsApp; never raises.
+    try:
+        fresh = await db.orders.find_one({"id": order_id}, {"_id": 0})
+        if fresh and fresh.get("payment_status") == "paid" and await _claim_once(order_id, "wa_paid_sent"):
+            from interakt import on_order_paid
+
+            await on_order_paid(fresh)
+    except Exception:  # noqa: BLE001
+        logger.exception("WhatsApp order-paid hook failed for order %s", order_id)
+
 
 def _require_client() -> razorpay.Client:
     if _client is None:

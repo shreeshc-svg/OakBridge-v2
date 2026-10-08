@@ -45,6 +45,7 @@ SECTIONS: tuple[str, ...] = (
     "ebooks",
     "careers",
     "orders",
+    "whatsapp",
     "coupons",
     "messages",
     "submissions",
@@ -73,6 +74,7 @@ SECTION_LABELS: dict[str, str] = {
     "ebooks": "E-Books",
     "careers": "Careers",
     "orders": "Orders",
+    "whatsapp": "WhatsApp",
     "coupons": "Coupons",
     "messages": "Messages",
     "submissions": "Submissions",
@@ -110,6 +112,8 @@ SECTION_PATHS: dict[str, set[str]] = {
     # /api/warehouse, is gated by warehouse.require_warehouse on this section.
     "warehouse": {"warehouse"},
     "orders": {"orders", "cart-reminders"},
+    # Admin → WhatsApp: the Interakt message log, delivery stats and replies.
+    "whatsapp": {"interakt"},
     "coupons": {"coupons"},
     "messages": {"messages"},
     "submissions": {"submissions"},
@@ -187,7 +191,7 @@ ROLE_PRESETS: dict[str, tuple[str, ...]] = {
         "media", "media-gallery", "careers", "page-bookstore", "page-book", "ebooks",
     ),
     "fulfilment": (
-        "dashboard", "inventory", "warehouse", "orders", "coupons",
+        "dashboard", "inventory", "warehouse", "orders", "whatsapp", "coupons",
         "messages", "submissions", "waitlists",
     ),
     # The warehouse person: the phone screen and nothing else — no prices,

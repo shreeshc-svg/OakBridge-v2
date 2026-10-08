@@ -1722,7 +1722,14 @@ async def admin_update_order(order_id: str, payload: OrderStatusUpdate, actor: d
         except Exception:  # noqa: BLE001
             logging.getLogger(__name__).exception("order status email failed for %s", order_id)
 
-    # Pushed AFTER the attempt, carrying its result.
+    # WhatsApp shipped / cancelled (interakt.py) — same "notify" tick as the
+    # email, so unticking it means the customer hears nothing on either.
+    wa = None
+    if payload.notify and payload.status in ("shipped", "cancelled"):
+        from interakt import on_order_status
+        wa = await on_order_status(await db.orders.find_one({"id": order_id}, {"_id": 0}) or order, payload.status, note)
+
+        # Pushed AFTER the attempt, carrying its result.
     #
     # Recording notify as "notified" before sending would have logged intent and
     # called it fact: send_order_status_update returns False for an order with no
@@ -1748,6 +1755,7 @@ async def admin_update_order(order_id: str, payload: OrderStatusUpdate, actor: d
     # Not persisted — lets the admin toast say what actually happened.
     order["email_sent"] = bool(sent)
     order["stock_result"] = stock_result
+    order["whatsapp"] = {"status": wa.get("status"), "error": wa.get("error", "")} if wa else None
     return order
 
 

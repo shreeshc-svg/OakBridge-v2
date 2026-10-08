@@ -2639,6 +2639,10 @@ async def process_cart_reminders(force: bool = False) -> dict:
         except Exception:  # noqa: BLE001
             log.exception("cart reminder email failed for %s", u.get("email"))
             continue
+        # One WhatsApp per abandoned cart (opted-in customers only; interakt.py
+        # dedupes on the cart's last change). Never raises.
+        from interakt import on_cart_reminder
+        await on_cart_reminder(c["user_id"], c.get("items", []), c.get("updated_at", ""))
         mark = set(order[: order.index(stage) + 1]) | done
         await db.carts.update_one(
             {"user_id": c["user_id"]},
