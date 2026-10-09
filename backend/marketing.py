@@ -1508,9 +1508,10 @@ async def adm_sync(user: dict = Depends(require_admin)):
 
 
 # ---- contacts ----
-@admin_router.get("/contacts")
-async def adm_contacts(q: Optional[str] = None, status: Optional[str] = None, list_id: Optional[str] = None,
-                       consent: Optional[str] = None, page: int = 1, per: int = 50):
+def _contact_filter(q: Optional[str] = None, status: Optional[str] = None, list_id: Optional[str] = None,
+                    consent: Optional[str] = None) -> dict:
+    """One filter for the Contacts page AND its "select all N matching" bulk
+    actions, so a bulk action can never hit more people than the admin saw."""
     flt: dict = {}
     if q and q.strip():
         rx = {"$regex": re.escape(q.strip()[:80]), "$options": "i"}
@@ -1521,6 +1522,13 @@ async def adm_contacts(q: Optional[str] = None, status: Optional[str] = None, li
         flt["lists"] = list_id
     if consent:
         flt["email_consent.status"] = consent
+    return flt
+
+
+@admin_router.get("/contacts")
+async def adm_contacts(q: Optional[str] = None, status: Optional[str] = None, list_id: Optional[str] = None,
+                       consent: Optional[str] = None, page: int = 1, per: int = 50):
+    flt = _contact_filter(q, status, list_id, consent)
     per = min(max(per, 10), 200)
     total = await db.mk_contacts.count_documents(flt)
     rows = await db.mk_contacts.find(flt, {"_id": 0}).sort("created_at", -1).skip((max(page, 1) - 1) * per).limit(per).to_list(per)
@@ -1579,6 +1587,53 @@ async def adm_delete_contact(cid: str, user: dict = Depends(require_admin)):
     return {"ok": True}
 
 
+class ContactBulk(BaseModel):
+    action: str                         # unsubscribe | erase
+    ids: Optional[list[str]] = None     # the ticked rows, or…
+    all_matching: Optional[dict] = None  # {q, status, list_id, consent}: everyone the filter shows
+    expected: int                       # how many the admin confirmed — must still match
+
+
+BULK_MAX = 50000
+
+
+@admin_router.post("/contacts/bulk")
+async def adm_contacts_bulk(body: ContactBulk, user: dict = Depends(require_admin)):
+    """Bulk unsubscribe (admin) or erase (superadmin — the same rule as the
+    single erase, which is a DELETE). Unsubscribe is reversible only by the
+    person opting in again; erase keeps just a hash so they can't be re-added."""
+    from rbac import is_superadmin
+    if body.action not in ("unsubscribe", "erase"):
+        raise HTTPException(status_code=400, detail="Unknown action")
+    if body.action == "erase" and not is_superadmin(user.get("role")):
+        raise HTTPException(status_code=403, detail="Only a superadmin can erase contacts")
+    if body.ids:
+        flt = {"id": {"$in": [str(x) for x in body.ids][:BULK_MAX]}}
+    elif body.all_matching is not None:
+        m = body.all_matching
+        flt = _contact_filter(m.get("q"), m.get("status"), m.get("list_id"), m.get("consent"))
+    else:
+        raise HTTPException(status_code=400, detail="Nothing selected")
+    n = await db.mk_contacts.count_documents(flt)
+    if n > BULK_MAX:
+        raise HTTPException(status_code=400, detail=f"{n} contacts — narrow the filter (max {BULK_MAX} at a time)")
+    if n != body.expected:
+        raise HTTPException(status_code=409, detail=f"The selection changed to {n} — check it again")
+    done = 0
+    if body.action == "unsubscribe":
+        r = await db.mk_contacts.update_many({**flt, "email_consent.status": {"$nin": ["unsubscribed", "complained"]}},
+                                             {"$set": {"email_consent": _consent("unsubscribed", "admin (bulk)", user.get("email", ""))}})
+        done = r.modified_count
+    else:
+        async for c in db.mk_contacts.find(flt, {"_id": 0, "id": 1, "email_norm": 1}):
+            await db.mk_erased.update_one({"h": hashlib.sha256(c["email_norm"].encode()).hexdigest()}, {"$set": {"at": _iso()}}, upsert=True)
+            await db.mk_contacts.delete_one({"id": c["id"]})
+            done += 1
+    await audit_log(db, f"MARKETING_CONTACTS_BULK_{body.action.upper()}", email=user.get("email", ""), role=user.get("role", ""),
+                    meta={"count": done, "by_filter": body.all_matching is not None})
+    return {"ok": True, "done": done}
+
+
 # ---- lists / segments ----
 class ListBody(BaseModel):
     name: str
@@ -1617,6 +1672,20 @@ async def adm_delete_list(lid: str):
     return {"ok": True}
 
 
+class IdsBody(BaseModel):
+    ids: list[str]
+
+
+@admin_router.post("/lists/bulk-delete")
+async def adm_lists_bulk_delete(body: IdsBody, user: dict = Depends(require_superadmin)):
+    """Delete several lists / segments. The contacts in them stay."""
+    ids = [str(x) for x in body.ids][:500]
+    r = await db.mk_lists.delete_many({"id": {"$in": ids}})
+    await db.mk_contacts.update_many({"lists": {"$in": ids}}, {"$pull": {"lists": {"$in": ids}}})
+    await audit_log(db, "MARKETING_LISTS_DELETED", email=user.get("email", ""), role=user.get("role", ""), meta={"count": r.deleted_count})
+    return {"ok": True, "deleted": r.deleted_count}
+
+
 # ---- campaigns ----
 class CampaignBody(BaseModel):
     name: Optional[str] = None
@@ -1647,7 +1716,38 @@ def _clean_blocks(blocks: list) -> list:
 
 @admin_router.get("/campaigns")
 async def adm_campaigns():
-    return await db.mk_campaigns.find({}, {"_id": 0, "blocks": 0}).sort("created_at", -1).to_list(500)
+    return await db.mk_campaigns.find({"deleted": {"$ne": True}}, {"_id": 0, "blocks": 0}).sort("created_at", -1).to_list(500)
+
+
+@admin_router.post("/campaigns/bulk-delete")
+async def adm_campaigns_bulk_delete(body: IdsBody, user: dict = Depends(require_superadmin)):
+    """Drafts (nothing sent) are deleted outright. Anything that reached a
+    mailbox is ARCHIVED instead — hidden everywhere, but its send records are
+    kept so the unsubscribe links in those emails keep working (a legal
+    requirement) and tracking links still land on the site. A campaign that
+    is preparing / sending must be cancelled first."""
+    deleted, archived, refused = 0, 0, []
+    for cid in [str(x) for x in body.ids][:500]:
+        c = await db.mk_campaigns.find_one({"id": cid, "deleted": {"$ne": True}}, {"_id": 0, "id": 1, "status": 1, "name": 1})
+        if not c:
+            continue
+        if c["status"] in ("preparing", "sending"):
+            refused.append({"id": cid, "name": c.get("name", ""), "reason": "still sending — cancel it first"})
+            continue
+        # scheduled / paused: nothing more may go out
+        await db.mk_sends.update_many({"campaign_id": cid, "status": "queued"}, {"$set": {"status": "skipped", "error": "campaign deleted"}})
+        reached = await db.mk_sends.count_documents({"campaign_id": cid, "status": {"$in": ["sent", "bounced", "complained", "blocked"]}})
+        if reached:
+            await db.mk_campaigns.update_one({"id": cid}, {"$set": {"deleted": True, "deleted_at": _iso(), "deleted_by": user.get("email", ""),
+                                                                    "status": c["status"] if c["status"] in ("sent", "cancelled") else "cancelled"}})
+            archived += 1
+        else:
+            await db.mk_sends.delete_many({"campaign_id": cid})
+            await db.mk_campaigns.delete_one({"id": cid})
+            deleted += 1
+    await audit_log(db, "MARKETING_CAMPAIGNS_DELETED", email=user.get("email", ""), role=user.get("role", ""),
+                    meta={"deleted": deleted, "archived": archived, "refused": len(refused)})
+    return {"ok": True, "deleted": deleted, "archived": archived, "refused": refused}
 
 
 @admin_router.post("/campaigns")
@@ -1880,7 +1980,9 @@ async def adm_report(cid: str):
 async def adm_dashboard(days: int = 30):
     days = max(1, min(days, 365))
     since = (_now() - timedelta(days=days)).isoformat()
-    camps = await db.mk_campaigns.find({"started_at": {"$gte": since}}, {"_id": 0, "blocks": 0}).sort("started_at", -1).to_list(200)
+    camps = await db.mk_campaigns.find({"started_at": {"$gte": since}, "deleted": {"$ne": True}}, {"_id": 0, "blocks": 0}).sort("started_at", -1).to_list(200)
+    gone = {c["id"] async for c in db.mk_campaigns.find({"deleted": True}, {"_id": 0, "id": 1})}
+    gone_tags = {core.campaign_tag(x) for x in gone}
     for c in camps:
         if c.get("status") in ("sending", "sent", "paused") and (c.get("stats_at") or "") < (_now() - timedelta(minutes=10)).isoformat():
             c["stats"] = await refresh_campaign_stats(c["id"])
@@ -1897,6 +1999,8 @@ async def adm_dashboard(days: int = 30):
         series[day][key] = series[day].get(key, 0) + n
 
     async for s in db.mk_sends.find({"sent_at": {"$gte": since}}, {"_id": 0, "sent_at": 1, "opened_at": 1, "clicked_at": 1, "status": 1, "campaign_id": 1}):
+        if s.get("campaign_id") in gone:
+            continue  # archived (deleted) campaigns drop out of the charts too
         bump(s["sent_at"][:10], "sent")
         if s.get("opened_at"):
             bump(s["opened_at"][:10], "opened")
@@ -1905,7 +2009,9 @@ async def adm_dashboard(days: int = 30):
         if s.get("status") == "bounced":
             bump(s["sent_at"][:10], "bounced")
     async for o in db.orders.find({"created_at": {"$gte": since}, "payment_status": "paid",
-                                   "attribution.utm_campaign": {"$regex": "^mk-"}}, {"_id": 0, "created_at": 1, "total": 1}):
+                                   "attribution.utm_campaign": {"$regex": "^mk-"}}, {"_id": 0, "created_at": 1, "total": 1, "attribution": 1}):
+        if (o.get("attribution") or {}).get("utm_campaign") in gone_tags:
+            continue
         bump(o["created_at"][:10], "revenue", round(float(o.get("total") or 0), 2))
     growth: dict = {}
     async for c in db.mk_contacts.find({"created_at": {"$gte": since}}, {"_id": 0, "created_at": 1}):

@@ -100,6 +100,17 @@ check(/core\.ses_status\(d\.get\("overall", ""\), d\.get\("mailbox", ""\)\)/.tes
 check(/v\["status"\] not in wanted/.test(mk) && /statuses: Object\.keys\(pick\)/.test(page), "import only the ticked statuses");
 check(/data-testid=\{`mk-status-\$\{k\}`\}/.test(page), "campaign has Verified / Valid / Risky tick-boxes");
 
+console.log("-- delete / bulk --");
+check(/"\/campaigns\/bulk-delete"[\s\S]{0,120}Depends\(require_superadmin\)/.test(mk) && /"\/lists\/bulk-delete"[\s\S]{0,120}Depends\(require_superadmin\)/.test(mk),
+    "bulk deletes are superadmin-only (POST does not auto-promote)");
+check(/if reached:[\s\S]{0,200}"deleted": True/.test(mk) && /mk_sends\.delete_many\(\{"campaign_id": cid\}\)/.test(mk),
+    "sent campaigns are archived (unsubscribe links keep working); only never-sent ones are hard-deleted");
+check(/still sending — cancel it first/.test(mk), "a campaign that is sending can't be deleted");
+check(/"deleted": \{"\$ne": True\}/.test(mk), "archived campaigns are hidden from lists and the dashboard");
+check(/body\.action == "erase" and not is_superadmin/.test(mk), "bulk erase is superadmin-only");
+check(/if n != body\.expected:/.test(mk) && /_contact_filter\(m\.get\("q"\)/.test(mk), "bulk on 'all matching' re-uses the page filter and must match the confirmed count");
+check(/Type ERASE to confirm/.test(page), "bulk erase needs ERASE typed");
+
 console.log("-- screen --");
 for (const t of ["mk-dashboard", "mk-editor", "mk-contacts", "mk-lists", "mk-verify", "mk-settings", "mk-report", "mk-dry-run"]) {
     check(page.includes(`"${t}"`), `screen has ${t}`);

@@ -640,6 +640,9 @@ export const mkSaveSettings = (body) => api.put("/admin/marketing/settings", bod
 export const mkVerify = (emails, autofix = true, ses = true) =>
     api.post("/admin/marketing/verify", { emails, autofix, ses }, { timeout: 120000 }).then((r) => r.data);
 export const mkValidatePending = () => api.post("/admin/marketing/validate-pending").then((r) => r.data);
+export const mkBulkContacts = (body) => api.post("/admin/marketing/contacts/bulk", body, { timeout: 300000 }).then((r) => r.data);
+export const mkBulkDeleteLists = (ids) => api.post("/admin/marketing/lists/bulk-delete", { ids }).then((r) => r.data);
+export const mkBulkDeleteCampaigns = (ids) => api.post("/admin/marketing/campaigns/bulk-delete", { ids }).then((r) => r.data);
 export const mkDismissAlert = (id) => api.post(`/admin/marketing/alerts/${id}/dismiss`).then((r) => r.data);
 export const mkSuppressionSync = () => api.post("/admin/marketing/suppression-sync", null, { timeout: 120000 }).then((r) => r.data);
 export const mkImport = (file, opts) => {

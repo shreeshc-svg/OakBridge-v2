@@ -3,8 +3,9 @@ import { toast } from "sonner";
 import { ArrowDown, ArrowUp, Mail, MessageCircle, Plus, Search, Trash2, X } from "lucide-react";
 import {
     mkDashboard, mkHealth, mkSettings, mkSaveSettings, mkVerify, mkImport, mkReverify, mkSync, mkContacts, mkPatchContact,
-    mkDeleteContact, mkLists, mkCreateList, mkDeleteList, mkCampaigns, mkNewCampaign, mkCampaign, mkSaveCampaign, mkDuplicate,
-    mkAudience, mkPreview, mkTestSend, mkSend, mkCampaignAction, mkReport, mkDismissAlert, mkSuppressionSync, fetchBooks, fetchCategories, mediaUrl, formatApiError,
+    mkDeleteContact, mkLists, mkCreateList, mkCampaigns, mkNewCampaign, mkCampaign, mkSaveCampaign, mkDuplicate,
+    mkAudience, mkPreview, mkTestSend, mkSend, mkCampaignAction, mkReport, mkDismissAlert, mkSuppressionSync,
+    mkBulkContacts, mkBulkDeleteLists, mkBulkDeleteCampaigns, fetchBooks, fetchCategories, mediaUrl, formatApiError,
 } from "../../lib/api";
 import { useAuth } from "../../context/AuthContext";
 import { isSuperadmin, canDelete } from "../../lib/rbac";
@@ -34,6 +35,28 @@ const when = (iso) => (iso ? new Date(iso).toLocaleString("en-IN") : "—");
 const SITE = "https://www.oakbridge.in";
 const box = "border border-[#E5E7EB] bg-white px-3 py-2 text-sm w-full focus:border-[#002B5C] outline-none";
 const btn = "px-4 py-2 text-sm disabled:opacity-50";
+
+/** Tick-box selection over ids (kept across pages until cleared). */
+function useSelection() {
+    const [sel, setSel] = useState(() => new Set());
+    const toggle = (id) => setSel((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+    const setAll = (ids, on) => setSel((s) => { const n = new Set(s); ids.forEach((id) => (on ? n.add(id) : n.delete(id))); return n; });
+    const clear = useCallback(() => setSel(new Set()), []);
+    return { sel, toggle, setAll, clear };
+}
+
+/** Appears when something is ticked: count, the actions, and Clear. */
+function BulkBar({ count, children, onClear }) {
+    if (!count) return null;
+    return (
+        <div className="flex flex-wrap items-center gap-3 bg-[#002B5C] text-white text-sm px-3 py-2" data-testid="mk-bulk-bar">
+            <span><b>{count.toLocaleString("en-IN")}</b> selected</span>
+            {children}
+            <button type="button" className="ml-auto underline" onClick={onClear}>Clear</button>
+        </div>
+    );
+}
+const bulkBtn = "border border-white/60 px-3 py-1 hover:bg-white hover:text-[#002B5C]";
 
 function useDebounced(v, ms = 300) {
     const [d, setD] = useState(v);
@@ -169,16 +192,22 @@ function Panel({ title, children, right }) {
     );
 }
 
-function CampaignTable({ rows = [], onOpen }) {
+function CampaignTable({ rows = [], onOpen, sel, onDelete }) {
+    const ids = rows.map((r) => r.id);
+    const allOn = !!sel && ids.length > 0 && ids.every((x) => sel.sel.has(x));
+    const cols = 8 + (sel ? 1 : 0) + (onDelete ? 1 : 0);
     return (
         <table className="w-full text-sm" data-testid="mk-campaign-table">
-            <thead><tr className="text-left text-[#4B5563]"><th className="py-2">Campaign</th><th>Status</th><th className="text-right">Sent</th><th className="text-right">Open</th><th className="text-right">Click</th><th className="text-right">Bounce</th><th className="text-right">Orders</th><th className="text-right">Revenue</th></tr></thead>
+            <thead><tr className="text-left text-[#4B5563]">
+                {sel && <th className="w-8"><input type="checkbox" aria-label="Select all campaigns" checked={allOn} onChange={(e) => sel.setAll(ids, e.target.checked)} data-testid="mk-camp-select-all" /></th>}
+                <th className="py-2">Campaign</th><th>Status</th><th className="text-right">Sent</th><th className="text-right">Open</th><th className="text-right">Click</th><th className="text-right">Bounce</th><th className="text-right">Orders</th><th className="text-right">Revenue</th>{onDelete && <th className="w-8"></th>}</tr></thead>
             <tbody>
                 {rows.map((c) => {
                     const s = c.stats || {};
                     const base = s.delivered || s.sent || 0;
                     return (
                         <tr key={c.id} className="border-t border-[#E5E7EB] hover:bg-[#F5F7FA] cursor-pointer" onClick={() => onOpen(c.id)}>
+                            {sel && <td onClick={(e) => e.stopPropagation()}><input type="checkbox" aria-label={`Select ${c.name}`} checked={sel.sel.has(c.id)} onChange={() => sel.toggle(c.id)} /></td>}
                             <td className="py-2">{c.channel === "whatsapp" ? <MessageCircle size={13} className="inline mr-1 text-[#15803D]" /> : <Mail size={13} className="inline mr-1 text-[#002B5C]" />}{c.name}</td>
                             <td><span className={`text-[10px] font-mono uppercase border px-1.5 py-0.5 ${CAMP_TONE[c.status] || ""}`}>{c.status}</span></td>
                             <td className="text-right">{(s.sent || 0).toLocaleString("en-IN")}</td>
@@ -187,19 +216,42 @@ function CampaignTable({ rows = [], onOpen }) {
                             <td className={`text-right ${s.sent && s.bounced / s.sent > 0.02 ? "text-[#CC0033]" : ""}`}>{pct(s.sent ? (s.bounced || 0) / s.sent : null, 2)}</td>
                             <td className="text-right">{s.paid || 0}</td>
                             <td className="text-right">{inr(s.revenue)}</td>
+                            {onDelete && <td className="text-right" onClick={(e) => e.stopPropagation()}>
+                                <button type="button" aria-label={`Delete ${c.name}`} onClick={() => onDelete([c.id])}><Trash2 size={14} className="text-[#CC0033]" /></button></td>}
                         </tr>
                     );
                 })}
-                {!rows.length && <tr><td colSpan={8} className="py-6 text-[#4B5563]">No campaigns yet.</td></tr>}
+                {!rows.length && <tr><td colSpan={cols} className="py-6 text-[#4B5563]">No campaigns yet.</td></tr>}
             </tbody>
         </table>
     );
 }
 
 /* ------------------------------------------------------------ campaigns --- */
+/** Delete (drafts) / archive (sent) campaigns, after one clear confirmation. */
+async function deleteCampaigns(ids, rows) {
+    const picked = (rows || []).filter((r) => ids.includes(r.id));
+    const live = picked.filter((r) => ["preparing", "sending"].includes(r.status)).length;
+    const went = picked.filter((r) => !["draft", "preparing", "sending"].includes(r.status)).length;
+    const msg = `Delete ${ids.length} campaign${ids.length === 1 ? "" : "s"}?`
+        + (went ? `\n\n${went} already went out (or were scheduled): they're archived — hidden everywhere, and the unsubscribe links in those emails keep working.` : "")
+        + (live ? `\n\n${live} still sending — cancel ${live === 1 ? "it" : "them"} first; ${live === 1 ? "it" : "they"} will be left as is.` : "");
+    if (!window.confirm(msg)) return false;
+    try {
+        const r = await mkBulkDeleteCampaigns(ids);
+        toast.success(`Deleted ${r.deleted}${r.archived ? `, archived ${r.archived}` : ""}.`);
+        (r.refused || []).forEach((x) => toast.error(`${x.name || "Campaign"}: ${x.reason}`));
+        return true;
+    } catch (e) { toast.error(formatApiError(e)); return false; }
+}
+
 function CampaignList({ onOpen }) {
+    const { user } = useAuth();
     const [rows, setRows] = useState(null);
-    useEffect(() => { mkCampaigns().then(setRows).catch(() => setRows([])); }, []);
+    const sel = useSelection();
+    const load = useCallback(() => { mkCampaigns().then(setRows).catch(() => setRows([])); }, []);
+    useEffect(load, [load]);
+    const del = async (ids) => { if (await deleteCampaigns(ids, rows)) { sel.clear(); load(); } };
     const create = async (channel) => {
         try { const c = await mkNewCampaign({ channel, name: channel === "email" ? "New email campaign" : "New WhatsApp campaign" }); onOpen(c.id); } catch (e) { toast.error(formatApiError(e)); }
     };
@@ -209,12 +261,20 @@ function CampaignList({ onOpen }) {
                 <button type="button" className={`${btn} bg-[#002B5C] text-white inline-flex items-center gap-2`} onClick={() => create("email")} data-testid="mk-new-email"><Mail size={15} /> New email campaign</button>
                 <button type="button" className={`${btn} border border-[#15803D] text-[#15803D] inline-flex items-center gap-2`} onClick={() => create("whatsapp")}><MessageCircle size={15} /> New WhatsApp campaign</button>
             </div>
-            {!rows ? <p className="text-sm text-[#4B5563]">Loading…</p> : <div className="bg-white border border-[#E5E7EB] p-4"><CampaignTable rows={rows} onOpen={onOpen} /></div>}
+            <BulkBar count={sel.sel.size} onClear={sel.clear}>
+                {canDelete(user) && <button type="button" className={bulkBtn} onClick={() => del([...sel.sel])} data-testid="mk-camp-bulk-delete">Delete</button>}
+            </BulkBar>
+            {!rows ? <p className="text-sm text-[#4B5563]">Loading…</p> : (
+                <div className="bg-white border border-[#E5E7EB] p-4">
+                    <CampaignTable rows={rows} onOpen={onOpen} sel={canDelete(user) ? sel : undefined} onDelete={canDelete(user) ? del : undefined} />
+                </div>
+            )}
         </div>
     );
 }
 
 function CampaignView({ id, onBack, onOpen }) {
+    const { user } = useAuth();
     const [c, setC] = useState(null);
     const load = useCallback(() => { mkCampaign(id).then(setC).catch((e) => toast.error(formatApiError(e))); }, [id]);
     useEffect(load, [load]);
@@ -226,6 +286,8 @@ function CampaignView({ id, onBack, onOpen }) {
                 <button type="button" className="underline text-sm" onClick={onBack}>← All campaigns</button>
                 <span className={`text-[10px] font-mono uppercase border px-1.5 py-0.5 ${CAMP_TONE[c.status] || ""}`}>{c.status}</span>
                 <button type="button" className="ml-auto border px-3 py-1 text-sm" onClick={async () => { try { const d = await mkDuplicate(id); toast.success("Copied as a new draft."); onOpen(d.id); } catch (e) { toast.error(formatApiError(e)); } }}>Duplicate</button>
+                {canDelete(user) && <button type="button" className="border border-[#CC0033] text-[#CC0033] px-3 py-1 text-sm inline-flex items-center gap-1"
+                    onClick={async () => { if (await deleteCampaigns([id], [c])) onBack(); }} data-testid="mk-camp-delete"><Trash2 size={13} /> Delete</button>}
             </div>
             {editable ? <CampaignEditor c={c} setC={setC} reload={load} /> : <CampaignReport id={id} status={c.status} reload={load} />}
         </div>
@@ -621,11 +683,31 @@ function Contacts() {
     const [page, setPage] = useState(1);
     const [d, setD] = useState(null);
     const [busy, setBusy] = useState(false);
+    const sel = useSelection();
+    const [allMatching, setAllMatching] = useState(false);
     const load = useCallback(() => {
         mkContacts({ q: dq || undefined, status: status || undefined, consent: consent || undefined, page }).then(setD).catch(() => setD({ rows: [], total: 0 }));
     }, [dq, status, consent, page]);
     useEffect(load, [load]);
-    useEffect(() => { setPage(1); }, [dq, status, consent]);
+    const clearSel = sel.clear;
+    useEffect(() => { setPage(1); clearSel(); setAllMatching(false); }, [dq, status, consent, clearSel]);
+    const pageIds = (d?.rows || []).map((c) => c.id);
+    const pageAllOn = pageIds.length > 0 && pageIds.every((x) => sel.sel.has(x));
+    const count = allMatching ? (d?.total || 0) : sel.sel.size;
+    const bulk = async (action) => {
+        if (action === "erase") {
+            const typed = window.prompt(`Erase ${count} contact${count === 1 ? "" : "s"} completely (privacy deletion)?\nThis can't be undone, and they can never be re-imported.\n\nType ERASE to confirm.`);
+            if (typed !== "ERASE") return;
+        } else if (!window.confirm(`Unsubscribe ${count} contact${count === 1 ? "" : "s"} from marketing email? Only they can opt in again.`)) return;
+        try {
+            const body = { action, expected: count, ...(allMatching
+                ? { all_matching: { q: dq || undefined, status: status || undefined, consent: consent || undefined } }
+                : { ids: [...sel.sel] }) };
+            const r = await mkBulkContacts(body);
+            toast.success(`${action === "erase" ? "Erased" : "Unsubscribed"} ${r.done}.`);
+            sel.clear(); setAllMatching(false); load();
+        } catch (e) { toast.error(formatApiError(e)); }
+    };
     const sync = async () => {
         setBusy(true);
         try { const r = await mkSync(); toast.success(`Synced. ${r.contacts} contacts in total.`); load(); } catch (e) { toast.error(formatApiError(e)); } finally { setBusy(false); }
@@ -635,7 +717,7 @@ function Contacts() {
         if (!window.confirm("Erase this person completely (privacy request)? They can never be re-imported by accident.")) return;
         try { await mkDeleteContact(cid); load(); } catch (e) { toast.error(formatApiError(e)); }
     };
-    const sel = "border border-[#E5E7EB] bg-white px-2 py-2 text-sm";
+    const selCls = "border border-[#E5E7EB] bg-white px-2 py-2 text-sm";
     return (
         <div className="space-y-3" data-testid="mk-contacts">
             <div className="flex flex-wrap gap-2 items-center">
@@ -643,10 +725,10 @@ function Contacts() {
                     <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#4B5563]" />
                     <input className={`${box} pl-9`} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search email, name, phone, source…" />
                 </div>
-                <select className={sel} value={status} onChange={(e) => setStatus(e.target.value)}>
+                <select className={selCls} value={status} onChange={(e) => setStatus(e.target.value)}>
                     <option value="">Any address status</option>{Object.keys(STATUS_COLORS).map((s) => <option key={s} value={s}>{s}</option>)}
                 </select>
-                <select className={sel} value={consent} onChange={(e) => setConsent(e.target.value)}>
+                <select className={selCls} value={consent} onChange={(e) => setConsent(e.target.value)}>
                     <option value="">Any email consent</option>{["subscribed", "pending", "none", "unsubscribed", "complained"].map((s) => <option key={s} value={s}>{s}</option>)}
                 </select>
                 <button type="button" className={`${btn} border ml-auto`} disabled={busy} onClick={sync} title="Newsletter sign-ups, paying customers and confirmed accounts">Sync website contacts</button>
@@ -654,13 +736,26 @@ function Contacts() {
             {d && (
                 <div className="text-xs text-[#4B5563]">{d.total.toLocaleString("en-IN")} contacts · {Object.entries(d.by_consent || {}).map(([k, v]) => `${k || "none"} ${v}`).join(" · ")}</div>
             )}
+            <BulkBar count={count} onClear={() => { sel.clear(); setAllMatching(false); }}>
+                <button type="button" className={bulkBtn} onClick={() => bulk("unsubscribe")} data-testid="mk-contacts-bulk-unsub">Unsubscribe</button>
+                {canDelete(user) && <button type="button" className={bulkBtn} onClick={() => bulk("erase")} data-testid="mk-contacts-bulk-erase">Erase</button>}
+            </BulkBar>
+            {d && pageAllOn && !allMatching && d.total > pageIds.length && (
+                <div className="text-xs bg-[#F5F7FA] p-2">All {pageIds.length} on this page are selected.{" "}
+                    <button type="button" className="underline" onClick={() => setAllMatching(true)} data-testid="mk-contacts-select-matching">Select all {d.total.toLocaleString("en-IN")} matching contacts</button></div>
+            )}
+            {allMatching && <div className="text-xs bg-[#F5F7FA] p-2">All {d?.total?.toLocaleString("en-IN")} contacts matching the current search and filters are selected.</div>}
             {!d ? <p className="text-sm text-[#4B5563]">Loading…</p> : (
                 <div className="bg-white border border-[#E5E7EB] overflow-x-auto">
                     <table className="w-full text-sm">
-                        <thead><tr className="text-left text-[#4B5563]"><th className="p-2">Email</th><th>Name</th><th>Address</th><th>Email consent</th><th>WhatsApp</th><th>Source</th><th className="text-right">Sent/Open/Click</th><th></th></tr></thead>
+                        <thead><tr className="text-left text-[#4B5563]">
+                            <th className="pl-2 w-6"><input type="checkbox" aria-label="Select all on this page" checked={allMatching || pageAllOn} disabled={allMatching}
+                                onChange={(e) => sel.setAll(pageIds, e.target.checked)} data-testid="mk-contacts-select-page" /></th>
+                            <th className="p-2">Email</th><th>Name</th><th>Address</th><th>Email consent</th><th>WhatsApp</th><th>Source</th><th className="text-right">Sent/Open/Click</th><th></th></tr></thead>
                         <tbody>
                             {d.rows.map((c) => (
                                 <tr key={c.id} className="border-t align-top">
+                                    <td className="pl-2 pt-2"><input type="checkbox" aria-label={`Select ${c.email}`} checked={allMatching || sel.sel.has(c.id)} disabled={allMatching} onChange={() => sel.toggle(c.id)} /></td>
                                     <td className="p-2 font-mono text-xs">{c.email}</td>
                                     <td className="text-xs">{c.name}<div className="text-[#6B7280]">{c.phone}</div></td>
                                     <td className="text-xs"><span style={{ color: STATUS_COLORS[c.email_status] }} className="font-medium">{c.email_status}</span>
@@ -674,7 +769,7 @@ function Contacts() {
                                     <td className="text-right pr-2">{canDelete(user) && <button type="button" aria-label="Erase contact" onClick={() => erase(c.id)}><Trash2 size={14} className="text-[#CC0033]" /></button>}</td>
                                 </tr>
                             ))}
-                            {!d.rows.length && <tr><td colSpan={8} className="p-4 text-[#4B5563]">No contacts {dq || status || consent ? "match" : "yet — import a list or press Sync website contacts"}.</td></tr>}
+                            {!d.rows.length && <tr><td colSpan={9} className="p-4 text-[#4B5563]">No contacts {dq || status || consent ? "match" : "yet — import a list or press Sync website contacts"}.</td></tr>}
                         </tbody>
                     </table>
                 </div>
@@ -694,6 +789,8 @@ function Contacts() {
 const RULES = [["bought_category", "Bought from a category"], ["customers", "Paying customers"], ["abandoned_cart", "Has items left in cart"], ["source", "Came from (source)"], ["status", "Address status"]];
 
 function Lists() {
+    const { user } = useAuth();
+    const sel = useSelection();
     const [lists, setLists] = useState(null);
     const [cats, setCats] = useState([]);
     const [name, setName] = useState("");
@@ -707,20 +804,33 @@ function Lists() {
         try { await mkCreateList({ name, kind, rules: kind === "segment" ? rules : [] }); setName(""); setRules([]); toast.success("Created."); load(); } catch (e) { toast.error(formatApiError(e)); }
     };
     const setRule = (i, p) => setRules(rules.map((r, k) => (k === i ? { ...r, ...p } : r)));
+    const delLists = async (ids) => {
+        const names = (lists || []).filter((l) => ids.includes(l.id)).map((l) => `“${l.name}”`);
+        if (!window.confirm(`Delete ${ids.length === 1 ? names[0] : `${ids.length} lists / segments`}? The contacts in them stay.`)) return;
+        try { const r = await mkBulkDeleteLists(ids); toast.success(`Deleted ${r.deleted}.`); sel.clear(); load(); } catch (e) { toast.error(formatApiError(e)); }
+    };
     const reverify = async (lid) => {
         try { const r = await mkReverify(lid); toast.success(`Re-checked: ${Object.entries(r.counts).map(([k, v]) => `${k} ${v}`).join(", ")}`); load(); } catch (e) { toast.error(formatApiError(e)); }
     };
     return (
         <div className="grid lg:grid-cols-2 gap-6">
             <Panel title="Lists and segments">
+                {canDelete(user) && <BulkBar count={sel.sel.size} onClear={sel.clear}>
+                    <button type="button" className={bulkBtn} onClick={() => delLists([...sel.sel])} data-testid="mk-lists-bulk-delete">Delete</button>
+                </BulkBar>}
                 {!lists ? <p className="text-sm">Loading…</p> : (
                     <ul className="divide-y text-sm" data-testid="mk-lists">
+                        {canDelete(user) && lists.length > 0 && (
+                            <li className="py-2 text-xs text-[#4B5563]"><label className="flex items-center gap-2">
+                                <input type="checkbox" checked={lists.every((l) => sel.sel.has(l.id))} onChange={(e) => sel.setAll(lists.map((l) => l.id), e.target.checked)} data-testid="mk-lists-select-all" /> Select all</label></li>
+                        )}
                         {lists.map((l) => (
                             <li key={l.id} className="py-2 flex items-center gap-3">
+                                {canDelete(user) && <input type="checkbox" aria-label={`Select ${l.name}`} checked={sel.sel.has(l.id)} onChange={() => sel.toggle(l.id)} />}
                                 <div className="flex-1"><b>{l.name}</b> <span className="text-xs text-[#6B7280]">{l.kind}</span>
                                     <div className="text-xs text-[#4B5563]">{l.count ?? 0} contacts{l.kind === "static" ? ` · ${l.sendable ?? 0} can be emailed` : ""}{l.rules?.length ? ` · ${l.rules.map((r) => r.type).join(" + ")}` : ""}</div></div>
                                 {l.kind === "static" && <button type="button" className="text-xs underline" onClick={() => reverify(l.id)}>Re-verify</button>}
-                                <button type="button" aria-label="Delete list" onClick={async () => { if (window.confirm(`Delete “${l.name}”? Contacts stay.`)) { await mkDeleteList(l.id).catch((e) => toast.error(formatApiError(e))); load(); } }}><Trash2 size={14} className="text-[#CC0033]" /></button>
+                                {canDelete(user) && <button type="button" aria-label="Delete list" onClick={() => delLists([l.id])}><Trash2 size={14} className="text-[#CC0033]" /></button>}
                             </li>
                         ))}
                         {!lists.length && <li className="py-4 text-[#6B7280]">None yet.</li>}
