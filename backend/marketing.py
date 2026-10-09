@@ -289,6 +289,9 @@ async def _ses_cached(norms: list) -> dict:
     fresh = (_now() - timedelta(days=SES_CHECK_TTL_DAYS)).isoformat()
     out = {}
     async for d in db.mk_ses_checks.find({"email_norm": {"$in": norms}, "at": {"$gte": fresh}}, {"_id": 0}):
+        # Re-derive from the stored SES levels so a rule fix (e.g. "mailbox
+        # does not exist" -> invalid) applies to verdicts already paid for.
+        d["status"] = core.ses_status(d.get("overall", ""), d.get("mailbox", "")) or d.get("status")
         out[d["email_norm"]] = d
     return out
 
@@ -718,7 +721,9 @@ async def audience_filter(campaign: dict) -> dict:
     else:
         flt["email_consent.status"] = "subscribed"
         flt["suppressed"] = {"$in": [None, ""]}
-        flt["email_status"] = {"$in": ["verified", "valid", "risky", "unknown"]}
+        # Only the statuses ticked for this campaign (+ not-yet-checked, which
+        # are checked on Send and then filtered by the same ticks).
+        flt["email_status"] = {"$in": sorted(core.selected_statuses(aud)) + ["unknown"]}
     return flt
 
 
@@ -774,13 +779,14 @@ async def _prepare_campaign(cid: str) -> None:
                 if not cur or cur.get("status") != "preparing":
                     return  # cancelled while checking
         pol = _policy(st, c)
+        allowed = core.selected_statuses(c.get("audience"))
         now = _iso()
         docs, skipped = [], {}
         for x in contacts:
             if is_email:
                 act, prio, why = core.send_decision(x.get("email_status") or "unknown", x.get("risk_kind") or "", pol,
                                                     needs_ses=ses_on and x.get("email_status") != "verified",
-                                                    has_ses=bool(x.get("_ses")))
+                                                    has_ses=bool(x.get("_ses")), allowed=allowed)
             else:
                 act, prio, why = "send", 1, ""
             doc = {"id": str(uuid.uuid4()), "campaign_id": cid, "contact_id": x["id"], "priority": prio, "queued_at": now,
@@ -1367,6 +1373,7 @@ async def adm_import(
     consent_source: str = Form(""),
     autofix: bool = Form(True),
     dry_run: bool = Form(True),
+    statuses: str = Form("verified,valid,risky"),
     user: dict = Depends(require_admin),
 ):
     """Upload a sheet -> verification report. dry_run=True only reports;
@@ -1415,8 +1422,9 @@ async def adm_import(
         lid = str(uuid.uuid4())
         await db.mk_lists.insert_one({"id": lid, "name": name[:80], "kind": "static", "created_at": _iso(), "created_by": user.get("email", "")})
         src = f"import: {consent_source.strip() or name}"[:120]
+        wanted = core.selected_statuses({"statuses": [x.strip() for x in statuses.split(",")]})
         for r, v in zip(unique_rows, results):
-            if v["status"] in ("invalid", "suppressed"):
+            if v["status"] in ("invalid", "suppressed") or v["status"] not in wanted:
                 continue
             if v["status"] == "risky" and v.get("role") and not st["include_role_addresses"]:
                 pass  # kept, but campaigns skip risky unless asked
@@ -1671,6 +1679,8 @@ async def adm_patch_campaign(cid: str, body: CampaignBody):
     if c["status"] not in ("draft", "scheduled"):
         raise HTTPException(status_code=409, detail="Only a draft can be edited — duplicate it to make changes")
     upd = {k: v for k, v in body.model_dump().items() if v is not None and k != "channel"}
+    if "audience" in upd and "statuses" in (upd["audience"] or {}):
+        upd["audience"]["statuses"] = sorted(core.selected_statuses(upd["audience"]))
     if "blocks" in upd:
         upd["blocks"] = _clean_blocks(upd["blocks"])
         upd["links"] = core.collect_links(upd["blocks"])
@@ -1726,7 +1736,7 @@ async def adm_audience(cid: str):
             kinds.setdefault(k, {"n": 0, "action": pol.get(k, "skip")})
             kinds[k]["n"] += 1
     out.update(needs_check=needs, check_cost_inr=round(needs * use["per_check_inr"], 2), checks_left=use["left"],
-               ses_on=ses_on, risky_by_kind=kinds)
+               ses_on=ses_on, risky_by_kind=kinds, selected=sorted(core.selected_statuses(c.get("audience"))))
     return out
 
 

@@ -221,13 +221,22 @@ def ses_verdict(resp: dict) -> tuple:
         reasons.append("SES: looks randomly typed")
     if lvl("IsRoleAddress") == "HIGH":
         reasons.append("SES: shared / role mailbox")
-    if overall == "HIGH":
-        return "valid", reasons or ["SES: mailbox likely exists"]
-    if overall == "MEDIUM":
-        return "risky", reasons or ["SES: deliverability uncertain"]
-    if overall == "LOW":
-        return "invalid", reasons or ["SES: unlikely to be deliverable"]
-    return None, []
+    status = ses_status(overall, lvl("MailboxExists"))
+    if not status:
+        return None, []
+    default = {"valid": "SES: mailbox likely exists", "risky": "SES: deliverability uncertain",
+               "invalid": "SES: unlikely to be deliverable"}[status]
+    return status, reasons or [default]
+
+
+def ses_status(overall: str, mailbox: str = "") -> Optional[str]:
+    """Status from SES's levels. "Mailbox does not exist" (MailboxExists LOW)
+    is decisive on its own: SES can still give such an address a MEDIUM
+    overall score, but mailing it is a guaranteed bounce."""
+    overall, mailbox = (overall or "").upper(), (mailbox or "").upper()
+    if mailbox == "LOW":
+        return "invalid" if overall else None
+    return {"HIGH": "valid", "MEDIUM": "risky", "LOW": "invalid"}.get(overall)
 
 
 def ses_details(resp: dict) -> dict:
@@ -262,12 +271,27 @@ def risk_kind(*, role: bool, domain: str, ses_overall: str = "", mailbox: str = 
     return "unconfirmed"
 
 
-def send_decision(status: str, kind: str, policy: Optional[dict], *, needs_ses: bool, has_ses: bool) -> tuple:
+SELECTABLE = ("verified", "valid", "risky")
+
+
+def selected_statuses(audience: Optional[dict]) -> frozenset:
+    """Which address statuses a campaign goes to (the admin's tick-boxes).
+    Missing / empty / junk -> all three, so older campaigns behave as before."""
+    got = frozenset(x for x in ((audience or {}).get("statuses") or []) if x in SELECTABLE)
+    return got or frozenset(SELECTABLE)
+
+
+def send_decision(status: str, kind: str, policy: Optional[dict], *, needs_ses: bool, has_ses: bool,
+                  allowed: Optional[frozenset] = None) -> tuple:
     """-> (action, priority, reason) for one recipient when a campaign is
     prepared. action: 'send' | 'tail' (sent last, stops itself if it bounces)
-    | 'skip' (recorded with the reason, never sent). Lower priority goes first."""
+    | 'skip' (recorded with the reason, never sent). Lower priority goes first.
+    `allowed` = the statuses ticked for this campaign; the status used is the
+    one AFTER the pre-send check."""
     if status in ("invalid", "suppressed"):
         return "skip", 9, f"address {status}"
+    if allowed is not None and status in SELECTABLE and status not in allowed:
+        return "skip", 9, f"{status} — not ticked for this campaign"
     if status == "verified":
         return "send", 0, ""
     if needs_ses and not has_ses:

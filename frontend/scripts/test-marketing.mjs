@@ -53,7 +53,7 @@ console.log("-- consent --");
 check(/email_marketing_optin/.test(checkout) && /email_marketing_optin:\s*bool\s*=\s*False/.test(srv), "checkout email opt-in exists and defaults to off");
 check(/email_consent\.status"\s*:\s*"subscribed"/.test(mk), "audiences require subscribed consent");
 check(/wa_consent\.status"\s*:\s*"subscribed"/.test(mk), "WhatsApp audiences require WhatsApp opt-in");
-check(/flt\["suppressed"\]\s*=\s*\{"\$in": \[None, ""\]\}/.test(mk) && /flt\["email_status"\] = \{"\$in": \["verified", "valid", "risky", "unknown"\]\}/.test(mk), "suppressed / unsendable addresses are filtered");
+check(/flt\["suppressed"\]\s*=\s*\{"\$in": \[None, ""\]\}/.test(mk) && /flt\["email_status"\] = \{"\$in": sorted\(core\.selected_statuses\(aud\)\) \+ \["unknown"\]\}/.test(mk), "suppressed / unsendable addresses are filtered");
 check(/mk_erased/.test(mk), "erased people can't be re-imported");
 check(/List-Unsubscribe-Post/.test(mk) || /List-Unsubscribe-Post/.test(core), "one-click unsubscribe header");
 check(/NoIndex|noindex/.test(unsub), "unsubscribe page is not indexed");
@@ -94,6 +94,11 @@ check(/EmailValidationSuppressed/.test(mk) && /"blocked"/.test(mk) && /k not in 
     "SES auto-validation blocks are not counted as sent or bounced (no false auto-pause)");
 check(/hasattr\(_ses\(\), "get_email_address_insights"\)/.test(mk), "old AWS SDK detected instead of crashing");
 check(/results = await verify_emails\(\[r\.get\(ecol, ""\) for r in unique_rows\], autofix=autofix, ses="cache"\)/.test(mk), "import (incl. dry-run) uses cached SES verdicts only — never spends money");
+
+check(/allowed=allowed\)/.test(mk) && /core\.selected_statuses\(aud\)/.test(mk), "campaign status tick-boxes filter both the count and the send");
+check(/core\.ses_status\(d\.get\("overall", ""\), d\.get\("mailbox", ""\)\)/.test(mk), "saved SES verdicts are re-derived (rule fixes apply to paid checks)");
+check(/v\["status"\] not in wanted/.test(mk) && /statuses: Object\.keys\(pick\)/.test(page), "import only the ticked statuses");
+check(/data-testid=\{`mk-status-\$\{k\}`\}/.test(page), "campaign has Verified / Valid / Risky tick-boxes");
 
 console.log("-- screen --");
 for (const t of ["mk-dashboard", "mk-editor", "mk-contacts", "mk-lists", "mk-verify", "mk-settings", "mk-report", "mk-dry-run"]) {

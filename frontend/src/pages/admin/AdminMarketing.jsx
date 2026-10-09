@@ -24,6 +24,8 @@ import { LineChart, BarChart, Funnel, Donut, Kpi, pct, inr } from "../../compone
  */
 const TABS = [["dash", "Dashboard"], ["campaigns", "Campaigns"], ["contacts", "Contacts"], ["lists", "Lists & segments"], ["verify", "Verify & import"], ["settings", "Settings"]];
 const STATUS_COLORS = { verified: "#15803D", valid: "#38bdf8", risky: "#F59E0B", invalid: "#CC0033", suppressed: "#6B7280", unknown: "#D1D5DB" };
+const SELECTABLE = [["verified", "Verified", "proven: confirmed account or delivered before"],
+    ["valid", "Valid", "mailbox checked"], ["risky", "Risky", "follows the risk rules in Settings"]];
 const RISK_LABEL = { role: "role address (info@, admin@)", catch_all: "domain accepts any address (catch-all)", unconfirmed: "mailbox unconfirmed" };
 const ACTION_LABEL = { send: "sent", tail: "sent last — stops itself if it bounces", skip: "skipped" };
 const CAMP_TONE = { preparing: "border-[#7c3aed] text-[#7c3aed]", draft: "border-[#9CA3AF] text-[#4B5563]", scheduled: "border-[#38bdf8] text-[#0369a1]", sending: "border-[#F59E0B] text-[#B4750F]",
@@ -262,6 +264,17 @@ function CampaignEditor({ c, setC, reload }) {
     const setBlocks = (blocks) => patch({ blocks });
     const blocks = c.blocks || [];
     const audSel = c.audience || { list_ids: [] };
+    const statuses = audSel.statuses?.length ? audSel.statuses : SELECTABLE.map(([k]) => k);
+    const toggleStatus = async (k) => {
+        const next = statuses.includes(k) ? statuses.filter((x) => x !== k) : [...statuses, k];
+        if (!next.length) return toast.error("Tick at least one.");
+        const audience = { ...audSel, statuses: next };
+        patch({ audience });
+        try {  // save just the audience and recount straight away — no extra click
+            await mkSaveCampaign(c.id, { audience });
+            setAud(await mkAudience(c.id));
+        } catch (e) { toast.error(formatApiError(e)); }
+    };
     const toggleList = (lid) => {
         const ids = new Set(audSel.list_ids || []);
         if (ids.has(lid)) ids.delete(lid); else ids.add(lid);
@@ -320,6 +333,21 @@ function CampaignEditor({ c, setC, reload }) {
                             </label>
                         ))}
                         {!lists.length && <p className="text-[#6B7280]">No lists yet — import or sync contacts first (Verify &amp; import / Contacts).</p>}
+                        {isEmail && (
+                            <div className="border-t border-[#E5E7EB] pt-2" data-testid="mk-statuses">
+                                <div className="text-xs text-[#4B5563] mb-1">Send to addresses that are:</div>
+                                <div className="flex flex-wrap gap-x-5 gap-y-1">
+                                    {SELECTABLE.map(([k, label, hint]) => (
+                                        <label key={k} className="flex items-center gap-2" title={hint}>
+                                            <input type="checkbox" checked={statuses.includes(k)} onChange={() => toggleStatus(k)} data-testid={`mk-status-${k}`} />
+                                            <span style={{ color: STATUS_COLORS[k] }} className="font-medium">{label}</span>
+                                            <span className="text-xs text-[#6B7280]">({aud?.by_status?.[k] ?? 0})</span>
+                                        </label>
+                                    ))}
+                                </div>
+                                <div className="text-[11px] text-[#6B7280] mt-1">Not-yet-checked addresses are checked on Send, then go only if their result is ticked. Invalid and bounced never go.</div>
+                            </div>
+                        )}
                         {aud && (
                             <div className="bg-[#F5F7FA] p-3 text-sm space-y-1" data-testid="mk-audience">
                                 <div><b>Up to {aud.total.toLocaleString("en-IN")}</b> {isEmail ? "opted-in contacts" : "contacts with WhatsApp opt-in"} (unsubscribed and bounced are always excluded)</div>
@@ -744,6 +772,7 @@ function VerifyImport() {
     const [file, setFile] = useState(null);
     const [report, setReport] = useState(null);
     const [opts, setOpts] = useState({ list_name: "", consent_email: false, consent_whatsapp: false, consent_source: "", autofix: true });
+    const [pick, setPick] = useState({ verified: true, valid: true, risky: true });
     const [busy, setBusy] = useState(false);
     const fileIn = useRef(null);
     const runQuick = async () => {
@@ -757,7 +786,7 @@ function VerifyImport() {
         if (!dry && (opts.consent_email || opts.consent_whatsapp) && opts.consent_source.trim().length < 3) return toast.error("Say where these people agreed to hear from you.");
         setBusy(true);
         try {
-            const r = await mkImport(file, { ...opts, dry_run: dry });
+            const r = await mkImport(file, { ...opts, dry_run: dry, statuses: Object.keys(pick).filter((k) => pick[k]).join(",") });
             setReport(r);
             if (!dry) toast.success(`Imported ${r.saved} contacts into the list.`);
         } catch (e) { toast.error(formatApiError(e)); } finally { setBusy(false); }
@@ -789,9 +818,23 @@ function VerifyImport() {
                     {report && (
                         <div className="space-y-3" data-testid="mk-import-report">
                             <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 text-center">
-                                {[["total", "Rows"], ["verified", "Verified"], ["valid", "Valid"], ["risky", "Risky"], ["invalid", "Invalid"], ["suppressed", "Bounced/unsub before"]].map(([k, l]) => (
-                                    <div key={k} className="border border-[#E5E7EB] p-2"><div className="text-lg font-serif" style={{ color: STATUS_COLORS[k] || "#002B5C" }}>{c[k] || 0}</div><div className="text-[10px] text-[#6B7280]">{l}</div></div>
-                                ))}
+                                {[["total", "Rows"], ["verified", "Verified"], ["valid", "Valid"], ["risky", "Risky"], ["invalid", "Invalid"], ["suppressed", "Bounced/unsub before"]].map(([k, l]) => {
+                                    const selectable = k in pick;
+                                    const on = selectable && pick[k];
+                                    const body = (
+                                        <>
+                                            <div className="text-lg font-serif" style={{ color: STATUS_COLORS[k] || "#002B5C" }}>{c[k] || 0}</div>
+                                            <div className="text-[10px] text-[#6B7280]">{l}</div>
+                                            {selectable && report.dry_run && <input type="checkbox" className="mt-1" checked={on} readOnly tabIndex={-1} aria-hidden="true" />}
+                                        </>
+                                    );
+                                    return selectable && report.dry_run ? (
+                                        <button key={k} type="button" aria-pressed={on} onClick={() => setPick({ ...pick, [k]: !pick[k] })} data-testid={`mk-pick-${k}`}
+                                            className={`border p-2 ${on ? "border-[#002B5C] bg-white" : "border-[#E5E7EB] opacity-60"}`} title={on ? "Will be imported — click to leave out" : "Left out — click to import"}>
+                                            {body}
+                                        </button>
+                                    ) : <div key={k} className="border border-[#E5E7EB] p-2">{body}</div>;
+                                })}
                             </div>
                             {report.ses && report.ses.enabled && report.ses.to_check > 0 && (
                                 <div className="text-xs bg-[#F5F7FA] p-2" data-testid="mk-import-ses">
@@ -816,7 +859,9 @@ function VerifyImport() {
                                         <input className={box} placeholder="Where did they agree? e.g. 'Summit registration form, opt-in box'" value={opts.consent_source} onChange={(e) => setOpts({ ...opts, consent_source: e.target.value })} />
                                     )}
                                     <p className="text-xs text-[#6B7280]">Without consent the contacts are saved but no campaign will go to them. Invalid and previously bounced/unsubscribed addresses are never imported.</p>
-                                    <button type="button" className={`${btn} bg-[#002B5C] text-white`} onClick={() => run(false)} disabled={busy} data-testid="mk-import">2. Import {(c.verified || 0) + (c.valid || 0) + (c.risky || 0)} contacts</button>
+                                    <button type="button" className={`${btn} bg-[#002B5C] text-white`} onClick={() => run(false)} data-testid="mk-import"
+                                        disabled={busy || !Object.values(pick).some(Boolean)}>2. Import {["verified", "valid", "risky"].reduce((a, k) => a + (pick[k] ? c[k] || 0 : 0), 0)} contacts</button>
+                                    <p className="text-xs text-[#6B7280]">Click Verified / Valid / Risky above to choose which to import.</p>
                                 </div>
                             )}
                         </div>

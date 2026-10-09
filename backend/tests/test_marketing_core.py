@@ -90,6 +90,20 @@ check(not m.is_bad_domain("gmail.com", 50), "webmail domains are never marked ba
 check(m.checks_for_budget(850, 85) == 1000 and m.checks_for_budget(0, 85) == 0 and m.checks_for_budget(100, 0) == 0, "₹ budget -> checks")
 check(not m.tail_should_stop(10, 5) and m.tail_should_stop(40, 2) and not m.tail_should_stop(40, 1), "tail stops above 3% after 20 sends")
 
+print("-- mailbox missing + status tick-boxes --")
+st, rs = m.ses_verdict(ses("MEDIUM", MailboxExists="LOW"))
+check(st == "invalid" and "SES: mailbox does not exist" in rs, "mailbox does not exist -> invalid even with a MEDIUM overall score")
+check(m.ses_status("MEDIUM", "LOW") == "invalid" and m.ses_status("HIGH", "HIGH") == "valid" and m.ses_status("", "LOW") is None,
+      "ses_status: decisive mailbox LOW; no overall -> not checked")
+check(m.selected_statuses(None) == frozenset(m.SELECTABLE) and m.selected_statuses({"statuses": ["junk"]}) == frozenset(m.SELECTABLE),
+      "no / junk selection -> all three (old campaigns unchanged)")
+A = m.selected_statuses({"statuses": ["verified", "valid"]})
+check(m.send_decision("verified", "", P, needs_ses=True, has_ses=False, allowed=A)[0] == "send", "ticked verified -> sent")
+d = m.send_decision("risky", "role", P, needs_ses=True, has_ses=True, allowed=A)
+check(d[0] == "skip" and "not ticked" in d[2], "risky not ticked -> skipped with the reason, even if the rule says send")
+check(m.send_decision("verified", "", P, needs_ses=False, has_ses=False, allowed=frozenset({"valid"}))[0] == "skip", "verified can be unticked too")
+check(m.send_decision("invalid", "", P, needs_ses=False, has_ses=False, allowed=frozenset(m.SELECTABLE))[0] == "skip", "invalid never selectable")
+
 print("-- auto-pause --")
 check(m.should_pause(40, 5, 0) is None, "no decision on too little data")
 check(m.should_pause(100, 2, 0) is None, "2% bounces is allowed")
