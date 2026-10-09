@@ -4,7 +4,7 @@ import { ArrowDown, ArrowUp, Mail, MessageCircle, Plus, Search, Trash2, X } from
 import {
     mkDashboard, mkHealth, mkSettings, mkSaveSettings, mkVerify, mkImport, mkReverify, mkSync, mkContacts, mkPatchContact,
     mkDeleteContact, mkLists, mkCreateList, mkDeleteList, mkCampaigns, mkNewCampaign, mkCampaign, mkSaveCampaign, mkDuplicate,
-    mkAudience, mkPreview, mkTestSend, mkSend, mkCampaignAction, mkReport, fetchBooks, fetchCategories, mediaUrl, formatApiError,
+    mkAudience, mkPreview, mkTestSend, mkSend, mkCampaignAction, mkReport, mkDismissAlert, mkSuppressionSync, fetchBooks, fetchCategories, mediaUrl, formatApiError,
 } from "../../lib/api";
 import { useAuth } from "../../context/AuthContext";
 import { isSuperadmin, canDelete } from "../../lib/rbac";
@@ -24,7 +24,9 @@ import { LineChart, BarChart, Funnel, Donut, Kpi, pct, inr } from "../../compone
  */
 const TABS = [["dash", "Dashboard"], ["campaigns", "Campaigns"], ["contacts", "Contacts"], ["lists", "Lists & segments"], ["verify", "Verify & import"], ["settings", "Settings"]];
 const STATUS_COLORS = { verified: "#15803D", valid: "#38bdf8", risky: "#F59E0B", invalid: "#CC0033", suppressed: "#6B7280", unknown: "#D1D5DB" };
-const CAMP_TONE = { draft: "border-[#9CA3AF] text-[#4B5563]", scheduled: "border-[#38bdf8] text-[#0369a1]", sending: "border-[#F59E0B] text-[#B4750F]",
+const RISK_LABEL = { role: "role address (info@, admin@)", catch_all: "domain accepts any address (catch-all)", unconfirmed: "mailbox unconfirmed" };
+const ACTION_LABEL = { send: "sent", tail: "sent last — stops itself if it bounces", skip: "skipped" };
+const CAMP_TONE = { preparing: "border-[#7c3aed] text-[#7c3aed]", draft: "border-[#9CA3AF] text-[#4B5563]", scheduled: "border-[#38bdf8] text-[#0369a1]", sending: "border-[#F59E0B] text-[#B4750F]",
     paused: "border-[#CC0033] text-[#CC0033]", sent: "border-[#15803D] text-[#15803D]", cancelled: "border-[#9CA3AF] text-[#9CA3AF]" };
 const when = (iso) => (iso ? new Date(iso).toLocaleString("en-IN") : "—");
 const SITE = "https://www.oakbridge.in";
@@ -78,8 +80,22 @@ function Dashboard({ onOpen }) {
     if (!d) return <p className="text-sm text-[#4B5563]">Loading…</p>;
     if (d.error) return <p className="text-sm text-[#CC0033]">Could not load the dashboard.</p>;
     const k = d.kpi;
+    const dismiss = async (aid) => {
+        try { await mkDismissAlert(aid); setD({ ...d, alerts: d.alerts.filter((a) => a.id !== aid) }); } catch (e) { toast.error(formatApiError(e)); }
+    };
     return (
         <div className="space-y-6" data-testid="mk-dashboard">
+            {(d.alerts || []).map((a) => (
+                <div key={a.id} className="border border-[#CC0033] bg-white text-sm p-3 flex items-start gap-3" data-testid="mk-alert">
+                    <span className="text-[#CC0033] font-medium">Needs a look</span>
+                    <span className="flex-1">{a.message} <span className="text-xs text-[#6B7280]">({when(a.at)})</span>
+                        {a.campaign_id && <button type="button" className="underline ml-2" onClick={() => onOpen(a.campaign_id)}>Open campaign</button>}</span>
+                    <button type="button" aria-label="Dismiss" onClick={() => dismiss(a.id)}><X size={14} /></button>
+                </div>
+            ))}
+            {d.ses_usage?.near_limit && (
+                <div className="border border-[#F59E0B] bg-white text-sm p-3"><SesUsage u={d.ses_usage} /></div>
+            )}
             <div className="flex flex-wrap items-center gap-2 text-sm">
                 Period
                 {[7, 30, 90, 365].map((n) => (
@@ -124,6 +140,21 @@ function HealthBadge({ h }) {
         <span className={`ml-auto text-xs ${sandbox ? "text-[#B4750F]" : "text-[#15803D]"}`} data-testid="mk-health">
             SES {sandbox ? "sandbox (only verified recipients)" : "ready"} · {h.sent_24h ?? 0}/{h.max_24h ?? "?"} sent in 24h · 30-day bounce {pct(h.last30?.bounce_rate, 2)}
         </span>
+    );
+}
+
+/** "Amazon SES mailbox checks: 120 of 1000 this month (≈ $1.20)" + why it stopped, if it did. */
+function SesUsage({ u }) {
+    if (!u) return null;
+    if (!u.enabled) return <p className="text-xs text-[#B4750F]">Amazon SES mailbox checks are switched off (Settings) — only the free checks run.</p>;
+    if (!u.supported) return <p className="text-xs text-[#CC0033]">The server's AWS library is too old for SES mailbox checks. In Render, use “Clear build cache &amp; deploy”.</p>;
+    return (
+        <p className="text-xs text-[#4B5563]" data-testid="mk-ses-usage">
+            Amazon SES mailbox checks this month: <b>{u.used}</b> of {u.cap} (₹{u.spent_inr} of ₹{u.budget_inr} budget)
+            {u.used >= u.cap ? <span className="text-[#CC0033]"> — budget used up; unchecked addresses are skipped until next month or a higher budget.</span>
+                : u.near_limit ? <span className="text-[#B4750F]"> — over 80% used.</span> : null}
+            {u.last_stop && u.used < u.cap && <span className="text-[#CC0033]"> — last run stopped: {u.last_stop.why}</span>}
+        </p>
     );
 }
 
@@ -240,12 +271,15 @@ function CampaignEditor({ c, setC, reload }) {
         const s = await save(true);
         if (!s) return;
         const a = await mkAudience(c.id).catch(() => null);
-        if (!a?.total) return toast.error("Nobody in this audience can be sent to (consent / verification).");
+        if (!a?.total) return toast.error("Nobody in this audience can be sent to — no one has opted in, or all are unsubscribed / bounced.");
         const whenTxt = schedule ? `at ${new Date(schedule).toLocaleString("en-IN")}` : "now";
-        if (!window.confirm(`Send "${c.name}" to ${a.total.toLocaleString("en-IN")} ${isEmail ? "email addresses" : "WhatsApp numbers"} ${whenTxt}?\n\nEstimated cost ≈ ₹${a.estimated_cost_inr}.${isEmail ? "\nSending pauses automatically if bounces pass the limit." : ""}`)) return;
+        const checks = isEmail && a.ses_on && a.needs_check > 0
+            ? `\n\nFirst, ${a.needs_check} addresses get an Amazon SES mailbox check (≈ ₹${a.check_cost_inr}). Any that fail, or can't be checked, are skipped automatically.` : "";
+        const guard = isEmail ? "\nIf bounces spike, unproven addresses are dropped and sending carries on; a second spike pauses it." : "";
+        if (!window.confirm(`Send "${c.name}" to up to ${a.total.toLocaleString("en-IN")} ${isEmail ? "email addresses" : "WhatsApp numbers"} ${whenTxt}?${checks}\n\nEstimated sending cost ≈ ₹${a.estimated_cost_inr}.${guard}`)) return;
         try {
             const r = await mkSend(c.id, a.total, schedule ? new Date(schedule).toISOString() : null);
-            toast.success(r.status === "scheduled" ? `Scheduled for ${r.recipients} people.` : `Sending to ${r.recipients} people.`);
+            toast.success(`Checking mailboxes, then ${schedule ? "scheduling" : "sending"} — up to ${r.recipients} people.`);
             reload();
         } catch (e) { toast.error(formatApiError(e)); }
     };
@@ -286,16 +320,25 @@ function CampaignEditor({ c, setC, reload }) {
                             </label>
                         ))}
                         {!lists.length && <p className="text-[#6B7280]">No lists yet — import or sync contacts first (Verify &amp; import / Contacts).</p>}
-                        {isEmail && (
-                            <label className="flex items-center gap-2 text-[#B4750F]">
-                                <input type="checkbox" checked={!!audSel.include_risky} onChange={(e) => patch({ audience: { ...audSel, include_risky: e.target.checked } })} />
-                                Also send to risky addresses (role addresses like info@, unconfirmed typos) — sent last
-                            </label>
-                        )}
                         {aud && (
-                            <div className="bg-[#F5F7FA] p-3 text-sm" data-testid="mk-audience">
-                                <b>{aud.total.toLocaleString("en-IN")}</b> will receive it (subscribed{isEmail ? ", verified/valid" : ", WhatsApp opt-in"}; unsubscribed and bounced are always excluded)
-                                <div className="text-xs text-[#4B5563] mt-1">{Object.entries(aud.by_status || {}).map(([k, v]) => `${k}: ${v}`).join(" · ")} · est. cost ≈ ₹{aud.estimated_cost_inr}</div>
+                            <div className="bg-[#F5F7FA] p-3 text-sm space-y-1" data-testid="mk-audience">
+                                <div><b>Up to {aud.total.toLocaleString("en-IN")}</b> {isEmail ? "opted-in contacts" : "contacts with WhatsApp opt-in"} (unsubscribed and bounced are always excluded)</div>
+                                <div className="text-xs text-[#4B5563]">{Object.entries(aud.by_status || {}).map(([k, v]) => `${k}: ${v}`).join(" · ")} · est. sending cost ≈ ₹{aud.estimated_cost_inr}</div>
+                                {isEmail && aud.ses_on && (
+                                    <div className="text-xs text-[#4B5563]" data-testid="mk-audience-checks">
+                                        {aud.needs_check > 0
+                                            ? <>On Send, <b>{aud.needs_check}</b> get an Amazon SES mailbox check first (≈ ₹{aud.check_cost_inr}); ones that fail are skipped automatically.
+                                                {aud.needs_check > aud.checks_left && <span className="text-[#CC0033]"> Only {aud.checks_left} checks left in this month's budget — the rest will be skipped.</span>}</>
+                                            : "Everyone here is already checked or proven."}
+                                    </div>
+                                )}
+                                {isEmail && Object.keys(aud.risky_by_kind || {}).length > 0 && (
+                                    <ul className="text-xs text-[#B4750F]">
+                                        {Object.entries(aud.risky_by_kind).map(([k, v]) => (
+                                            <li key={k}>{v.n} risky — {RISK_LABEL[k] || k}: {ACTION_LABEL[v.action] || v.action}</li>
+                                        ))}
+                                    </ul>
+                                )}
                             </div>
                         )}
                         <button type="button" className="underline text-xs" onClick={() => save()}>Save &amp; recount</button>
@@ -435,10 +478,10 @@ function CampaignReport({ id, status, reload }) {
     const load = useCallback(() => { mkReport(id).then(setR).catch((e) => toast.error(formatApiError(e))); }, [id]);
     useEffect(() => {
         load();
-        if (status !== "sending") return undefined;
-        const t = setInterval(load, 15000);  // live while sending
+        if (!["sending", "preparing"].includes(status)) return undefined;
+        const t = setInterval(() => { load(); if (status === "preparing") reload(); }, status === "preparing" ? 5000 : 15000);  // live while checking / sending
         return () => clearInterval(t);
-    }, [load, status]);
+    }, [load, status, reload]);
     const act = async (a) => {
         if (a === "cancel" && !window.confirm("Cancel this campaign? Messages not yet sent will not go.")) return;
         try { await mkCampaignAction(id, a); toast.success("Done."); reload(); load(); } catch (e) { toast.error(formatApiError(e)); }
@@ -454,10 +497,24 @@ function CampaignReport({ id, status, reload }) {
                 <span className="ml-auto flex gap-2">
                     {["sending", "scheduled"].includes(status) && <button type="button" className="border px-3 py-1 text-sm" onClick={() => act("pause")}>Pause</button>}
                     {status === "paused" && <button type="button" className="border border-[#15803D] text-[#15803D] px-3 py-1 text-sm" onClick={() => act("resume")}>Resume</button>}
-                    {["sending", "scheduled", "paused"].includes(status) && <button type="button" className="border border-[#CC0033] text-[#CC0033] px-3 py-1 text-sm" onClick={() => act("cancel")}>Cancel</button>}
+                    {["preparing", "sending", "scheduled", "paused"].includes(status) && <button type="button" className="border border-[#CC0033] text-[#CC0033] px-3 py-1 text-sm" onClick={() => act("cancel")}>Cancel</button>}
                 </span>
             </div>
             {r.campaign.paused_reason && <div className="border border-[#CC0033] text-[#CC0033] p-2 text-sm">{r.campaign.paused_reason}</div>}
+            {status === "preparing" && (
+                <div className="border border-[#7c3aed] text-[#5b21b6] p-2 text-sm" data-testid="mk-preparing">
+                    Checking mailboxes before sending… {r.campaign.prepare?.checked ?? 0} of {r.campaign.prepare?.to_check ?? "?"} checked. Sending starts by itself.
+                </div>
+            )}
+            {r.campaign.prepare_error && <div className="border border-[#CC0033] text-[#CC0033] p-2 text-sm">Could not prepare: {r.campaign.prepare_error}</div>}
+            {r.campaign.recovery && (
+                <div className="border border-[#F59E0B] text-[#92400e] p-2 text-sm" data-testid="mk-recovery">
+                    Bounce spike at {when(r.campaign.recovery.at)} ({r.campaign.recovery.reason}): {r.campaign.recovery.dropped} unproven addresses were dropped
+                    {r.campaign.recovery.rechecked ? `, ${r.campaign.recovery.rechecked} re-checked` : ""} and sending carried on.
+                </div>
+            )}
+            {r.campaign.tail_stopped_at && <div className="border border-[#F59E0B] text-[#92400e] p-2 text-sm">The catch-all tail stopped itself at {when(r.campaign.tail_stopped_at)} — too many of those bounced.</div>}
+            {r.campaign.note && <div className="border p-2 text-sm">{r.campaign.note}</div>}
             <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3">
                 <Kpi label="Sent" value={(s.sent || 0).toLocaleString("en-IN")} sub={s.queued ? `${s.queued} waiting` : ""} />
                 <Kpi label="Delivered" value={pct(r.rates.delivery)} />
@@ -481,6 +538,13 @@ function CampaignReport({ id, status, reload }) {
                     ))}</tbody></table>
                 </Panel>
             )}
+            {(r.skipped || []).length > 0 && (
+                <Panel title={`Not sent (${r.skipped.reduce((a, x) => a + x.n, 0)})`}>
+                    <table className="w-full text-xs" data-testid="mk-skipped"><tbody>{r.skipped.map((x) => (
+                        <tr key={x.reason} className="border-t"><td className="py-1 pr-3">{x.reason}</td><td className="text-right font-medium">{x.n}</td></tr>
+                    ))}</tbody></table>
+                </Panel>
+            )}
             {r.problems.length > 0 && (
                 <Panel title={`Bounces, complaints and failures (${r.problems.length})`}>
                     <table className="w-full text-xs"><tbody>{r.problems.map((p, i) => (
@@ -497,17 +561,23 @@ function HourChart({ timeline = {} }) {
     const hours = Object.keys(timeline);
     if (!hours.length) return <p className="text-sm text-[#6B7280]">No opens or clicks yet.</p>;
     const max = Math.max(1, ...hours.map((h) => timeline[h].opened));
+    // Keys are UTC hours ("2026-10-09T09") from the server; show them in the
+    // admin's own time zone (IST), or 09h reads as five and a half hours off.
+    const local = (h) => new Date(`${h}:00:00Z`).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", hour12: true });
     return (
         <div>
+            {/* h-full on each column: without it the column is as tall as its
+                content, so the bars' percentage heights resolve to 0 and a
+                real open shows as an empty chart. */}
             <div className="flex items-end gap-[2px] h-32">
                 {hours.map((h) => (
-                    <div key={h} className="flex-1 flex flex-col justify-end" title={`${h.replace("T", " ")}:00 — ${timeline[h].opened} opens, ${timeline[h].clicked} clicks`}>
+                    <div key={h} className="flex-1 h-full flex flex-col justify-end max-w-[48px]" title={`${local(h)} — ${timeline[h].opened} opens, ${timeline[h].clicked} clicks`}>
                         <div style={{ height: `${(timeline[h].clicked / max) * 100}%`, background: "#F59E0B" }} />
                         <div style={{ height: `${((timeline[h].opened - timeline[h].clicked) / max) * 100}%`, background: "#38bdf8" }} />
                     </div>
                 ))}
             </div>
-            <div className="flex justify-between text-[10px] text-[#6B7280] mt-1"><span>{hours[0].replace("T", " ")}h</span><span>{hours[hours.length - 1].replace("T", " ")}h</span></div>
+            <div className="flex justify-between text-[10px] text-[#6B7280] mt-1"><span>{local(hours[0])}</span>{hours.length > 1 && <span>{local(hours[hours.length - 1])}</span>}</div>
             <div className="text-xs mt-1"><i className="inline-block w-3 h-3 bg-[#38bdf8] mr-1" />opens <i className="inline-block w-3 h-3 bg-[#F59E0B] ml-3 mr-1" />clicks</div>
         </div>
     );
@@ -566,6 +636,8 @@ function Contacts() {
                                     <td className="p-2 font-mono text-xs">{c.email}</td>
                                     <td className="text-xs">{c.name}<div className="text-[#6B7280]">{c.phone}</div></td>
                                     <td className="text-xs"><span style={{ color: STATUS_COLORS[c.email_status] }} className="font-medium">{c.email_status}</span>
+                                        {c.ses_checked && <span className="ml-1 text-[10px] border border-[#E5E7EB] px-1" title="Mailbox checked by Amazon SES">SES ✓</span>}
+                                        {c.email_status === "risky" && c.risk_kind && <div className="text-[#B4750F]">{RISK_LABEL[c.risk_kind] || c.risk_kind}</div>}
                                         {c.reasons?.length ? <div className="text-[#6B7280] max-w-[24ch]">{c.reasons.join("; ")}</div> : null}</td>
                                     <td className="text-xs">{c.email_consent?.status}{c.email_consent?.status === "subscribed" && <button type="button" className="block underline text-[#CC0033]" onClick={() => unsub(c.id, "email_consent")}>unsubscribe</button>}</td>
                                     <td className="text-xs">{c.wa_consent?.status}{c.wa_consent?.status === "subscribed" && <button type="button" className="block underline text-[#CC0033]" onClick={() => unsub(c.id, "wa_consent")}>opt out</button>}</td>
@@ -667,6 +739,7 @@ function Lists() {
 /* ------------------------------------------------------- verify / import --- */
 function VerifyImport() {
     const [paste, setPaste] = useState("");
+    const [useSes, setUseSes] = useState(true);
     const [quick, setQuick] = useState(null);
     const [file, setFile] = useState(null);
     const [report, setReport] = useState(null);
@@ -677,7 +750,7 @@ function VerifyImport() {
         const emails = paste.split(/[\n,;]+/).map((s) => s.trim()).filter(Boolean);
         if (!emails.length) return;
         setBusy(true);
-        try { setQuick(await mkVerify(emails)); } catch (e) { toast.error(formatApiError(e)); } finally { setBusy(false); }
+        try { setQuick(await mkVerify(emails, true, useSes)); } catch (e) { toast.error(formatApiError(e)); } finally { setBusy(false); }
     };
     const run = async (dry) => {
         if (!file) return toast.error("Choose an Excel (.xlsx) or CSV file.");
@@ -694,7 +767,9 @@ function VerifyImport() {
         <div className="grid xl:grid-cols-2 gap-6" data-testid="mk-verify">
             <Panel title="Check addresses (paste up to 200)">
                 <textarea rows={6} className={box} value={paste} onChange={(e) => setPaste(e.target.value)} placeholder={"one per line, or separated by commas\nrohan@gmial.com\ninfo@school.edu.in"} />
-                <button type="button" className={`${btn} bg-[#002B5C] text-white mt-2`} onClick={runQuick} disabled={busy}>Check</button>
+                <label className="flex items-center gap-2 text-sm mt-2"><input type="checkbox" checked={useSes} onChange={(e) => setUseSes(e.target.checked)} />
+                    Also ask Amazon SES whether each mailbox exists (≈ $0.01 each, never twice for the same address)</label>
+                <button type="button" className={`${btn} bg-[#002B5C] text-white mt-2`} onClick={runQuick} disabled={busy}>{busy ? "Checking…" : "Check"}</button>
                 {quick && (
                     <table className="w-full text-xs mt-3" data-testid="mk-quick-results"><tbody>
                         {quick.results.map((r, i) => (
@@ -718,6 +793,14 @@ function VerifyImport() {
                                     <div key={k} className="border border-[#E5E7EB] p-2"><div className="text-lg font-serif" style={{ color: STATUS_COLORS[k] || "#002B5C" }}>{c[k] || 0}</div><div className="text-[10px] text-[#6B7280]">{l}</div></div>
                                 ))}
                             </div>
+                            {report.ses && report.ses.enabled && report.ses.to_check > 0 && (
+                                <div className="text-xs bg-[#F5F7FA] p-2" data-testid="mk-import-ses">
+                                    {report.dry_run ? "After import, " : "Now running in the background: "}
+                                    <b>{report.ses.to_check}</b> address{report.ses.to_check === 1 ? "" : "es"} get an Amazon SES mailbox check (≈ ₹{report.ses.est_inr}).
+                                    Ones SES says don't exist become invalid; any still unchecked are checked automatically when a campaign is sent.
+                                    <SesUsage u={report.ses} />
+                                </div>
+                            )}
                             <div className="text-xs text-[#4B5563]">{c.duplicates_in_file || 0} duplicates removed · {c.fixed || 0} typos fixed · columns: email “{report.columns.email}”{report.columns.name ? `, name “${report.columns.name}”` : ""}{report.columns.phone ? `, phone “${report.columns.phone}”` : ""}</div>
                             {Object.entries(report.sample || {}).filter(([k]) => ["invalid", "risky", "suppressed"].includes(k)).map(([k, rows]) => (
                                 <details key={k} className="text-xs"><summary className="cursor-pointer" style={{ color: STATUS_COLORS[k] }}>{k}: examples</summary>
@@ -746,10 +829,11 @@ function VerifyImport() {
                     <li>Throwaway domains and role addresses (info@, admin@ — marked risky).</li>
                     <li>Does the domain receive email at all (its mail server is looked up).</li>
                     <li>Already proven: confirmed accounts and anyone we delivered to before → <b style={{ color: STATUS_COLORS.verified }}>verified</b>.</li>
+                    <li><b>Amazon SES mailbox check</b> for everyone not yet proven: does the mailbox exist, is it random or throwaway (≈ $0.01 each, within the monthly cap in Settings).</li>
                     <li>Bounced, complained or unsubscribed before → never mailed again.</li>
                     <li>While sending: verified first, risky last; the campaign auto-pauses above the bounce limit.</li>
                 </ol>
-                <p className="text-xs text-[#6B7280] mt-2">What it can't know for free: whether a specific mailbox exists at a real domain (wrongname@gmail.com). Those bounce once and are then suppressed automatically.</p>
+                <p className="text-xs text-[#6B7280] mt-2">SES gives a confidence, not a guarantee: the odd address it passes may still bounce once — it is then suppressed automatically.</p>
             </Panel>
         </div>
     );
@@ -772,6 +856,8 @@ function Settings() {
         try {
             const body = { from_name: s.from_name, from_email: s.from_email, reply_to: s.reply_to, footer: s.footer, logo: s.logo,
                 double_opt_in: s.double_opt_in, include_role_addresses: s.include_role_addresses, max_bounce: Number(s.max_bounce),
+                ses_validation: !!s.ses_validation, ses_budget_inr: Math.max(0, Number(s.ses_budget_inr) || 0), usd_inr: Number(s.usd_inr) || 88,
+                risk_policy: s.risk_policy, tail_max_bounce: Number(s.tail_max_bounce),
                 wa_rate_marketing: Number(s.wa_rate_marketing), wa_rate_utility: Number(s.wa_rate_utility),
                 extra_disposable: s.extra_disposable_text.split(/\s+/).filter(Boolean) };
             await mkSaveSettings(body);
@@ -799,6 +885,27 @@ function Settings() {
                     <label className="flex items-center gap-2"><input type="checkbox" checked={!!s.double_opt_in} disabled={!su} onChange={(e) => setS({ ...s, double_opt_in: e.target.checked })} />Double opt-in for website sign-ups (they confirm by email first)</label>
                     <label className="flex items-center gap-2"><input type="checkbox" checked={!!s.include_role_addresses} disabled={!su} onChange={(e) => setS({ ...s, include_role_addresses: e.target.checked })} />Treat role addresses (info@, admin@) as normal</label>
                     {F("max_bounce", "Auto-pause when bounces exceed (0.02 = 2%)", { type: "number", step: "0.005" })}
+                    <div className="border-t border-[#E5E7EB] pt-2 space-y-2">
+                        <label className="flex items-center gap-2"><input type="checkbox" checked={!!s.ses_validation} disabled={!su} onChange={(e) => setS({ ...s, ses_validation: e.target.checked })} data-testid="mk-ses-validation" />
+                            Check every new address with Amazon SES Email Validation before mailing it (≈ $0.01 per address)</label>
+                        <div className="grid grid-cols-2 gap-2">
+                            {F("ses_budget_inr", "Monthly budget for mailbox checks, ₹", { type: "number", step: "50", min: "0" })}
+                            {F("usd_inr", "USD → ₹ rate (for estimates)", { type: "number", step: "0.5" })}
+                        </div>
+                        <SesUsage u={s.ses_usage} />
+                        {s.waiting_checks > 0 && <p className="text-xs text-[#6B7280]">{s.waiting_checks} contacts not checked yet — they're checked in the background, or when a campaign is sent to them.</p>}
+                        <div className="text-sm font-medium text-[#002B5C] pt-1">Risky addresses — what campaigns do with them</div>
+                        {["role", "catch_all", "unconfirmed"].map((kk) => (
+                            <label key={kk} className="flex items-center justify-between gap-2 text-sm">
+                                <span>{RISK_LABEL[kk]}</span>
+                                <select className="border border-[#E5E7EB] px-2 py-1" disabled={!su} value={(s.risk_policy || {})[kk] || "skip"}
+                                    onChange={(e) => setS({ ...s, risk_policy: { ...(s.risk_policy || {}), [kk]: e.target.value } })} data-testid={`mk-risk-${kk}`}>
+                                    <option value="send">Send</option><option value="tail">Send last (stops itself if it bounces)</option><option value="skip">Skip</option>
+                                </select>
+                            </label>
+                        ))}
+                        {F("tail_max_bounce", "“Send last” stops itself above this bounce rate (0.03 = 3%)", { type: "number", step: "0.005" })}
+                    </div>
                     {F("wa_rate_marketing", "WhatsApp marketing cost per message, ₹ (for estimates)", { type: "number", step: "0.01" })}
                     {F("wa_rate_utility", "WhatsApp utility cost per message, ₹", { type: "number", step: "0.01" })}
                     <label className="block">Extra throwaway domains to block (one per line)
@@ -824,6 +931,10 @@ function Settings() {
                         <code className="block mt-1 p-2 bg-[#F5F7FA] text-xs break-all" data-testid="mk-sns-url">{s.sns_url}</code></div>
                     <div className="text-xs text-[#4B5563]">Event types: Delivery, Bounce, Complaint, Reject. Leave Open/Click tracking OFF in SES — the site tracks those itself.</div>
                     <div className="text-xs">Last event: {s.last_ses_event ? `${s.last_ses_event.type} at ${when(s.last_ses_event.at)}` : "none received yet"}</div>
+                    <div className="text-xs">AWS suppression list copied into Contacts daily — last: {s.suppression_sync?.suppression_synced_at ? `${when(s.suppression_sync.suppression_synced_at)} (+${s.suppression_sync.suppression_last_added ?? 0})` : "not yet"}{" "}
+                        <button type="button" className="underline" onClick={async () => {
+                            try { const r = await mkSuppressionSync(); if (r.ok === false) toast.error(`AWS said: ${r.error}`); else toast.success(`Synced: ${r.suppressed ?? 0} newly suppressed.`); load(); } catch (e) { toast.error(formatApiError(e)); }
+                        }}>Sync now</button></div>
                 </div>
             </Panel>
             {su ? <button type="button" className={`${btn} bg-[#002B5C] text-white w-max`} onClick={save}>Save settings</button>

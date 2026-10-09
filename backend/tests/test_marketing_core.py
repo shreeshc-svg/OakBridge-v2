@@ -47,6 +47,49 @@ check(m.verdict(m.check_syntax("info@company.com"), True) == "risky", "role addr
 check(m.verdict(ok, True, suppressed="bounced") == "suppressed", "bounced before -> suppressed, whatever else")
 check(m.SEND_ORDER["verified"] < m.SEND_ORDER["valid"] < m.SEND_ORDER["risky"], "proven addresses are sent first")
 
+print("-- SES email validation --")
+
+
+def ses(overall, **ev):
+    return {"MailboxValidation": {"IsValid": {"ConfidenceVerdict": overall},
+                                  "Evaluations": {k: {"ConfidenceVerdict": v} for k, v in ev.items()}}}
+
+
+st, rs = m.ses_verdict(ses("LOW", MailboxExists="LOW", IsRandomInput="HIGH", IsRoleAddress="LOW"))
+check(st == "invalid" and "SES: mailbox does not exist" in rs and "SES: looks randomly typed" in rs
+      and not any("role" in r for r in rs), f"LOW + no mailbox + random -> invalid with reasons {rs}")
+check(m.ses_verdict(ses("MEDIUM", MailboxExists="MEDIUM")) == ("risky", ["SES: mailbox not confirmed"]), "MEDIUM -> risky")
+check(m.ses_verdict(ses("HIGH", MailboxExists="HIGH", IsDisposable="LOW"))[0] == "valid", "HIGH -> valid")
+check(m.ses_verdict(ses("LOW"))[1] == ["SES: unlikely to be deliverable"], "LOW with no detail still explains itself")
+check(m.ses_verdict({}) == (None, []) and m.ses_verdict(None) == (None, []), "no verdict -> treated as not checked")
+check(m.worse("valid", "invalid") == "invalid" and m.worse("risky", "valid") == "risky", "SES can only downgrade")
+check(m.worse("verified", "risky") == "risky" and m.worse("valid", None) == "valid", "worse() edge cases")
+
+print("-- risk kinds and send decisions --")
+check(m.ses_details(ses("MEDIUM", MailboxExists="MEDIUM", IsRoleAddress="HIGH")) == {"overall": "MEDIUM", "mailbox": "MEDIUM", "role": True},
+      "ses_details keeps overall / mailbox / role")
+check(m.risk_kind(role=True, domain="school.edu.in") == "role", "role address -> role")
+check(m.risk_kind(role=False, domain="lawfirm.co.in", ses_overall="MEDIUM", mailbox="MEDIUM") == "catch_all",
+      "company domain SES can't confirm -> catch-all")
+check(m.risk_kind(role=False, domain="gmail.com", ses_overall="MEDIUM", mailbox="MEDIUM") == "unconfirmed",
+      "Gmail is never catch-all: uncertain there means unconfirmed")
+check(m.risk_kind(role=False, domain="x.com") == "unconfirmed", "no SES detail -> unconfirmed")
+P = m.DEFAULT_RISK_POLICY
+check(m.send_decision("verified", "", P, needs_ses=True, has_ses=False)[:2] == ("send", 0), "verified goes first, no check needed")
+check(m.send_decision("valid", "", P, needs_ses=True, has_ses=False)[0] == "skip", "unproven + unchecked -> skipped, not sent blind")
+check(m.send_decision("valid", "", P, needs_ses=True, has_ses=True)[:2] == ("send", 1), "checked valid -> send")
+check(m.send_decision("valid", "", P, needs_ses=False, has_ses=False)[0] == "send", "SES switched off -> free checks decide")
+check(m.send_decision("risky", "role", P, needs_ses=True, has_ses=True)[0] == "send", "default: role addresses are sent")
+check(m.send_decision("risky", "catch_all", P, needs_ses=True, has_ses=True)[:2] == ("tail", 3), "default: catch-all goes last as the tail")
+d = m.send_decision("risky", "unconfirmed", P, needs_ses=True, has_ses=True)
+check(d[0] == "skip" and "unconfirmed" in d[2], "default: unconfirmed is skipped with a reason")
+check(m.send_decision("risky", "unconfirmed", {"unconfirmed": "tail"}, needs_ses=True, has_ses=True)[0] == "tail", "rule is configurable")
+check(m.send_decision("invalid", "", P, needs_ses=False, has_ses=False)[0] == "skip", "invalid never sent")
+check(m.is_bad_domain("deadfirm.in", 3) and not m.is_bad_domain("deadfirm.in", 2), "3 hard bounces mark a company domain bad")
+check(not m.is_bad_domain("gmail.com", 50), "webmail domains are never marked bad")
+check(m.checks_for_budget(850, 85) == 1000 and m.checks_for_budget(0, 85) == 0 and m.checks_for_budget(100, 0) == 0, "₹ budget -> checks")
+check(not m.tail_should_stop(10, 5) and m.tail_should_stop(40, 2) and not m.tail_should_stop(40, 1), "tail stops above 3% after 20 sends")
+
 print("-- auto-pause --")
 check(m.should_pause(40, 5, 0) is None, "no decision on too little data")
 check(m.should_pause(100, 2, 0) is None, "2% bounces is allowed")

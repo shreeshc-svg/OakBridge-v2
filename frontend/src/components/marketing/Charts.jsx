@@ -97,7 +97,12 @@ export function Funnel({ steps = [] }) {
                     <div className="w-20 shrink-0 text-[#4B5563]">{s.step}</div>
                     <div className="flex-1 bg-[#F5F7FA] h-7 relative">
                         <div className="h-7" style={{ width: `${Math.max(1.5, (s.count / top) * 100)}%`, background: tones[i % tones.length] }} />
-                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs font-medium text-white mix-blend-difference">{Number(s.count || 0).toLocaleString("en-IN")}</span>
+                        {/* White on a wide dark bar, navy beside a short or light one —
+                            mix-blend-difference turned the digits peach/red on the tones. */}
+                        <span className={`absolute top-1/2 -translate-y-1/2 text-xs font-semibold ${(s.count / top) >= 0.35 && i < 2 ? "left-2 text-white" : "text-[#002B5C]"}`}
+                            style={(s.count / top) >= 0.35 && i < 2 ? undefined : { left: `calc(${Math.max(1.5, (s.count / top) * 100)}% + 6px)` }}>
+                            {Number(s.count || 0).toLocaleString("en-IN")}
+                        </span>
                     </div>
                     <div className="w-16 text-right text-xs text-[#4B5563]">{s.from_prev == null ? "" : pct(s.from_prev)}</div>
                 </div>

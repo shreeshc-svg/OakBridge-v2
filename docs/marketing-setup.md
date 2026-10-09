@@ -46,6 +46,19 @@ Every 5 minutes
 3. **Campaigns → New email campaign**: subject, blocks, audience → **Send test** to yourself → **Send now** / **Schedule**. The count you confirm must still match at send time.
 4. **Dashboard / report**: opens, clicks, bounces, orders and revenue (orders are tied to a campaign by the `utm_campaign=mk-…` tag on our links).
 
+## 4a. Amazon SES Email Validation (mailbox checks)
+
+- On by default (Admin → Marketing → Settings → Rules) with a **monthly ₹ budget** (default ₹850 ≈ 1,000 checks). A dashboard banner appears at 80%.
+- Who gets checked: every contact not already proven (confirmed account / delivered before) and not already invalid. Each mailbox is checked once and the verdict reused for 180 days.
+- When: the moment people arrive (newsletter sign-up — before the confirmation email —, checkout opt-in, import), in the background on every cron tick, and **automatically when a campaign is sent**.
+- **Send = check, then send.** Send puts the campaign in *Preparing*: unchecked recipients are checked, then each is sent, sent last, or skipped **with the reason** (report → "Not sent"). Nothing is mailed unchecked; nothing waits for an admin.
+- Risky addresses follow standing rules (Settings): role address → send; catch-all company domain → send last, stops itself above 3% bounces; mailbox unconfirmed → skip.
+- Bounce spike: the first time, unproven / non-HIGH addresses are dropped (old HIGH verdicts re-checked) and sending carries on. A second spike pauses the campaign and raises a dashboard alert.
+- Domain learning: 3 different hard bounces at one company domain → new addresses there become risky. Never applied to Gmail / Yahoo / Outlook etc.
+- AWS suppression list is copied into Contacts daily (Settings → SNS box → Sync now).
+- IAM needs `ses:GetEmailAddressInsights` **and** `ses:ListSuppressedDestinations`. If Settings says the AWS library is too old: Render → Manual Deploy → **Clear build cache & deploy**.
+- SES **Auto Validation** (console switch) is optional. Blocks it causes are recorded as "blocked", not bounces, so they don't trigger auto-pause.
+
 ## 5. Safety rails (automatic)
 
 - Only `subscribed` people get campaigns; unsubscribed, bounced and complained addresses are excluded whatever list they are in.

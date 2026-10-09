@@ -77,7 +77,19 @@ DEFAULT_SETTINGS = {
     "wa_rate_marketing": 0.96,   # ₹ per message incl. Interakt markup, before GST
     "wa_rate_utility": 0.13,
     "extra_disposable": [],
+    # Amazon SES Email Validation (paid, ~$0.01 per address): checks whether
+    # the mailbox exists before anyone is mailed. The monthly ₹ budget stops a
+    # big import from running up a bill; anyone left unchecked is skipped
+    # (with the reason shown), never mailed blind.
+    "ses_validation": True,
+    "ses_budget_inr": 850,       # ≈ 1,000 checks a month
+    "usd_inr": 88,               # for ₹ estimates of $-priced AWS charges
+    # What happens to each kind of 'risky' address when a campaign is sent:
+    # send | tail (last, stops itself if it bounces) | skip.
+    "risk_policy": dict(core.DEFAULT_RISK_POLICY),
+    "tail_max_bounce": 0.03,
 }
+SES_CHECK_TTL_DAYS = 180  # a mailbox verdict is reused for 6 months, never paid for twice
 GIF = (b"GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xff\xff\xff!\xf9\x04\x01\x00\x00\x00\x00,"
        b"\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;")
 
@@ -97,6 +109,13 @@ def _secret() -> str:
 
 
 def sns_token() -> str:
+    # SES_EVENTS_TOKEN lets the SNS endpoint be rotated on its own (e.g. after
+    # the URL shows up in a screenshot) without touching JWT_SECRET, which
+    # would sign everyone out and break every unsubscribe link already sent.
+    # Ignored when shorter than 24 characters so a typo can't make it guessable.
+    override = (os.environ.get("SES_EVENTS_TOKEN") or "").strip()
+    if len(override) >= 24:
+        return override
     return core.sign(_secret(), "ses-events")
 
 
@@ -119,6 +138,8 @@ async def _ensure_indexes() -> None:
         await db.mk_sends.create_index("message_id", sparse=True)
         await db.mk_sends.create_index([("campaign_id", 1), ("contact_id", 1)], unique=True)
         await db.mk_domains.create_index("domain", unique=True)
+        await db.mk_ses_checks.create_index("email_norm", unique=True)
+        await db.mk_ses_usage.create_index("month", unique=True)
     except Exception:  # noqa: BLE001
         log.warning("marketing: index creation failed", exc_info=True)
     _indexes = True
@@ -185,9 +206,168 @@ async def _proven(emails_norm: list) -> set:
     return proven & set(emails_norm)
 
 
-async def verify_emails(raw: list, *, autofix: bool = True) -> list:
+# ------------------------------------------------ SES email validation ---
+_SES_STOP: dict = {}  # last time live checks stopped early: {"why", "at"}
+
+
+def _month() -> str:
+    return _now().strftime("%Y-%m")
+
+
+_SES_SUPPORTED: Optional[bool] = None
+
+
+def ses_validation_supported() -> bool:
+    """The sesv2 GetEmailAddressInsights call only exists in boto3/botocore
+    released after SES Email Validation launched (Jan 2026). An older cached
+    install on Render would raise AttributeError mid-import, so check first.
+    The installed SDK can't change while the process runs, so check once."""
+    global _SES_SUPPORTED
+    if _SES_SUPPORTED is None:
+        try:
+            _SES_SUPPORTED = hasattr(_ses(), "get_email_address_insights")
+        except Exception:  # noqa: BLE001
+            return False
+    return _SES_SUPPORTED
+
+
+def _cap(st: dict) -> int:
+    return core.checks_for_budget(float(st.get("ses_budget_inr") or 0), float(st.get("usd_inr") or 0))
+
+
+async def ses_usage() -> dict:
+    st = await get_settings()
+    d = await db.mk_ses_usage.find_one({"month": _month()}, {"_id": 0}) or {}
+    used = int(d.get("n", 0))
+    cap = _cap(st)
+    rate = float(st.get("usd_inr") or 0)
+    return {"month": _month(), "used": used, "cap": cap, "left": max(0, cap - used),
+            "enabled": bool(st.get("ses_validation")), "supported": ses_validation_supported(),
+            "budget_inr": float(st.get("ses_budget_inr") or 0), "spent_inr": round(used * 0.01 * rate, 2),
+            "per_check_inr": round(0.01 * rate, 2), "near_limit": cap > 0 and used >= 0.8 * cap,
+            "last_stop": _SES_STOP or None}
+
+
+# --------------------------------------------------------------- alerts ---
+async def raise_alert(kind: str, message: str, *, campaign_id: Optional[str] = None, key: Optional[str] = None) -> None:
+    """Something an admin should look at, shown on the Marketing dashboard.
+    One open alert per key, refreshed rather than repeated."""
+    try:
+        key = key or f"{kind}:{campaign_id or ''}"
+        await db.mk_alerts.update_one(
+            {"key": key, "resolved": False},
+            {"$set": {"kind": kind, "message": message[:300], "campaign_id": campaign_id, "at": _iso()},
+             "$setOnInsert": {"id": str(uuid.uuid4()), "created_at": _iso()}}, upsert=True)
+    except Exception:  # noqa: BLE001
+        log.warning("marketing: could not store alert %s", kind, exc_info=True)
+
+
+_bg_tasks: set = set()
+
+
+def _bg(coro) -> None:
+    """Fire-and-forget, kept referenced so it can't be garbage-collected mid-run."""
+    t = asyncio.create_task(coro)
+    _bg_tasks.add(t)
+    t.add_done_callback(_bg_tasks.discard)
+
+
+async def _reserve_check(cap: int) -> bool:
+    """Count one paid check against this month's cap, atomically, BEFORE the
+    call — two workers can't both take the last slot."""
+    m = _month()
+    await db.mk_ses_usage.update_one({"month": m}, {"$setOnInsert": {"month": m, "n": 0}}, upsert=True)
+    r = await db.mk_ses_usage.update_one({"month": m, "n": {"$lt": cap}}, {"$inc": {"n": 1}})
+    return r.modified_count == 1
+
+
+async def _release_check() -> None:
+    await db.mk_ses_usage.update_one({"month": _month(), "n": {"$gt": 0}}, {"$inc": {"n": -1}})
+
+
+async def _ses_cached(norms: list) -> dict:
+    fresh = (_now() - timedelta(days=SES_CHECK_TTL_DAYS)).isoformat()
+    out = {}
+    async for d in db.mk_ses_checks.find({"email_norm": {"$in": norms}, "at": {"$gte": fresh}}, {"_id": 0}):
+        out[d["email_norm"]] = d
+    return out
+
+
+async def ses_check(emails: list, *, refresh: bool = False) -> dict:
+    """Live SES Email Validation for addresses with no fresh verdict yet.
+    Paid, so: only when switched on, only within the monthly cap, never twice
+    for one mailbox within SES_CHECK_TTL_DAYS. Returns {email_norm: verdict};
+    an address that could not be checked is simply absent (and stays
+    'waiting' — campaigns don't mail it)."""
+    st = await get_settings()
+    norms = {}
+    for e in emails:
+        n = core.normalise_email(e)
+        if n:
+            norms.setdefault(n, e)
+    # refresh=True: ask SES again even if we have a verdict (used when a
+    # campaign recovers from a bounce spike and old verdicts are suspect).
+    out = {} if refresh else await _ses_cached(list(norms))
+    if not st.get("ses_validation") or not ses_validation_supported():
+        return out
+    cap = _cap(st)
+    todo = [(n, e) for n, e in norms.items() if n not in out]
+    sem = asyncio.Semaphore(4)   # gentle on the API; throttling is retried below
+    stop = {"why": ""}
+    client = _ses() if todo else None  # boto3 clients are thread-safe; one per batch
+
+    async def one(n: str, e: str) -> None:
+        async with sem:
+            if stop["why"]:
+                return
+            if not await _reserve_check(cap):
+                stop["why"] = f"this month's SES check budget (₹{st.get('ses_budget_inr')}, {cap} checks) is used up"
+                return
+            resp = None
+            for attempt in range(3):
+                try:
+                    resp = await asyncio.to_thread(lambda: client.get_email_address_insights(EmailAddress=e))
+                    break
+                except Exception as ex:  # noqa: BLE001
+                    code = ((getattr(ex, "response", None) or {}).get("Error") or {}).get("Code", "")
+                    if code in ("ThrottlingException", "TooManyRequestsException", "Throttling") and attempt < 2:
+                        await asyncio.sleep(1.5 * (attempt + 1))
+                        continue
+                    await _release_check()   # failed calls aren't billed; give the slot back
+                    if code in ("AccessDeniedException", "AccessDenied", "UnrecognizedClientException",
+                                "InvalidClientTokenId", "SignatureDoesNotMatch"):
+                        stop["why"] = f"SES refused the check ({code}) — is ses:GetEmailAddressInsights allowed?"
+                    else:
+                        log.warning("marketing: SES validation failed for one address: %s", str(ex)[:200])
+                    return
+            if resp is None:
+                await _release_check()
+                return
+            status, reasons = core.ses_verdict(resp)
+            if not status:
+                return  # billed but no verdict: leave unchecked rather than guess
+            doc = {"email_norm": n, "status": status, "reasons": reasons, "at": _iso(), **core.ses_details(resp)}
+            await db.mk_ses_checks.update_one({"email_norm": n}, {"$set": doc}, upsert=True)
+            out[n] = doc
+
+    await asyncio.gather(*(one(n, e) for n, e in todo))
+    if stop["why"]:
+        _SES_STOP.update(why=stop["why"], at=_iso())
+        log.warning("marketing: SES validation stopped early: %s", stop["why"])
+        await raise_alert("ses_checks", f"Mailbox checks stopped: {stop['why']}. Unchecked addresses are skipped, not mailed.",
+                          key=f"ses_checks:{_month()}")
+    return out
+
+
+async def verify_emails(raw: list, *, autofix: bool = True, ses: str = "cache") -> list:
     """Full verification for a batch of raw strings. One result per input row:
-    {input, email, email_norm, status, reasons[], fixed_from}."""
+    {input, email, email_norm, status, reasons[], fixed_from, ses_checked}.
+
+    ses="cache" applies SES verdicts we already paid for (free);
+    ses="live" also asks SES about addresses without one (paid, capped);
+    ses="refresh" asks SES again even where we have a verdict;
+    ses="off" uses only our own free checks.
+    Risky rows also get risk_kind (role / catch_all / unconfirmed)."""
     st = await get_settings()
     extra_disp = {d.strip().lower() for d in st.get("extra_disposable") or [] if d.strip()}
     rows = []
@@ -202,6 +382,7 @@ async def verify_emails(raw: list, *, autofix: bool = True) -> list:
         rows.append({"input": r, "syntax": s, "fixed_from": fixed_from})
     domains = {x["syntax"]["email"].split("@")[1] for x in rows if x["syntax"]["ok"]}
     mx = await domains_mx(domains)
+    bad_domains = {d["domain"] async for d in db.mk_domains.find({"domain": {"$in": list(domains)}, "bad": True}, {"_id": 0, "domain": 1})}
     norms = [core.normalise_email(x["syntax"]["email"]) for x in rows]
     proven = await _proven([n for n in norms if n])
     supp = {}
@@ -222,9 +403,89 @@ async def verify_emails(raw: list, *, autofix: bool = True) -> list:
             reasons.append(f"previously {supp[n]}")
         if n in proven:
             reasons.append("proven (confirmed account or delivered before)")
+        dom = s["email"].split("@")[-1] if s["ok"] else ""
+        bad = dom in bad_domains and status == "valid"
+        if bad:
+            # Several different addresses at this company domain hard-bounced.
+            status = "risky"
+            reasons.append("3+ addresses at this domain bounced")
         out.append({"input": x["input"], "email": s["email"], "email_norm": n, "status": status,
-                    "reasons": reasons, "fixed_from": x["fixed_from"], "role": s.get("role", False)})
+                    "reasons": reasons, "fixed_from": x["fixed_from"], "role": s.get("role", False), "ses_checked": False,
+                    "_bad_domain": bad, "_ses": None})
+    if ses in ("cache", "live", "refresh"):
+        # Only addresses our free checks couldn't settle are worth an SES look:
+        # verified ones are proven, invalid/suppressed ones are never sent.
+        need = [r for r in out if r["status"] in ("valid", "risky") and r["email_norm"]]
+        if ses == "cache":
+            verdicts = await _ses_cached([r["email_norm"] for r in need])
+        else:
+            verdicts = await ses_check([r["email"] for r in need], refresh=ses == "refresh")
+        for r in need:
+            v = verdicts.get(r["email_norm"])
+            if v:
+                r["status"] = core.worse(r["status"], v["status"])
+                r["reasons"] = r["reasons"] + [x for x in v.get("reasons") or [] if x not in r["reasons"]]
+                r["ses_checked"] = True
+                r["_ses"] = v
+    for r in out:
+        v = r.pop("_ses") or {}
+        bad = r.pop("_bad_domain")
+        r["ses_overall"] = v.get("overall", "")
+        r["risk_kind"] = "" if r["status"] != "risky" else (
+            "unconfirmed" if bad else core.risk_kind(role=bool(r["role"] or v.get("role")), domain=r["email"].split("@")[-1],
+                                                     ses_overall=v.get("overall", ""), mailbox=v.get("mailbox", "")))
     return out
+
+
+def _status_update(v: dict) -> dict:
+    """Contact fields from one verify_emails() row."""
+    upd = {"email_status": v["status"], "reasons": v["reasons"][:6], "verified_at": _iso(), "risk_kind": v.get("risk_kind", "")}
+    if v.get("ses_checked"):
+        upd.update(ses_checked=True, ses_overall=v.get("ses_overall", ""))
+    return upd
+
+
+_validating = False
+
+
+async def validate_pending(max_n: int = 5000) -> dict:
+    """Background pass over saved contacts: website contacts that arrived
+    without any check ('unknown') get the free checks, and — with SES
+    validation on — every not-yet-proven address gets its SES mailbox check
+    (within the budget). Campaigns don't depend on it — sending checks its own
+    recipients first — it just spreads the work and keeps the Contacts page current."""
+    global _validating
+    if _validating:
+        return {"running": True}
+    _validating = True
+    started = _iso()
+    done = 0
+    try:
+        st = await get_settings()
+        use = await ses_usage()
+        if st.get("ses_validation") and use["supported"] and use["used"] < use["cap"]:
+            flt = {"email_status": {"$in": ["unknown", "valid", "risky"]}, "ses_checked": {"$ne": True}}
+        else:
+            flt = {"email_status": "unknown"}
+        contacts = await db.mk_contacts.find(flt, {"_id": 0, "id": 1, "email": 1}).limit(max_n).to_list(max_n)
+        for i in range(0, len(contacts), 100):
+            chunk = contacts[i:i + 100]
+            res = await verify_emails([c["email"] for c in chunk], autofix=False, ses="live")
+            for c, v in zip(chunk, res):
+                await db.mk_contacts.update_one({"id": c["id"]}, {"$set": _status_update(v)})
+                done += 1
+            if _SES_STOP.get("at", "") >= started:
+                break  # cap reached or SES refused: the rest wait for next time
+    except Exception:  # noqa: BLE001
+        log.exception("marketing: validate_pending failed")
+    finally:
+        _validating = False
+    return {"processed": done}
+
+
+def kick_validation() -> None:
+    """Fire-and-forget validate_pending() after an import / sync / re-verify / sign-up."""
+    _bg(validate_pending())
 
 
 # ------------------------------------------------------------- contacts ---
@@ -235,7 +496,8 @@ def _consent(status: str, source: str, by: str = "") -> dict:
 async def upsert_contact(email: str, *, name: str = "", phone: str = "", source: str = "",
                          email_consent: Optional[str] = None, wa_consent: Optional[str] = None,
                          lists: Optional[list] = None, status: Optional[str] = None, reasons: Optional[list] = None,
-                         proven: Optional[bool] = None, customer: Optional[bool] = None, by: str = "") -> Optional[dict]:
+                         proven: Optional[bool] = None, customer: Optional[bool] = None, by: str = "",
+                         ses_checked: Optional[bool] = None, extra: Optional[dict] = None) -> Optional[dict]:
     """Create or update one contact (keyed on the real mailbox). Consent is
     only ever RAISED to subscribed by a new opt-in, never by an import of an
     already-unsubscribed contact: an unsubscribe is final."""
@@ -265,6 +527,10 @@ async def upsert_contact(email: str, *, name: str = "", phone: str = "", source:
         upd["verified_at"] = now
     if proven:
         upd["proven"] = True
+    if ses_checked:
+        upd["ses_checked"] = True
+    if extra:
+        upd.update({k: v for k, v in extra.items() if k in ("risk_kind", "ses_overall")})
     if customer:
         upd["customer"] = True
     final = {"unsubscribed", "complained"}
@@ -295,7 +561,14 @@ async def on_newsletter(email: str, source: str = "newsletter") -> None:
     try:
         st = await get_settings()
         if st["double_opt_in"]:
-            c = await upsert_contact(email, source=source or "newsletter", email_consent="pending")
+            # Check the address the moment it arrives: a bot or a typo'd
+            # sign-up would otherwise cost us a bounce on the confirmation email.
+            v = (await verify_emails([email], autofix=False, ses="live"))[0]
+            c = await upsert_contact(email, source=source or "newsletter", email_consent="pending", status=v["status"],
+                                     reasons=v["reasons"], ses_checked=v.get("ses_checked") or None,
+                                     extra={"risk_kind": v.get("risk_kind", ""), "ses_overall": v.get("ses_overall", "")})
+            if v["status"] in ("invalid", "suppressed"):
+                return  # kept as a record, but no email to a dead / bounced address
             if c and c.get("email_consent", {}).get("status") == "pending":
                 await send_confirmation(c)
         else:
@@ -311,6 +584,8 @@ async def on_order_paid(order: dict) -> None:
         await upsert_contact(order.get("email", ""), name=order.get("full_name", ""), phone=order.get("phone", ""),
                              source="checkout", customer=True,
                              email_consent="subscribed" if order.get("email_marketing_optin") else None)
+        if order.get("email_marketing_optin"):
+            kick_validation()  # check the new subscriber now, not on the next campaign
     except Exception:  # noqa: BLE001
         log.exception("marketing: order hook failed for %s", order.get("order_number"))
 
@@ -411,8 +686,10 @@ async def _rule_emails(rule: dict) -> Optional[set]:
 
 
 async def audience_filter(campaign: dict) -> dict:
-    """Mongo filter for who a campaign goes to. Consent and suppression are
-    applied here, always — no option skips them."""
+    """Mongo filter for who a campaign MAY go to. Consent and suppression are
+    applied here, always — no option skips them. For email, which of these
+    candidates are actually sent is decided when the campaign is prepared
+    (mailbox checks + risk rules, core.send_decision)."""
     aud = campaign.get("audience") or {}
     flt: dict = {}
     ors = []
@@ -441,14 +718,151 @@ async def audience_filter(campaign: dict) -> dict:
     else:
         flt["email_consent.status"] = "subscribed"
         flt["suppressed"] = {"$in": [None, ""]}
-        allowed = ["verified", "valid"] + (["risky"] if aud.get("include_risky") else [])
-        flt["email_status"] = {"$in": allowed}
+        flt["email_status"] = {"$in": ["verified", "valid", "risky", "unknown"]}
     return flt
+
+
+def _policy(st: dict, campaign: dict) -> dict:
+    pol = {**core.DEFAULT_RISK_POLICY, **{k: v for k, v in (st.get("risk_policy") or {}).items()
+                                          if k in core.RISK_KINDS and v in ("send", "tail", "skip")}}
+    if (campaign.get("audience") or {}).get("include_risky") and pol["unconfirmed"] == "skip":
+        pol["unconfirmed"] = "tail"  # older campaigns that ticked "include risky"
+    return pol
 
 
 # -------------------------------------------------------------- sending ---
 WORKER_STALE = 120  # seconds without a heartbeat before another tick takes over
 _running: set = set()
+
+
+_preparing: set = set()
+PREPARE_STALE = 180  # seconds without progress before the cron restarts a preparation
+
+
+def start_prepare(cid: str) -> None:
+    if cid not in _preparing:
+        _bg(_prepare_campaign(cid))
+
+
+async def _prepare_campaign(cid: str) -> None:
+    """Send = check, then send. Every not-yet-proven recipient gets the free
+    checks and (if on) its SES mailbox check — within the budget — then each
+    recipient is queued, put in the tail, or skipped WITH the reason, by the
+    risk rules in Settings. Idempotent: a restart re-runs it safely (cached
+    verdicts cost nothing, sends are unique per contact)."""
+    _preparing.add(cid)
+    try:
+        c = await db.mk_campaigns.find_one({"id": cid}, {"_id": 0})
+        if not c or c.get("status") != "preparing":
+            return
+        st = await get_settings()
+        contacts = await db.mk_contacts.find(await audience_filter(c), {"_id": 0, "id": 1, "email": 1, "phone": 1, "email_status": 1,
+                                                                        "risk_kind": 1, "email_norm": 1}).to_list(200000)
+        is_email = c["channel"] == "email"
+        ses_on = is_email and bool(st.get("ses_validation")) and ses_validation_supported()
+        if is_email:
+            todo = [x for x in contacts if x.get("email_status") != "verified"]
+            for i in range(0, len(todo), 100):
+                chunk = todo[i:i + 100]
+                res = await verify_emails([x["email"] for x in chunk], autofix=False, ses="live" if ses_on else "cache")
+                for x, v in zip(chunk, res):
+                    await db.mk_contacts.update_one({"id": x["id"]}, {"$set": _status_update(v)})
+                    x.update(email_status=v["status"], risk_kind=v.get("risk_kind", ""), _ses=v.get("ses_checked"))
+                cur = await db.mk_campaigns.find_one_and_update(
+                    {"id": cid}, {"$set": {"prepare.checked": min(i + 100, len(todo)), "prepare.to_check": len(todo),
+                                          "prepare_heartbeat": _iso()}}, projection={"_id": 0, "status": 1})
+                if not cur or cur.get("status") != "preparing":
+                    return  # cancelled while checking
+        pol = _policy(st, c)
+        now = _iso()
+        docs, skipped = [], {}
+        for x in contacts:
+            if is_email:
+                act, prio, why = core.send_decision(x.get("email_status") or "unknown", x.get("risk_kind") or "", pol,
+                                                    needs_ses=ses_on and x.get("email_status") != "verified",
+                                                    has_ses=bool(x.get("_ses")))
+            else:
+                act, prio, why = "send", 1, ""
+            doc = {"id": str(uuid.uuid4()), "campaign_id": cid, "contact_id": x["id"], "priority": prio, "queued_at": now,
+                   "to": x.get("email") if is_email else x.get("phone")}
+            if act == "skip":
+                doc.update(status="skipped", error=why)
+                skipped[why] = skipped.get(why, 0) + 1
+            else:
+                doc.update(status="queued", tail=act == "tail")
+            docs.append(doc)
+        if (await db.mk_campaigns.find_one({"id": cid}, {"_id": 0, "status": 1}) or {}).get("status") != "preparing":
+            return
+        for i in range(0, len(docs), 1000):
+            try:
+                await db.mk_sends.insert_many(docs[i:i + 1000], ordered=False)
+            except Exception:  # noqa: BLE001 — duplicates from a restarted preparation are fine (unique index)
+                pass
+        queued = await db.mk_sends.count_documents({"campaign_id": cid, "status": "queued"})
+        when = c.get("schedule_at") or ""
+        now = _iso()
+        if not queued:
+            status, extra = "sent", {"finished_at": now, "note": "Nobody passed the checks — see the skipped list."}
+        elif when and when > now:
+            status, extra = "scheduled", {}
+        else:
+            status, extra = "sending", {"started_at": now, "schedule_at": now}
+        await db.mk_campaigns.update_one({"id": cid, "status": "preparing"}, {"$set": {
+            "status": status, "queued": queued, "prepare.finished_at": now, "prepare.skipped": skipped, **extra}})
+        await refresh_campaign_stats(cid)
+        if status == "sending":
+            await start_campaign(cid)
+    except Exception as e:  # noqa: BLE001
+        log.exception("marketing: preparing campaign %s failed", cid)
+        await db.mk_campaigns.update_one({"id": cid, "status": "preparing"},
+                                         {"$set": {"status": "draft", "prepare_error": str(e)[:300]}})
+        await raise_alert("prepare", f"A campaign could not be prepared and went back to draft: {str(e)[:160]}", campaign_id=cid)
+    finally:
+        _preparing.discard(cid)
+
+
+async def _window_stats(cid: str, since: str) -> dict:
+    """sent / bounced / complained for this campaign's sends since a moment —
+    after a recovery the bounce guard judges only what was sent since."""
+    base = {"campaign_id": cid, "sent_at": {"$gte": since}}
+    return {"sent": await db.mk_sends.count_documents({**base, "status": {"$in": ["sent", "bounced", "complained"]}}),
+            "bounced": await db.mk_sends.count_documents({**base, "status": "bounced"}),
+            "complained": await db.mk_sends.count_documents({**base, "status": "complained"})}
+
+
+async def _recover(cid: str, why: str) -> dict:
+    """First bounce spike: instead of stopping, keep only proven addresses
+    and ones SES rated HIGH (re-asking SES where that verdict is over 30
+    days old); drop the rest, with the reason, and carry on."""
+    fresh_cut = (_now() - timedelta(days=30)).isoformat()
+    queued = await db.mk_sends.find({"campaign_id": cid, "status": "queued"}, {"_id": 0, "id": 1, "contact_id": 1}).to_list(200000)
+    contacts = {x["id"]: x async for x in db.mk_contacts.find({"id": {"$in": [q["contact_id"] for q in queued]}},
+                                                              {"_id": 0, "id": 1, "email": 1, "email_norm": 1, "email_status": 1})}
+    cached = await _ses_cached([x["email_norm"] for x in contacts.values() if x.get("email_status") != "verified"])
+    drop, recheck = [], []
+    for q in queued:
+        x = contacts.get(q["contact_id"])
+        if not x:
+            drop.append(q["id"])
+        elif x.get("email_status") == "verified":
+            continue
+        elif (cached.get(x["email_norm"]) or {}).get("overall") != "HIGH":
+            drop.append(q["id"])
+        elif cached[x["email_norm"]].get("at", "") < fresh_cut:
+            recheck.append((q, x))
+    if recheck:
+        res = await verify_emails([x["email"] for _, x in recheck], autofix=False, ses="refresh")
+        for (q, x), v in zip(recheck, res):
+            await db.mk_contacts.update_one({"id": x["id"]}, {"$set": _status_update(v)})
+            if not (v["status"] == "valid" and v.get("ses_overall") == "HIGH"):
+                drop.append(q["id"])
+    if drop:
+        await db.mk_sends.update_many({"id": {"$in": drop}, "status": "queued"},
+                                      {"$set": {"status": "skipped", "error": "dropped after a bounce spike (not proven / not high-confidence)"}})
+    info = {"at": _iso(), "reason": why, "dropped": len(drop), "rechecked": len(recheck)}
+    await db.mk_campaigns.update_one({"id": cid}, {"$set": {"recovered_at": info["at"], "recovery": info}})
+    log.warning("marketing: campaign %s recovered from a bounce spike: %s", cid, info)
+    return info
 
 
 async def start_campaign(cid: str) -> None:
@@ -517,14 +931,28 @@ async def _run_campaign(cid: str) -> None:
                     await db.mk_sends.update_one({"id": s["id"]}, {"$set": upd})
                     await asyncio.sleep(0.25)
             await refresh_campaign_stats(cid)
-            camp = await db.mk_campaigns.find_one({"id": cid}, {"_id": 0, "stats": 1, "channel": 1})
+            camp = await db.mk_campaigns.find_one({"id": cid}, {"_id": 0, "stats": 1, "channel": 1, "recovered_at": 1, "name": 1})
             if camp["channel"] == "email":
-                s_ = camp.get("stats") or {}
+                # The catch-all tail stops itself if it bounces; the campaign carries on.
+                tail_base = {"campaign_id": cid, "tail": True}
+                t_sent = await db.mk_sends.count_documents({**tail_base, "status": {"$in": ["sent", "bounced", "complained"]}})
+                t_bounced = await db.mk_sends.count_documents({**tail_base, "status": "bounced"})
+                if core.tail_should_stop(t_sent, t_bounced, max_rate=float(st.get("tail_max_bounce") or 0.03)):
+                    r = await db.mk_sends.update_many({**tail_base, "status": "queued"},
+                                                      {"$set": {"status": "skipped", "error": "catch-all tail stopped: too many bounces"}})
+                    if r.modified_count:
+                        await db.mk_campaigns.update_one({"id": cid}, {"$set": {"tail_stopped_at": _iso()}})
+                since = camp.get("recovered_at")
+                s_ = await _window_stats(cid, since) if since else (camp.get("stats") or {})
                 why = core.should_pause(s_.get("sent", 0), s_.get("bounced", 0), s_.get("complained", 0),
                                         max_bounce=float(st.get("max_bounce") or 0.02))
-                if why:
+                if why and not since:
+                    await _recover(cid, why)   # first spike: clean the queue and carry on
+                elif why:
                     await db.mk_campaigns.update_one({"id": cid, "status": "sending"},
-                                                     {"$set": {"status": "paused", "paused_reason": f"Auto-paused: {why}", "paused_at": _iso()}})
+                                                     {"$set": {"status": "paused", "paused_reason": f"Auto-paused again after recovering: {why}", "paused_at": _iso()}})
+                    await raise_alert("paused", f"“{camp.get('name', '')}” paused: {why}, even after dropping unproven addresses. Check the bounce list before resuming.",
+                                      campaign_id=cid)
                     return
     except Exception:  # noqa: BLE001
         log.exception("marketing: campaign %s worker crashed", cid)
@@ -539,8 +967,11 @@ async def refresh_campaign_stats(cid: str) -> dict:
     counts: dict = {}
     async for r in db.mk_sends.aggregate([{"$match": {"campaign_id": cid}}, {"$group": {"_id": "$status", "n": {"$sum": 1}}}]):
         counts[r["_id"]] = r["n"]
-    agg = {"queued": counts.get("queued", 0), "failed": counts.get("failed", 0), "skipped": counts.get("skipped", 0)}
-    sent_like = sum(v for k, v in counts.items() if k not in ("queued", "failed", "skipped"))
+    agg = {"queued": counts.get("queued", 0), "failed": counts.get("failed", 0), "skipped": counts.get("skipped", 0),
+           "blocked": counts.get("blocked", 0)}
+    # "blocked" = SES Auto Validation refused it before sending: not sent, and
+    # not a bounce, so it must not push the campaign towards auto-pause.
+    sent_like = sum(v for k, v in counts.items() if k not in ("queued", "failed", "skipped", "blocked"))
     agg["sent"] = sent_like
     for fld in ("delivered_at", "opened_at", "clicked_at", "unsubscribed_at"):
         agg[fld.replace("_at", "")] = await db.mk_sends.count_documents({"campaign_id": cid, fld: {"$exists": True}})
@@ -705,6 +1136,13 @@ async def handle_ses_event(msg: dict) -> None:
         if s:
             await db.mk_sends.update_one({"id": s["id"]}, {"$set": {"delivered_at": _iso()}})
             await db.mk_contacts.update_one({"id": s["contact_id"]}, {"$set": {"proven": True}})
+    elif kind == "Bounce" and (msg.get("bounce") or {}).get("bounceSubType") == "EmailValidationSuppressed":
+        # SES Auto Validation stopped it before sending. Never mail it again,
+        # but it never reached a mailbox provider, so it is not a bounce.
+        for r in (msg.get("bounce") or {}).get("bouncedRecipients") or []:
+            await suppress({"email_norm": core.normalise_email(r.get("emailAddress"))}, "invalid (SES validation)")
+        if s:
+            await db.mk_sends.update_one({"id": s["id"]}, {"$set": {"status": "blocked", "error": "SES validation: address unlikely to exist"}})
     elif kind == "Bounce":
         b = msg.get("bounce") or {}
         permanent = b.get("bounceType") == "Permanent"
@@ -712,6 +1150,12 @@ async def handle_ses_event(msg: dict) -> None:
             norm = core.normalise_email(r.get("emailAddress"))
             if permanent:
                 await suppress({"email_norm": norm}, "bounced")
+                dom = norm.split("@")[-1] if "@" in norm else ""
+                if dom and dom not in core.WEBMAIL:
+                    d = await db.mk_domains.find_one_and_update({"domain": dom}, {"$addToSet": {"hard_bounced": norm}},
+                                                                upsert=True, return_document=True, projection={"_id": 0, "hard_bounced": 1})
+                    if core.is_bad_domain(dom, len((d or {}).get("hard_bounced") or [])):
+                        await db.mk_domains.update_one({"domain": dom}, {"$set": {"bad": True, "bad_at": _iso()}})
             else:
                 await db.mk_contacts.update_one({"email_norm": norm}, {"$inc": {"soft_bounces": 1}})
                 c = await db.mk_contacts.find_one({"email_norm": norm}, {"_id": 0, "soft_bounces": 1})
@@ -732,6 +1176,43 @@ async def handle_ses_event(msg: dict) -> None:
             await db.mk_sends.update_one({"id": s["id"]}, {"$set": {"status": "failed", "error": kind}})
 
 
+async def sync_aws_suppression(force: bool = False) -> dict:
+    """Once a day: copy AWS's own suppression list (addresses SES itself
+    refuses after a hard bounce / complaint) into Contacts, so the two never
+    drift apart. Needs ses:ListSuppressedDestinations."""
+    state = await db.integrations.find_one({"key": "marketing_state"}, {"_id": 0}) or {}
+    last = state.get("suppression_synced_at") or ""
+    if not force and last and last > (_now() - timedelta(hours=24)).isoformat():
+        return {"skipped": True}
+    start = datetime.fromisoformat(last) if last else datetime(2020, 1, 1, tzinfo=timezone.utc)
+    n, token = 0, None
+    try:
+        client = _ses()
+        while True:
+            kw = {"PageSize": 1000, "StartDate": start}
+            if token:
+                kw["NextToken"] = token
+            r = await asyncio.to_thread(lambda: client.list_suppressed_destinations(**kw))
+            for d in r.get("SuppressedDestinationSummaries") or []:
+                norm = core.normalise_email(d.get("EmailAddress"))
+                c = await db.mk_contacts.find_one({"email_norm": norm, "suppressed": {"$in": [None, ""]}}, {"_id": 0, "id": 1})
+                if c:
+                    await suppress({"id": c["id"]}, "complained" if d.get("Reason") == "COMPLAINT" else "bounced")
+                    n += 1
+            token = r.get("NextToken")
+            if not token:
+                break
+    except Exception as e:  # noqa: BLE001
+        code = ((getattr(e, "response", None) or {}).get("Error") or {}).get("Code", "") or str(e)[:120]
+        await raise_alert("aws_suppression", f"Could not read the AWS suppression list ({code}). "
+                                             "Allow ses:ListSuppressedDestinations for the site's AWS user.", key="aws_suppression")
+        return {"ok": False, "error": code}
+    await db.integrations.update_one({"key": "marketing_state"}, {"$set": {"key": "marketing_state", "suppression_synced_at": _iso(),
+                                                                           "suppression_last_added": n}}, upsert=True)
+    await db.mk_alerts.update_many({"key": "aws_suppression", "resolved": False}, {"$set": {"resolved": True, "resolved_at": _iso()}})
+    return {"ok": True, "suppressed": n}
+
+
 # ============================================================ admin API ===
 admin_router = APIRouter(prefix="/api/admin/marketing", tags=["marketing-admin"], dependencies=[Depends(require_admin)])
 
@@ -744,7 +1225,12 @@ async def adm_settings(user: dict = Depends(require_admin)):
     url = f"{PUBLIC_API}/api/m/ses-events/{sns_token()}"
     return {**st, "ses_region": SES_REGION, "configuration_set": SES_CONFIG_SET,
             "sns_url": url if is_superadmin(user.get("role")) else f"{PUBLIC_API}/api/m/ses-events/••••••",
-            "last_ses_event": await db.mk_events.find_one({}, {"_id": 0, "at": 1, "type": 1}, sort=[("at", -1)])}
+            "last_ses_event": await db.mk_events.find_one({}, {"_id": 0, "at": 1, "type": 1}, sort=[("at", -1)]),
+            "ses_usage": await ses_usage(),
+            "waiting_checks": await db.mk_contacts.count_documents({"email_status": {"$in": ["unknown", "valid", "risky"]},
+                                                                     "ses_checked": {"$ne": True}}),
+            "suppression_sync": await db.integrations.find_one({"key": "marketing_state"}, {"_id": 0, "suppression_synced_at": 1,
+                                                                                             "suppression_last_added": 1})}
 
 
 class SettingsBody(BaseModel):
@@ -759,6 +1245,11 @@ class SettingsBody(BaseModel):
     wa_rate_marketing: Optional[float] = None
     wa_rate_utility: Optional[float] = None
     extra_disposable: Optional[list] = None
+    ses_validation: Optional[bool] = None
+    ses_budget_inr: Optional[float] = None
+    usd_inr: Optional[float] = None
+    risk_policy: Optional[dict] = None
+    tail_max_bounce: Optional[float] = None
 
 
 @admin_router.put("/settings")
@@ -769,6 +1260,17 @@ async def adm_put_settings(body: SettingsBody, user: dict = Depends(require_supe
             raise HTTPException(status_code=400, detail=f"{k.replace('_', ' ')} is not a valid email address")
     if "max_bounce" in upd and not (0.005 <= upd["max_bounce"] <= 0.05):
         raise HTTPException(status_code=400, detail="Auto-pause must be between 0.5% and 5% bounces")
+    if "ses_budget_inr" in upd and not (0 <= upd["ses_budget_inr"] <= 100000):
+        raise HTTPException(status_code=400, detail="Monthly mailbox-check budget must be between ₹0 and ₹1,00,000")
+    if "usd_inr" in upd and not (50 <= upd["usd_inr"] <= 200):
+        raise HTTPException(status_code=400, detail="USD→INR rate looks wrong (50–200)")
+    if "tail_max_bounce" in upd and not (0.005 <= upd["tail_max_bounce"] <= 0.1):
+        raise HTTPException(status_code=400, detail="Tail bounce limit must be between 0.5% and 10%")
+    if "risk_policy" in upd:
+        pol = upd["risk_policy"] or {}
+        if any(k not in core.RISK_KINDS or v not in ("send", "tail", "skip") for k, v in pol.items()):
+            raise HTTPException(status_code=400, detail="Risk rules: each kind must be send, tail or skip")
+        upd["risk_policy"] = {**core.DEFAULT_RISK_POLICY, **pol}
     if "extra_disposable" in upd:
         upd["extra_disposable"] = [str(d).strip().lower() for d in upd["extra_disposable"] if str(d).strip()][:500]
     await db.integrations.update_one({"key": "marketing"}, {"$set": {"key": "marketing", **upd, "updated_at": _iso()}}, upsert=True)
@@ -810,12 +1312,14 @@ async def adm_health():
 class VerifyBody(BaseModel):
     emails: list[str]
     autofix: bool = True
+    ses: bool = True   # also ask SES whether each mailbox exists (paid, capped)
 
 
 @admin_router.post("/verify")
 async def adm_verify(body: VerifyBody):
     """Check up to 200 typed / pasted addresses without saving anything."""
-    rows = await verify_emails([e for e in body.emails if str(e).strip()][:200], autofix=body.autofix)
+    rows = await verify_emails([e for e in body.emails if str(e).strip()][:200], autofix=body.autofix,
+                               ses="live" if body.ses else "cache")
     return {"results": rows, "counts": _count(rows)}
 
 
@@ -898,7 +1402,9 @@ async def adm_import(
         if k:
             seen.add(k)
         unique_rows.append(r)
-    results = await verify_emails([r.get(ecol, "") for r in unique_rows], autofix=autofix)
+    # Cached SES verdicts only: a dry run must never spend money, and a real
+    # import hands the paid checks to the capped background pass (kick_validation).
+    results = await verify_emails([r.get(ecol, "") for r in unique_rows], autofix=autofix, ses="cache")
     st = await get_settings()
     counts = _count(results)
     counts["duplicates_in_file"] = dups
@@ -916,7 +1422,8 @@ async def adm_import(
                 pass  # kept, but campaigns skip risky unless asked
             await upsert_contact(v["email"], name=r.get(ncol, "") if ncol else "", phone=r.get(pcol, "") if pcol else "",
                                  source=src, lists=[lid], status=v["status"], reasons=v["reasons"],
-                                 proven=v["status"] == "verified" or None,
+                                 proven=v["status"] == "verified" or None, ses_checked=v.get("ses_checked") or None,
+                                 extra={"risk_kind": v.get("risk_kind", ""), "ses_overall": v.get("ses_overall", "")},
                                  email_consent="subscribed" if consent_email else None,
                                  wa_consent="subscribed" if consent_whatsapp else None, by=user.get("email", ""))
             saved += 1
@@ -925,13 +1432,36 @@ async def adm_import(
         await audit_log(db, "MARKETING_IMPORT", email=user.get("email", ""), role=user.get("role", ""),
                         meta={"file": file.filename, "saved": saved, "counts": counts, "consent_email": consent_email,
                               "consent_whatsapp": consent_whatsapp})
+        kick_validation()
     sample: dict = {}
     for v in results:
         sample.setdefault(v["status"], [])
         if len(sample[v["status"]]) < 25:
             sample[v["status"]].append({k: v[k] for k in ("input", "email", "reasons", "fixed_from")})
+    ses_todo = sum(1 for v in results if v["status"] in ("valid", "risky") and not v.get("ses_checked"))
     return {"columns": {"email": ecol, "name": ncol, "phone": pcol}, "counts": counts, "sample": sample,
-            "saved": saved, "list_id": lid, "dry_run": dry_run}
+            "saved": saved, "list_id": lid, "dry_run": dry_run,
+            "ses": {**(_u := await ses_usage()), "to_check": ses_todo, "est_inr": round(ses_todo * _u["per_check_inr"], 2)}}
+
+
+@admin_router.post("/alerts/{aid}/dismiss")
+async def adm_dismiss_alert(aid: str, user: dict = Depends(require_admin)):
+    await db.mk_alerts.update_one({"id": aid}, {"$set": {"resolved": True, "resolved_at": _iso(), "resolved_by": user.get("email", "")}})
+    return {"ok": True}
+
+
+@admin_router.post("/suppression-sync")
+async def adm_suppression_sync():
+    """Copy AWS's suppression list into Contacts now (the cron does it daily)."""
+    return await sync_aws_suppression(force=True)
+
+
+@admin_router.post("/validate-pending")
+async def adm_validate_pending():
+    """'Check now': run the mailbox checks for waiting contacts immediately
+    (the cron does the same every few minutes)."""
+    kick_validation()
+    return {"ok": True, "usage": await ses_usage()}
 
 
 @admin_router.post("/reverify")
@@ -941,7 +1471,8 @@ async def adm_reverify(list_id: Optional[str] = None):
     contacts = await db.mk_contacts.find(flt, {"_id": 0, "id": 1, "email": 1}).to_list(50000)
     res = await verify_emails([c["email"] for c in contacts], autofix=False)
     for c, v in zip(contacts, res):
-        await db.mk_contacts.update_one({"id": c["id"]}, {"$set": {"email_status": v["status"], "reasons": v["reasons"][:6], "verified_at": _iso()}})
+        await db.mk_contacts.update_one({"id": c["id"]}, {"$set": _status_update(v)})
+    kick_validation()
     return {"counts": _count(res)}
 
 
@@ -964,6 +1495,7 @@ async def adm_sync(user: dict = Depends(require_admin)):
                              wa_consent="subscribed" if u.get("wa_marketing_optin") else None)
         n += 1
     await audit_log(db, "MARKETING_SYNC", email=user.get("email", ""), role=user.get("role", ""), meta={"rows": n})
+    kick_validation()
     return {"ok": True, "processed": n, "contacts": await db.mk_contacts.count_documents({})}
 
 
@@ -1169,11 +1701,33 @@ async def adm_audience(cid: str):
     if not c:
         raise HTTPException(status_code=404, detail="Campaign not found")
     flt = await audience_filter(c)
-    total = await db.mk_contacts.count_documents(flt)
-    by = {r["_id"]: r["n"] async for r in db.mk_contacts.aggregate([{"$match": flt}, {"$group": {"_id": "$email_status", "n": {"$sum": 1}}}])}
+    rows = await db.mk_contacts.find(flt, {"_id": 0, "email_norm": 1, "email_status": 1, "risk_kind": 1}).to_list(200000)
+    total = len(rows)
+    by: dict = {}
+    for r in rows:
+        by[r.get("email_status") or "unknown"] = by.get(r.get("email_status") or "unknown", 0) + 1
     st = await get_settings()
-    est = round(total * float(st["wa_rate_marketing"]) * 1.18, 2) if c["channel"] == "whatsapp" else round(total / 1000 * 0.10 * 88, 2)
-    return {"total": total, "by_status": by, "estimated_cost_inr": est}
+    rate = float(st.get("usd_inr") or 88)
+    out = {"total": total, "by_status": by}
+    if c["channel"] == "whatsapp":
+        out["estimated_cost_inr"] = round(total * float(st["wa_rate_marketing"]) * 1.18, 2)
+        return out
+    out["estimated_cost_inr"] = round(total / 1000 * 0.10 * rate, 2)
+    use = await ses_usage()
+    ses_on = use["enabled"] and use["supported"]
+    unproven = [r["email_norm"] for r in rows if r.get("email_status") in ("valid", "risky", "unknown") and r.get("email_norm")]
+    cached = await _ses_cached(unproven) if ses_on else {}
+    needs = sum(1 for n in unproven if n not in cached) if ses_on else 0
+    pol = _policy(st, c)
+    kinds: dict = {}
+    for r in rows:
+        if r.get("email_status") == "risky":
+            k = r.get("risk_kind") or "unconfirmed"
+            kinds.setdefault(k, {"n": 0, "action": pol.get(k, "skip")})
+            kinds[k]["n"] += 1
+    out.update(needs_check=needs, check_cost_inr=round(needs * use["per_check_inr"], 2), checks_left=use["left"],
+               ses_on=ses_on, risky_by_kind=kinds)
+    return out
 
 
 class TestBody(BaseModel):
@@ -1236,30 +1790,23 @@ async def adm_send(cid: str, body: SendBody, user: dict = Depends(require_admin)
         raise HTTPException(status_code=400, detail="Add a subject and some content first")
     if c["channel"] == "whatsapp" and not c.get("wa_template"):
         raise HTTPException(status_code=400, detail="Choose the approved WhatsApp template first")
-    flt = await audience_filter(c)
-    contacts = await db.mk_contacts.find(flt, {"_id": 0, "id": 1, "email": 1, "phone": 1, "email_status": 1}).to_list(100000)
-    if not contacts:
-        raise HTTPException(status_code=400, detail="Nobody in this audience can be sent to (consent / verification)")
-    if abs(len(contacts) - body.confirm_count) > max(5, len(contacts) // 50):
-        raise HTTPException(status_code=409, detail=f"The audience changed to {len(contacts)} — check it again before sending")
+    n = await db.mk_contacts.count_documents(await audience_filter(c))
+    if not n:
+        raise HTTPException(status_code=400, detail="Nobody in this audience can be sent to (no one has opted in, or all are unsubscribed / bounced)")
+    if abs(n - body.confirm_count) > max(5, n // 50):
+        raise HTTPException(status_code=409, detail=f"The audience changed to {n} — check it again before sending")
     await _ensure_indexes()
     now = _iso()
-    docs = [{"id": str(uuid.uuid4()), "campaign_id": cid, "contact_id": x["id"], "to": x.get("email") if c["channel"] == "email" else x.get("phone"),
-             "status": "queued", "priority": core.SEND_ORDER.get(x.get("email_status"), 3), "queued_at": now} for x in contacts]
-    for i in range(0, len(docs), 1000):
-        try:
-            await db.mk_sends.insert_many(docs[i:i + 1000], ordered=False)
-        except Exception:  # noqa: BLE001 — duplicates from a retried click are fine (unique index)
-            pass
-    when = body.schedule_at
-    status = "scheduled" if when and when > now else "sending"
-    await db.mk_campaigns.update_one({"id": cid}, {"$set": {"status": status, "schedule_at": when or now, "queued": len(docs),
-                                                            "started_at": now if status == "sending" else None, "sent_by": user.get("email", "")}})
+    # Status guard: a double click can't start two preparations.
+    r = await db.mk_campaigns.update_one({"id": cid, "status": {"$in": ["draft", "scheduled"]}}, {"$set": {
+        "status": "preparing", "schedule_at": body.schedule_at or "", "sent_by": user.get("email", ""), "prepare_error": "",
+        "prepare": {"started_at": now, "candidates": n, "checked": 0}, "prepare_heartbeat": now}})
+    if not r.modified_count:
+        raise HTTPException(status_code=409, detail="This campaign is already being sent")
     await audit_log(db, "MARKETING_CAMPAIGN_SEND", email=user.get("email", ""), role=user.get("role", ""),
-                    meta={"campaign": cid, "channel": c["channel"], "recipients": len(docs), "scheduled": status == "scheduled"})
-    if status == "sending":
-        await start_campaign(cid)
-    return {"ok": True, "status": status, "recipients": len(docs)}
+                    meta={"campaign": cid, "channel": c["channel"], "candidates": n, "schedule_at": body.schedule_at or ""})
+    start_prepare(cid)
+    return {"ok": True, "status": "preparing", "recipients": n}
 
 
 @admin_router.post("/campaigns/{cid}/{action}")
@@ -1269,7 +1816,7 @@ async def adm_campaign_action(cid: str, action: str, user: dict = Depends(requir
     c = await db.mk_campaigns.find_one({"id": cid}, {"_id": 0, "status": 1})
     if not c:
         raise HTTPException(status_code=404, detail="Campaign not found")
-    allowed = {"pause": ("sending", "scheduled"), "resume": ("paused",), "cancel": ("sending", "scheduled", "paused")}[action]
+    allowed = {"pause": ("sending", "scheduled"), "resume": ("paused",), "cancel": ("preparing", "sending", "scheduled", "paused")}[action]
     if c["status"] not in allowed:
         raise HTTPException(status_code=409, detail=f"Cannot {action} a campaign that is {c['status']}")
     new = {"pause": "paused", "resume": "sending", "cancel": "cancelled"}[action]
@@ -1301,9 +1848,13 @@ async def adm_report(cid: str):
                 h = s[f][:13]
                 timeline.setdefault(h, {"opened": 0, "clicked": 0})
                 timeline[h][f[:-3]] += 1
-    problems = await db.mk_sends.find({"campaign_id": cid, "status": {"$in": ["bounced", "complained", "failed"]}},
+    problems = await db.mk_sends.find({"campaign_id": cid, "status": {"$in": ["bounced", "complained", "failed", "blocked"]}},
                                       {"_id": 0, "to": 1, "status": 1, "bounce_type": 1, "error": 1}).limit(200).to_list(200)
-    return {"campaign": {k: c.get(k) for k in ("id", "name", "channel", "subject", "status", "started_at", "finished_at", "paused_reason")},
+    skipped = [{"reason": r["_id"] or "skipped", "n": r["n"]} async for r in db.mk_sends.aggregate([
+        {"$match": {"campaign_id": cid, "status": "skipped"}}, {"$group": {"_id": "$error", "n": {"$sum": 1}}}, {"$sort": {"n": -1}}])]
+    return {"campaign": {k: c.get(k) for k in ("id", "name", "channel", "subject", "status", "started_at", "finished_at", "paused_reason",
+                                               "prepare", "prepare_error", "recovery", "tail_stopped_at", "note")},
+            "skipped": skipped,
             "stats": stats, "funnel": core.funnel(stats), "links": [{"url": u, "clicks": n} for u, n in zip(links, clicks)],
             "timeline": dict(sorted(timeline.items())), "problems": problems,
             "rates": {"delivery": core.rate(stats.get("delivered", 0), stats.get("sent", 0)),
@@ -1375,7 +1926,9 @@ async def adm_dashboard(days: int = 30):
     return {"days": days, "kpi": kpi, "series": dict(sorted(series.items())), "growth": dict(sorted(growth.items())),
             "unsubs": dict(sorted(unsubs.items())), "funnel_email": core.funnel(e), "funnel_whatsapp": core.funnel(tot["whatsapp"]),
             "campaigns": [{k: c.get(k) for k in ("id", "name", "channel", "status", "started_at", "stats")} for c in camps],
-            "verification": by_status}
+            "verification": by_status,
+            "alerts": await db.mk_alerts.find({"resolved": False}, {"_id": 0}).sort("at", -1).limit(20).to_list(20),
+            "ses_usage": await ses_usage()}
 
 
 # ================================================================ tasks ===
@@ -1400,6 +1953,12 @@ async def marketing_tick(x_task_token: Optional[str] = Header(None)):
     async for c in db.mk_campaigns.find({"status": "sending", "$or": [{"heartbeat": {"$lt": stale}}, {"heartbeat": {"$exists": False}}]}, {"_id": 0, "id": 1}):
         await start_campaign(c["id"])
         started.append(c["id"])
+    stale_prep = (_now() - timedelta(seconds=PREPARE_STALE)).isoformat()
+    async for c in db.mk_campaigns.find({"status": "preparing", "prepare_heartbeat": {"$lt": stale_prep}}, {"_id": 0, "id": 1}):
+        start_prepare(c["id"])   # e.g. a deploy restarted the server mid-check
+        started.append(c["id"])
+    kick_validation()
+    _bg(sync_aws_suppression())  # no-op unless 24h have passed
     return {"ok": True, "started": started}
 
 
@@ -1409,5 +1968,7 @@ async def resume_on_startup() -> None:
         await asyncio.sleep(10)
         async for c in db.mk_campaigns.find({"status": "sending"}, {"_id": 0, "id": 1}):
             await start_campaign(c["id"])
+        async for c in db.mk_campaigns.find({"status": "preparing"}, {"_id": 0, "id": 1}):
+            start_prepare(c["id"])
     except Exception:  # noqa: BLE001
         log.exception("marketing: resume on startup failed")

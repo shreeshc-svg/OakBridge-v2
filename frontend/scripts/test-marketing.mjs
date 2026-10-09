@@ -53,7 +53,7 @@ console.log("-- consent --");
 check(/email_marketing_optin/.test(checkout) && /email_marketing_optin:\s*bool\s*=\s*False/.test(srv), "checkout email opt-in exists and defaults to off");
 check(/email_consent\.status"\s*:\s*"subscribed"/.test(mk), "audiences require subscribed consent");
 check(/wa_consent\.status"\s*:\s*"subscribed"/.test(mk), "WhatsApp audiences require WhatsApp opt-in");
-check(/flt\["suppressed"\]\s*=\s*\{"\$in": \[None, ""\]\}/.test(mk) && /allowed = \["verified", "valid"\]/.test(mk), "suppressed / unsendable addresses are filtered");
+check(/flt\["suppressed"\]\s*=\s*\{"\$in": \[None, ""\]\}/.test(mk) && /flt\["email_status"\] = \{"\$in": \["verified", "valid", "risky", "unknown"\]\}/.test(mk), "suppressed / unsendable addresses are filtered");
 check(/mk_erased/.test(mk), "erased people can't be re-imported");
 check(/List-Unsubscribe-Post/.test(mk) || /List-Unsubscribe-Post/.test(core), "one-click unsubscribe header");
 check(/NoIndex|noindex/.test(unsub), "unsubscribe page is not indexed");
@@ -66,6 +66,34 @@ check(/confirm_count:\s*int/.test(mk) && /mkSend\(c\.id, a\.total/.test(page), "
 check(/require_superadmin/.test(mk), "settings changes are superadmin-only");
 check(!/AKIA[0-9A-Z]{16}/.test(mk + core), "no AWS key in source");
 check(/javascript:/.test(core) || /startswith\(\("https:\/\/", "http:\/\/"\)\)/.test(core) || /https\?:/.test(core), "only http(s) links are rendered");
+
+check(/SES_EVENTS_TOKEN/.test(mk) && /len\(override\) >= 24/.test(mk), "SNS endpoint token can be rotated without JWT_SECRET (min 24 chars)");
+
+console.log("-- SES email validation --");
+check(/if not await _reserve_check\(cap\)/.test(mk) && mk.indexOf("_reserve_check(cap)") < mk.indexOf("get_email_address_insights(EmailAddress"),
+    "each paid SES check is counted against the monthly cap BEFORE the call");
+check(/"n": \{"\$lt": cap\}/.test(mk), "cap reservation is atomic (conditional \$inc)");
+check(/_ses_cached\(/.test(mk) && /SES_CHECK_TTL_DAYS/.test(mk), "an address is never paid for twice within the cache window");
+check(/core\.send_decision\([\s\S]{0,200}needs_ses=ses_on and x\.get\("email_status"\) != "verified"[\s\S]{0,80}has_ses=bool\(x\.get\("_ses"\)\)/.test(mk),
+    "send decides per recipient: unproven + unchecked is skipped, never mailed blind");
+check(/"status": "preparing"/.test(mk) && /start_prepare\(cid\)/.test(mk) && /ses="live" if ses_on else "cache"/.test(mk),
+    "Send checks the recipients first (preparing), then sends");
+check(/doc\.update\(status="skipped", error=why\)/.test(mk), "every skipped recipient is recorded with its reason");
+check(/\{"id": cid, "status": \{"\$in": \["draft", "scheduled"\]\}\}/.test(mk), "double-click can't prepare a campaign twice");
+check(/if why and not since:\s*\n\s*await _recover\(cid, why\)/.test(mk) && /Auto-paused again after recovering/.test(mk),
+    "first bounce spike recovers by itself; a second one pauses + alerts");
+check(/_window_stats\(cid, since\)/.test(mk), "after recovery the bounce guard judges only what was sent since");
+check(/\.get\("overall"\) != "HIGH"/.test(mk), "recovery keeps only proven / SES-HIGH addresses");
+check(/tail_should_stop\(/.test(mk) && /catch-all tail stopped/.test(mk), "the catch-all tail stops itself");
+check(/dom not in core\.WEBMAIL/.test(mk) && /is_bad_domain\(/.test(mk), "domain learning never marks webmail domains bad");
+check(/list_suppressed_destinations/.test(mk) && /sync_aws_suppression\(\)/.test(mk), "AWS suppression list synced into contacts by the cron");
+check(/if v\["status"\] in \("invalid", "suppressed"\):\s*\n\s*return/.test(mk), "no confirmation email to a dead sign-up address");
+check(/checks_for_budget\(/.test(mk) && !/ses_validation_monthly_cap/.test(mk + page), "budget is in ₹, the old check-count cap is gone");
+check(/core\.worse\(/.test(mk), "SES can only downgrade an address, never vouch over our own doubts");
+check(/EmailValidationSuppressed/.test(mk) && /"blocked"/.test(mk) && /k not in \("queued", "failed", "skipped", "blocked"\)/.test(mk),
+    "SES auto-validation blocks are not counted as sent or bounced (no false auto-pause)");
+check(/hasattr\(_ses\(\), "get_email_address_insights"\)/.test(mk), "old AWS SDK detected instead of crashing");
+check(/results = await verify_emails\(\[r\.get\(ecol, ""\) for r in unique_rows\], autofix=autofix, ses="cache"\)/.test(mk), "import (incl. dry-run) uses cached SES verdicts only — never spends money");
 
 console.log("-- screen --");
 for (const t of ["mk-dashboard", "mk-editor", "mk-contacts", "mk-lists", "mk-verify", "mk-settings", "mk-report", "mk-dry-run"]) {

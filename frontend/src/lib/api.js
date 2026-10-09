@@ -637,7 +637,11 @@ export const mkDashboard = (days = 30) => api.get("/admin/marketing/dashboard", 
 export const mkHealth = () => api.get("/admin/marketing/health").then((r) => r.data);
 export const mkSettings = () => api.get("/admin/marketing/settings").then((r) => r.data);
 export const mkSaveSettings = (body) => api.put("/admin/marketing/settings", body).then((r) => r.data);
-export const mkVerify = (emails, autofix = true) => api.post("/admin/marketing/verify", { emails, autofix }).then((r) => r.data);
+export const mkVerify = (emails, autofix = true, ses = true) =>
+    api.post("/admin/marketing/verify", { emails, autofix, ses }, { timeout: 120000 }).then((r) => r.data);
+export const mkValidatePending = () => api.post("/admin/marketing/validate-pending").then((r) => r.data);
+export const mkDismissAlert = (id) => api.post(`/admin/marketing/alerts/${id}/dismiss`).then((r) => r.data);
+export const mkSuppressionSync = () => api.post("/admin/marketing/suppression-sync", null, { timeout: 120000 }).then((r) => r.data);
 export const mkImport = (file, opts) => {
     const fd = new FormData();
     fd.append("file", file);

@@ -178,6 +178,133 @@ def verdict(syntax: dict, mx: Optional[bool], *, proven: bool = False, suppresse
 SEND_ORDER = {"verified": 0, "valid": 1, "risky": 2}
 SENDABLE = frozenset(SEND_ORDER)
 
+_SEVERITY = {"verified": 0, "valid": 1, "unknown": 1, "risky": 2, "invalid": 3, "suppressed": 4}
+
+
+def worse(a: str, b: Optional[str]) -> str:
+    """The more cautious of two statuses. Combining our free checks with SES
+    can only ever downgrade an address, never vouch for one our own checks
+    already doubted (a role address stays risky even if SES says HIGH)."""
+    if not b:
+        return a
+    return a if _SEVERITY.get(a, 1) >= _SEVERITY.get(b, 1) else b
+
+
+def ses_verdict(resp: dict) -> tuple:
+    """Amazon SES Email Validation (sesv2 GetEmailAddressInsights) -> (status, reasons).
+
+    IsValid is SES's overall confidence that the address is deliverable:
+    HIGH -> valid, MEDIUM -> risky (sent only if a campaign asks for risky),
+    LOW -> invalid (never sent). For IsDisposable / IsRandomInput /
+    IsRoleAddress the confidence is that the address IS that thing, so HIGH
+    there is bad news. Returns (None, []) for a response without a verdict,
+    which callers treat as "not checked" rather than guessing."""
+    mv = (resp or {}).get("MailboxValidation") or {}
+    overall = str((mv.get("IsValid") or {}).get("ConfidenceVerdict") or "").upper()
+    ev = mv.get("Evaluations") or {}
+
+    def lvl(k: str) -> str:
+        return str((ev.get(k) or {}).get("ConfidenceVerdict") or "").upper()
+
+    reasons = []
+    if lvl("HasValidSyntax") == "LOW":
+        reasons.append("SES: address format not accepted")
+    if lvl("HasValidDnsRecords") == "LOW":
+        reasons.append("SES: domain can't receive email")
+    if lvl("MailboxExists") == "LOW":
+        reasons.append("SES: mailbox does not exist")
+    elif lvl("MailboxExists") == "MEDIUM":
+        reasons.append("SES: mailbox not confirmed")
+    if lvl("IsDisposable") == "HIGH":
+        reasons.append("SES: throwaway address")
+    if lvl("IsRandomInput") == "HIGH":
+        reasons.append("SES: looks randomly typed")
+    if lvl("IsRoleAddress") == "HIGH":
+        reasons.append("SES: shared / role mailbox")
+    if overall == "HIGH":
+        return "valid", reasons or ["SES: mailbox likely exists"]
+    if overall == "MEDIUM":
+        return "risky", reasons or ["SES: deliverability uncertain"]
+    if overall == "LOW":
+        return "invalid", reasons or ["SES: unlikely to be deliverable"]
+    return None, []
+
+
+def ses_details(resp: dict) -> dict:
+    """The raw SES levels we keep beside the verdict: overall confidence,
+    mailbox-exists confidence, and whether SES thinks it's a role mailbox."""
+    mv = (resp or {}).get("MailboxValidation") or {}
+    ev = mv.get("Evaluations") or {}
+
+    def lvl(k: str) -> str:
+        return str((ev.get(k) or {}).get("ConfidenceVerdict") or "").upper()
+
+    return {"overall": str((mv.get("IsValid") or {}).get("ConfidenceVerdict") or "").upper(),
+            "mailbox": lvl("MailboxExists"), "role": lvl("IsRoleAddress") == "HIGH"}
+
+
+# Big free-mail providers answer mailbox checks definitively, so "uncertain"
+# there means uncertain. Company / college servers often accept ANY address
+# (catch-all), which is why SES can't confirm the mailbox — a different risk.
+# They are also never "learned" as bad domains: three typo'd Gmail addresses
+# say nothing about Gmail.
+WEBMAIL = frozenset(COMMON_DOMAINS) | {"googlemail.com", "rediff.com"}
+RISK_KINDS = ("role", "catch_all", "unconfirmed")
+DEFAULT_RISK_POLICY = {"role": "send", "catch_all": "tail", "unconfirmed": "skip"}
+
+
+def risk_kind(*, role: bool, domain: str, ses_overall: str = "", mailbox: str = "") -> str:
+    """Why a 'risky' address is risky, so each kind can get its own rule."""
+    if role:
+        return "role"
+    if ses_overall == "MEDIUM" and mailbox in ("MEDIUM", "") and (domain or "").lower() not in WEBMAIL:
+        return "catch_all"
+    return "unconfirmed"
+
+
+def send_decision(status: str, kind: str, policy: Optional[dict], *, needs_ses: bool, has_ses: bool) -> tuple:
+    """-> (action, priority, reason) for one recipient when a campaign is
+    prepared. action: 'send' | 'tail' (sent last, stops itself if it bounces)
+    | 'skip' (recorded with the reason, never sent). Lower priority goes first."""
+    if status in ("invalid", "suppressed"):
+        return "skip", 9, f"address {status}"
+    if status == "verified":
+        return "send", 0, ""
+    if needs_ses and not has_ses:
+        return "skip", 9, "mailbox not checked (monthly budget used up or AWS unavailable)"
+    if status == "valid":
+        return "send", 1, ""
+    if status == "risky":
+        act = (policy or {}).get(kind) or DEFAULT_RISK_POLICY.get(kind, "skip")
+        if act == "send":
+            return "send", 2, ""
+        if act == "tail":
+            return "tail", 3, ""
+        return "skip", 9, f"risky ({(kind or 'unconfirmed').replace('_', ' ')}) — skipped by rule"
+    return "skip", 9, "address not checked"
+
+
+def is_bad_domain(domain: str, hard_bounced: int, threshold: int = 3) -> bool:
+    """A company domain where several different addresses hard-bounced is
+    probably dead or rejecting us; new addresses there become risky."""
+    return (domain or "").lower() not in WEBMAIL and hard_bounced >= threshold
+
+
+def checks_for_budget(budget_inr: float, usd_inr: float, usd_per_check: float = 0.01) -> int:
+    """₹ monthly budget -> how many SES checks it buys."""
+    try:
+        if usd_inr <= 0 or budget_inr <= 0:
+            return 0
+        return int(float(budget_inr) / (usd_per_check * float(usd_inr)))
+    except (TypeError, ValueError):
+        return 0
+
+
+def tail_should_stop(sent: int, bounced: int, *, max_rate: float = 0.03, min_sent: int = 20) -> bool:
+    """The catch-all tail stops itself (without pausing the campaign) once
+    enough of it has gone out to judge and its bounces pass the limit."""
+    return sent >= min_sent and bounced / max(sent, 1) > max_rate
+
 
 def should_pause(sent: int, bounced: int, complained: int, *, min_sent: int = 50,
                  max_bounce: float = 0.02, max_complaint: float = 0.001) -> Optional[str]:
