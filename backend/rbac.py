@@ -46,6 +46,7 @@ SECTIONS: tuple[str, ...] = (
     "careers",
     "orders",
     "whatsapp",
+    "marketing",
     "coupons",
     "messages",
     "submissions",
@@ -75,6 +76,7 @@ SECTION_LABELS: dict[str, str] = {
     "careers": "Careers",
     "orders": "Orders",
     "whatsapp": "WhatsApp",
+    "marketing": "Marketing",
     "coupons": "Coupons",
     "messages": "Messages",
     "submissions": "Submissions",
@@ -114,6 +116,9 @@ SECTION_PATHS: dict[str, set[str]] = {
     "orders": {"orders", "cart-reminders"},
     # Admin → WhatsApp: the Interakt message log, delivery stats and replies.
     "whatsapp": {"interakt"},
+    # Admin → Marketing: contacts, verification, campaigns, analytics. Image
+    # blocks upload through the media library endpoints.
+    "marketing": {"marketing", "media", "uploads"},
     "coupons": {"coupons"},
     "messages": {"messages"},
     "submissions": {"submissions"},

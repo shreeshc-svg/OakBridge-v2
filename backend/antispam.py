@@ -81,15 +81,9 @@ def normalise_email(email: str) -> str:
     The stored address is always the one the user gave — this is only for
     comparison, so mail still reaches them exactly as they wrote it.
     """
-    e = str(email or "").strip().lower()
-    if "@" not in e:
-        return e
-    local, _, domain = e.partition("@")
-    local = local.split("+", 1)[0]
-    if domain in _DOT_DOMAINS:
-        local = local.replace(".", "")
-        domain = "gmail.com"
-    return f"{local}@{domain}"
+    # One implementation, shared with marketing (marketing_core.normalise_email).
+    from marketing_core import normalise_email as _norm
+    return _norm(email)
 
 
 def looks_machine_generated(name: str) -> bool:

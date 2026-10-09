@@ -81,6 +81,8 @@ export default function Checkout() {
         // on their account).
         wa_optin: true,
         wa_marketing_optin: false,
+        // Marketing email consent (backend/marketing.py) — off until ticked.
+        email_marketing_optin: false,
     });
     const [deliverElsewhere, setDeliverElsewhere] = useState(false);
     const [couponCode, setCouponCode] = useState("");
@@ -427,6 +429,11 @@ export default function Checkout() {
                     </section>
 
                     <section className="space-y-2" data-testid="checkout-whatsapp">
+                        <label className="flex items-start gap-2 text-sm text-[#4B5563]">
+                            <input type="checkbox" className="mt-1" checked={!!form.email_marketing_optin} data-testid="checkout-email-marketing"
+                                onChange={(e) => setForm((f) => ({ ...f, email_marketing_optin: e.target.checked }))} />
+                            <span>Email me about new books, events and offers. Unsubscribe any time.</span>
+                        </label>
                         <label className="flex items-start gap-2 text-sm text-[#1F2937]">
                             <input type="checkbox" className="mt-1" checked={!!form.wa_optin} data-testid="checkout-wa-optin"
                                 onChange={(e) => setForm((f) => ({ ...f, wa_optin: e.target.checked }))} />

@@ -285,6 +285,10 @@ async def _deliver_paid_order(order_id: str) -> None:
             from interakt import on_order_paid
 
             await on_order_paid(fresh)
+            # Marketing contact (customer; consent only if ticked at checkout).
+            from marketing import on_order_paid as marketing_on_paid
+
+            await marketing_on_paid(fresh)
     except Exception:  # noqa: BLE001
         logger.exception("WhatsApp order-paid hook failed for order %s", order_id)
 

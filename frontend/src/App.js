@@ -35,6 +35,9 @@ import AdminCoupons from "@/pages/admin/AdminCoupons";
 import AdminInventory from "@/pages/admin/AdminInventory";
 import AdminWarehouse from "@/pages/admin/AdminWarehouse";
 import AdminWhatsApp from "@/pages/admin/AdminWhatsApp";
+import AdminMarketing from "@/pages/admin/AdminMarketing";
+import Unsubscribe from "@/pages/Unsubscribe";
+import SubscribeConfirm from "@/pages/SubscribeConfirm";
 import WarehouseApp from "@/pages/warehouse/WarehouseApp";
 import AdminSubmissions from "@/pages/admin/AdminSubmissions";
 import AdminSpam from "@/pages/admin/AdminSpam";
@@ -131,6 +134,8 @@ function App() {
                                     element={<Solutions />}
                                 />
                                 <Route path="/contact" element={<Contact />} />
+                                <Route path="/unsubscribe" element={<Unsubscribe />} />
+                                <Route path="/subscribe/confirm" element={<SubscribeConfirm />} />
                                 <Route path="/authors" element={<Authors />} />
                                 <Route path="/authors/:id" element={<Authors />} />
                                 {/* The old site's author URL. Still ranking, and
@@ -250,6 +255,7 @@ function App() {
                                 <Route path="inventory" element={<AdminInventory />} />
                                 <Route path="warehouse" element={<AdminWarehouse />} />
                                 <Route path="whatsapp" element={<AdminWhatsApp />} />
+                                <Route path="marketing" element={<AdminMarketing />} />
                                 <Route path="submissions" element={<AdminSubmissions />} />
                                 <Route path="spam" element={<AdminSpam />} />
                                 <Route path="audit" element={<AdminAudit />} />

@@ -25,6 +25,7 @@ export const SECTIONS = [
     "careers",
     "orders",
     "whatsapp",
+    "marketing",
     "coupons",
     "messages",
     "submissions",
@@ -54,6 +55,7 @@ export const SECTION_LABELS = {
     careers: "Careers",
     orders: "Orders",
     whatsapp: "WhatsApp",
+    marketing: "Marketing",
     coupons: "Coupons",
     messages: "Messages",
     submissions: "Submissions",
@@ -73,6 +75,7 @@ export const SECTION_GROUPS = [
         sections: ["pages", "navigation", "media", "media-gallery", "careers", "page-bookstore", "page-book", "ebooks"],
     },
     { label: "Fulfilment", sections: ["orders", "whatsapp", "coupons"] },
+    { label: "Marketing", sections: ["marketing"] },
     { label: "Enquiries", sections: ["messages", "submissions", "waitlists", "spam"] },
     { label: "Governance", sections: ["users", "audit", "legal", "settings"] },
 ];

@@ -627,3 +627,40 @@ export const adminWaStats = (days = 30) => api.get("/admin/interakt/stats", { pa
 export const adminWaReplies = (params = {}) => api.get("/admin/interakt/replies", { params }).then((r) => r.data);
 export const adminWaReplyRead = (id) => api.post(`/admin/interakt/replies/${id}/read`).then((r) => r.data);
 export const adminWaEvents = () => api.get("/admin/interakt/events").then((r) => r.data);
+
+// Marketing (backend/marketing.py) — public unsubscribe / confirm
+export const mkUnsubInfo = (s, t) => api.get(`/m/u/${encodeURIComponent(s)}/${encodeURIComponent(t)}`).then((r) => r.data);
+export const mkUnsubscribe = (s, t) => api.post(`/m/u/${encodeURIComponent(s)}/${encodeURIComponent(t)}`).then((r) => r.data);
+export const mkConfirm = (c, t) => api.post("/m/confirm", { c, t }).then((r) => r.data);
+// … and Admin → Marketing
+export const mkDashboard = (days = 30) => api.get("/admin/marketing/dashboard", { params: { days } }).then((r) => r.data);
+export const mkHealth = () => api.get("/admin/marketing/health").then((r) => r.data);
+export const mkSettings = () => api.get("/admin/marketing/settings").then((r) => r.data);
+export const mkSaveSettings = (body) => api.put("/admin/marketing/settings", body).then((r) => r.data);
+export const mkVerify = (emails, autofix = true) => api.post("/admin/marketing/verify", { emails, autofix }).then((r) => r.data);
+export const mkImport = (file, opts) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    Object.entries(opts || {}).forEach(([k, v]) => fd.append(k, typeof v === "boolean" ? String(v) : v ?? ""));
+    return api.post("/admin/marketing/import", fd, { timeout: 300000 }).then((r) => r.data);
+};
+export const mkReverify = (listId) => api.post("/admin/marketing/reverify", null, { params: listId ? { list_id: listId } : {}, timeout: 300000 }).then((r) => r.data);
+export const mkSync = () => api.post("/admin/marketing/sync", null, { timeout: 300000 }).then((r) => r.data);
+export const mkContacts = (params) => api.get("/admin/marketing/contacts", { params }).then((r) => r.data);
+export const mkPatchContact = (id, body) => api.patch(`/admin/marketing/contacts/${id}`, body).then((r) => r.data);
+export const mkDeleteContact = (id) => api.delete(`/admin/marketing/contacts/${id}`).then((r) => r.data);
+export const mkLists = () => api.get("/admin/marketing/lists").then((r) => r.data);
+export const mkCreateList = (body) => api.post("/admin/marketing/lists", body).then((r) => r.data);
+export const mkDeleteList = (id) => api.delete(`/admin/marketing/lists/${id}`).then((r) => r.data);
+export const mkCampaigns = () => api.get("/admin/marketing/campaigns").then((r) => r.data);
+export const mkNewCampaign = (body) => api.post("/admin/marketing/campaigns", body).then((r) => r.data);
+export const mkCampaign = (id) => api.get(`/admin/marketing/campaigns/${id}`).then((r) => r.data);
+export const mkSaveCampaign = (id, body) => api.patch(`/admin/marketing/campaigns/${id}`, body).then((r) => r.data);
+export const mkDuplicate = (id) => api.post(`/admin/marketing/campaigns/${id}/duplicate`).then((r) => r.data);
+export const mkAudience = (id) => api.get(`/admin/marketing/campaigns/${id}/audience`).then((r) => r.data);
+export const mkPreview = (id) => api.get(`/admin/marketing/campaigns/${id}/preview`).then((r) => r.data);
+export const mkTestSend = (id, to) => api.post(`/admin/marketing/campaigns/${id}/test`, { to }).then((r) => r.data);
+export const mkSend = (id, confirmCount, scheduleAt) =>
+    api.post(`/admin/marketing/campaigns/${id}/send`, { confirm_count: confirmCount, schedule_at: scheduleAt || null }).then((r) => r.data);
+export const mkCampaignAction = (id, action) => api.post(`/admin/marketing/campaigns/${id}/${action}`).then((r) => r.data);
+export const mkReport = (id) => api.get(`/admin/marketing/campaigns/${id}/report`).then((r) => r.data);

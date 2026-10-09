@@ -324,6 +324,7 @@ class OrderCreate(BaseModel):
     # new-release news on WhatsApp (marketing — stored on the account).
     wa_optin: bool = False
     wa_marketing_optin: bool = False
+    email_marketing_optin: bool = False
     # {utm_source, utm_medium, utm_campaign, utm_term, utm_content, referrer,
     # landed_at} -- whichever of those the landing URL carried. Free-form
     # because campaign tags are whatever the person building the link typed,
@@ -373,6 +374,8 @@ class Order(BaseModel):
     gift_recipient: str = ""
     # WhatsApp consent (interakt.py). Declared, or response_model=Order drops it.
     wa_optin: bool = False
+    # "Email me new books & offers" at checkout (marketing.py consent).
+    email_marketing_optin: bool = False
     # Declared here or response_model=Order drops it and the campaign that
     # earned the sale is lost between creating the order and reading it back.
     attribution: dict = Field(default_factory=dict)
@@ -696,6 +699,10 @@ async def startup_event():
     await ensure_indexes()
     await ensure_feature_indexes()
     init_storage()
+    # Marketing: carry on with any campaign a deploy interrupted mid-send.
+    import asyncio as _asyncio
+    from marketing import resume_on_startup
+    _asyncio.create_task(resume_on_startup())
 
 
 # ============== ROUTES ==============
@@ -1642,6 +1649,13 @@ async def newsletter_signup(payload: NewsletterSignup, request: Request):
     }
     await db.newsletter.insert_one({**doc})
 
+    # Marketing contact (double opt-in when switched on in Admin → Marketing).
+    try:
+        from marketing import on_newsletter
+        await on_newsletter(payload.email, doc["source"])
+    except Exception:  # noqa: BLE001
+        logging.getLogger(__name__).exception("Marketing hook failed for %s", payload.email)
+
     # Best-effort welcome email (never blocks signup if email fails)
     try:
         from emailer import send_waitlist_welcome
@@ -1874,6 +1888,7 @@ async def create_order(payload: OrderCreate, user: Optional[dict] = Depends(get_
         gift_message=(payload.gift_message or "").strip()[:200],
         gift_recipient=(payload.gift_recipient or "").strip()[:120],
         wa_optin=bool(payload.wa_optin),
+        email_marketing_optin=bool(payload.email_marketing_optin),
         # Trusted only as far as it is useful: keys we know, values clipped.
         # This arrives from the browser, so it is somebody's input, not a fact.
         attribution={
@@ -1933,6 +1948,11 @@ app.include_router(wh_admin_router)
 from interakt import admin_router as interakt_admin_router, webhook_router as interakt_webhook_router  # noqa: E402
 app.include_router(interakt_webhook_router)
 app.include_router(interakt_admin_router)
+from marketing import (admin_router as marketing_admin_router, public_router as marketing_public_router,  # noqa: E402
+                       tasks_router as marketing_tasks_router)
+app.include_router(marketing_public_router)
+app.include_router(marketing_admin_router)
+app.include_router(marketing_tasks_router)
 
 # The production domains, Vercel preview and local dev are always allowed; any
 # extra origins in the CORS_ORIGINS env var (comma-separated) are merged in. This

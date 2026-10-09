@@ -234,6 +234,44 @@ async def send_template(kind: str, *, phone: str, ctx: dict, dedupe: str,
         return None
 
 
+async def send_campaign_message(*, template: str, language: str, values: list, phone: str, dedupe: str,
+                                campaign_id: str, force_test: bool = False) -> Optional[dict]:
+    """One message of a bulk WhatsApp campaign (marketing.py): any approved
+    template, variables already filled in. Same Off/Test/Live switch, logging,
+    once-only dedupe and webhook status tracking as the order messages.
+    Never raises."""
+    try:
+        cfg = await get_cfg()
+        mode = "test" if force_test else cfg["mode"]
+        if mode == "off" or not re.match(r"^[a-z0-9_]+$", template or ""):
+            return None
+        await _ensure_index()
+        to_raw = cfg["test_phone"] if mode == "test" else phone
+        to = split_phone(to_raw)
+        vals = [_val(v) for v in values or []]
+        rec = {"id": str(uuid.uuid4()), "kind": "campaign", "template": template, "mode": mode,
+               "to": f"{to[0]}{to[1]}" if to else (to_raw or ""), "intended_to": phone or "", "order_id": "", "order_number": "",
+               "user_id": "", "campaign_id": campaign_id, "values": vals, "status": "queued", "created_at": _now(), "history": []}
+        if dedupe and not force_test:
+            claim = await db.wa_messages.update_one({"dedupe": dedupe}, {"$setOnInsert": rec}, upsert=True)
+            if claim.upserted_id is None:
+                return await db.wa_messages.find_one({"dedupe": dedupe}, {"_id": 0})
+        else:
+            await db.wa_messages.insert_one(dict(rec))
+        if not _api_key():
+            return await _finish(rec["id"], False, {"error": "INTERAKT_API_KEY is not set on the server"})
+        if not to:
+            return await _finish(rec["id"], False, {"error": f"not a usable mobile number: {to_raw!r}"})
+        body = {"countryCode": to[0], "phoneNumber": to[1], "type": "Template",
+                "callbackData": json.dumps({"m": rec["id"], "k": "campaign", "c": campaign_id})[:500],
+                "template": {"name": template, "languageCode": language or "en", "bodyValues": vals}}
+        ok, data = await asyncio.to_thread(_post, "/message/", body)
+        return await _finish(rec["id"], ok, data)
+    except Exception:  # noqa: BLE001
+        log.exception("interakt: campaign send failed")
+        return None
+
+
 async def _finish(mid: str, ok: bool, data: dict) -> dict:
     upd = {"status": "accepted" if ok else "failed", "sent_at": _now(),
            "interakt_id": str(data.get("id") or ""), "response": {k: data.get(k) for k in ("result", "message", "id", "error", "http_status", "raw") if k in data}}
