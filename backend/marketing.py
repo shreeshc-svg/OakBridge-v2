@@ -40,6 +40,7 @@ import json
 import logging
 import os
 import re
+import secrets
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -72,7 +73,10 @@ DEFAULT_SETTINGS = {
     "footer": "Oakbridge Publishing Pvt. Ltd. · 934, 9th Floor, Tower B3, Spaze Itech Park, Sector 49, Gurugram 122018",
     "logo": "",
     "double_opt_in": True,
-    "include_role_addresses": False,
+    # info@ / contact@ / admin@ at a school, college or firm is often the real
+    # buyer for a publisher, so by default they count as valid. Off = risky
+    # (shared inbox: whoever reads it never opted in personally).
+    "include_role_addresses": True,
     "max_bounce": 0.02,
     "wa_rate_marketing": 0.96,   # ₹ per message incl. Interakt markup, before GST
     "wa_rate_utility": 0.13,
@@ -88,6 +92,10 @@ DEFAULT_SETTINGS = {
     # send | tail (last, stops itself if it bounces) | skip.
     "risk_policy": dict(core.DEFAULT_RISK_POLICY),
     "tail_max_bounce": 0.03,
+    # Confidence score lines (0-100) and self-learning from bounce outcomes.
+    "score_valid": 65,
+    "score_invalid": 35,
+    "auto_learn": True,
 }
 SES_CHECK_TTL_DAYS = 180  # a mailbox verdict is reused for 6 months, never paid for twice
 GIF = (b"GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xff\xff\xff!\xf9\x04\x01\x00\x00\x00\x00,"
@@ -362,19 +370,66 @@ async def ses_check(emails: list, *, refresh: bool = False) -> dict:
     return out
 
 
-async def verify_emails(raw: list, *, autofix: bool = True, ses: str = "cache") -> list:
+_MODEL: dict = {"at": 0.0, "doc": None}
+
+
+async def scoring_model() -> dict:
+    """What the self-learning job last worked out (signal adjustments and the
+    'valid' threshold). Cached for 10 minutes; the job clears the cache."""
+    if _MODEL["doc"] is None or time.time() - _MODEL["at"] > 600:
+        _MODEL.update(at=time.time(), doc=await db.mk_model.find_one({"key": "scoring"}, {"_id": 0}) or {})
+    return _MODEL["doc"]
+
+
+async def _scoring_params(st: dict) -> tuple:
+    model = await scoring_model()
+    auto = bool(st.get("auto_learn", True))
+    valid = int(st.get("score_valid") or core.DEFAULT_THRESHOLDS["valid"])
+    if auto and (model.get("thresholds") or {}).get("valid"):
+        valid = int(model["thresholds"]["valid"])
+    th = {"valid": valid, "invalid": min(int(st.get("score_invalid") or core.DEFAULT_THRESHOLDS["invalid"]), valid - 5)}
+    return th, (model.get("adjust") or {}) if auto else {}
+
+
+async def _probe_catch_all(domain: str) -> Optional[bool]:
+    """Does this company domain accept ANY address? Ask SES about one made-up
+    mailbox there — one paid check per domain per 90 days. If SES says even
+    that "exists", the domain is catch-all and "mailbox not confirmed" on a
+    real address there means nothing; if SES says it doesn't exist, the
+    domain checks its mailboxes and an unconfirmed real address is a doubt."""
+    probe = f"zq{secrets.token_hex(5)}x@{domain}"
+    norm = core.normalise_email(probe)
+    v = (await ses_check([probe])).get(norm)
+    await db.mk_ses_checks.delete_one({"email_norm": norm})  # not a real contact
+    if not v:
+        return None
+    mb = v.get("mailbox", "")
+    res = False if mb == "LOW" else True if mb in ("HIGH", "MEDIUM") else None
+    if res is not None:
+        await db.mk_domains.update_one({"domain": domain}, {"$set": {"domain": domain, "catch_all": res, "catch_all_at": _iso()}}, upsert=True)
+    return res
+
+
+async def verify_emails(raw: list, *, autofix: bool = True, ses: str = "cache", names: Optional[list] = None) -> list:
     """Full verification for a batch of raw strings. One result per input row:
-    {input, email, email_norm, status, reasons[], fixed_from, ses_checked}.
+    {input, email, email_norm, status, reasons[], fixed_from, ses_checked,
+     score, flags[], risk_kind}.
+
+    Hard facts decide first (bad format, no mail server, throwaway, bounced /
+    unsubscribed before, SES "mailbox does not exist", proven). Everything
+    else gets a 0-100 confidence score (core.score_address) and the score
+    decides valid / risky / invalid.
 
     ses="cache" applies SES verdicts we already paid for (free);
-    ses="live" also asks SES about addresses without one (paid, capped);
-    ses="refresh" asks SES again even where we have a verdict;
+    ses="live" also asks SES about addresses without one (paid, capped) and
+    tests company domains for catch-all once; ses="refresh" re-asks SES;
     ses="off" uses only our own free checks.
-    Risky rows also get risk_kind (role / catch_all / unconfirmed)."""
+    names: optional, aligned with raw — lets "name matches address" count."""
     st = await get_settings()
     extra_disp = {d.strip().lower() for d in st.get("extra_disposable") or [] if d.strip()}
+    names = list(names or [])
     rows = []
-    for r in raw:
+    for i, r in enumerate(raw):
         s = core.check_syntax(r)
         fixed_from = None
         if autofix and s["ok"] and s["suggestion"]:
@@ -382,10 +437,17 @@ async def verify_emails(raw: list, *, autofix: bool = True, ses: str = "cache") 
             s = {**core.check_syntax(s["suggestion"]), "reasons": [f"fixed typo from {fixed_from}"]}
         if s["ok"] and s["email"].split("@")[1] in extra_disp:
             s.update(ok=False, disposable=True, reasons=s["reasons"] + ["throwaway domain"])
-        rows.append({"input": r, "syntax": s, "fixed_from": fixed_from})
+        rows.append({"input": r, "syntax": s, "fixed_from": fixed_from, "name": str(names[i] if i < len(names) else "") or ""})
     domains = {x["syntax"]["email"].split("@")[1] for x in rows if x["syntax"]["ok"]}
     mx = await domains_mx(domains)
-    bad_domains = {d["domain"] async for d in db.mk_domains.find({"domain": {"$in": list(domains)}, "bad": True}, {"_id": 0, "domain": 1})}
+    slow = {d for d in domains if mx.get(d) is None}
+    if slow:
+        # One immediate retry: a slow DNS answer is not a risk signal. Still
+        # nothing -> 'unknown', re-checked automatically later (never 'risky').
+        mx.update({d: v for d, v in (await domains_mx(slow)).items() if v is not None})
+    dom_info = {d["domain"]: d async for d in db.mk_domains.find(
+        {"domain": {"$in": list(domains)}}, {"_id": 0, "domain": 1, "bad": 1, "delivered_n": 1, "hard_bounced": 1,
+                                              "catch_all": 1, "catch_all_at": 1})}
     norms = [core.normalise_email(x["syntax"]["email"]) for x in rows]
     proven = await _proven([n for n in norms if n])
     supp = {}
@@ -400,21 +462,16 @@ async def verify_emails(raw: list, *, autofix: bool = True, ses: str = "cache") 
         reasons = list(s["reasons"])
         if s["ok"] and dom_mx is False:
             reasons.append("domain does not receive email")
-        if s["ok"] and dom_mx is None:
-            reasons.append("domain check did not finish")
+        if s["ok"] and dom_mx is None and status == "risky":
+            status = "unknown"
+            reasons.append("domain check did not finish — retried automatically")
         if supp.get(n):
             reasons.append(f"previously {supp[n]}")
         if n in proven:
             reasons.append("proven (confirmed account or delivered before)")
-        dom = s["email"].split("@")[-1] if s["ok"] else ""
-        bad = dom in bad_domains and status == "valid"
-        if bad:
-            # Several different addresses at this company domain hard-bounced.
-            status = "risky"
-            reasons.append("3+ addresses at this domain bounced")
         out.append({"input": x["input"], "email": s["email"], "email_norm": n, "status": status,
                     "reasons": reasons, "fixed_from": x["fixed_from"], "role": s.get("role", False), "ses_checked": False,
-                    "_bad_domain": bad, "_ses": None})
+                    "_ses": None, "_name": x["name"], "_suggest": bool(s.get("suggestion")) and not x["fixed_from"]})
     if ses in ("cache", "live", "refresh"):
         # Only addresses our free checks couldn't settle are worth an SES look:
         # verified ones are proven, invalid/suppressed ones are never sent.
@@ -426,23 +483,65 @@ async def verify_emails(raw: list, *, autofix: bool = True, ses: str = "cache") 
         for r in need:
             v = verdicts.get(r["email_norm"])
             if v:
-                r["status"] = core.worse(r["status"], v["status"])
-                r["reasons"] = r["reasons"] + [x for x in v.get("reasons") or [] if x not in r["reasons"]]
                 r["ses_checked"] = True
                 r["_ses"] = v
+                if v["status"] == "invalid":  # SES LOW / mailbox does not exist: a fact, not a score
+                    r["status"] = "invalid"
+                    r["reasons"] = r["reasons"] + [x for x in v.get("reasons") or [] if x not in r["reasons"]]
+    ca_fresh = (_now() - timedelta(days=90)).isoformat()
+    if ses in ("live", "refresh"):
+        doms = {r["email"].split("@")[-1] for r in out if r["status"] in ("valid", "risky") and r["_ses"]
+                and r["_ses"].get("overall") == "MEDIUM" and r["_ses"].get("mailbox") in ("MEDIUM", "")}
+        for d in sorted(doms):
+            if d in core.WEBMAIL or ((dom_info.get(d) or {}).get("catch_all_at") or "") >= ca_fresh:
+                continue
+            res = await _probe_catch_all(d)
+            if res is not None:
+                dom_info.setdefault(d, {"domain": d}).update(catch_all=res, catch_all_at=_iso())
+    th, adjust = await _scoring_params(st)
+    role_ok = bool(st.get("include_role_addresses"))
     for r in out:
         v = r.pop("_ses") or {}
-        bad = r.pop("_bad_domain")
+        nm, suggest = r.pop("_name"), r.pop("_suggest")
         r["ses_overall"] = v.get("overall", "")
-        r["risk_kind"] = "" if r["status"] != "risky" else (
-            "unconfirmed" if bad else core.risk_kind(role=bool(r["role"] or v.get("role")), domain=r["email"].split("@")[-1],
-                                                     ses_overall=v.get("overall", ""), mailbox=v.get("mailbox", "")))
+        r["role"] = bool(r["role"] or v.get("role"))
+        r["risk_kind"], r["flags"] = "", []
+        r["score"] = 100 if r["status"] == "verified" else 0 if r["status"] in ("invalid", "suppressed") else None
+        if r["status"] not in ("valid", "risky"):
+            continue
+        dom = r["email"].split("@")[-1]
+        di = dom_info.get(dom) or {}
+        catch_all = di.get("catch_all") if (di.get("catch_all_at") or "") >= ca_fresh else None
+        sig = {"ses": v.get("overall", ""), "mailbox": v.get("mailbox", ""), "catch_all": catch_all,
+               "random": bool(v.get("random") or "SES: looks randomly typed" in (v.get("reasons") or [])),
+               "role": r["role"], "domain_bad": bool(di.get("bad")),
+               "domain_good": dom not in core.WEBMAIL and int(di.get("delivered_n") or 0) >= 3 and not di.get("hard_bounced"),
+               "name_match": core.name_matches(r["email"].split("@")[0], nm)}
+        sc = core.score_address(sig, adjust=adjust, thresholds=th, role_ok=role_ok)
+        status = sc["status"]
+        if suggest and status == "valid":
+            status = "risky"  # looks like a typo we weren't allowed to fix
+        r.update(status=status, score=sc["score"], flags=sc["flags"])
+        r["reasons"] = [x for x in r["reasons"] if not x.startswith("SES:")] + [f"confidence {sc['score']}/100"] + sc["reasons"]
+        if r["role"] and role_ok:
+            r["reasons"].append("role address — treated as normal (Settings)")
+        if status == "risky":
+            if r["role"] and not role_ok:
+                r["risk_kind"] = "role"
+            elif sig["domain_bad"]:
+                r["risk_kind"] = "unconfirmed"
+            elif catch_all is True or (catch_all is None and core.risk_kind(role=False, domain=dom, ses_overall=sig["ses"],
+                                                                              mailbox=sig["mailbox"]) == "catch_all"):
+                r["risk_kind"] = "catch_all"
+            else:
+                r["risk_kind"] = "unconfirmed"
     return out
 
 
 def _status_update(v: dict) -> dict:
     """Contact fields from one verify_emails() row."""
-    upd = {"email_status": v["status"], "reasons": v["reasons"][:6], "verified_at": _iso(), "risk_kind": v.get("risk_kind", "")}
+    upd = {"email_status": v["status"], "reasons": v["reasons"][:7], "verified_at": _iso(), "risk_kind": v.get("risk_kind", ""),
+           "role": bool(v.get("role")), "score": v.get("score"), "flags": v.get("flags") or []}
     if v.get("ses_checked"):
         upd.update(ses_checked=True, ses_overall=v.get("ses_overall", ""))
     return upd
@@ -470,10 +569,10 @@ async def validate_pending(max_n: int = 5000) -> dict:
             flt = {"email_status": {"$in": ["unknown", "valid", "risky"]}, "ses_checked": {"$ne": True}}
         else:
             flt = {"email_status": "unknown"}
-        contacts = await db.mk_contacts.find(flt, {"_id": 0, "id": 1, "email": 1}).limit(max_n).to_list(max_n)
+        contacts = await db.mk_contacts.find(flt, {"_id": 0, "id": 1, "email": 1, "name": 1}).limit(max_n).to_list(max_n)
         for i in range(0, len(contacts), 100):
             chunk = contacts[i:i + 100]
-            res = await verify_emails([c["email"] for c in chunk], autofix=False, ses="live")
+            res = await verify_emails([c["email"] for c in chunk], autofix=False, ses="live", names=[c.get("name", "") for c in chunk])
             for c, v in zip(chunk, res):
                 await db.mk_contacts.update_one({"id": c["id"]}, {"$set": _status_update(v)})
                 done += 1
@@ -484,6 +583,23 @@ async def validate_pending(max_n: int = 5000) -> dict:
     finally:
         _validating = False
     return {"processed": done}
+
+
+async def _reapply_role_rule() -> None:
+    """The role-address setting changed: re-rate saved role addresses now
+    (cached SES verdicts only — free), so Contacts and audience counts match
+    the new rule straight away instead of at the next send."""
+    try:
+        flt = {"$or": [{"role": True}, {"risk_kind": "role"}, {"reasons": "role address — treated as normal (Settings)"}],
+               "email_status": {"$in": ["valid", "risky"]}}
+        contacts = await db.mk_contacts.find(flt, {"_id": 0, "id": 1, "email": 1, "name": 1}).to_list(100000)
+        for i in range(0, len(contacts), 200):
+            chunk = contacts[i:i + 200]
+            res = await verify_emails([c["email"] for c in chunk], autofix=False, ses="cache", names=[c.get("name", "") for c in chunk])
+            for c, v in zip(chunk, res):
+                await db.mk_contacts.update_one({"id": c["id"]}, {"$set": _status_update(v)})
+    except Exception:  # noqa: BLE001
+        log.exception("marketing: re-applying the role-address rule failed")
 
 
 def kick_validation() -> None:
@@ -533,7 +649,7 @@ async def upsert_contact(email: str, *, name: str = "", phone: str = "", source:
     if ses_checked:
         upd["ses_checked"] = True
     if extra:
-        upd.update({k: v for k, v in extra.items() if k in ("risk_kind", "ses_overall")})
+        upd.update({k: v for k, v in extra.items() if k in ("risk_kind", "ses_overall", "score", "flags", "role")})
     if customer:
         upd["customer"] = True
     final = {"unsubscribed", "complained"}
@@ -569,7 +685,8 @@ async def on_newsletter(email: str, source: str = "newsletter") -> None:
             v = (await verify_emails([email], autofix=False, ses="live"))[0]
             c = await upsert_contact(email, source=source or "newsletter", email_consent="pending", status=v["status"],
                                      reasons=v["reasons"], ses_checked=v.get("ses_checked") or None,
-                                     extra={"risk_kind": v.get("risk_kind", ""), "ses_overall": v.get("ses_overall", "")})
+                                     extra={"risk_kind": v.get("risk_kind", ""), "ses_overall": v.get("ses_overall", ""), "score": v.get("score"),
+                                    "flags": v.get("flags") or [], "role": bool(v.get("role"))})
             if v["status"] in ("invalid", "suppressed"):
                 return  # kept as a record, but no email to a dead / bounced address
             if c and c.get("email_consent", {}).get("status") == "pending":
@@ -762,17 +879,19 @@ async def _prepare_campaign(cid: str) -> None:
             return
         st = await get_settings()
         contacts = await db.mk_contacts.find(await audience_filter(c), {"_id": 0, "id": 1, "email": 1, "phone": 1, "email_status": 1,
-                                                                        "risk_kind": 1, "email_norm": 1}).to_list(200000)
+                                                                        "risk_kind": 1, "email_norm": 1, "name": 1, "score": 1, "flags": 1}).to_list(200000)
         is_email = c["channel"] == "email"
         ses_on = is_email and bool(st.get("ses_validation")) and ses_validation_supported()
         if is_email:
             todo = [x for x in contacts if x.get("email_status") != "verified"]
             for i in range(0, len(todo), 100):
                 chunk = todo[i:i + 100]
-                res = await verify_emails([x["email"] for x in chunk], autofix=False, ses="live" if ses_on else "cache")
+                res = await verify_emails([x["email"] for x in chunk], autofix=False, ses="live" if ses_on else "cache",
+                                          names=[x.get("name", "") for x in chunk])
                 for x, v in zip(chunk, res):
                     await db.mk_contacts.update_one({"id": x["id"]}, {"$set": _status_update(v)})
-                    x.update(email_status=v["status"], risk_kind=v.get("risk_kind", ""), _ses=v.get("ses_checked"))
+                    x.update(email_status=v["status"], risk_kind=v.get("risk_kind", ""), _ses=v.get("ses_checked"),
+                             score=v.get("score"), flags=v.get("flags") or [])
                 cur = await db.mk_campaigns.find_one_and_update(
                     {"id": cid}, {"$set": {"prepare.checked": min(i + 100, len(todo)), "prepare.to_check": len(todo),
                                           "prepare_heartbeat": _iso()}}, projection={"_id": 0, "status": 1})
@@ -791,6 +910,12 @@ async def _prepare_campaign(cid: str) -> None:
                 act, prio, why = "send", 1, ""
             doc = {"id": str(uuid.uuid4()), "campaign_id": cid, "contact_id": x["id"], "priority": prio, "queued_at": now,
                    "to": x.get("email") if is_email else x.get("phone")}
+            if is_email:
+                # What we believed about the address when we sent: the
+                # self-learning job compares this with what actually bounced.
+                doc.update(band=x.get("email_status") or "unknown",
+                           score=100 if x.get("email_status") == "verified" else x.get("score"),
+                           flags=["proven"] if x.get("email_status") == "verified" else (x.get("flags") or []))
             if act == "skip":
                 doc.update(status="skipped", error=why)
                 skipped[why] = skipped.get(why, 0) + 1
@@ -843,7 +968,7 @@ async def _recover(cid: str, why: str) -> dict:
     fresh_cut = (_now() - timedelta(days=30)).isoformat()
     queued = await db.mk_sends.find({"campaign_id": cid, "status": "queued"}, {"_id": 0, "id": 1, "contact_id": 1}).to_list(200000)
     contacts = {x["id"]: x async for x in db.mk_contacts.find({"id": {"$in": [q["contact_id"] for q in queued]}},
-                                                              {"_id": 0, "id": 1, "email": 1, "email_norm": 1, "email_status": 1})}
+                                                              {"_id": 0, "id": 1, "email": 1, "email_norm": 1, "email_status": 1, "name": 1})}
     cached = await _ses_cached([x["email_norm"] for x in contacts.values() if x.get("email_status") != "verified"])
     drop, recheck = [], []
     for q in queued:
@@ -857,7 +982,7 @@ async def _recover(cid: str, why: str) -> dict:
         elif cached[x["email_norm"]].get("at", "") < fresh_cut:
             recheck.append((q, x))
     if recheck:
-        res = await verify_emails([x["email"] for _, x in recheck], autofix=False, ses="refresh")
+        res = await verify_emails([x["email"] for _, x in recheck], autofix=False, ses="refresh", names=[x.get("name", "") for _, x in recheck])
         for (q, x), v in zip(recheck, res):
             await db.mk_contacts.update_one({"id": x["id"]}, {"$set": _status_update(v)})
             if not (v["status"] == "valid" and v.get("ses_overall") == "HIGH"):
@@ -1141,7 +1266,13 @@ async def handle_ses_event(msg: dict) -> None:
     if kind == "Delivery":
         if s:
             await db.mk_sends.update_one({"id": s["id"]}, {"$set": {"delivered_at": _iso()}})
-            await db.mk_contacts.update_one({"id": s["contact_id"]}, {"$set": {"proven": True}})
+            before = await db.mk_contacts.find_one_and_update({"id": s["contact_id"]}, {"$set": {"proven": True}},
+                                                              projection={"_id": 0, "proven": 1, "email_norm": 1})
+            dom = ((before or {}).get("email_norm") or "").split("@")[-1]
+            if before and not before.get("proven") and dom and dom not in core.WEBMAIL:
+                # One more distinct address at this company domain reached an
+                # inbox: after 3 (and no hard bounces) the domain counts as good.
+                await db.mk_domains.update_one({"domain": dom}, {"$inc": {"delivered_n": 1}}, upsert=True)
     elif kind == "Bounce" and (msg.get("bounce") or {}).get("bounceSubType") == "EmailValidationSuppressed":
         # SES Auto Validation stopped it before sending. Never mail it again,
         # but it never reached a mailbox provider, so it is not a bounce.
@@ -1180,6 +1311,52 @@ async def handle_ses_event(msg: dict) -> None:
     elif kind in ("Reject", "Rendering Failure"):
         if s:
             await db.mk_sends.update_one({"id": s["id"]}, {"$set": {"status": "failed", "error": kind}})
+
+
+async def learn_from_outcomes(force: bool = False) -> dict:
+    """Self-learning, once a day. Looks at every campaign email sent in the
+    last 180 days (and at least a day old, so late bounces are in) together
+    with what we believed about the address when we sent it (band / score /
+    signals, recorded at preparation). Then:
+      * each signal's weight is nudged towards what actually bounced
+        (core.learn_adjustments — bounded ±20, needs 30+ sends per signal);
+      * the 'valid' line moves one step if 'valid' addresses bounced too
+        much, or 'risky' ones turned out clean (core.calibrate_threshold).
+    Hard rules (mailbox missing, bounced before…) are never learned away."""
+    st = await get_settings()
+    model = await db.mk_model.find_one({"key": "scoring"}, {"_id": 0}) or {}
+    if not force and (model.get("updated_at") or "") > (_now() - timedelta(hours=24)).isoformat():
+        return {"skipped": True}
+    match = {"sent_at": {"$gte": (_now() - timedelta(days=180)).isoformat(), "$lte": (_now() - timedelta(days=1)).isoformat()},
+             "status": {"$in": ["sent", "bounced", "complained"]}, "band": {"$exists": True}}
+    total, bounced = 0, 0
+    per_flag: dict = {}
+    bands: dict = {}
+    async for x in db.mk_sends.find(match, {"_id": 0, "status": 1, "flags": 1, "band": 1}):
+        b = x.get("status") == "bounced"
+        total += 1
+        bounced += b
+        for f in x.get("flags") or []:
+            per_flag.setdefault(f, {"sent": 0, "bounced": 0})
+            per_flag[f]["sent"] += 1
+            per_flag[f]["bounced"] += b
+        band = x.get("band") or "unknown"
+        bands.setdefault(band, {"sent": 0, "bounced": 0})
+        bands[band]["sent"] += 1
+        bands[band]["bounced"] += b
+    baseline = bounced / total if total else 0.02
+    adjust = core.learn_adjustments({f: v for f, v in per_flag.items() if f in core.BASE_DELTAS}, baseline=baseline)
+    cur = int((model.get("thresholds") or {}).get("valid") or st.get("score_valid") or core.DEFAULT_THRESHOLDS["valid"])
+    valid_th = core.calibrate_threshold(cur, bands.get("valid", {}), bands.get("risky", {}))
+    snap = {"at": _iso(), "sent": total, "baseline": round(baseline, 4), "valid": valid_th, "adjust": adjust}
+    await db.mk_model.update_one({"key": "scoring"}, {
+        "$set": {"key": "scoring", "adjust": adjust, "thresholds": {"valid": valid_th}, "updated_at": _iso(),
+                 "stats": {"sent": total, "bounced": bounced, "baseline": round(baseline, 4), "per_flag": per_flag, "bands": bands}},
+        "$push": {"history": {"$each": [snap], "$slice": -30}}}, upsert=True)
+    _MODEL.update(at=0.0, doc=None)
+    if valid_th != cur:
+        log.info("marketing: learning moved the 'valid' line %s -> %s", cur, valid_th)
+    return {"ok": True, **snap}
 
 
 async def sync_aws_suppression(force: bool = False) -> dict:
@@ -1256,6 +1433,9 @@ class SettingsBody(BaseModel):
     usd_inr: Optional[float] = None
     risk_policy: Optional[dict] = None
     tail_max_bounce: Optional[float] = None
+    score_valid: Optional[int] = None
+    score_invalid: Optional[int] = None
+    auto_learn: Optional[bool] = None
 
 
 @admin_router.put("/settings")
@@ -1270,6 +1450,12 @@ async def adm_put_settings(body: SettingsBody, user: dict = Depends(require_supe
         raise HTTPException(status_code=400, detail="Monthly mailbox-check budget must be between ₹0 and ₹1,00,000")
     if "usd_inr" in upd and not (50 <= upd["usd_inr"] <= 200):
         raise HTTPException(status_code=400, detail="USD→INR rate looks wrong (50–200)")
+    if "score_valid" in upd and not (50 <= upd["score_valid"] <= 90):
+        raise HTTPException(status_code=400, detail="'Valid from' score must be 50–90")
+    if "score_invalid" in upd and not (10 <= upd["score_invalid"] <= 60):
+        raise HTTPException(status_code=400, detail="'Invalid below' score must be 10–60")
+    if upd.get("score_invalid") and upd.get("score_valid") and upd["score_invalid"] >= upd["score_valid"] - 5:
+        raise HTTPException(status_code=400, detail="'Invalid below' must be at least 5 under 'Valid from'")
     if "tail_max_bounce" in upd and not (0.005 <= upd["tail_max_bounce"] <= 0.1):
         raise HTTPException(status_code=400, detail="Tail bounce limit must be between 0.5% and 10%")
     if "risk_policy" in upd:
@@ -1279,7 +1465,10 @@ async def adm_put_settings(body: SettingsBody, user: dict = Depends(require_supe
         upd["risk_policy"] = {**core.DEFAULT_RISK_POLICY, **pol}
     if "extra_disposable" in upd:
         upd["extra_disposable"] = [str(d).strip().lower() for d in upd["extra_disposable"] if str(d).strip()][:500]
+    before = await get_settings()
     await db.integrations.update_one({"key": "marketing"}, {"$set": {"key": "marketing", **upd, "updated_at": _iso()}}, upsert=True)
+    if "include_role_addresses" in upd and upd["include_role_addresses"] != before.get("include_role_addresses"):
+        _bg(_reapply_role_rule())
     await audit_log(db, "MARKETING_SETTINGS", email=user.get("email", ""), role=user.get("role", ""), meta={k: v for k, v in upd.items() if k != "footer"})
     return await get_settings()
 
@@ -1411,7 +1600,8 @@ async def adm_import(
         unique_rows.append(r)
     # Cached SES verdicts only: a dry run must never spend money, and a real
     # import hands the paid checks to the capped background pass (kick_validation).
-    results = await verify_emails([r.get(ecol, "") for r in unique_rows], autofix=autofix, ses="cache")
+    results = await verify_emails([r.get(ecol, "") for r in unique_rows], autofix=autofix, ses="cache",
+                                  names=[(r.get(ncol, "") if ncol else "") for r in unique_rows])
     st = await get_settings()
     counts = _count(results)
     counts["duplicates_in_file"] = dups
@@ -1426,12 +1616,11 @@ async def adm_import(
         for r, v in zip(unique_rows, results):
             if v["status"] in ("invalid", "suppressed") or v["status"] not in wanted:
                 continue
-            if v["status"] == "risky" and v.get("role") and not st["include_role_addresses"]:
-                pass  # kept, but campaigns skip risky unless asked
             await upsert_contact(v["email"], name=r.get(ncol, "") if ncol else "", phone=r.get(pcol, "") if pcol else "",
                                  source=src, lists=[lid], status=v["status"], reasons=v["reasons"],
                                  proven=v["status"] == "verified" or None, ses_checked=v.get("ses_checked") or None,
-                                 extra={"risk_kind": v.get("risk_kind", ""), "ses_overall": v.get("ses_overall", "")},
+                                 extra={"risk_kind": v.get("risk_kind", ""), "ses_overall": v.get("ses_overall", ""), "score": v.get("score"),
+                                    "flags": v.get("flags") or [], "role": bool(v.get("role"))},
                                  email_consent="subscribed" if consent_email else None,
                                  wa_consent="subscribed" if consent_whatsapp else None, by=user.get("email", ""))
             saved += 1
@@ -1458,6 +1647,12 @@ async def adm_dismiss_alert(aid: str, user: dict = Depends(require_admin)):
     return {"ok": True}
 
 
+@admin_router.post("/learn")
+async def adm_learn(user: dict = Depends(require_admin)):
+    """Run the self-learning pass now (the cron runs it daily)."""
+    return await learn_from_outcomes(force=True)
+
+
 @admin_router.post("/suppression-sync")
 async def adm_suppression_sync():
     """Copy AWS's suppression list into Contacts now (the cron does it daily)."""
@@ -1476,8 +1671,8 @@ async def adm_validate_pending():
 async def adm_reverify(list_id: Optional[str] = None):
     """Run verification again over saved contacts (e.g. after 6 months)."""
     flt = {"lists": list_id} if list_id else {}
-    contacts = await db.mk_contacts.find(flt, {"_id": 0, "id": 1, "email": 1}).to_list(50000)
-    res = await verify_emails([c["email"] for c in contacts], autofix=False)
+    contacts = await db.mk_contacts.find(flt, {"_id": 0, "id": 1, "email": 1, "name": 1}).to_list(50000)
+    res = await verify_emails([c["email"] for c in contacts], autofix=False, names=[c.get("name", "") for c in contacts])
     for c, v in zip(contacts, res):
         await db.mk_contacts.update_one({"id": c["id"]}, {"$set": _status_update(v)})
     kick_validation()
@@ -1975,6 +2170,23 @@ async def adm_report(cid: str):
                       "unsubscribe": core.rate(stats.get("unsubscribed", 0), stats.get("delivered", 0) or stats.get("sent", 0))}}
 
 
+async def _accuracy() -> dict:
+    """How right were we? Hard-bounce rate by what we believed when we sent
+    (last 90 days, settled a day), plus what the learning job has changed."""
+    match = {"sent_at": {"$gte": (_now() - timedelta(days=90)).isoformat(), "$lte": (_now() - timedelta(days=1)).isoformat()},
+             "status": {"$in": ["sent", "bounced", "complained"]}, "band": {"$exists": True}}
+    bands: dict = {}
+    async for r in db.mk_sends.aggregate([{"$match": match}, {"$group": {
+            "_id": "$band", "sent": {"$sum": 1}, "bounced": {"$sum": {"$cond": [{"$eq": ["$status", "bounced"]}, 1, 0]}}}}]):
+        bands[r["_id"] or "unknown"] = {"sent": r["sent"], "bounced": r["bounced"], "rate": core.rate(r["bounced"], r["sent"])}
+    st = await get_settings()
+    th, adjust = await _scoring_params(st)
+    model = await scoring_model()
+    return {"bands": bands, "thresholds": th, "auto": bool(st.get("auto_learn", True)), "adjust": adjust,
+            "labels": core.SIGNAL_LABELS, "base": core.BASE_DELTAS, "learned_at": model.get("updated_at"),
+            "samples": ((model.get("stats") or {}).get("per_flag") or {})}
+
+
 # ---- dashboard ----
 @admin_router.get("/dashboard")
 async def adm_dashboard(days: int = 30):
@@ -2044,6 +2256,7 @@ async def adm_dashboard(days: int = 30):
             "campaigns": [{k: c.get(k) for k in ("id", "name", "channel", "status", "started_at", "stats")} for c in camps],
             "verification": by_status,
             "alerts": await db.mk_alerts.find({"resolved": False}, {"_id": 0}).sort("at", -1).limit(20).to_list(20),
+            "accuracy": await _accuracy(),
             "ses_usage": await ses_usage()}
 
 
@@ -2075,6 +2288,7 @@ async def marketing_tick(x_task_token: Optional[str] = Header(None)):
         started.append(c["id"])
     kick_validation()
     _bg(sync_aws_suppression())  # no-op unless 24h have passed
+    _bg(learn_from_outcomes())   # likewise daily
     return {"ok": True, "started": started}
 
 

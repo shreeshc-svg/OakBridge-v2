@@ -5,7 +5,7 @@ import {
     mkDashboard, mkHealth, mkSettings, mkSaveSettings, mkVerify, mkImport, mkReverify, mkSync, mkContacts, mkPatchContact,
     mkDeleteContact, mkLists, mkCreateList, mkCampaigns, mkNewCampaign, mkCampaign, mkSaveCampaign, mkDuplicate,
     mkAudience, mkPreview, mkTestSend, mkSend, mkCampaignAction, mkReport, mkDismissAlert, mkSuppressionSync,
-    mkBulkContacts, mkBulkDeleteLists, mkBulkDeleteCampaigns, fetchBooks, fetchCategories, mediaUrl, formatApiError,
+    mkBulkContacts, mkBulkDeleteLists, mkBulkDeleteCampaigns, mkLearn, fetchBooks, fetchCategories, mediaUrl, formatApiError,
 } from "../../lib/api";
 import { useAuth } from "../../context/AuthContext";
 import { isSuperadmin, canDelete } from "../../lib/rbac";
@@ -150,10 +150,59 @@ function Dashboard({ onOpen }) {
                 <Panel title="List growth"><BarChart up={d.growth} down={d.unsubs} days={days} upLabel="New contacts" downLabel="Unsubscribed" /></Panel>
                 <Panel title="Address quality (all contacts)"><Donut data={d.verification} colors={STATUS_COLORS} label="Verification status" /></Panel>
             </div>
+            <AccuracyPanel a={d.accuracy} onLearned={() => mkDashboard(days).then(setD).catch(() => {})} />
             <Panel title="Campaigns in this period">
                 <CampaignTable rows={d.campaigns} onOpen={onOpen} />
             </Panel>
         </div>
+    );
+}
+
+/** 0-100 confidence chip, coloured by band. */
+function ScoreChip({ score, th }) {
+    if (score == null) return null;
+    const v = th?.valid ?? 65;
+    const iv = th?.invalid ?? 35;
+    const col = score >= v ? "#15803D" : score >= iv ? "#B4750F" : "#CC0033";
+    return <span className="ml-1 text-[10px] font-mono border px-1" style={{ color: col, borderColor: col }} title="Confidence the address works (0–100)">{score}</span>;
+}
+
+/** Dashboard: how right the flags were, and what the learning changed. */
+function AccuracyPanel({ a, onLearned }) {
+    const [busy, setBusy] = useState(false);
+    if (!a) return null;
+    const rows = ["verified", "valid", "risky"].map((k) => [k, a.bands?.[k]]);
+    const learn = async () => {
+        setBusy(true);
+        try { const r = await mkLearn(); toast.success(r.sent ? `Learned from ${r.sent} sends.` : "Not enough sends yet to learn from."); onLearned(); }
+        catch (e) { toast.error(formatApiError(e)); } finally { setBusy(false); }
+    };
+    const adj = Object.entries(a.adjust || {}).filter(([, v]) => v);
+    return (
+        <Panel title="Address accuracy & self-learning" right={<button type="button" className="text-xs underline" disabled={busy} onClick={learn}>{busy ? "Learning…" : "Learn now"}</button>}>
+            <div className="grid md:grid-cols-2 gap-4 text-sm" data-testid="mk-accuracy">
+                <div>
+                    <div className="text-xs text-[#4B5563] mb-1">What actually bounced, by what we believed when sending (last 90 days)</div>
+                    <table className="w-full text-sm"><thead><tr className="text-left text-xs text-[#6B7280]"><th className="py-1">Flagged as</th><th className="text-right">Sent</th><th className="text-right">Hard bounces</th></tr></thead>
+                        <tbody>{rows.map(([k, b]) => (
+                            <tr key={k} className="border-t"><td className="py-1" style={{ color: STATUS_COLORS[k] }}>{k}</td>
+                                <td className="text-right">{b?.sent ?? 0}</td>
+                                <td className={`text-right ${(b?.rate || 0) > 0.02 ? "text-[#CC0033] font-medium" : ""}`}>{b ? pct(b.rate, 1) : "—"}</td></tr>
+                        ))}</tbody></table>
+                    <p className="text-[11px] text-[#6B7280] mt-1">Good flags: verified ≈ 0%, valid under 2%, risky clearly higher.</p>
+                </div>
+                <div>
+                    <div className="text-xs text-[#4B5563]">Valid from score <b>{a.thresholds?.valid}</b> · invalid below <b>{a.thresholds?.invalid}</b> · learning {a.auto ? "on" : "off"}
+                        {a.learned_at && <> · last learned {when(a.learned_at)}</>}</div>
+                    {adj.length ? (
+                        <ul className="text-xs mt-2 space-y-0.5">{adj.map(([k, v]) => (
+                            <li key={k}>{a.labels?.[k] || k}: {a.base?.[k] >= 0 ? "+" : ""}{a.base?.[k]} → <b>{(a.base?.[k] || 0) + v >= 0 ? "+" : ""}{(a.base?.[k] || 0) + v}</b>
+                                <span className="text-[#6B7280]"> (learned {v > 0 ? "+" : ""}{v} from {a.samples?.[k]?.sent ?? "?"} sends)</span></li>
+                        ))}</ul>
+                    ) : <p className="text-xs text-[#6B7280] mt-2">Nothing learned yet — each signal needs about 30 sent emails before its weight moves. It runs daily on its own.</p>}
+                </div>
+            </div>
+        </Panel>
     );
 }
 
@@ -759,6 +808,7 @@ function Contacts() {
                                     <td className="p-2 font-mono text-xs">{c.email}</td>
                                     <td className="text-xs">{c.name}<div className="text-[#6B7280]">{c.phone}</div></td>
                                     <td className="text-xs"><span style={{ color: STATUS_COLORS[c.email_status] }} className="font-medium">{c.email_status}</span>
+                                        {!["verified", "invalid", "suppressed"].includes(c.email_status) && <ScoreChip score={c.score} />}
                                         {c.ses_checked && <span className="ml-1 text-[10px] border border-[#E5E7EB] px-1" title="Mailbox checked by Amazon SES">SES ✓</span>}
                                         {c.email_status === "risky" && c.risk_kind && <div className="text-[#B4750F]">{RISK_LABEL[c.risk_kind] || c.risk_kind}</div>}
                                         {c.reasons?.length ? <div className="text-[#6B7280] max-w-[24ch]">{c.reasons.join("; ")}</div> : null}</td>
@@ -913,7 +963,7 @@ function VerifyImport() {
                     <table className="w-full text-xs mt-3" data-testid="mk-quick-results"><tbody>
                         {quick.results.map((r, i) => (
                             <tr key={i} className="border-t"><td className="py-1 font-mono pr-2">{r.email || r.input}</td>
-                                <td className="pr-2 font-medium" style={{ color: STATUS_COLORS[r.status] }}>{r.status}</td>
+                                <td className="pr-2 font-medium whitespace-nowrap" style={{ color: STATUS_COLORS[r.status] }}>{r.status}{!["verified", "invalid", "suppressed"].includes(r.status) && <ScoreChip score={r.score} />}</td>
                                 <td className="text-[#6B7280]">{r.reasons.join("; ")}</td></tr>
                         ))}
                     </tbody></table>
@@ -1013,6 +1063,7 @@ function Settings() {
                 double_opt_in: s.double_opt_in, include_role_addresses: s.include_role_addresses, max_bounce: Number(s.max_bounce),
                 ses_validation: !!s.ses_validation, ses_budget_inr: Math.max(0, Number(s.ses_budget_inr) || 0), usd_inr: Number(s.usd_inr) || 88,
                 risk_policy: s.risk_policy, tail_max_bounce: Number(s.tail_max_bounce),
+                score_valid: Math.round(Number(s.score_valid) || 65), score_invalid: Math.round(Number(s.score_invalid) || 35), auto_learn: !!s.auto_learn,
                 wa_rate_marketing: Number(s.wa_rate_marketing), wa_rate_utility: Number(s.wa_rate_utility),
                 extra_disposable: s.extra_disposable_text.split(/\s+/).filter(Boolean) };
             await mkSaveSettings(body);
@@ -1038,7 +1089,8 @@ function Settings() {
             <Panel title="Rules">
                 <div className="space-y-2 text-sm">
                     <label className="flex items-center gap-2"><input type="checkbox" checked={!!s.double_opt_in} disabled={!su} onChange={(e) => setS({ ...s, double_opt_in: e.target.checked })} />Double opt-in for website sign-ups (they confirm by email first)</label>
-                    <label className="flex items-center gap-2"><input type="checkbox" checked={!!s.include_role_addresses} disabled={!su} onChange={(e) => setS({ ...s, include_role_addresses: e.target.checked })} />Treat role addresses (info@, admin@) as normal</label>
+                    <label className="flex items-start gap-2"><input type="checkbox" className="mt-1" checked={!!s.include_role_addresses} disabled={!su} onChange={(e) => setS({ ...s, include_role_addresses: e.target.checked })} data-testid="mk-role-valid" />
+                        <span>Treat role addresses (info@, contact@, admin@…) as <b>valid</b> <span className="text-xs text-[#6B7280]">— right when schools, colleges and firms buy from you. Contacts are re-rated as soon as you save.</span></span></label>
                     {F("max_bounce", "Auto-pause when bounces exceed (0.02 = 2%)", { type: "number", step: "0.005" })}
                     <div className="border-t border-[#E5E7EB] pt-2 space-y-2">
                         <label className="flex items-center gap-2"><input type="checkbox" checked={!!s.ses_validation} disabled={!su} onChange={(e) => setS({ ...s, ses_validation: e.target.checked })} data-testid="mk-ses-validation" />
@@ -1060,6 +1112,14 @@ function Settings() {
                             </label>
                         ))}
                         {F("tail_max_bounce", "“Send last” stops itself above this bounce rate (0.03 = 3%)", { type: "number", step: "0.005" })}
+                        <div className="text-sm font-medium text-[#002B5C] pt-1">Confidence score (0–100)</div>
+                        <div className="grid grid-cols-2 gap-2">
+                            {F("score_valid", "Valid from", { type: "number", min: "50", max: "90" })}
+                            {F("score_invalid", "Invalid below", { type: "number", min: "10", max: "60" })}
+                        </div>
+                        <label className="flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1" checked={s.auto_learn !== false} disabled={!su}
+                            onChange={(e) => setS({ ...s, auto_learn: e.target.checked })} data-testid="mk-auto-learn" />
+                            <span>Learn from real bounces <span className="text-xs text-[#6B7280]">— daily, it adjusts how much each signal counts (±20 at most) and moves “Valid from” one step at a time (55–85). See the Dashboard for what it changed.</span></span></label>
                     </div>
                     {F("wa_rate_marketing", "WhatsApp marketing cost per message, ₹ (for estimates)", { type: "number", step: "0.01" })}
                     {F("wa_rate_utility", "WhatsApp utility cost per message, ₹", { type: "number", step: "0.01" })}

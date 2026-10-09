@@ -59,6 +59,15 @@ Every 5 minutes
 - IAM needs `ses:GetEmailAddressInsights` **and** `ses:ListSuppressedDestinations`. If Settings says the AWS library is too old: Render → Manual Deploy → **Clear build cache & deploy**.
 - SES **Auto Validation** (console switch) is optional. Blocks it causes are recorded as "blocked", not bounces, so they don't trigger auto-pause.
 
+## 4b. Confidence score and self-learning
+
+- Every unproven address gets a 0–100 score: starts at 65 (passed the free checks), then ± for SES result, mailbox confirmed / not, catch-all domain, looks random, name matches the address, domain delivery history (3+ delivered, no bounces = good; 3+ bounced = bad). Valid ≥ 65, invalid < 35, risky between (Settings).
+- Hard facts never become a score: bad format, no mail server, throwaway, bounced/unsubscribed before, SES "mailbox does not exist" → invalid; confirmed account / delivered before → verified.
+- Catch-all test: once per company domain per 90 days SES is asked about a made-up address there (≈ ₹0.85). Never for Gmail/Yahoo/Outlook etc.
+- Slow domain lookups are retried, not flagged.
+- Each campaign email records what we believed (band, score, signals). Daily, the learning pass compares that with real hard bounces: each signal's weight moves (±20 max, needs 30+ sends), and "Valid from" moves one step (55–85) if valid addresses bounced >2% or risky ones turned out clean. Dashboard → *Address accuracy & self-learning* shows the bounce rate per flag and every change; Settings can switch learning off.
+- Order emails (Resend) don't count as proof yet: no Resend delivery webhook is connected.
+
 ## 5. Safety rails (automatic)
 
 - Only `subscribed` people get campaigns; unsubscribed, bounced and complained addresses are excluded whatever list they are in.

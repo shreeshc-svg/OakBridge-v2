@@ -249,7 +249,8 @@ def ses_details(resp: dict) -> dict:
         return str((ev.get(k) or {}).get("ConfidenceVerdict") or "").upper()
 
     return {"overall": str((mv.get("IsValid") or {}).get("ConfidenceVerdict") or "").upper(),
-            "mailbox": lvl("MailboxExists"), "role": lvl("IsRoleAddress") == "HIGH"}
+            "mailbox": lvl("MailboxExists"), "role": lvl("IsRoleAddress") == "HIGH",
+            "random": lvl("IsRandomInput") == "HIGH"}
 
 
 # Big free-mail providers answer mailbox checks definitively, so "uncertain"
@@ -306,6 +307,116 @@ def send_decision(status: str, kind: str, policy: Optional[dict], *, needs_ses: 
             return "tail", 3, ""
         return "skip", 9, f"risky ({(kind or 'unconfirmed').replace('_', ' ')}) — skipped by rule"
     return "skip", 9, "address not checked"
+
+
+# ----------------------------------------------------------- scoring ---
+# Every not-yet-proven address gets a 0-100 confidence score from the
+# evidence we have; the score — not one signal — decides valid / risky /
+# invalid. Base deltas are a starting point; learn_adjustments() nudges each
+# signal from real bounce outcomes (bounded, minimum sample sizes).
+BASE_DELTAS = {
+    "ses_high": 20, "ses_medium": -15, "mailbox_high": 5, "mailbox_doubt": -10, "catch_all": -5,
+    "random": -25, "domain_good": 15, "domain_bad": -30, "name_match": 10, "no_ses": 0,
+}
+SIGNAL_LABELS = {
+    "ses_high": "SES: deliverable", "ses_medium": "SES: uncertain", "mailbox_high": "SES: mailbox exists",
+    "mailbox_doubt": "SES: mailbox not confirmed", "catch_all": "domain accepts any address",
+    "random": "looks randomly typed", "domain_good": "this domain receives our email",
+    "domain_bad": "this domain bounced 3+ addresses", "name_match": "name matches the address",
+    "no_ses": "no mailbox check",
+}
+DEFAULT_THRESHOLDS = {"valid": 65, "invalid": 35}
+START_SCORE = 65  # format + mail server + not throwaway: passes the free checks
+
+
+def name_matches(local: str, name: str) -> bool:
+    """'renu.rawat', 'rrawat', 'renu_r', 'rawat.renu' for 'Renu Rawat'.
+    A real person's address usually contains their name; a typo'd or made-up
+    one usually doesn't."""
+    parts = [p for p in re.split(r"[^a-z]+", (name or "").lower()) if len(p) >= 3]
+    loc = re.sub(r"[^a-z]", "", (local or "").lower().split("+")[0])
+    if not parts or len(loc) < 3:
+        return False
+    if any(p in loc for p in parts):
+        return True
+    first, last = parts[0], parts[-1]
+    return len(parts) >= 2 and (loc.startswith(first[0] + last) or loc.startswith(last + first[0]))
+
+
+def score_address(signals: dict, *, adjust: Optional[dict] = None, thresholds: Optional[dict] = None,
+                  role_ok: bool = True) -> dict:
+    """signals: {ses: 'HIGH'|'MEDIUM'|'', mailbox: 'HIGH'|'MEDIUM'|'', catch_all: True|False|None,
+    random: bool, role: bool, domain_good: bool, domain_bad: bool, name_match: bool}
+    -> {score, status ('valid'|'risky'|'invalid'), flags[], reasons[]}.
+    Hard facts (mailbox missing, throwaway, bounced before) are decided before
+    this and never reach it. Role addresses and bad domains are capped at
+    risky whatever the score: those are rules, not evidence."""
+    adjust = adjust or {}
+    th = {**DEFAULT_THRESHOLDS, **(thresholds or {})}
+    flags = []
+    ses, mailbox = (signals.get("ses") or "").upper(), (signals.get("mailbox") or "").upper()
+    if ses == "HIGH":
+        flags.append("ses_high")
+    elif ses == "MEDIUM":
+        flags.append("ses_medium")
+    else:
+        flags.append("no_ses")
+    if mailbox == "HIGH":
+        flags.append("mailbox_high")
+    elif mailbox == "MEDIUM" and signals.get("catch_all") is not True:
+        # At a catch-all domain "can't confirm the mailbox" says nothing; at a
+        # domain that does confirm mailboxes it is a real doubt.
+        flags.append("mailbox_doubt")
+    if signals.get("catch_all") is True:
+        flags.append("catch_all")
+    for f in ("random", "domain_good", "domain_bad", "name_match"):
+        if signals.get(f):
+            flags.append(f)
+    score, reasons = START_SCORE, []
+    for f in flags:
+        d = BASE_DELTAS.get(f, 0) + int(adjust.get(f, 0))
+        score += d
+        if d:
+            reasons.append((d, f"{'+' if d > 0 else '−'}{abs(d)} {SIGNAL_LABELS.get(f, f)}"))
+    score = max(0, min(100, score))
+    status = "valid" if score >= th["valid"] else "risky" if score >= th["invalid"] else "invalid"
+    if status == "valid" and (signals.get("domain_bad") or (signals.get("role") and not role_ok)):
+        status = "risky"
+    reasons.sort(key=lambda x: -abs(x[0]))
+    return {"score": score, "status": status, "flags": flags, "reasons": [r for _, r in reasons[:3]]}
+
+
+def learn_adjustments(flag_stats: dict, *, baseline: float, min_sent: int = 30, cap: int = 20, k: float = 8.0) -> dict:
+    """Self-learning, kept simple and bounded. For each signal: how often did
+    addresses carrying it hard-bounce, compared with all sends? Twice the
+    usual bounce rate -> about -8 points; half -> about +8; capped at ±cap,
+    and nothing changes below min_sent sends (no learning from noise).
+    flag_stats = {flag: {"sent": n, "bounced": b}}."""
+    import math
+    out = {}
+    base = max(float(baseline), 0.002)
+    for flag, st in (flag_stats or {}).items():
+        n, b = int(st.get("sent", 0)), int(st.get("bounced", 0))
+        if n < min_sent:
+            continue
+        rate = (b + base * 10) / (n + 10)          # smoothed towards the baseline
+        adj = -k * math.log2(max(rate, 0.0005) / base)
+        out[flag] = int(max(-cap, min(cap, round(adj))))
+    return out
+
+
+def calibrate_threshold(current: int, valid_band: dict, risky_band: dict, *, target: float = 0.02,
+                        lo: int = 55, hi: int = 85, step: int = 5, min_sent: int = 50) -> int:
+    """Move the 'valid' line from what actually bounced: if addresses we
+    called valid bounce above target, be stricter; if the risky band turns out
+    clean (under half the target), be looser. One step at a time, bounded."""
+    vn, vb = int(valid_band.get("sent", 0)), int(valid_band.get("bounced", 0))
+    rn, rb = int(risky_band.get("sent", 0)), int(risky_band.get("bounced", 0))
+    if vn >= min_sent and vb / vn > target:
+        current += step
+    elif rn >= min_sent and rb / rn < target / 2:
+        current -= step
+    return max(lo, min(hi, current))
 
 
 def is_bad_domain(domain: str, hard_bounced: int, threshold: int = 3) -> bool:

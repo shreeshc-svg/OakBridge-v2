@@ -89,11 +89,11 @@ check(/dom not in core\.WEBMAIL/.test(mk) && /is_bad_domain\(/.test(mk), "domain
 check(/list_suppressed_destinations/.test(mk) && /sync_aws_suppression\(\)/.test(mk), "AWS suppression list synced into contacts by the cron");
 check(/if v\["status"\] in \("invalid", "suppressed"\):\s*\n\s*return/.test(mk), "no confirmation email to a dead sign-up address");
 check(/checks_for_budget\(/.test(mk) && !/ses_validation_monthly_cap/.test(mk + page), "budget is in ₹, the old check-count cap is gone");
-check(/core\.worse\(/.test(mk), "SES can only downgrade an address, never vouch over our own doubts");
+check(/if suggest and status == "valid":\s*\n\s*status = "risky"/.test(mk) && /score_address\(sig/.test(mk), "an unfixed typo is never scored up to valid");
 check(/EmailValidationSuppressed/.test(mk) && /"blocked"/.test(mk) && /k not in \("queued", "failed", "skipped", "blocked"\)/.test(mk),
     "SES auto-validation blocks are not counted as sent or bounced (no false auto-pause)");
 check(/hasattr\(_ses\(\), "get_email_address_insights"\)/.test(mk), "old AWS SDK detected instead of crashing");
-check(/results = await verify_emails\(\[r\.get\(ecol, ""\) for r in unique_rows\], autofix=autofix, ses="cache"\)/.test(mk), "import (incl. dry-run) uses cached SES verdicts only — never spends money");
+check(/results = await verify_emails\(\[r\.get\(ecol, ""\) for r in unique_rows\], autofix=autofix, ses="cache",/.test(mk), "import (incl. dry-run) uses cached SES verdicts only — never spends money");
 
 check(/allowed=allowed\)/.test(mk) && /core\.selected_statuses\(aud\)/.test(mk), "campaign status tick-boxes filter both the count and the send");
 check(/core\.ses_status\(d\.get\("overall", ""\), d\.get\("mailbox", ""\)\)/.test(mk), "saved SES verdicts are re-derived (rule fixes apply to paid checks)");
@@ -110,6 +110,21 @@ check(/"deleted": \{"\$ne": True\}/.test(mk), "archived campaigns are hidden fro
 check(/body\.action == "erase" and not is_superadmin/.test(mk), "bulk erase is superadmin-only");
 check(/if n != body\.expected:/.test(mk) && /_contact_filter\(m\.get\("q"\)/.test(mk), "bulk on 'all matching' re-uses the page filter and must match the confirmed count");
 check(/Type ERASE to confirm/.test(page), "bulk erase needs ERASE typed");
+
+check(/role_ok = bool\(st\.get\("include_role_addresses"\)\)/.test(mk) && /role_ok=role_ok\)/.test(mk),
+    "'treat role addresses as valid' really makes them valid (it used to do nothing)");
+check(/"include_role_addresses": True/.test(mk) && /_bg\(_reapply_role_rule\(\)\)/.test(mk), "on by default; changing it re-rates saved contacts");
+
+console.log("-- scoring + self-learning --");
+check(/core\.score_address\(sig, adjust=adjust, thresholds=th, role_ok=role_ok\)/.test(mk), "the confidence score decides valid / risky / invalid");
+check(/if v\["status"\] == "invalid":  /.test(mk.replace(/#.*$/gm, "")) || /if v\["status"\] == "invalid":/.test(mk), "SES 'mailbox does not exist' stays a hard fact, not a score");
+check(/status = "unknown"[\s\S]{0,80}retried automatically/.test(mk) && /await domains_mx\(slow\)/.test(mk), "slow domain lookups are retried, never flagged risky");
+check(/_probe_catch_all\(d\)/.test(mk) && /"catch_all_at": _iso\(\)/.test(mk) && /d in core\.WEBMAIL or/.test(mk), "catch-all tested once per company domain (90 days), never webmail");
+check(/\$inc": \{"delivered_n": 1\}/.test(mk) && /dom not in core\.WEBMAIL/.test(mk), "domain delivery history counted per distinct address");
+check(/doc\.update\(band=/.test(mk) && /score=100 if x\.get\("email_status"\) == "verified"/.test(mk), "what we believed is recorded on every send");
+check(/core\.learn_adjustments\(/.test(mk) && /core\.calibrate_threshold\(/.test(mk) && /_bg\(learn_from_outcomes\(\)\)/.test(mk), "daily self-learning from outcomes");
+check(/"\$lte": \(_now\(\) - timedelta\(days=1\)\)/.test(mk), "learning waits a day so late bounces are counted");
+check(/data-testid="mk-accuracy"/.test(page) && /data-testid="mk-auto-learn"/.test(page), "accuracy panel + learning switch on screen");
 
 console.log("-- screen --");
 for (const t of ["mk-dashboard", "mk-editor", "mk-contacts", "mk-lists", "mk-verify", "mk-settings", "mk-report", "mk-dry-run"]) {

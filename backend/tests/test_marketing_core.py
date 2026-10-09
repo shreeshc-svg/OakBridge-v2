@@ -66,7 +66,7 @@ check(m.worse("valid", "invalid") == "invalid" and m.worse("risky", "valid") == 
 check(m.worse("verified", "risky") == "risky" and m.worse("valid", None) == "valid", "worse() edge cases")
 
 print("-- risk kinds and send decisions --")
-check(m.ses_details(ses("MEDIUM", MailboxExists="MEDIUM", IsRoleAddress="HIGH")) == {"overall": "MEDIUM", "mailbox": "MEDIUM", "role": True},
+check(m.ses_details(ses("MEDIUM", MailboxExists="MEDIUM", IsRoleAddress="HIGH")) == {"overall": "MEDIUM", "mailbox": "MEDIUM", "role": True, "random": False},
       "ses_details keeps overall / mailbox / role")
 check(m.risk_kind(role=True, domain="school.edu.in") == "role", "role address -> role")
 check(m.risk_kind(role=False, domain="lawfirm.co.in", ses_overall="MEDIUM", mailbox="MEDIUM") == "catch_all",
@@ -103,6 +103,40 @@ d = m.send_decision("risky", "role", P, needs_ses=True, has_ses=True, allowed=A)
 check(d[0] == "skip" and "not ticked" in d[2], "risky not ticked -> skipped with the reason, even if the rule says send")
 check(m.send_decision("verified", "", P, needs_ses=False, has_ses=False, allowed=frozenset({"valid"}))[0] == "skip", "verified can be unticked too")
 check(m.send_decision("invalid", "", P, needs_ses=False, has_ses=False, allowed=frozenset(m.SELECTABLE))[0] == "skip", "invalid never selectable")
+
+print("-- confidence score --")
+check(m.name_matches("renu.rawat", "Renu Rawat") and m.name_matches("rrawat", "Renu Rawat") and m.name_matches("rawat.r", "Renu Rawat"),
+      "name matches: full, initial+surname, surname first")
+check(not m.name_matches("qqqqqqqwerty", "test") and not m.name_matches("abc", "") and not m.name_matches("xy", "Xy Z"),
+      "no name / short / unrelated -> no match")
+S = m.score_address
+check(S({"ses": "", "mailbox": ""})["status"] == "valid", "free checks only, nothing against it -> valid (same as before)")
+check(S({"ses": "HIGH", "mailbox": "HIGH"})["score"] == 90, "SES high + mailbox exists -> 90")
+q = S({"ses": "MEDIUM", "mailbox": "MEDIUM", "random": True, "catch_all": False})
+check(q["status"] == "invalid" and q["score"] == 15, f"qqqqqqqwerty@gmail.com pattern -> invalid ({q['score']})")
+w = S({"ses": "MEDIUM", "mailbox": "MEDIUM", "catch_all": False})
+check(w["status"] == "risky" and "mailbox_doubt" in w["flags"], "Gmail 'mailbox not confirmed' -> risky")
+c = S({"ses": "MEDIUM", "mailbox": "MEDIUM", "catch_all": True})
+check("mailbox_doubt" not in c["flags"] and c["status"] == "risky", "catch-all: unconfirmed mailbox is not held against it")
+g = S({"ses": "MEDIUM", "mailbox": "MEDIUM", "catch_all": True, "domain_good": True, "name_match": True})
+check(g["status"] == "valid" and g["score"] == 70, f"catch-all firm with delivery history + name match -> valid ({g['score']})")
+check(S({"ses": "HIGH", "mailbox": "HIGH", "domain_bad": True})["status"] == "risky", "bad domain capped at risky")
+check(S({"ses": "HIGH", "role": True}, role_ok=False)["status"] == "risky" and S({"ses": "HIGH", "role": True})["status"] == "valid",
+      "role cap only when 'role as valid' is off")
+check(S({"ses": "MEDIUM", "mailbox": "MEDIUM"}, adjust={"ses_medium": 20, "mailbox_doubt": 10})["status"] == "valid",
+      "learned adjustments move the score")
+check(S({"ses": "MEDIUM"}, thresholds={"valid": 50})["status"] == "valid", "threshold is configurable")
+check(len(S({"ses": "MEDIUM", "mailbox": "MEDIUM", "random": True})["reasons"]) <= 3, "at most 3 reasons, biggest first")
+
+print("-- self-learning --")
+L = m.learn_adjustments({"random": {"sent": 100, "bounced": 20}, "name_match": {"sent": 200, "bounced": 0},
+                         "catch_all": {"sent": 10, "bounced": 5}}, baseline=0.02)
+check(L["random"] < -10 and L["name_match"] > 5 and "catch_all" not in L, f"bad signal down, good up, too few sends ignored {L}")
+check(all(-20 <= v <= 20 for v in m.learn_adjustments({"x": {"sent": 1000, "bounced": 900}}, baseline=0.001).values()), "adjustments capped ±20")
+check(m.calibrate_threshold(65, {"sent": 100, "bounced": 5}, {}) == 70, "valid band bouncing above 2% -> stricter")
+check(m.calibrate_threshold(65, {"sent": 100, "bounced": 0}, {"sent": 100, "bounced": 0}) == 60, "clean risky band -> looser")
+check(m.calibrate_threshold(65, {"sent": 10, "bounced": 5}, {}) == 65, "too few sends -> unchanged")
+check(m.calibrate_threshold(85, {"sent": 100, "bounced": 50}, {}) == 85, "bounded")
 
 print("-- auto-pause --")
 check(m.should_pause(40, 5, 0) is None, "no decision on too little data")
