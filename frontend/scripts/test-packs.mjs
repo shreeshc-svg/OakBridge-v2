@@ -32,7 +32,7 @@ check(/"packs": \{"packs", "uploads"\}/.test(rbac), "RBAC section grants its end
 check(/\$nin": \["hamper", "pack"\]/.test(ext), "packs are not in the books CSV");
 
 console.log("\n-- admin --");
-check(/<Route path="packs" element=\{<AdminPacks \/>\} \/>/.test(app), "route");
+check(/<Route path="packs" element=\{(?:<AdminPacks \/>|lazyPage\(AdminPacks\))\} \/>/.test(app), "route");
 check(/to: "\/admin\/packs"/.test(nav) && /"packs"/.test(frbac), "sidebar + permission section");
 check(/b\.product_type !== "pack"/.test(books), "Books tab does not list packs");
 check(/!\["pack", "hamper"\]\.includes\(b\.product_type\)/.test(admin), "picker offers books only");

@@ -1991,6 +1991,45 @@ app.add_middleware(
 )
 
 
+# Response compression. JSON (book lists, home content, admin tables) shrinks to
+# a fraction of its size; nothing compressed it before (no middleware here, and
+# Render's proxy does not promise to). Level 5, not Starlette's default 9: on a
+# 0.5-CPU instance the last few percent of size are not worth the CPU. Binary
+# downloads are skipped — images, PDFs, e-books and .xlsx are already compressed,
+# so gzipping them again only burns CPU. Bodies under 1 KB are left alone.
+_NO_GZIP = re.compile(r"^/api/(files/|my/books/[^/]+/ebook|admin/job-applications/[^/]+/cv|admin/books/import-template)"
+                      r"|\.(pdf|xlsx|zip|epub|jpe?g|png|webp|gif|avif)$", re.I)
+
+
+class _SelectiveGZip:
+    def __init__(self, app):
+        from starlette.middleware.gzip import GZipMiddleware
+        self.app = app
+        self.gzip = GZipMiddleware(app, minimum_size=1024, compresslevel=5)
+
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") == "http" and not _NO_GZIP.search(scope.get("path") or ""):
+            return await self.gzip(scope, receive, send)
+        return await self.app(scope, receive, send)
+
+
+app.add_middleware(_SelectiveGZip)
+
+# Public response cache (backend/cache.py). Added LAST so it is the outermost
+# layer: it stores the finished, already-gzipped response with its CORS headers,
+# and a hit costs no handler, no database and no compression. PUBLIC_CACHE=off on
+# Render switches it off without a deploy-time code change.
+if os.environ.get("PUBLIC_CACHE", "on").strip().lower() != "off":
+    from cache import PUBLIC_STORE, ResponseCacheMiddleware, shared_version  # noqa: E402
+    app.add_middleware(ResponseCacheMiddleware, version=shared_version(db), store=PUBLIC_STORE)
+
+# Request timing (backend/perf.py) — outermost, so the health panel shows what a
+# visitor really waits, cache hits included. Records only method, path shape,
+# status and milliseconds.
+from perf import TimingMiddleware  # noqa: E402
+app.add_middleware(TimingMiddleware)
+
+
 @app.on_event("shutdown")
 async def shutdown_db_client():
     client.close()

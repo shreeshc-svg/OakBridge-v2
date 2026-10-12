@@ -113,7 +113,7 @@ check(/Type ERASE to confirm/.test(page), "bulk erase needs ERASE typed");
 
 check(/role_ok = bool\(st\.get\("include_role_addresses"\)\)/.test(mk) && /role_ok=role_ok\)/.test(mk),
     "'treat role addresses as valid' really makes them valid (it used to do nothing)");
-check(/"include_role_addresses": True/.test(mk) && /_bg\(_reapply_role_rule\(\)\)/.test(mk), "on by default; changing it re-rates saved contacts");
+check(/"include_role_addresses": True/.test(mk) && /dispatch\("mk_role_rule"/.test(mk) && /@_jobs\.handler\("mk_role_rule"\)[\s\S]{0,120}_reapply_role_rule\(\)/.test(mk), "on by default; changing it re-rates saved contacts");
 
 console.log("-- scoring + self-learning --");
 check(/core\.score_address\(sig, adjust=adjust, thresholds=th, role_ok=role_ok\)/.test(mk), "the confidence score decides valid / risky / invalid");
@@ -122,7 +122,7 @@ check(/status = "unknown"[\s\S]{0,80}retried automatically/.test(mk) && /await d
 check(/_probe_catch_all\(d\)/.test(mk) && /"catch_all_at": _iso\(\)/.test(mk) && /d in core\.WEBMAIL or/.test(mk), "catch-all tested once per company domain (90 days), never webmail");
 check(/\$inc": \{"delivered_n": 1\}/.test(mk) && /dom not in core\.WEBMAIL/.test(mk), "domain delivery history counted per distinct address");
 check(/doc\.update\(band=/.test(mk) && /score=100 if x\.get\("email_status"\) == "verified"/.test(mk), "what we believed is recorded on every send");
-check(/core\.learn_adjustments\(/.test(mk) && /core\.calibrate_threshold\(/.test(mk) && /_bg\(learn_from_outcomes\(\)\)/.test(mk), "daily self-learning from outcomes");
+check(/core\.learn_adjustments\(/.test(mk) && /core\.calibrate_threshold\(/.test(mk) && /dispatch\("mk_learn"/.test(mk) && /@_jobs\.handler\("mk_learn"\)[\s\S]{0,120}learn_from_outcomes\(\)/.test(mk), "daily self-learning from outcomes");
 check(/"\$lte": \(_now\(\) - timedelta\(days=1\)\)/.test(mk), "learning waits a day so late bounces are counted");
 check(/data-testid="mk-accuracy"/.test(page) && /data-testid="mk-auto-learn"/.test(page), "accuracy panel + learning switch on screen");
 
@@ -151,6 +151,17 @@ check(/async def adm_delete_contact\(cid: str, erase: bool = False/.test(mk) && 
 check(/email_consent="subscribed", readd_erased=True\)/.test(mk) && /status=v\["status"\], readd_erased=True,/.test(mk),
     "a person's own new sign-up lifts their erasure (fresh consent)");
 check(/onClick=\{\(\) => removeOne\(c\.id\)\}/.test(page) && !/onClick=\{\(\) => erase\(c\.id\)\}/.test(page), "row 🗑 deletes, it no longer erases");
+
+console.log("-- worker / queue / memory (phase 0) --");
+check(!/to_list\((200000|100000|50000)\)/.test(mk), "no load-everything queries left in marketing");
+check(/dbutil\.batches\(db\.mk_contacts, flt, proj, size=500\)/.test(mk), "campaign preparation walks the audience in pages");
+check(/create_index\("id", unique=True\)/.test(mk) && /mk_sends\.create_index\("sent_at"\)/.test(mk), "id / sent_at indexes");
+check(/if _jobs\.worker_mode\(\) == "external":\s*\n\s*if await _jobs\.worker_alive\(db\):/.test(mk) && /key="worker_down"/.test(mk),
+    "external mode enqueues only while the worker is alive; otherwise runs here + alerts");
+for (const k of ["mk_validate", "mk_prepare", "mk_send", "mk_role_rule", "mk_suppression", "mk_learn", "mk_disposable", "mk_lapse", "mk_newsletter"]) {
+    check(new RegExp(`@_jobs\\.handler\\("${k}"\\)`).test(mk), `job handler registered: ${k}`);
+}
+check(/async def on_newsletter[\s\S]{0,300}dispatch\("mk_newsletter"/.test(mk), "newsletter sign-up no longer waits for the address check");
 
 console.log("-- screen --");
 for (const t of ["mk-dashboard", "mk-editor", "mk-contacts", "mk-lists", "mk-verify", "mk-settings", "mk-report", "mk-dry-run"]) {

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { lazy, Suspense } from "react";
 import "@/App.css";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Layout from "@/components/Layout";
@@ -23,37 +23,8 @@ import Login from "@/pages/auth/Login";
 import Register from "@/pages/auth/Register";
 import ForgotPassword from "@/pages/auth/ForgotPassword";
 import ResetPassword from "@/pages/auth/ResetPassword";
-import AdminLayout from "@/pages/admin/AdminLayout";
-import AdminDashboard from "@/pages/admin/AdminDashboard";
-import AdminBooks from "@/pages/admin/AdminBooks";
-import AdminHampers from "@/pages/admin/AdminHampers";
-import AdminPacks from "@/pages/admin/AdminPacks";
-import AdminOrders from "@/pages/admin/AdminOrders";
-import AdminUsers from "@/pages/admin/AdminUsers";
-import AdminWaitlists from "@/pages/admin/AdminWaitlists";
-import AdminCoupons from "@/pages/admin/AdminCoupons";
-import AdminInventory from "@/pages/admin/AdminInventory";
-import AdminWarehouse from "@/pages/admin/AdminWarehouse";
-import AdminWhatsApp from "@/pages/admin/AdminWhatsApp";
-import AdminMarketing from "@/pages/admin/AdminMarketing";
 import Unsubscribe from "@/pages/Unsubscribe";
 import SubscribeConfirm from "@/pages/SubscribeConfirm";
-import WarehouseApp from "@/pages/warehouse/WarehouseApp";
-import AdminSubmissions from "@/pages/admin/AdminSubmissions";
-import AdminSpam from "@/pages/admin/AdminSpam";
-import AdminAudit from "@/pages/admin/AdminAudit";
-import AdminMedia from "@/pages/admin/AdminMedia";
-import AdminPages from "@/pages/admin/AdminPages";
-import AdminNavigation from "@/pages/admin/AdminNavigation";
-import AdminSettings from "@/pages/admin/AdminSettings";
-import AdminPLP from "@/pages/admin/AdminPLP";
-import AdminPDP from "@/pages/admin/AdminPDP";
-import AdminAuthors from "@/pages/admin/AdminAuthors";
-import AdminCareers from "@/pages/admin/AdminCareers";
-import AdminMediaGallery from "@/pages/admin/AdminMediaGallery";
-import AdminLegal from "@/pages/admin/AdminLegal";
-import AdminMessages from "@/pages/admin/AdminMessages";
-import AdminEbooks from "@/pages/admin/AdminEbooks";
 import NotFound from "@/pages/NotFound";
 import WriterRedirect from "@/pages/WriterRedirect";
 import Submissions from "@/pages/Submissions";
@@ -67,6 +38,47 @@ import Academy from "@/pages/Academy";
 import Ebooks from "@/pages/Ebooks";
 import { CartProvider } from "@/context/CartContext";
 import { AuthProvider } from "@/context/AuthContext";
+
+/*
+ * Admin + warehouse screens load on demand. They were in the main bundle, so
+ * every shopper downloaded the whole admin (marketing, warehouse, orders…) just
+ * to browse books. Safe for hydration: none of these routes is prerendered —
+ * /admin and /warehouse always mount fresh from the app shell.
+ */
+const AdminLayout = lazy(() => import("@/pages/admin/AdminLayout"));
+const AdminDashboard = lazy(() => import("@/pages/admin/AdminDashboard"));
+const AdminBooks = lazy(() => import("@/pages/admin/AdminBooks"));
+const AdminHampers = lazy(() => import("@/pages/admin/AdminHampers"));
+const AdminPacks = lazy(() => import("@/pages/admin/AdminPacks"));
+const AdminOrders = lazy(() => import("@/pages/admin/AdminOrders"));
+const AdminUsers = lazy(() => import("@/pages/admin/AdminUsers"));
+const AdminWaitlists = lazy(() => import("@/pages/admin/AdminWaitlists"));
+const AdminCoupons = lazy(() => import("@/pages/admin/AdminCoupons"));
+const AdminInventory = lazy(() => import("@/pages/admin/AdminInventory"));
+const AdminWarehouse = lazy(() => import("@/pages/admin/AdminWarehouse"));
+const AdminWhatsApp = lazy(() => import("@/pages/admin/AdminWhatsApp"));
+const AdminMarketing = lazy(() => import("@/pages/admin/AdminMarketing"));
+const WarehouseApp = lazy(() => import("@/pages/warehouse/WarehouseApp"));
+const AdminSubmissions = lazy(() => import("@/pages/admin/AdminSubmissions"));
+const AdminSpam = lazy(() => import("@/pages/admin/AdminSpam"));
+const AdminAudit = lazy(() => import("@/pages/admin/AdminAudit"));
+const AdminMedia = lazy(() => import("@/pages/admin/AdminMedia"));
+const AdminPages = lazy(() => import("@/pages/admin/AdminPages"));
+const AdminNavigation = lazy(() => import("@/pages/admin/AdminNavigation"));
+const AdminSettings = lazy(() => import("@/pages/admin/AdminSettings"));
+const AdminPLP = lazy(() => import("@/pages/admin/AdminPLP"));
+const AdminPDP = lazy(() => import("@/pages/admin/AdminPDP"));
+const AdminAuthors = lazy(() => import("@/pages/admin/AdminAuthors"));
+const AdminCareers = lazy(() => import("@/pages/admin/AdminCareers"));
+const AdminMediaGallery = lazy(() => import("@/pages/admin/AdminMediaGallery"));
+const AdminLegal = lazy(() => import("@/pages/admin/AdminLegal"));
+const AdminMessages = lazy(() => import("@/pages/admin/AdminMessages"));
+const AdminEbooks = lazy(() => import("@/pages/admin/AdminEbooks"));
+
+const AdminFallback = () => <div className="p-8 text-sm text-[#4B5563]" role="status">Loading…</div>;
+// Each admin page gets its own Suspense boundary, so moving between admin pages
+// shows a small "Loading…" in the content area instead of blanking the shell.
+const lazyPage = (C) => <Suspense fallback={<AdminFallback />}><C /></Suspense>;
 
 /*
  * Read the campaign tags off the landing URL before anything navigates away.
@@ -232,7 +244,7 @@ function App() {
                                 path="/warehouse"
                                 element={
                                     <ProtectedRoute requireAdmin>
-                                        <WarehouseApp />
+                                        {lazyPage(WarehouseApp)}
                                     </ProtectedRoute>
                                 }
                             />
@@ -240,37 +252,37 @@ function App() {
                                 path="/admin"
                                 element={
                                     <ProtectedRoute requireAdmin>
-                                        <AdminLayout />
+                                        {lazyPage(AdminLayout)}
                                     </ProtectedRoute>
                                 }
                             >
-                                <Route index element={<AdminDashboard />} />
-                                <Route path="books" element={<AdminBooks />} />
-                                <Route path="hampers" element={<AdminHampers />} />
-                                <Route path="packs" element={<AdminPacks />} />
-                                <Route path="orders" element={<AdminOrders />} />
-                                <Route path="users" element={<AdminUsers />} />
-                                <Route path="waitlists" element={<AdminWaitlists />} />
-                                <Route path="coupons" element={<AdminCoupons />} />
-                                <Route path="inventory" element={<AdminInventory />} />
-                                <Route path="warehouse" element={<AdminWarehouse />} />
-                                <Route path="whatsapp" element={<AdminWhatsApp />} />
-                                <Route path="marketing" element={<AdminMarketing />} />
-                                <Route path="submissions" element={<AdminSubmissions />} />
-                                <Route path="spam" element={<AdminSpam />} />
-                                <Route path="audit" element={<AdminAudit />} />
-                                <Route path="pages" element={<AdminPages />} />
-                                <Route path="navigation" element={<AdminNavigation />} />
-                                <Route path="media" element={<AdminMedia />} />
-                                <Route path="ebooks" element={<AdminEbooks />} />
-                                <Route path="page-bookstore" element={<AdminPLP />} />
-                                <Route path="page-book" element={<AdminPDP />} />
-                                <Route path="authors" element={<AdminAuthors />} />
-                                <Route path="careers" element={<AdminCareers />} />
-                                <Route path="media-gallery" element={<AdminMediaGallery />} />
-                                <Route path="messages" element={<AdminMessages />} />
-                                <Route path="legal" element={<AdminLegal />} />
-                                <Route path="settings" element={<AdminSettings />} />
+                                <Route index element={lazyPage(AdminDashboard)} />
+                                <Route path="books" element={lazyPage(AdminBooks)} />
+                                <Route path="hampers" element={lazyPage(AdminHampers)} />
+                                <Route path="packs" element={lazyPage(AdminPacks)} />
+                                <Route path="orders" element={lazyPage(AdminOrders)} />
+                                <Route path="users" element={lazyPage(AdminUsers)} />
+                                <Route path="waitlists" element={lazyPage(AdminWaitlists)} />
+                                <Route path="coupons" element={lazyPage(AdminCoupons)} />
+                                <Route path="inventory" element={lazyPage(AdminInventory)} />
+                                <Route path="warehouse" element={lazyPage(AdminWarehouse)} />
+                                <Route path="whatsapp" element={lazyPage(AdminWhatsApp)} />
+                                <Route path="marketing" element={lazyPage(AdminMarketing)} />
+                                <Route path="submissions" element={lazyPage(AdminSubmissions)} />
+                                <Route path="spam" element={lazyPage(AdminSpam)} />
+                                <Route path="audit" element={lazyPage(AdminAudit)} />
+                                <Route path="pages" element={lazyPage(AdminPages)} />
+                                <Route path="navigation" element={lazyPage(AdminNavigation)} />
+                                <Route path="media" element={lazyPage(AdminMedia)} />
+                                <Route path="ebooks" element={lazyPage(AdminEbooks)} />
+                                <Route path="page-bookstore" element={lazyPage(AdminPLP)} />
+                                <Route path="page-book" element={lazyPage(AdminPDP)} />
+                                <Route path="authors" element={lazyPage(AdminAuthors)} />
+                                <Route path="careers" element={lazyPage(AdminCareers)} />
+                                <Route path="media-gallery" element={lazyPage(AdminMediaGallery)} />
+                                <Route path="messages" element={lazyPage(AdminMessages)} />
+                                <Route path="legal" element={lazyPage(AdminLegal)} />
+                                <Route path="settings" element={lazyPage(AdminSettings)} />
                             </Route>
                         </Routes>
                     </BrowserRouter>

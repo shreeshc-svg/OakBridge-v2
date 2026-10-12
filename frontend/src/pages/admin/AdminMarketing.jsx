@@ -5,7 +5,7 @@ import {
     mkDashboard, mkHealth, mkSettings, mkSaveSettings, mkVerify, mkImport, mkReverify, mkSync, mkContacts, mkPatchContact,
     mkDeleteContact, mkLists, mkCreateList, mkCampaigns, mkNewCampaign, mkCampaign, mkSaveCampaign, mkDuplicate,
     mkAudience, mkPreview, mkTestSend, mkSend, mkCampaignAction, mkReport, mkDismissAlert, mkSuppressionSync,
-    mkBulkContacts, mkBulkDeleteLists, mkBulkDeleteCampaigns, mkLearn, mkDisposableRefresh, fetchBooks, fetchCategories, mediaUrl, formatApiError,
+    mkBulkContacts, mkBulkDeleteLists, mkBulkDeleteCampaigns, mkLearn, mkDisposableRefresh, mkSystemHealth, fetchBooks, fetchCategories, mediaUrl, formatApiError,
 } from "../../lib/api";
 import { useAuth } from "../../context/AuthContext";
 import { isSuperadmin, canDelete } from "../../lib/rbac";
@@ -1126,6 +1126,54 @@ function VerifyImport() {
     );
 }
 
+/** Settings -> System health: is the site fast, and is background work keeping up? */
+function SystemHealth() {
+    const [h, setH] = useState(null);
+    const [busy, setBusy] = useState(false);
+    const load = useCallback(() => {
+        setBusy(true);
+        mkSystemHealth().then(setH).catch((e) => setH({ error: formatApiError(e) })).finally(() => setBusy(false));
+    }, []);
+    useEffect(load, [load]);
+    if (!h) return <p className="text-sm">Checking…</p>;
+    if (h.error) return <p className="text-sm text-[#CC0033]">{h.error}</p>;
+    const q = h.queue || {};
+    const w = q.worker || {};
+    const ok = (b) => <b className={b ? "text-[#15803D]" : "text-[#CC0033]"}>{b ? "OK" : "needs a look"}</b>;
+    const row = (r) => (
+        <tr key={r.route} className="border-t"><td className="py-1 pr-2 font-mono break-all">{r.route}</td>
+            <td className="text-right">{r.p50} ms</td><td className={`text-right ${r.p95 > 800 ? "text-[#CC0033]" : ""}`}>{r.p95} ms</td>
+            <td className="text-right">{r.n}</td><td className="text-right">{r.errors_5xx || ""}</td></tr>
+    );
+    return (
+        <div className="text-sm space-y-3" data-testid="mk-system-health">
+            <div className="flex flex-wrap gap-x-6 gap-y-1">
+                <span>Background work: <b>{q.mode === "external" ? "separate worker" : "inside the website (inline)"}</b></span>
+                {q.mode === "external" && <span>Worker: {ok(q.worker_alive)} {w.seconds_ago != null && <span className="text-xs text-[#6B7280]">(heartbeat {w.seconds_ago}s ago)</span>}</span>}
+                <span>Queue lag: {ok(h.checks?.queue_lag_ok)} <span className="text-xs text-[#6B7280]">{q.lag_seconds != null ? `${q.lag_seconds}s` : "nothing waiting"}</span></span>
+                <button type="button" className="underline ml-auto" disabled={busy} onClick={load}>{busy ? "Refreshing…" : "Refresh"}</button>
+            </div>
+            <div className="text-xs text-[#4B5563]">Jobs: {Object.entries(q.counts || {}).map(([k, v]) => `${k} ${v}`).join(" · ") || "none yet"}
+                {" "}· Website memory: {h.memory_mb ?? "?"} MB · up {h.uptime_min} min</div>
+            <div className="text-xs text-[#4B5563]">Public cache: {h.cache?.entries ?? 0} pages, {Math.round((h.cache?.bytes || 0) / 1024)} KB,
+                hit rate {h.cache?.hit_rate != null ? `${Math.round(h.cache.hit_rate * 100)}%` : "—"} ({h.cache?.hits ?? 0} hits / {h.cache?.misses ?? 0} misses)</div>
+            {(q.recent_dead || []).length > 0 && (
+                <div className="text-xs border border-[#CC0033] p-2">Stopped after 3 failures: {q.recent_dead.map((d) => `${d.kind} (${d.error})`).join(" · ")}</div>
+            )}
+            <details>
+                <summary className="cursor-pointer text-[#002B5C]">Slowest endpoints (since the last restart)</summary>
+                <table className="w-full text-xs mt-2"><thead><tr className="text-left text-[#6B7280]"><th>Endpoint</th><th className="text-right">typical</th>
+                    <th className="text-right">slowest 5%</th><th className="text-right">requests</th><th className="text-right">5xx</th></tr></thead>
+                    <tbody>{(h.slowest || []).map(row)}</tbody></table>
+            </details>
+            <details>
+                <summary className="cursor-pointer text-[#002B5C]">Storefront book endpoints</summary>
+                <table className="w-full text-xs mt-2"><tbody>{(h.storefront || []).map(row)}</tbody></table>
+            </details>
+        </div>
+    );
+}
+
 /* ------------------------------------------------------------- settings --- */
 function Settings() {
     const { user } = useAuth();
@@ -1215,6 +1263,9 @@ function Settings() {
                     <label className="block">Extra throwaway domains to block (one per line)
                         <textarea rows={3} className={box} value={s.extra_disposable_text} disabled={!su} onChange={(e) => setS({ ...s, extra_disposable_text: e.target.value })} /></label>
                 </div>
+            </Panel>
+            <Panel title="System health">
+                <SystemHealth />
             </Panel>
             <Panel title="Amazon SES">
                 {!h ? <p className="text-sm">Checking…</p> : h.ok ? (

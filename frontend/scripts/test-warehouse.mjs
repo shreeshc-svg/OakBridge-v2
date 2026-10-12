@@ -85,7 +85,7 @@ console.log("-- access --");
 check(/"warehouse": \("warehouse",\),/.test(rbac) && /warehouse: \["warehouse"\]/.test(rbacFe), "warehouse role sees only the warehouse");
 check(/"warehouse" not in rbac\.effective_sections\(user\)/.test(wh), "phone API checks the warehouse section");
 check(/async def adm_mode\(body: ModeBody, user: dict = Depends\(require_superadmin\)\)/.test(wh), "start / go live / stop is superadmin-only");
-check(/path="\/warehouse"/.test(app) && /<WarehouseApp \/>/.test(app), "phone screen route");
+check(/path="\/warehouse"/.test(app) && /<WarehouseApp \/>|lazyPage\(WarehouseApp\)/.test(app), "phone screen route");
 check(/user\.role === "warehouse" \? "\/warehouse" : "\/admin"/.test(login), "warehouse login lands on the phone screen");
 check(/if \(user\?\.role === "warehouse"\) return <Navigate to="\/warehouse"/.test(admin), "…and is sent there from the admin page");
 check(/Disallow: \/warehouse/.test(robots), "kept out of search engines");

@@ -86,6 +86,76 @@ services:
         sync: false
 
   # ---------------------------------------------------------------------------
+  # Background worker — marketing sending, address checks, learning, syncs
+  # (backend/worker.py). Keeps that work off the website's CPU and memory.
+  #
+  # Turn on in this order:
+  #   1. Deploy this service (it is harmless while the web service is still
+  #      WORKER_MODE=inline: it only runs the minute tick and waits for jobs).
+  #   2. Check Admin -> Marketing -> Settings -> System health shows the worker
+  #      as alive.
+  #   3. Set WORKER_MODE=external on BOTH services. If the worker ever stops, the
+  #      website notices within 3 minutes and does the work itself (with an alert).
+  #
+  # JWT_SECRET MUST be identical to the web service's: the worker signs the
+  # unsubscribe / tracking links inside every email with it, and a different
+  # value makes every one of those links invalid. Same for every other key the
+  # marketing code reads. The simplest safe setup is one Render Environment
+  # Group attached to both services.
+  - type: worker
+    name: oakbridge-worker
+    runtime: python
+    rootDir: backend
+    plan: starter
+    buildCommand: "pip install -r requirements-local.txt"
+    startCommand: "python worker.py"
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+      - key: DB_NAME
+        value: oakbridge
+      - key: WORKER_MODE
+        value: inline              # switch to external on BOTH services after step 2
+      - key: WORKER_CONCURRENCY
+        value: "3"
+      - key: PUBLIC_API_URL
+        value: https://api.oakbridge.in
+      - key: JWT_SECRET            # copied from the web service (must match)
+        fromService:
+          type: web
+          name: oakbridge-api
+          envVarKey: JWT_SECRET
+      - key: TASK_TOKEN
+        fromService:
+          type: web
+          name: oakbridge-api
+          envVarKey: TASK_TOKEN
+      # --- same values as the web service (dashboard / environment group) ---
+      - key: MONGO_URL
+        sync: false
+      - key: SITE_URL
+        sync: false
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: S3_REGION
+        sync: false
+      - key: SES_REGION
+        sync: false
+      - key: SES_CONFIGURATION_SET
+        sync: false
+      - key: SNS_TOPIC_ARN
+        sync: false
+      - key: INTERAKT_API_KEY
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: SENDER_EMAIL
+        sync: false
+
+  # ---------------------------------------------------------------------------
   # Scheduled stock sync — Google Sheet -> website.
   #
   # SCHEDULE IS IN UTC. Render does not run cron in your local timezone, and
