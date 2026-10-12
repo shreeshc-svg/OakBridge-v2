@@ -317,13 +317,14 @@ def send_decision(status: str, kind: str, policy: Optional[dict], *, needs_ses: 
 BASE_DELTAS = {
     "ses_high": 20, "ses_medium": -15, "mailbox_high": 5, "mailbox_doubt": -10, "catch_all": -5,
     "random": -25, "domain_good": 15, "domain_bad": -30, "name_match": 10, "no_ses": 0,
+    "made_up": -20, "inactive": -15,
 }
 SIGNAL_LABELS = {
     "ses_high": "SES: deliverable", "ses_medium": "SES: uncertain", "mailbox_high": "SES: mailbox exists",
     "mailbox_doubt": "SES: mailbox not confirmed", "catch_all": "domain accepts any address",
     "random": "looks randomly typed", "domain_good": "this domain receives our email",
     "domain_bad": "this domain bounced 3+ addresses", "name_match": "name matches the address",
-    "no_ses": "no mailbox check",
+    "no_ses": "no mailbox check", "made_up": "looks made-up", "inactive": "no opens or clicks lately",
 }
 DEFAULT_THRESHOLDS = {"valid": 65, "invalid": 35}
 START_SCORE = 65  # format + mail server + not throwaway: passes the free checks
@@ -369,7 +370,7 @@ def score_address(signals: dict, *, adjust: Optional[dict] = None, thresholds: O
         flags.append("mailbox_doubt")
     if signals.get("catch_all") is True:
         flags.append("catch_all")
-    for f in ("random", "domain_good", "domain_bad", "name_match"):
+    for f in ("random", "domain_good", "domain_bad", "name_match", "made_up", "inactive"):
         if signals.get(f):
             flags.append(f)
     score, reasons = START_SCORE, []
@@ -417,6 +418,85 @@ def calibrate_threshold(current: int, valid_band: dict, risky_band: dict, *, tar
     elif rn >= min_sent and rb / rn < target / 2:
         current -= step
     return max(lo, min(hi, current))
+
+
+_KEYBOARD_ROWS = ("qwertyuiop", "asdfghjkl", "zxcvbnm", "1234567890")
+_NUMBER_WORDS = ("zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten")
+
+
+def looks_made_up(local: str) -> Optional[str]:
+    """Free 'is this a made-up address?' check on the part before the @.
+    Returns the reason, or None. Lowers the score; never decides on its own
+    (some real people do use rahul1234@…)."""
+    loc = (local or "").lower().split("+")[0]
+    letters = re.sub(r"[^a-z]", "", loc)
+    if re.search(r"(.)\1{4,}", loc):
+        return "one character repeated"
+    for row in _KEYBOARD_ROWS:
+        for i in range(len(row) - 4):
+            w = row[i:i + 5]
+            if w in loc or w[::-1] in loc:
+                return "keyboard run"
+    for i in range(len(loc) - 3):
+        seg = loc[i:i + 4]
+        if seg.isdigit():
+            d = [int(c) for c in seg]
+            if all(d[k + 1] - d[k] == 1 for k in range(3)) or all(d[k] - d[k + 1] == 1 for k in range(3)) or len(set(seg)) == 1:
+                return "number run"
+    if sum(1 for w in _NUMBER_WORDS if w in letters) >= 3:
+        return "spelled-out numbers"
+    if len(letters) >= 8 and sum(c in "aeiou" for c in letters) / len(letters) < 0.15:
+        return "no vowels — random letters"
+    return None
+
+
+def svix_verify(secret: str, msg_id: str, timestamp: str, body: bytes, signature_header: str, *,
+                now: Optional[float] = None, tolerance: int = 300) -> bool:
+    """Svix / Standard Webhooks signature check (Resend signs webhooks this
+    way): HMAC-SHA256 over "id.timestamp.body" with the base64 secret after
+    'whsec_', compared in constant time against any 'v1,<sig>' in the header,
+    and the timestamp must be within `tolerance` seconds (replay guard)."""
+    import time as _t
+    try:
+        ts = int(timestamp)
+    except (TypeError, ValueError):
+        return False
+    if abs((now if now is not None else _t.time()) - ts) > tolerance:
+        return False
+    try:
+        key = base64.b64decode((secret or "").split("_", 1)[-1])
+    except (ValueError, TypeError):
+        return False
+    if not key or not msg_id:
+        return False
+    signed = f"{msg_id}.{timestamp}.".encode() + (body or b"")
+    expected = base64.b64encode(hmac.new(key, signed, hashlib.sha256).digest()).decode()
+    for part in (signature_header or "").split():
+        ver, _, sig = part.partition(",")
+        if ver == "v1" and hmac.compare_digest(sig, expected):
+            return True
+    return False
+
+
+def parse_domain_list(text: str) -> set:
+    """One domain per line, '#' comments, blanks ignored, lowercased."""
+    out = set()
+    for line in (text or "").splitlines():
+        d = line.split("#", 1)[0].strip().lower()
+        if d and "." in d and " " not in d:
+            out.add(d)
+    return out
+
+
+def sunset_state(sent_since_engaged: int, *, inactive_after: int = 6, sunset_after: int = 12) -> str:
+    """'active' | 'inactive' (warn) | 'sunset' (stop mailing). Counted in
+    campaign emails sent since the last open or click; 0 = rule off."""
+    n = int(sent_since_engaged or 0)
+    if sunset_after and n >= sunset_after:
+        return "sunset"
+    if inactive_after and n >= inactive_after:
+        return "inactive"
+    return "active"
 
 
 def is_bad_domain(domain: str, hard_bounced: int, threshold: int = 3) -> bool:

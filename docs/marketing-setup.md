@@ -68,6 +68,15 @@ Every 5 minutes
 - Each campaign email records what we believed (band, score, signals). Daily, the learning pass compares that with real hard bounces: each signal's weight moves (±20 max, needs 30+ sends), and "Valid from" moves one step (55–85) if valid addresses bounced >2% or risky ones turned out clean. Dashboard → *Address accuracy & self-learning* shows the bounce rate per flag and every change; Settings can switch learning off.
 - Order emails (Resend) don't count as proof yet: no Resend delivery webhook is connected.
 
+## 4c. Accuracy pack
+
+- **Resend delivery proof (free):** Resend → Webhooks → Add endpoint `https://api.oakbridge.in/api/m/resend-events`, events `email.delivered`, `email.bounced`, `email.complained`, `email.suppressed`. Copy the endpoint's signing secret (`whsec_…`) into Render env `RESEND_WEBHOOK_SECRET` (never into chat). Delivered order/account emails then mark those addresses verified; bounces/complaints suppress them. Signature-checked (Svix), replay-guarded, each event applied once. Settings shows status and how many addresses were proven this way.
+- **Throwaway domains:** the community list (github.com/disposable-email-domains, ~4,200 domains) is downloaded weekly, minus its allowlist, never blocking Gmail/Yahoo/etc. or our own domain. Settings → Update now.
+- **Looks made-up:** repeated letters, keyboard runs, number runs, spelled-out numbers, no-vowel strings → −20 on the score (learned like other signals); never invalid on its own.
+- **Inactive / retire:** every campaign email adds 1 to the contact's "since last open or click"; an open/click resets it. 6 → inactive (score −15); 12 → not mailed. Settings, 0 = off.
+- **Per-row import report:** every address (first 2,000) with status, score and reasons, filterable.
+- **Re-confirm campaign:** Campaigns → New re-confirm campaign. Any link click renews consent and verifies the address; after the window (default 30 days) non-clickers become "lapsed" and stop getting campaigns. Includes retired addresses.
+
 ## 5. Safety rails (automatic)
 
 - Only `subscribed` people get campaigns; unsubscribed, bounced and complained addresses are excluded whatever list they are in.

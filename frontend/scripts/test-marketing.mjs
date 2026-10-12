@@ -93,7 +93,7 @@ check(/if suggest and status == "valid":\s*\n\s*status = "risky"/.test(mk) && /s
 check(/EmailValidationSuppressed/.test(mk) && /"blocked"/.test(mk) && /k not in \("queued", "failed", "skipped", "blocked"\)/.test(mk),
     "SES auto-validation blocks are not counted as sent or bounced (no false auto-pause)");
 check(/hasattr\(_ses\(\), "get_email_address_insights"\)/.test(mk), "old AWS SDK detected instead of crashing");
-check(/results = await verify_emails\(\[r\.get\(ecol, ""\) for r in unique_rows\], autofix=autofix, ses="cache",/.test(mk), "import (incl. dry-run) uses cached SES verdicts only — never spends money");
+check(/autofix=autofix, ses="live" if ses_live else "cache",/.test(mk) && /ses_live: bool = Form\(False\)/.test(mk), "import spends on SES checks only when the admin ticks the box (off by default on the API)");
 
 check(/allowed=allowed\)/.test(mk) && /core\.selected_statuses\(aud\)/.test(mk), "campaign status tick-boxes filter both the count and the send");
 check(/core\.ses_status\(d\.get\("overall", ""\), d\.get\("mailbox", ""\)\)/.test(mk), "saved SES verdicts are re-derived (rule fixes apply to paid checks)");
@@ -125,6 +125,21 @@ check(/doc\.update\(band=/.test(mk) && /score=100 if x\.get\("email_status"\) ==
 check(/core\.learn_adjustments\(/.test(mk) && /core\.calibrate_threshold\(/.test(mk) && /_bg\(learn_from_outcomes\(\)\)/.test(mk), "daily self-learning from outcomes");
 check(/"\$lte": \(_now\(\) - timedelta\(days=1\)\)/.test(mk), "learning waits a day so late bounces are counted");
 check(/data-testid="mk-accuracy"/.test(page) && /data-testid="mk-auto-learn"/.test(page), "accuracy panel + learning switch on screen");
+
+console.log("-- accuracy pack --");
+check(/core\.svix_verify\(RESEND_WEBHOOK_SECRET/.test(mk) && /if not RESEND_WEBHOOK_SECRET:\s*\n\s*raise HTTPException\(status_code=404/.test(mk),
+    "Resend webhook: signature-checked, off (404) until a secret is set");
+check(/mk_webhook_seen\.insert_one\(\{"id": f"resend:\{sid\}"/.test(mk), "Resend retries applied once (svix-id)");
+check(/typ == "email\.delivered":\s*\n\s*await note_delivered\(/.test(mk) && /db\.mk_proven\.find\(/.test(mk), "delivered order emails prove addresses (free)");
+check(/len\(domains\) < 1000/.test(mk) && /domains -= set\(core\.WEBMAIL\) \| own/.test(mk), "throwaway list: broken download ignored, never blocks webmail / our domain");
+check(/\| await disposable_domains\(\)/.test(mk), "throwaway list used by verification");
+check(/"made_up": bool\(core\.looks_made_up\(/.test(mk), "made-up detector feeds the score");
+check(/"since_engaged": 1\}/.test(mk) && /"since_engaged": 0, "last_engaged_at"/.test(mk), "engagement counter: +1 per send, reset on open/click");
+check(/not reconfirm and core\.sunset_state\(/.test(mk), "retired addresses skipped — except by a re-confirm campaign");
+check(/if \(camp or \{\}\)\.get\("kind"\) == "reconfirm":/.test(mk) && /"email_consent\.status": \{"\$nin": \["unsubscribed", "complained"\]\}/.test(mk),
+    "re-confirm: a click renews consent, never over an unsubscribe");
+check(/_consent\("lapsed"/.test(mk) && /"email_consent\.at": \{"\$lt":/.test(mk), "re-confirm: non-clickers lapse, unless they re-subscribed since");
+check(/"rows": row_report/.test(mk) && /function RowReport/.test(page), "import shows every row");
 
 console.log("-- screen --");
 for (const t of ["mk-dashboard", "mk-editor", "mk-contacts", "mk-lists", "mk-verify", "mk-settings", "mk-report", "mk-dry-run"]) {

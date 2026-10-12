@@ -138,6 +138,23 @@ check(m.calibrate_threshold(65, {"sent": 100, "bounced": 0}, {"sent": 100, "boun
 check(m.calibrate_threshold(65, {"sent": 10, "bounced": 5}, {}) == 65, "too few sends -> unchanged")
 check(m.calibrate_threshold(85, {"sent": 100, "bounced": 50}, {}) == 85, "bounded")
 
+print("-- made-up detector, svix, lists, sunset --")
+for bad in ["xxxxxxxxxxxxxxxxxxx", "zyzqwerty1234567", "onetwothree123", "asdfgh", "rahul1234", "bcdfghjklmn"]:
+    check(m.looks_made_up(bad) is not None, f"made-up: {bad} ({m.looks_made_up(bad)})")
+for ok in ["renu.rawat", "khushi.mehra", "rohan.kapoor", "info", "a.sharma1990", "priya_2024", "shashi", "contact"]:
+    check(m.looks_made_up(ok) is None, f"real-looking: {ok}")
+check(m.score_address({"ses": "", "made_up": True})["status"] == "risky", "made-up alone -> risky, not invalid")
+# Svix's own published example (docs.svix.com, manual verification)
+SV = ("whsec_plJ3nmyCDGBKInavdOK15jsl", "msg_loFOjxBNrRLzqYUf", "1731705121", b'{"event_type":"ping","data":{"success":true}}')
+check(m.svix_verify(*SV, "v1,rAvfW3dJ/X/qxhsaXPOyyCGmRKsaKWcsNccKXlIktD0=", now=1731705121), "svix: published example verifies")
+check(m.svix_verify(*SV, "v2,xx v1,rAvfW3dJ/X/qxhsaXPOyyCGmRKsaKWcsNccKXlIktD0=", now=1731705121), "svix: any v1 in the list")
+check(not m.svix_verify(*SV, "v1,rAvfW3dJ/X/qxhsaXPOyyCGmRKsaKWcsNccKXlIktD0=", now=1731705121 + 3600), "svix: old timestamp rejected (replay)")
+check(not m.svix_verify(SV[0], SV[1], SV[2], SV[3] + b" ", "v1,rAvfW3dJ/X/qxhsaXPOyyCGmRKsaKWcsNccKXlIktD0=", now=1731705121), "svix: changed body rejected")
+check(not m.svix_verify("whsec_other", SV[1], SV[2], SV[3], "v1,rAvfW3dJ/X/qxhsaXPOyyCGmRKsaKWcsNccKXlIktD0=", now=1731705121), "svix: wrong secret rejected")
+check(m.parse_domain_list("# c\nMailinator.com\n\nbad line\nx.io # note\n") == {"mailinator.com", "x.io"}, "domain list parsing")
+check(m.sunset_state(3) == "active" and m.sunset_state(6) == "inactive" and m.sunset_state(12) == "sunset"
+      and m.sunset_state(50, sunset_after=0) == "inactive", "sunset states, 0 = off")
+
 print("-- auto-pause --")
 check(m.should_pause(40, 5, 0) is None, "no decision on too little data")
 check(m.should_pause(100, 2, 0) is None, "2% bounces is allowed")

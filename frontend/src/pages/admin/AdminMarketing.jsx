@@ -5,7 +5,7 @@ import {
     mkDashboard, mkHealth, mkSettings, mkSaveSettings, mkVerify, mkImport, mkReverify, mkSync, mkContacts, mkPatchContact,
     mkDeleteContact, mkLists, mkCreateList, mkCampaigns, mkNewCampaign, mkCampaign, mkSaveCampaign, mkDuplicate,
     mkAudience, mkPreview, mkTestSend, mkSend, mkCampaignAction, mkReport, mkDismissAlert, mkSuppressionSync,
-    mkBulkContacts, mkBulkDeleteLists, mkBulkDeleteCampaigns, mkLearn, fetchBooks, fetchCategories, mediaUrl, formatApiError,
+    mkBulkContacts, mkBulkDeleteLists, mkBulkDeleteCampaigns, mkLearn, mkDisposableRefresh, fetchBooks, fetchCategories, mediaUrl, formatApiError,
 } from "../../lib/api";
 import { useAuth } from "../../context/AuthContext";
 import { isSuperadmin, canDelete } from "../../lib/rbac";
@@ -301,14 +301,17 @@ function CampaignList({ onOpen }) {
     const load = useCallback(() => { mkCampaigns().then(setRows).catch(() => setRows([])); }, []);
     useEffect(load, [load]);
     const del = async (ids) => { if (await deleteCampaigns(ids, rows)) { sel.clear(); load(); } };
-    const create = async (channel) => {
-        try { const c = await mkNewCampaign({ channel, name: channel === "email" ? "New email campaign" : "New WhatsApp campaign" }); onOpen(c.id); } catch (e) { toast.error(formatApiError(e)); }
+    const create = async (channel, kind) => {
+        const name = kind === "reconfirm" ? "Re-confirm subscribers" : channel === "email" ? "New email campaign" : "New WhatsApp campaign";
+        try { const c = await mkNewCampaign({ channel, name, kind }); onOpen(c.id); } catch (e) { toast.error(formatApiError(e)); }
     };
     return (
         <div className="space-y-4">
             <div className="flex gap-2">
                 <button type="button" className={`${btn} bg-[#002B5C] text-white inline-flex items-center gap-2`} onClick={() => create("email")} data-testid="mk-new-email"><Mail size={15} /> New email campaign</button>
                 <button type="button" className={`${btn} border border-[#15803D] text-[#15803D] inline-flex items-center gap-2`} onClick={() => create("whatsapp")}><MessageCircle size={15} /> New WhatsApp campaign</button>
+                <button type="button" className={`${btn} border border-[#7c3aed] text-[#7c3aed]`} onClick={() => create("email", "reconfirm")} data-testid="mk-new-reconfirm"
+                    title="Ask an old list to click to stay subscribed; those who don't stop getting campaigns">New re-confirm campaign</button>
             </div>
             <BulkBar count={sel.sel.size} onClear={sel.clear}>
                 {canDelete(user) && <button type="button" className={bulkBtn} onClick={() => del([...sel.sel])} data-testid="mk-camp-bulk-delete">Delete</button>}
@@ -359,7 +362,8 @@ function CampaignEditor({ c, setC, reload }) {
         setSaving(true);
         try {
             const body = { name: c.name, subject: c.subject, preheader: c.preheader, blocks: c.blocks, audience: c.audience,
-                wa_template: c.wa_template, wa_language: c.wa_language, wa_variables: c.wa_variables };
+                wa_template: c.wa_template, wa_language: c.wa_language, wa_variables: c.wa_variables,
+                ...(c.kind === "reconfirm" ? { reconfirm_days: Number(c.reconfirm_days) || 30 } : {}) };
             const saved = await mkSaveCampaign(c.id, body);
             setC(saved);
             if (isEmail) mkPreview(c.id).then((r) => setPreview(r.html)).catch(() => {});
@@ -415,6 +419,15 @@ function CampaignEditor({ c, setC, reload }) {
     return (
         <div className="grid xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-6" data-testid="mk-editor">
             <div className="space-y-4">
+                {c.kind === "reconfirm" && (
+                    <div className="border border-[#7c3aed] bg-white p-3 text-sm space-y-2" data-testid="mk-reconfirm-info">
+                        <b className="text-[#5b21b6]">Re-confirm campaign</b>
+                        <p>Anyone who <b>clicks any link</b> in it is re-confirmed: their address becomes verified and their consent is renewed (opens don't count — Apple Mail opens everything).
+                            Those who don't click stop getting campaigns after the window below. Inactive (retired) addresses are included — this is their way back.</p>
+                        <label className="flex items-center gap-2">Window <input type="number" min="7" max="90" className="border border-[#E5E7EB] px-2 py-1 w-20" value={c.reconfirm_days || 30}
+                            onChange={(e) => patch({ reconfirm_days: e.target.value })} /> days</label>
+                    </div>
+                )}
                 <Panel title="Details">
                     <div className="space-y-2 text-sm">
                         <label className="block">Campaign name (internal)<input className={box} value={c.name || ""} onChange={(e) => patch({ name: e.target.value })} /></label>
@@ -654,6 +667,13 @@ function CampaignReport({ id, status, reload }) {
             )}
             {r.campaign.tail_stopped_at && <div className="border border-[#F59E0B] text-[#92400e] p-2 text-sm">The catch-all tail stopped itself at {when(r.campaign.tail_stopped_at)} — too many of those bounced.</div>}
             {r.campaign.note && <div className="border p-2 text-sm">{r.campaign.note}</div>}
+            {r.campaign.kind === "reconfirm" && (
+                <div className="border border-[#7c3aed] text-[#5b21b6] p-2 text-sm" data-testid="mk-reconfirm-report">
+                    Re-confirm: <b>{(r.stats || {}).clicked || 0}</b> clicked and stay subscribed.{" "}
+                    {r.campaign.lapsed_at ? <>After {r.campaign.reconfirm_days} days, <b>{r.campaign.lapsed_count}</b> who didn't click stopped getting campaigns ({when(r.campaign.lapsed_at)}).</>
+                        : <>Those who don't click stop getting campaigns {r.campaign.reconfirm_days || 30} days after sending finishes.</>}
+                </div>
+            )}
             <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3">
                 <Kpi label="Sent" value={(s.sent || 0).toLocaleString("en-IN")} sub={s.queued ? `${s.queued} waiting` : ""} />
                 <Kpi label="Delivered" value={pct(r.rates.delivery)} />
@@ -778,7 +798,7 @@ function Contacts() {
                     <option value="">Any address status</option>{Object.keys(STATUS_COLORS).map((s) => <option key={s} value={s}>{s}</option>)}
                 </select>
                 <select className={selCls} value={consent} onChange={(e) => setConsent(e.target.value)}>
-                    <option value="">Any email consent</option>{["subscribed", "pending", "none", "unsubscribed", "complained"].map((s) => <option key={s} value={s}>{s}</option>)}
+                    <option value="">Any email consent</option>{["subscribed", "pending", "none", "lapsed", "unsubscribed", "complained"].map((s) => <option key={s} value={s}>{s}</option>)}
                 </select>
                 <button type="button" className={`${btn} border ml-auto`} disabled={busy} onClick={sync} title="Newsletter sign-ups, paying customers and confirmed accounts">Sync website contacts</button>
             </div>
@@ -811,6 +831,7 @@ function Contacts() {
                                         {!["verified", "invalid", "suppressed"].includes(c.email_status) && <ScoreChip score={c.score} />}
                                         {c.ses_checked && <span className="ml-1 text-[10px] border border-[#E5E7EB] px-1" title="Mailbox checked by Amazon SES">SES ✓</span>}
                                         {c.email_status === "risky" && c.risk_kind && <div className="text-[#B4750F]">{RISK_LABEL[c.risk_kind] || c.risk_kind}</div>}
+                                        {(c.since_engaged || 0) >= 6 && <div className="text-[#B4750F]">no opens or clicks in {c.since_engaged} emails</div>}
                                         {c.reasons?.length ? <div className="text-[#6B7280] max-w-[24ch]">{c.reasons.join("; ")}</div> : null}</td>
                                     <td className="text-xs">{c.email_consent?.status}{c.email_consent?.status === "subscribed" && <button type="button" className="block underline text-[#CC0033]" onClick={() => unsub(c.id, "email_consent")}>unsubscribe</button>}</td>
                                     <td className="text-xs">{c.wa_consent?.status}{c.wa_consent?.status === "subscribed" && <button type="button" className="block underline text-[#CC0033]" onClick={() => unsub(c.id, "wa_consent")}>opt out</button>}</td>
@@ -924,6 +945,37 @@ function Lists() {
     );
 }
 
+/** Every imported row with its verdict, score and why — filterable, 100 at a time. */
+function RowReport({ rows }) {
+    const [f, setF] = useState("");
+    const [n, setN] = useState(100);
+    if (!rows.length) return null;
+    const shown = rows.filter((r) => !f || r.status === f);
+    return (
+        <details className="text-xs" data-testid="mk-row-report">
+            <summary className="cursor-pointer text-[#002B5C]">Every address ({rows.length}{rows.length >= 2000 ? ", first 2,000" : ""})</summary>
+            <div className="mt-2 flex flex-wrap gap-2">
+                {["", "verified", "valid", "risky", "unknown", "invalid", "suppressed"].map((k) => (
+                    <button key={k || "all"} type="button" onClick={() => { setF(k); setN(100); }}
+                        className={`border px-2 py-0.5 ${f === k ? "border-[#002B5C] text-[#002B5C]" : "border-[#E5E7EB]"}`}>
+                        {k || "all"} ({k ? rows.filter((r) => r.status === k).length : rows.length})</button>
+                ))}
+            </div>
+            <table className="w-full mt-2"><tbody>
+                {shown.slice(0, n).map((r, i) => (
+                    <tr key={i} className="border-t align-top">
+                        <td className="py-1 pr-2 font-mono break-all">{r.email}<div className="text-[#6B7280] font-sans">{r.name}</div></td>
+                        <td className="pr-2 whitespace-nowrap font-medium" style={{ color: STATUS_COLORS[r.status] }}>{r.status}
+                            {!["verified", "invalid", "suppressed"].includes(r.status) && <ScoreChip score={r.score} />}</td>
+                        <td className="text-[#6B7280]">{(r.why || []).join("; ")}{r.risk_kind ? ` · ${RISK_LABEL[r.risk_kind] || r.risk_kind}` : ""}</td>
+                    </tr>
+                ))}
+            </tbody></table>
+            {shown.length > n && <button type="button" className="underline mt-1" onClick={() => setN(n + 200)}>Show more ({shown.length - n} left)</button>}
+        </details>
+    );
+}
+
 /* ------------------------------------------------------- verify / import --- */
 function VerifyImport() {
     const [paste, setPaste] = useState("");
@@ -933,6 +985,7 @@ function VerifyImport() {
     const [report, setReport] = useState(null);
     const [opts, setOpts] = useState({ list_name: "", consent_email: false, consent_whatsapp: false, consent_source: "", autofix: true });
     const [pick, setPick] = useState({ verified: true, valid: true, risky: true });
+    const [sesLive, setSesLive] = useState(true);
     const [busy, setBusy] = useState(false);
     const fileIn = useRef(null);
     const runQuick = async () => {
@@ -946,7 +999,7 @@ function VerifyImport() {
         if (!dry && (opts.consent_email || opts.consent_whatsapp) && opts.consent_source.trim().length < 3) return toast.error("Say where these people agreed to hear from you.");
         setBusy(true);
         try {
-            const r = await mkImport(file, { ...opts, dry_run: dry, statuses: Object.keys(pick).filter((k) => pick[k]).join(",") });
+            const r = await mkImport(file, { ...opts, dry_run: dry, statuses: Object.keys(pick).filter((k) => pick[k]).join(","), ses_live: sesLive });
             setReport(r);
             if (!dry) toast.success(`Imported ${r.saved} contacts into the list.`);
         } catch (e) { toast.error(formatApiError(e)); } finally { setBusy(false); }
@@ -974,6 +1027,8 @@ function VerifyImport() {
                     <input ref={fileIn} type="file" accept=".xlsx,.csv" onChange={(e) => { setFile(e.target.files?.[0] || null); setReport(null); }} />
                     <p className="text-xs text-[#6B7280]">Needs an “email” column; “name” and “phone” are picked up if present. Up to 50,000 rows.</p>
                     <label className="flex items-center gap-2"><input type="checkbox" checked={opts.autofix} onChange={(e) => setOpts({ ...opts, autofix: e.target.checked })} /> Fix obvious typos (gmial.com → gmail.com)</label>
+                    <label className="flex items-start gap-2"><input type="checkbox" className="mt-1" checked={sesLive} onChange={(e) => setSesLive(e.target.checked)} data-testid="mk-import-ses-live" />
+                        <span>Also ask Amazon SES whether each mailbox exists (≈ $0.01 per new address, never twice for the same one — within the monthly budget)</span></label>
                     <button type="button" className={`${btn} border border-[#002B5C] text-[#002B5C]`} onClick={() => run(true)} disabled={busy || !file} data-testid="mk-dry-run">{busy ? "Checking…" : "1. Check the file (nothing is saved)"}</button>
                     {report && (
                         <div className="space-y-3" data-testid="mk-import-report">
@@ -998,12 +1053,13 @@ function VerifyImport() {
                             </div>
                             {report.ses && report.ses.enabled && report.ses.to_check > 0 && (
                                 <div className="text-xs bg-[#F5F7FA] p-2" data-testid="mk-import-ses">
-                                    {report.dry_run ? "After import, " : "Now running in the background: "}
+                                    {report.dry_run ? (sesLive ? "Not checked yet (monthly budget used up, or AWS didn't answer) — after import, " : "Not checked yet — after import, ") : "Now running in the background: "}
                                     <b>{report.ses.to_check}</b> address{report.ses.to_check === 1 ? "" : "es"} get an Amazon SES mailbox check (≈ ₹{report.ses.est_inr}).
                                     Ones SES says don't exist become invalid; any still unchecked are checked automatically when a campaign is sent.
                                     <SesUsage u={report.ses} />
                                 </div>
                             )}
+                            <RowReport rows={report.rows || []} />
                             <div className="text-xs text-[#4B5563]">{c.duplicates_in_file || 0} duplicates removed · {c.fixed || 0} typos fixed · columns: email “{report.columns.email}”{report.columns.name ? `, name “${report.columns.name}”` : ""}{report.columns.phone ? `, phone “${report.columns.phone}”` : ""}</div>
                             {Object.entries(report.sample || {}).filter(([k]) => ["invalid", "risky", "suppressed"].includes(k)).map(([k, rows]) => (
                                 <details key={k} className="text-xs"><summary className="cursor-pointer" style={{ color: STATUS_COLORS[k] }}>{k}: examples</summary>
@@ -1064,6 +1120,7 @@ function Settings() {
                 ses_validation: !!s.ses_validation, ses_budget_inr: Math.max(0, Number(s.ses_budget_inr) || 0), usd_inr: Number(s.usd_inr) || 88,
                 risk_policy: s.risk_policy, tail_max_bounce: Number(s.tail_max_bounce),
                 score_valid: Math.round(Number(s.score_valid) || 65), score_invalid: Math.round(Number(s.score_invalid) || 35), auto_learn: !!s.auto_learn,
+                inactive_after: Math.max(0, Math.round(Number(s.inactive_after) || 0)), sunset_after: Math.max(0, Math.round(Number(s.sunset_after) || 0)),
                 wa_rate_marketing: Number(s.wa_rate_marketing), wa_rate_utility: Number(s.wa_rate_utility),
                 extra_disposable: s.extra_disposable_text.split(/\s+/).filter(Boolean) };
             await mkSaveSettings(body);
@@ -1117,6 +1174,12 @@ function Settings() {
                             {F("score_valid", "Valid from", { type: "number", min: "50", max: "90" })}
                             {F("score_invalid", "Invalid below", { type: "number", min: "10", max: "60" })}
                         </div>
+                        <div className="text-sm font-medium text-[#002B5C] pt-1">Inactive addresses (counted in campaign emails since the last open or click)</div>
+                        <div className="grid grid-cols-2 gap-2">
+                            {F("inactive_after", "Mark inactive after (lowers the score)", { type: "number", min: "0", max: "100" })}
+                            {F("sunset_after", "Stop mailing after (0 = never)", { type: "number", min: "0", max: "100" })}
+                        </div>
+                        <p className="text-xs text-[#6B7280]">Abandoned inboxes are where providers set spam traps. A re-confirm campaign is the way back for stopped addresses.</p>
                         <label className="flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1" checked={s.auto_learn !== false} disabled={!su}
                             onChange={(e) => setS({ ...s, auto_learn: e.target.checked })} data-testid="mk-auto-learn" />
                             <span>Learn from real bounces <span className="text-xs text-[#6B7280]">— daily, it adjusts how much each signal counts (±20 at most) and moves “Valid from” one step at a time (55–85). See the Dashboard for what it changed.</span></span></label>
@@ -1150,6 +1213,19 @@ function Settings() {
                         <button type="button" className="underline" onClick={async () => {
                             try { const r = await mkSuppressionSync(); if (r.ok === false) toast.error(`AWS said: ${r.error}`); else toast.success(`Synced: ${r.suppressed ?? 0} newly suppressed.`); load(); } catch (e) { toast.error(formatApiError(e)); }
                         }}>Sync now</button></div>
+                    <div className="text-xs">Throwaway-domain list: {s.disposable?.count ? `${s.disposable.count.toLocaleString("en-IN")} domains, updated ${when(s.disposable.at)}` : "not downloaded yet"} (weekly){" "}
+                        <button type="button" className="underline" onClick={async () => {
+                            try { const r = await mkDisposableRefresh(); if (r.ok) toast.success(`Updated: ${r.count} domains.`); else toast.error("Could not update — see Dashboard alerts."); load(); } catch (e) { toast.error(formatApiError(e)); }
+                        }}>Update now</button></div>
+                </div>
+            </Panel>
+            <Panel title="Order-email delivery proof (Resend)">
+                <div className="text-sm space-y-2" data-testid="mk-resend">
+                    <p>When Resend delivers an order or account email, that address is marked <b>verified</b> for free — no SES check needed. Bounces and spam complaints there stop marketing too.</p>
+                    <div>Status: {s.resend?.configured ? <b className="text-[#15803D]">connected</b> : <b className="text-[#B4750F]">not set up — add RESEND_WEBHOOK_SECRET on Render</b>}
+                        {s.resend?.last_event && <> · last event {s.resend.last_event.type.replace("resend:", "")} at {when(s.resend.last_event.at)}</>}
+                        {" "}· {s.resend?.proven ?? 0} addresses proven this way</div>
+                    <div className="text-xs">Resend → Webhooks → Add endpoint: <code className="bg-[#F5F7FA] px-1 break-all">{s.resend?.url}</code> · events: email.delivered, email.bounced, email.complained, email.suppressed</div>
                 </div>
             </Panel>
             {su ? <button type="button" className={`${btn} bg-[#002B5C] text-white w-max`} onClick={save}>Save settings</button>

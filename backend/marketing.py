@@ -96,7 +96,20 @@ DEFAULT_SETTINGS = {
     "score_valid": 65,
     "score_invalid": 35,
     "auto_learn": True,
+    # Retire inactive addresses: counted in campaign emails since the last
+    # open / click. Abandoned inboxes become spam traps. 0 = rule off.
+    "inactive_after": 6,
+    "sunset_after": 12,
 }
+DISPOSABLE_URL = "https://raw.githubusercontent.com/disposable-email-domains/disposable-email-domains/main/disposable_email_blocklist.conf"
+DISPOSABLE_ALLOW_URL = "https://raw.githubusercontent.com/disposable-email-domains/disposable-email-domains/main/allowlist.conf"
+RESEND_WEBHOOK_SECRET = (os.environ.get("RESEND_WEBHOOK_SECRET") or "").strip()
+RECONFIRM_BLOCKS = [
+    {"type": "heading", "text": "Do you still want to hear from us?"},
+    {"type": "text", "text": "Hi {{first_name}}, we only email people who want our news — new books, events and offers. "
+                             "Click below to stay on the list. If you don't, we'll stop emailing you in 30 days."},
+    {"type": "button", "label": "Yes, keep me subscribed", "url": "https://www.oakbridge.in/"},
+]
 SES_CHECK_TTL_DAYS = 180  # a mailbox verdict is reused for 6 months, never paid for twice
 GIF = (b"GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xff\xff\xff!\xf9\x04\x01\x00\x00\x00\x00,"
        b"\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;")
@@ -148,6 +161,9 @@ async def _ensure_indexes() -> None:
         await db.mk_domains.create_index("domain", unique=True)
         await db.mk_ses_checks.create_index("email_norm", unique=True)
         await db.mk_ses_usage.create_index("month", unique=True)
+        await db.mk_proven.create_index("email_norm", unique=True)
+        await db.mk_webhook_seen.create_index("id", unique=True)
+        await db.mk_webhook_seen.create_index("at", expireAfterSeconds=7 * 86400)
     except Exception:  # noqa: BLE001
         log.warning("marketing: index creation failed", exc_info=True)
     _indexes = True
@@ -211,7 +227,66 @@ async def _proven(emails_norm: list) -> set:
         proven.add(core.normalise_email(u.get("email")))
     async for c in db.mk_contacts.find({"email_norm": {"$in": emails_norm}, "proven": True}, {"_id": 0, "email_norm": 1}):
         proven.add(c["email_norm"])
+    # Order / account emails Resend delivered (resend_events) — free proof.
+    async for c in db.mk_proven.find({"email_norm": {"$in": emails_norm}}, {"_id": 0, "email_norm": 1}):
+        proven.add(c["email_norm"])
     return proven & set(emails_norm)
+
+
+async def note_delivered(norm: str, source: str) -> None:
+    """A real email reached this mailbox: remember it (even before the person
+    is a marketing contact), mark the contact verified, and count it towards
+    its company domain's delivery history the first time."""
+    if not norm or "@" not in norm:
+        return
+    r = await db.mk_proven.update_one({"email_norm": norm}, {"$setOnInsert": {"email_norm": norm, "at": _iso(), "source": source}}, upsert=True)
+    await db.mk_contacts.update_one({"email_norm": norm, "suppressed": {"$in": [None, ""]}},
+                                    {"$set": {"proven": True, "email_status": "verified", "verified_at": _iso()}})
+    dom = norm.split("@")[-1]
+    if r.upserted_id is not None and dom not in core.WEBMAIL:
+        await db.mk_domains.update_one({"domain": dom}, {"$inc": {"delivered_n": 1}}, upsert=True)
+
+
+_DISP: dict = {"at": 0.0, "set": frozenset()}
+
+
+async def disposable_domains() -> frozenset:
+    """The maintained public throwaway-domain list (refreshed weekly by
+    refresh_disposable), cached in memory for an hour."""
+    if time.time() - _DISP["at"] > 3600:
+        d = await db.integrations.find_one({"key": "disposable_list"}, {"_id": 0, "domains": 1}) or {}
+        _DISP.update(at=time.time(), set=frozenset(d.get("domains") or []))
+    return _DISP["set"]
+
+
+async def refresh_disposable(force: bool = False) -> dict:
+    """Weekly: download the community-maintained throwaway-domain list (and
+    its allowlist). Never lets it block a big provider or our own domain, and
+    ignores a download that looks broken (fewer than 1,000 domains)."""
+    cur = await db.integrations.find_one({"key": "disposable_list"}, {"_id": 0, "at": 1, "count": 1}) or {}
+    if not force and (cur.get("at") or "") > (_now() - timedelta(days=7)).isoformat():
+        return {"skipped": True, "count": cur.get("count", 0)}
+    try:
+        block = await asyncio.to_thread(lambda: requests.get(DISPOSABLE_URL, timeout=20))
+        allow = await asyncio.to_thread(lambda: requests.get(DISPOSABLE_ALLOW_URL, timeout=20))
+        block.raise_for_status()
+        domains = core.parse_domain_list(block.text)
+        if allow.status_code == 200:
+            domains -= core.parse_domain_list(allow.text)
+    except Exception as e:  # noqa: BLE001
+        await raise_alert("disposable", f"Could not update the throwaway-domain list: {str(e)[:120]}", key="disposable")
+        return {"ok": False}
+    st = await get_settings()
+    own = {(st.get("from_email") or "").split("@")[-1], "oakbridge.in"}
+    domains -= set(core.WEBMAIL) | own
+    if len(domains) < 1000:
+        await raise_alert("disposable", f"Throwaway-domain list download looked wrong ({len(domains)} domains) — kept the old one.", key="disposable")
+        return {"ok": False}
+    await db.integrations.update_one({"key": "disposable_list"}, {"$set": {"key": "disposable_list", "domains": sorted(domains),
+                                                                           "count": len(domains), "at": _iso()}}, upsert=True)
+    _DISP["at"] = 0.0
+    await db.mk_alerts.update_many({"key": "disposable", "resolved": False}, {"$set": {"resolved": True, "resolved_at": _iso()}})
+    return {"ok": True, "count": len(domains)}
 
 
 # ------------------------------------------------ SES email validation ---
@@ -426,7 +501,7 @@ async def verify_emails(raw: list, *, autofix: bool = True, ses: str = "cache", 
     ses="off" uses only our own free checks.
     names: optional, aligned with raw — lets "name matches address" count."""
     st = await get_settings()
-    extra_disp = {d.strip().lower() for d in st.get("extra_disposable") or [] if d.strip()}
+    extra_disp = {d.strip().lower() for d in st.get("extra_disposable") or [] if d.strip()} | await disposable_domains()
     names = list(names or [])
     rows = []
     for i, r in enumerate(raw):
@@ -450,10 +525,11 @@ async def verify_emails(raw: list, *, autofix: bool = True, ses: str = "cache", 
                                               "catch_all": 1, "catch_all_at": 1})}
     norms = [core.normalise_email(x["syntax"]["email"]) for x in rows]
     proven = await _proven([n for n in norms if n])
-    supp = {}
-    async for c in db.mk_contacts.find({"email_norm": {"$in": norms}, "suppressed": {"$nin": [None, ""]}},
-                                       {"_id": 0, "email_norm": 1, "suppressed": 1}):
-        supp[c["email_norm"]] = c["suppressed"]
+    supp, idle = {}, {}
+    async for c in db.mk_contacts.find({"email_norm": {"$in": norms}}, {"_id": 0, "email_norm": 1, "suppressed": 1, "since_engaged": 1}):
+        if c.get("suppressed"):
+            supp[c["email_norm"]] = c["suppressed"]
+        idle[c["email_norm"]] = int(c.get("since_engaged") or 0)
     out = []
     for x, n in zip(rows, norms):
         s = x["syntax"]
@@ -516,13 +592,18 @@ async def verify_emails(raw: list, *, autofix: bool = True, ses: str = "cache", 
                "random": bool(v.get("random") or "SES: looks randomly typed" in (v.get("reasons") or [])),
                "role": r["role"], "domain_bad": bool(di.get("bad")),
                "domain_good": dom not in core.WEBMAIL and int(di.get("delivered_n") or 0) >= 3 and not di.get("hard_bounced"),
-               "name_match": core.name_matches(r["email"].split("@")[0], nm)}
+               "name_match": core.name_matches(r["email"].split("@")[0], nm),
+               "made_up": bool(core.looks_made_up(r["email"].split("@")[0])),
+               "inactive": core.sunset_state(idle.get(r["email_norm"], 0), inactive_after=int(st.get("inactive_after") or 0),
+                                             sunset_after=0) != "active"}
         sc = core.score_address(sig, adjust=adjust, thresholds=th, role_ok=role_ok)
         status = sc["status"]
         if suggest and status == "valid":
             status = "risky"  # looks like a typo we weren't allowed to fix
         r.update(status=status, score=sc["score"], flags=sc["flags"])
         r["reasons"] = [x for x in r["reasons"] if not x.startswith("SES:")] + [f"confidence {sc['score']}/100"] + sc["reasons"]
+        if sig["made_up"]:
+            r["reasons"].append(f"looks made-up: {core.looks_made_up(r['email'].split('@')[0])}")
         if r["role"] and role_ok:
             r["reasons"].append("role address — treated as normal (Settings)")
         if status == "risky":
@@ -879,7 +960,8 @@ async def _prepare_campaign(cid: str) -> None:
             return
         st = await get_settings()
         contacts = await db.mk_contacts.find(await audience_filter(c), {"_id": 0, "id": 1, "email": 1, "phone": 1, "email_status": 1,
-                                                                        "risk_kind": 1, "email_norm": 1, "name": 1, "score": 1, "flags": 1}).to_list(200000)
+                                                                        "risk_kind": 1, "email_norm": 1, "name": 1, "score": 1, "flags": 1,
+                                                                        "since_engaged": 1}).to_list(200000)
         is_email = c["channel"] == "email"
         ses_on = is_email and bool(st.get("ses_validation")) and ses_validation_supported()
         if is_email:
@@ -899,6 +981,8 @@ async def _prepare_campaign(cid: str) -> None:
                     return  # cancelled while checking
         pol = _policy(st, c)
         allowed = core.selected_statuses(c.get("audience"))
+        reconfirm = c.get("kind") == "reconfirm"
+        idle = {x["id"]: int(x.get("since_engaged") or 0) for x in contacts}
         now = _iso()
         docs, skipped = [], {}
         for x in contacts:
@@ -906,6 +990,12 @@ async def _prepare_campaign(cid: str) -> None:
                 act, prio, why = core.send_decision(x.get("email_status") or "unknown", x.get("risk_kind") or "", pol,
                                                     needs_ses=ses_on and x.get("email_status") != "verified",
                                                     has_ses=bool(x.get("_ses")), allowed=allowed)
+                n_idle = idle.get(x["id"], 0)
+                if act != "skip" and not reconfirm and core.sunset_state(
+                        n_idle, inactive_after=0, sunset_after=int(st.get("sunset_after") or 0)) == "sunset":
+                    # Retired: no opens / clicks in N campaign emails. A
+                    # re-confirm campaign is the one way back in.
+                    act, prio, why = "skip", 9, f"inactive — no opens or clicks in {n_idle} emails"
             else:
                 act, prio, why = "send", 1, ""
             doc = {"id": str(uuid.uuid4()), "campaign_id": cid, "contact_id": x["id"], "priority": prio, "queued_at": now,
@@ -1043,7 +1133,7 @@ async def _run_campaign(cid: str) -> None:
                                          html_doc=html_doc, text_doc=text_doc, unsub_post=_links(s["id"])["unsub_post"])
                         mid = await asyncio.to_thread(_send_raw, raw)
                         await db.mk_sends.update_one({"id": s["id"]}, {"$set": {"status": "sent", "message_id": mid, "sent_at": _iso()}})
-                        await db.mk_contacts.update_one({"id": contact["id"]}, {"$inc": {"stats.sent": 1}, "$set": {"last_sent_at": _iso()}})
+                        await db.mk_contacts.update_one({"id": contact["id"]}, {"$inc": {"stats.sent": 1, "since_engaged": 1}, "$set": {"last_sent_at": _iso()}})
                     except Exception as e:  # noqa: BLE001
                         await db.mk_sends.update_one({"id": s["id"]}, {"$set": {"status": "failed", "error": str(e)[:300]}})
                         if "Throttling" in str(e) or "MaxSendRate" in str(e):
@@ -1139,7 +1229,8 @@ async def track_open(send_id: str, sig: str):
             upd = {"$inc": {"open_count": 1}}
             if not s.get("opened_at"):
                 upd["$set"] = {"opened_at": _iso()}
-                await db.mk_contacts.update_one({"id": s["contact_id"]}, {"$inc": {"stats.opened": 1}, "$set": {"proven": True}})
+                await db.mk_contacts.update_one({"id": s["contact_id"]}, {"$inc": {"stats.opened": 1},
+                                                                          "$set": {"proven": True, "since_engaged": 0, "last_engaged_at": _iso()}})
             await db.mk_sends.update_one({"id": send_id}, upd)
     return Response(content=GIF, media_type="image/gif", headers={"Cache-Control": "no-store, max-age=0"})
 
@@ -1149,7 +1240,7 @@ async def track_click(send_id: str, idx: int, sig: str):
     if not core.check_sig(_secret(), sig, "c", send_id, str(idx)):
         return RedirectResponse(SITE, status_code=302)
     s = await db.mk_sends.find_one({"id": send_id}, {"_id": 0})
-    camp = await db.mk_campaigns.find_one({"id": (s or {}).get("campaign_id")}, {"_id": 0, "links": 1, "id": 1}) if s else None
+    camp = await db.mk_campaigns.find_one({"id": (s or {}).get("campaign_id")}, {"_id": 0, "links": 1, "id": 1, "kind": 1}) if s else None
     links = (camp or {}).get("links") or []
     if not s or idx < 0 or idx >= len(links):
         return RedirectResponse(SITE, status_code=302)
@@ -1157,7 +1248,15 @@ async def track_click(send_id: str, idx: int, sig: str):
     sets = {}
     if not s.get("clicked_at"):
         sets["clicked_at"] = _iso()
-        await db.mk_contacts.update_one({"id": s["contact_id"]}, {"$inc": {"stats.clicked": 1}, "$set": {"proven": True}})
+        await db.mk_contacts.update_one({"id": s["contact_id"]}, {"$inc": {"stats.clicked": 1},
+                                                                  "$set": {"proven": True, "since_engaged": 0, "last_engaged_at": _iso()}})
+        if (camp or {}).get("kind") == "reconfirm":
+            # A click (not an open — Apple Mail opens everything) on a
+            # re-confirm email is a fresh, provable yes.
+            await db.mk_contacts.update_one({"id": s["contact_id"], "suppressed": {"$in": [None, ""]},
+                                             "email_consent.status": {"$nin": ["unsubscribed", "complained"]}},
+                                            {"$set": {"email_consent": _consent("subscribed", "re-confirmed (campaign click)"),
+                                                      "email_status": "verified", "reconfirmed_at": _iso()}})
     if not s.get("opened_at"):
         sets["opened_at"] = _iso()  # a click proves the open (images may be blocked)
     if sets:
@@ -1218,6 +1317,44 @@ async def confirm_subscription(body: ConfirmBody):
         "email_consent": _consent("subscribed", "confirmed (double opt-in)"), "proven": True,
         "email_status": "verified", "verified_at": _iso()}})
     return {"ok": True, "status": "subscribed"}
+
+
+@public_router.post("/resend-events")
+async def resend_events(request: Request):
+    """Resend (order / account emails) delivery events, signed with Svix.
+    delivered -> that mailbox is proven (free); bounced / suppressed ->
+    never mail it again; complained -> unsubscribed + suppressed. Retries
+    carry the same svix-id, so each event is applied once."""
+    if not RESEND_WEBHOOK_SECRET:
+        raise HTTPException(status_code=404, detail="Not found")
+    body = await request.body()
+    h = request.headers
+    sid = h.get("svix-id", "")
+    if not core.svix_verify(RESEND_WEBHOOK_SECRET, sid, h.get("svix-timestamp", ""), body, h.get("svix-signature", "")):
+        raise HTTPException(status_code=400, detail="Invalid signature")
+    await _ensure_indexes()
+    try:
+        await db.mk_webhook_seen.insert_one({"id": f"resend:{sid}", "at": datetime.now(timezone.utc)})
+    except Exception:  # noqa: BLE001 — duplicate = already handled
+        return {"ok": True, "duplicate": True}
+    try:
+        evt = json.loads(body or b"{}")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Bad JSON")
+    typ = str(evt.get("type") or "")
+    data = evt.get("data") or {}
+    for addr in data.get("to") or []:
+        norm = core.normalise_email(addr)
+        if not norm:
+            continue
+        if typ == "email.delivered":
+            await note_delivered(norm, "order/account email delivered (Resend)")
+        elif typ in ("email.bounced", "email.suppressed"):
+            await suppress({"email_norm": norm}, "bounced")
+        elif typ == "email.complained":
+            await suppress({"email_norm": norm}, "complained")
+    await db.mk_events.insert_one({"at": _iso(), "type": f"resend:{typ}"})
+    return {"ok": True}
 
 
 @public_router.post("/ses-events/{token}")
@@ -1311,6 +1448,29 @@ async def handle_ses_event(msg: dict) -> None:
     elif kind in ("Reject", "Rendering Failure"):
         if s:
             await db.mk_sends.update_one({"id": s["id"]}, {"$set": {"status": "failed", "error": kind}})
+
+
+async def lapse_reconfirm() -> dict:
+    """After a re-confirm campaign's window (default 30 days): everyone it
+    reached who did NOT click — and hasn't re-subscribed some other way since
+    — stops getting campaigns (consent 'lapsed'). The record stays; they can
+    opt in again any time."""
+    done = 0
+    async for c in db.mk_campaigns.find({"kind": "reconfirm", "status": "sent", "lapsed_done": {"$ne": True}},
+                                        {"_id": 0, "id": 1, "finished_at": 1, "started_at": 1, "reconfirm_days": 1, "name": 1}):
+        due = (datetime.fromisoformat(c["finished_at"]) + timedelta(days=int(c.get("reconfirm_days") or 30))) if c.get("finished_at") else None
+        if not due or due > _now():
+            continue
+        n = 0
+        async for x in db.mk_sends.find({"campaign_id": c["id"], "status": "sent", "clicked_at": {"$exists": False}}, {"_id": 0, "contact_id": 1}):
+            r = await db.mk_contacts.update_one(
+                {"id": x["contact_id"], "email_consent.status": "subscribed", "email_consent.at": {"$lt": c.get("started_at") or c["finished_at"]}},
+                {"$set": {"email_consent": _consent("lapsed", f"no reply to re-confirm “{c.get('name', '')}”")}})
+            n += r.modified_count
+        await db.mk_campaigns.update_one({"id": c["id"]}, {"$set": {"lapsed_done": True, "lapsed_count": n, "lapsed_at": _iso()}})
+        await audit_log(db, "MARKETING_RECONFIRM_LAPSED", email="system", role="system", meta={"campaign": c["id"], "lapsed": n})
+        done += n
+    return {"lapsed": done}
 
 
 async def learn_from_outcomes(force: bool = False) -> dict:
@@ -1413,7 +1573,11 @@ async def adm_settings(user: dict = Depends(require_admin)):
             "waiting_checks": await db.mk_contacts.count_documents({"email_status": {"$in": ["unknown", "valid", "risky"]},
                                                                      "ses_checked": {"$ne": True}}),
             "suppression_sync": await db.integrations.find_one({"key": "marketing_state"}, {"_id": 0, "suppression_synced_at": 1,
-                                                                                             "suppression_last_added": 1})}
+                                                                                             "suppression_last_added": 1}),
+            "resend": {"url": f"{PUBLIC_API}/api/m/resend-events", "configured": bool(RESEND_WEBHOOK_SECRET),
+                       "last_event": await db.mk_events.find_one({"type": {"$regex": "^resend:"}}, {"_id": 0, "at": 1, "type": 1}, sort=[("at", -1)]),
+                       "proven": await db.mk_proven.count_documents({})},
+            "disposable": await db.integrations.find_one({"key": "disposable_list"}, {"_id": 0, "count": 1, "at": 1})}
 
 
 class SettingsBody(BaseModel):
@@ -1436,6 +1600,8 @@ class SettingsBody(BaseModel):
     score_valid: Optional[int] = None
     score_invalid: Optional[int] = None
     auto_learn: Optional[bool] = None
+    inactive_after: Optional[int] = None
+    sunset_after: Optional[int] = None
 
 
 @admin_router.put("/settings")
@@ -1456,6 +1622,11 @@ async def adm_put_settings(body: SettingsBody, user: dict = Depends(require_supe
         raise HTTPException(status_code=400, detail="'Invalid below' score must be 10–60")
     if upd.get("score_invalid") and upd.get("score_valid") and upd["score_invalid"] >= upd["score_valid"] - 5:
         raise HTTPException(status_code=400, detail="'Invalid below' must be at least 5 under 'Valid from'")
+    for k in ("inactive_after", "sunset_after"):
+        if k in upd and not (0 <= upd[k] <= 100):
+            raise HTTPException(status_code=400, detail="Inactive / retire counts must be 0–100 (0 = off)")
+    if upd.get("inactive_after") and upd.get("sunset_after") and upd["sunset_after"] < upd["inactive_after"]:
+        raise HTTPException(status_code=400, detail="'Stop mailing after' must be at least 'Mark inactive after'")
     if "tail_max_bounce" in upd and not (0.005 <= upd["tail_max_bounce"] <= 0.1):
         raise HTTPException(status_code=400, detail="Tail bounce limit must be between 0.5% and 10%")
     if "risk_policy" in upd:
@@ -1563,6 +1734,7 @@ async def adm_import(
     autofix: bool = Form(True),
     dry_run: bool = Form(True),
     statuses: str = Form("verified,valid,risky"),
+    ses_live: bool = Form(False),
     user: dict = Depends(require_admin),
 ):
     """Upload a sheet -> verification report. dry_run=True only reports;
@@ -1598,9 +1770,11 @@ async def adm_import(
         if k:
             seen.add(k)
         unique_rows.append(r)
-    # Cached SES verdicts only: a dry run must never spend money, and a real
-    # import hands the paid checks to the capped background pass (kick_validation).
-    results = await verify_emails([r.get(ecol, "") for r in unique_rows], autofix=autofix, ses="cache",
+    # Paid SES mailbox checks only when the admin ticked "Also ask Amazon SES"
+    # (within the monthly budget; never twice for one address). Otherwise
+    # cached verdicts only, and a real import hands the checks to the capped
+    # background pass (kick_validation).
+    results = await verify_emails([r.get(ecol, "") for r in unique_rows], autofix=autofix, ses="live" if ses_live else "cache",
                                   names=[(r.get(ncol, "") if ncol else "") for r in unique_rows])
     st = await get_settings()
     counts = _count(results)
@@ -1636,8 +1810,12 @@ async def adm_import(
         if len(sample[v["status"]]) < 25:
             sample[v["status"]].append({k: v[k] for k in ("input", "email", "reasons", "fixed_from")})
     ses_todo = sum(1 for v in results if v["status"] in ("valid", "risky") and not v.get("ses_checked"))
+    # Every row (first 2,000) with its verdict, so the admin sees each address, not just examples.
+    row_report = [{"email": v["email"] or v["input"], "name": (r.get(ncol, "") if ncol else "")[:60], "status": v["status"],
+                   "score": v.get("score"), "why": (v.get("reasons") or [])[:3], "risk_kind": v.get("risk_kind", "")}
+                  for r, v in zip(unique_rows[:2000], results[:2000])]
     return {"columns": {"email": ecol, "name": ncol, "phone": pcol}, "counts": counts, "sample": sample,
-            "saved": saved, "list_id": lid, "dry_run": dry_run,
+            "saved": saved, "list_id": lid, "dry_run": dry_run, "rows": row_report,
             "ses": {**(_u := await ses_usage()), "to_check": ses_todo, "est_inr": round(ses_todo * _u["per_check_inr"], 2)}}
 
 
@@ -1645,6 +1823,11 @@ async def adm_import(
 async def adm_dismiss_alert(aid: str, user: dict = Depends(require_admin)):
     await db.mk_alerts.update_one({"id": aid}, {"$set": {"resolved": True, "resolved_at": _iso(), "resolved_by": user.get("email", "")}})
     return {"ok": True}
+
+
+@admin_router.post("/disposable-refresh")
+async def adm_disposable_refresh():
+    return await refresh_disposable(force=True)
 
 
 @admin_router.post("/learn")
@@ -1892,6 +2075,8 @@ class CampaignBody(BaseModel):
     wa_template: Optional[str] = None
     wa_language: Optional[str] = None
     wa_variables: Optional[list] = None    # [{source: first_name|name|static, value}]
+    kind: Optional[str] = None             # standard | reconfirm
+    reconfirm_days: Optional[int] = None
 
 
 def _clean_blocks(blocks: list) -> list:
@@ -1950,8 +2135,12 @@ async def adm_new_campaign(body: CampaignBody, user: dict = Depends(require_admi
     ch = body.channel or "email"
     if ch not in ("email", "whatsapp"):
         raise HTTPException(status_code=400, detail="channel must be email or whatsapp")
-    doc = {"id": str(uuid.uuid4()), "name": (body.name or "Untitled campaign").strip()[:120], "channel": ch,
-           "subject": "", "preheader": "", "blocks": [], "links": [], "audience": {"list_ids": [], "rules": []},
+    kind = "reconfirm" if body.kind == "reconfirm" and ch == "email" else "standard"
+    blocks = [dict(b) for b in RECONFIRM_BLOCKS] if kind == "reconfirm" else []
+    doc = {"id": str(uuid.uuid4()), "name": (body.name or "Untitled campaign").strip()[:120], "channel": ch, "kind": kind,
+           "reconfirm_days": max(7, min(int(body.reconfirm_days or 30), 90)) if kind == "reconfirm" else None,
+           "subject": "Do you still want to hear from Oakbridge?" if kind == "reconfirm" else "", "preheader": "",
+           "blocks": blocks, "links": core.collect_links(blocks), "audience": {"list_ids": [], "rules": []},
            "wa_template": "", "wa_language": "en", "wa_variables": [], "status": "draft", "created_at": _iso(),
            "created_by": user.get("email", ""), "stats": {}}
     await db.mk_campaigns.insert_one(dict(doc))
@@ -1973,7 +2162,9 @@ async def adm_patch_campaign(cid: str, body: CampaignBody):
         raise HTTPException(status_code=404, detail="Campaign not found")
     if c["status"] not in ("draft", "scheduled"):
         raise HTTPException(status_code=409, detail="Only a draft can be edited — duplicate it to make changes")
-    upd = {k: v for k, v in body.model_dump().items() if v is not None and k != "channel"}
+    upd = {k: v for k, v in body.model_dump().items() if v is not None and k not in ("channel", "kind")}
+    if "reconfirm_days" in upd:
+        upd["reconfirm_days"] = max(7, min(int(upd["reconfirm_days"]), 90))
     if "audience" in upd and "statuses" in (upd["audience"] or {}):
         upd["audience"]["statuses"] = sorted(core.selected_statuses(upd["audience"]))
     if "blocks" in upd:
@@ -2158,7 +2349,8 @@ async def adm_report(cid: str):
     skipped = [{"reason": r["_id"] or "skipped", "n": r["n"]} async for r in db.mk_sends.aggregate([
         {"$match": {"campaign_id": cid, "status": "skipped"}}, {"$group": {"_id": "$error", "n": {"$sum": 1}}}, {"$sort": {"n": -1}}])]
     return {"campaign": {k: c.get(k) for k in ("id", "name", "channel", "subject", "status", "started_at", "finished_at", "paused_reason",
-                                               "prepare", "prepare_error", "recovery", "tail_stopped_at", "note")},
+                                               "prepare", "prepare_error", "recovery", "tail_stopped_at", "note",
+                                               "kind", "reconfirm_days", "lapsed_count", "lapsed_at")},
             "skipped": skipped,
             "stats": stats, "funnel": core.funnel(stats), "links": [{"url": u, "clicks": n} for u, n in zip(links, clicks)],
             "timeline": dict(sorted(timeline.items())), "problems": problems,
@@ -2289,6 +2481,8 @@ async def marketing_tick(x_task_token: Optional[str] = Header(None)):
     kick_validation()
     _bg(sync_aws_suppression())  # no-op unless 24h have passed
     _bg(learn_from_outcomes())   # likewise daily
+    _bg(refresh_disposable())    # weekly
+    _bg(lapse_reconfirm())
     return {"ok": True, "started": started}
 
 
