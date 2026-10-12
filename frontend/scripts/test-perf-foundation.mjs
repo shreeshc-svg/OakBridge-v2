@@ -66,6 +66,13 @@ check(/key: JWT_SECRET[\s\S]{0,120}fromService:[\s\S]{0,80}name: oakbridge-api[\
     "worker shares JWT_SECRET with the web service (signed email links)");
 check(/value: inline\s+# switch to external/.test(yaml), "worker ships in inline mode; external is a deliberate switch");
 
+console.log("-- index safety (bug 2026-10-12: duplicate SES usage counters) --");
+check(/await _unique_index\(db\.mk_ses_usage, "month", sum_field="n"\)/.test(mk),
+    "usage counters: duplicates merged (summed) before the unique index is built");
+check(!/try:\s*\n\s*await db\.mk_contacts\.create_index/.test(mk) && /async def _index\(coll, keys/.test(mk),
+    "one failing index no longer skips the rest");
+check(/if "E11000" not in str\(e\)/.test(mk), "simultaneous first checks of a month don't crash or split the counter");
+
 console.log("-- marketing load --");
 check(!/to_list\((200000|100000|50000)\)/.test(mk), "no load-everything queries");
 check(/await _DASH_MEMO\.get\(/.test(mk) && /_by_day\(db\.mk_sends, "sent_at"/.test(mk), "dashboard: memoised + counted in MongoDB");

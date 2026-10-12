@@ -167,38 +167,71 @@ async def get_settings(fresh: bool = False) -> dict:
 _indexes = False
 
 
+async def _index(coll, keys, **kw) -> bool:
+    """Create one index; a failure is logged and never stops the others (a
+    single failing index used to skip every index listed after it)."""
+    try:
+        await coll.create_index(keys, **kw)
+        return True
+    except Exception:  # noqa: BLE001
+        log.warning("marketing: index %s on %s failed", keys, coll.name, exc_info=True)
+        return False
+
+
+async def _merge_duplicates(coll, field: str, sum_field: Optional[str] = None) -> int:
+    """Collapse documents sharing `field` into one (summing `sum_field` if
+    given), so a unique index can be built. Needed when rows were upserted
+    concurrently before the unique index existed — e.g. two SES checks starting
+    in the same instant each created this month's usage counter, which split
+    the count and let the monthly budget be exceeded."""
+    merged = 0
+    grp = {"_id": f"${field}", "ids": {"$push": "$_id"}, "c": {"$sum": 1}}
+    if sum_field:
+        grp["total"] = {"$sum": {"$ifNull": [f"${sum_field}", 0]}}
+    async for g in coll.aggregate([{"$group": grp}, {"$match": {"c": {"$gt": 1}}}]):
+        keep, rest = g["ids"][0], g["ids"][1:]
+        if sum_field:
+            await coll.update_one({"_id": keep}, {"$set": {sum_field: g["total"]}})
+        await coll.delete_many({"_id": {"$in": rest}})
+        merged += len(rest)
+    if merged:
+        log.warning("marketing: merged %s duplicate %s rows on %s", merged, coll.name, field)
+    return merged
+
+
+async def _unique_index(coll, field: str, sum_field: Optional[str] = None, **kw) -> None:
+    if not await _index(coll, field, unique=True, **kw):
+        await _merge_duplicates(coll, field, sum_field)
+        await _index(coll, field, unique=True, **kw)
+
+
 async def _ensure_indexes() -> None:
     global _indexes
     if _indexes:
         return
-    try:
-        await db.mk_contacts.create_index("email_norm", unique=True, sparse=True)
-        await db.mk_contacts.create_index("lists")
-        await db.mk_sends.create_index([("campaign_id", 1), ("status", 1)])
-        await db.mk_sends.create_index("message_id", sparse=True)
-        await db.mk_sends.create_index([("campaign_id", 1), ("contact_id", 1)], unique=True)
-        await db.mk_domains.create_index("domain", unique=True)
-        # Lookups and updates by `id` are on every hot path (each send, each
-        # contact update); without these every one of them scanned the collection.
-        await db.mk_contacts.create_index("id", unique=True)
-        await db.mk_sends.create_index("id", unique=True)
-        await db.mk_campaigns.create_index("id", unique=True)
-        await db.mk_lists.create_index("id", unique=True)
-        await db.mk_alerts.create_index([("resolved", 1), ("at", -1)])
-        await db.mk_sends.create_index("sent_at")
-        await db.mk_sends.create_index([("campaign_id", 1), ("tail", 1), ("status", 1)])
-        await db.mk_contacts.create_index([("email_consent.status", 1), ("email_status", 1)])
-        await db.mk_contacts.create_index("created_at")
-        await db.mk_events.create_index("at")
-        await _jobs.ensure_indexes(db)
-        await db.mk_ses_checks.create_index("email_norm", unique=True)
-        await db.mk_ses_usage.create_index("month", unique=True)
-        await db.mk_proven.create_index("email_norm", unique=True)
-        await db.mk_webhook_seen.create_index("id", unique=True)
-        await db.mk_webhook_seen.create_index("at", expireAfterSeconds=7 * 86400)
-    except Exception:  # noqa: BLE001
-        log.warning("marketing: index creation failed", exc_info=True)
     _indexes = True
+    await _unique_index(db.mk_contacts, "email_norm", sparse=True)
+    await _index(db.mk_contacts, "lists")
+    await _index(db.mk_sends, [("campaign_id", 1), ("status", 1)])
+    await _index(db.mk_sends, "message_id", sparse=True)
+    await _index(db.mk_sends, [("campaign_id", 1), ("contact_id", 1)], unique=True)
+    await _unique_index(db.mk_domains, "domain")
+    # Lookups and updates by `id` are on every hot path (each send, each
+    # contact update); without these every one of them scanned the collection.
+    for coll in (db.mk_contacts, db.mk_sends, db.mk_campaigns, db.mk_lists):
+        await _index(coll, "id", unique=True)
+    await _index(db.mk_alerts, [("resolved", 1), ("at", -1)])
+    await _index(db.mk_sends, "sent_at")
+    await _index(db.mk_sends, [("campaign_id", 1), ("tail", 1), ("status", 1)])
+    await _index(db.mk_contacts, [("email_consent.status", 1), ("email_status", 1)])
+    await _index(db.mk_contacts, "created_at")
+    await _index(db.mk_events, "at")
+    await _jobs.ensure_indexes(db)
+    await _unique_index(db.mk_ses_checks, "email_norm")
+    await _unique_index(db.mk_ses_usage, "month", sum_field="n")
+    await _unique_index(db.mk_proven, "email_norm")
+    await _unique_index(db.mk_webhook_seen, "id")
+    await _index(db.mk_webhook_seen, "at", expireAfterSeconds=7 * 86400)
 
 
 # ------------------------------------------------------- domain lookups ---
@@ -404,7 +437,11 @@ async def _reserve_check(cap: int) -> bool:
     """Count one paid check against this month's cap, atomically, BEFORE the
     call — two workers can't both take the last slot."""
     m = _month()
-    await db.mk_ses_usage.update_one({"month": m}, {"$setOnInsert": {"month": m, "n": 0}}, upsert=True)
+    try:
+        await db.mk_ses_usage.update_one({"month": m}, {"$setOnInsert": {"month": m, "n": 0}}, upsert=True)
+    except Exception as e:  # noqa: BLE001 — a simultaneous check created it first: fine
+        if "E11000" not in str(e) and "duplicate key" not in str(e).lower():
+            raise
     r = await db.mk_ses_usage.update_one({"month": m, "n": {"$lt": cap}}, {"$inc": {"n": 1}})
     return r.modified_count == 1
 

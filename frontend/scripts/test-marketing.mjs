@@ -155,7 +155,7 @@ check(/onClick=\{\(\) => removeOne\(c\.id\)\}/.test(page) && !/onClick=\{\(\) =>
 console.log("-- worker / queue / memory (phase 0) --");
 check(!/to_list\((200000|100000|50000)\)/.test(mk), "no load-everything queries left in marketing");
 check(/dbutil\.batches\(db\.mk_contacts, flt, proj, size=500\)/.test(mk), "campaign preparation walks the audience in pages");
-check(/create_index\("id", unique=True\)/.test(mk) && /mk_sends\.create_index\("sent_at"\)/.test(mk), "id / sent_at indexes");
+check(/for coll in \(db\.mk_contacts, db\.mk_sends, db\.mk_campaigns, db\.mk_lists\):\s*\n\s*await _index\(coll, "id", unique=True\)/.test(mk) && /await _index\(db\.mk_sends, "sent_at"\)/.test(mk), "id / sent_at indexes");
 check(/if _jobs\.worker_mode\(\) == "external":\s*\n\s*if await _jobs\.worker_alive\(db\):/.test(mk) && /key="worker_down"/.test(mk),
     "external mode enqueues only while the worker is alive; otherwise runs here + alerts");
 for (const k of ["mk_validate", "mk_prepare", "mk_send", "mk_role_rule", "mk_suppression", "mk_learn", "mk_disposable", "mk_lapse", "mk_newsletter"]) {
