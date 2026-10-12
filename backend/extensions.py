@@ -912,14 +912,46 @@ async def books_for_authors(author_ids: Optional[set] = None) -> dict:
 
     Same answer as the PDP now, aliases and all, because it is the same code.
     """
+    if author_ids is not None:
+        # One author's page: use the memoised author -> book-id map and fetch
+        # only that author's books. This used to load EVERY field of EVERY book
+        # and run the matcher over all of them for each author page (~0.5 s,
+        # growing with the catalogue). Same matcher, same answer, same order.
+        id_map = await _author_book_ids()
+        wanted = {aid: id_map.get(aid, []) for aid in author_ids}
+        ids = list({i for v in wanted.values() for i in v})
+        docs = {d["id"]: d async for d in db.books.find({"id": {"$in": ids}}, {"_id": 0})} if ids else {}
+        return {aid: [docs[i] for i in v if i in docs] for aid, v in wanted.items() if v}
     index = await _author_index()
     books = await db.books.find({}, {"_id": 0}).to_list(None)
     out: dict = {}
     for book in books:
         for aid in match_authors(book.get("author", ""), index):
-            if author_ids is None or aid in author_ids:
-                out.setdefault(aid, []).append(book)
+            out.setdefault(aid, []).append(book)
     return out
+
+
+_AUTHOR_MAP_MEMO = None
+
+
+async def _author_book_ids() -> dict:
+    """author id -> [book ids], in catalogue order, built from `id` + `author`
+    only. Memoised for 60 s (the same window as _author_index) and dropped at
+    once by any admin write (cache.py's shared version)."""
+    global _AUTHOR_MAP_MEMO
+    if _AUTHOR_MAP_MEMO is None:
+        from cache import Memo, shared_version
+        _AUTHOR_MAP_MEMO = Memo(shared_version(db))
+
+    async def build() -> dict:
+        index = await _author_index()
+        out: dict = {}
+        async for b in db.books.find({}, {"_id": 0, "id": 1, "author": 1}):
+            for aid in match_authors(b.get("author", ""), index):
+                out.setdefault(aid, []).append(b["id"])
+        return out
+
+    return await _AUTHOR_MAP_MEMO.get("author_book_ids", 60, build)
 
 
 @extras_router.get("/authors/{author_id}/books")

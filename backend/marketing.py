@@ -1795,9 +1795,21 @@ async def adm_put_settings(body: SettingsBody, user: dict = Depends(require_supe
     return await get_settings(fresh=True)
 
 
+_HEALTH_MEMO = None
+
+
 @admin_router.get("/health")
 async def adm_health():
-    """Is SES ready to send from our address? Read straight from SES."""
+    """Is SES ready to send from our address? Read straight from SES — two AWS
+    calls (~2 s), so the answer is reused for 60 s instead of on every visit."""
+    global _HEALTH_MEMO
+    if _HEALTH_MEMO is None:
+        from cache import Memo, shared_version
+        _HEALTH_MEMO = Memo(shared_version(db))
+    return await _HEALTH_MEMO.get("ses_health", 60, _ses_health)
+
+
+async def _ses_health():
     st = await get_settings()
     out: dict = {"region": SES_REGION}
     try:

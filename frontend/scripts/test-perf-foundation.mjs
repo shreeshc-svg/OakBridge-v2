@@ -73,6 +73,16 @@ check(!/try:\s*\n\s*await db\.mk_contacts\.create_index/.test(mk) && /async def 
     "one failing index no longer skips the rest");
 check(/if "E11000" not in str\(e\)/.test(mk), "simultaneous first checks of a month don't crash or split the counter");
 
+console.log("-- found by System health (2026-10-12) --");
+const ext = code("backend/extensions.py");
+const feat = code("backend/features.py");
+check(/if author_ids is not None:[\s\S]{0,400}await _author_book_ids\(\)/.test(ext) && /"author": 1\}/.test(ext),
+    "an author page no longer loads every book in the catalogue");
+check(/\(db\.books, "id"\)/.test(feat) && /\(db\.orders, "user_id"\)/.test(feat) && /\(db\.orders, "id"\)/.test(feat),
+    "core lookups (books / orders / users / authors by id) are indexed");
+check(/_HEALTH_MEMO\.get\("ses_health", 60/.test(mk), "SES health (2 AWS calls) reused for 60 s");
+check(/ENTRIES_MAX = 4000/.test(cache), "public cache sized for a full catalogue crawl");
+
 console.log("-- marketing load --");
 check(!/to_list\((200000|100000|50000)\)/.test(mk), "no load-everything queries");
 check(/await _DASH_MEMO\.get\(/.test(mk) && /_by_day\(db\.mk_sends, "sent_at"/.test(mk), "dashboard: memoised + counted in MongoDB");

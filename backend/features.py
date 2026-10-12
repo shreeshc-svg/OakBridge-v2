@@ -2556,6 +2556,21 @@ async def ensure_feature_indexes():
     await db.content_collections.create_index("key", unique=True)
     await db.settings.create_index("key", unique=True)
     await db.legal.create_index("slug", unique=True)
+    # Core lookups that had no index, so every product page, order lookup and
+    # "my orders" call scanned its whole collection — slower with every order.
+    # Non-unique on purpose: they can't fail on existing data, and Mongo builds
+    # them without blocking reads/writes. Each one is independent.
+    for coll, keys in (
+        (db.books, "id"), (db.books, "category"), (db.books, "product_type"),
+        (db.authors, "id"), (db.users, "id"),
+        (db.orders, "id"), (db.orders, "order_number"), (db.orders, "user_id"),
+        (db.orders, "created_at"), (db.orders, [("payment_status", 1), ("created_at", -1)]),
+        (db.orders, "attribution.utm_campaign"),
+    ):
+        try:
+            await coll.create_index(keys)
+        except Exception:  # noqa: BLE001
+            log.warning("index %s on %s failed", keys, coll.name, exc_info=True)
 
 
 # ====== Server-side cart + abandoned-cart reminders ======

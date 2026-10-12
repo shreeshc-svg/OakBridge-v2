@@ -57,7 +57,7 @@ BUMP_PATHS = re.compile(r"^/api/(admin/|payments/|webhooks/|tasks/|orders(/|$)|b
 
 ENTRY_BYTES_MAX = 1_000_000
 TOTAL_BYTES_MAX = 40_000_000
-ENTRIES_MAX = 600
+ENTRIES_MAX = 4000   # entries average ~1.5 KB gzipped; TOTAL_BYTES_MAX is the real cap
 VERSION_RECHECK = 5.0  # seconds between reads of the shared version
 
 
