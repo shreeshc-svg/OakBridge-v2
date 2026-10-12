@@ -20,9 +20,13 @@ _GRIEVANCE = "Bhupendra Yadav"
 # Effective date shown at the top of every policy. Update when a policy materially
 # changes — the Consumer Protection (E-Commerce) Rules expect a dated version.
 _UPDATED = "24 July 2026"
+# Terms, Privacy and Cookie were revised for the DPDP Act 2023 / DPDP Rules 2025
+# and the email + WhatsApp marketing system (Oct 2026). Refund / Shipping keep
+# their own date. Not legal advice — counsel should review before relying on it.
+_UPDATED_DPDP = "12 October 2026"
 
 TERMS = f"""\
-_Last updated: {_UPDATED}_
+_Last updated: {_UPDATED_DPDP}_
 
 **{_ENTITY}** (hereinafter referred to as "Oakbridge") is the sole and absolute
 owner of the website {_SITE} (the "Site") and offers the visitor(s)/user(s)
@@ -38,19 +42,27 @@ including but not limited to delivery of content via the Site or any Service.
 By accessing this Site, you automatically confirm your acknowledgment and
 acceptance of these Terms, which shall apply to You while hosting, publishing,
 sharing, transacting, displaying or uploading information or views related directly
-or indirectly to the Site or Services provided by Oakbridge.
+or indirectly to the Site or Services provided by Oakbridge. Accepting these Terms
+is **not** consent to any use of your personal data: that is governed by our
+[Privacy Policy](/privacy), and wherever we rely on consent we ask for it
+separately, with nothing pre-ticked.
 
 You hereby represent and warrant to Oakbridge that you are at least eighteen (18)
 years of age or above and are capable of entering, performing and adhering to these
-Terms and that you agree to be bound by the following terms and conditions. While
-individuals under the age of 18 may utilize the Service of the Site, they shall do
-so only with the involvement and guidance of their parents and/or legal guardians.
+Terms and that you agree to be bound by the following terms and conditions.
+Accounts, orders, submissions and subscriptions are for adults only. A person under
+18 may browse the Site, but any purchase or account for them must be made by a
+parent or legal guardian in the parent's or guardian's own name. We do not knowingly
+collect a child's personal data; if we learn that we have done so without verifiable
+parental consent, we will delete it.
 
 Oakbridge may add, change or update these Terms from time to time, entirely at its
 own discretion. You are responsible for checking these Terms periodically to remain
 in compliance with them. Your use of the Site after any amendment to the Terms
 shall constitute your acceptance of the amended Terms and you thereby agree to be
-bound by such change(s)/revision(s).
+bound by such change(s)/revision(s). Changes to these Terms never extend what we do
+with your personal data: a new purpose needs a fresh notice and, where required,
+your fresh consent.
 
 Please also read our [Refund & Cancellation Policy](/refund-policy),
 [Shipping & Delivery Policy](/shipping-policy), [Privacy Policy](/privacy) and
@@ -103,11 +115,14 @@ incorrect. Full details are set out in our
 [Refund & Cancellation Policy](/refund-policy).
 
 ## Limitation of Liability
-Oakbridge specifically disclaims any liability (whether based in contract, tort,
-strict liability or otherwise) for any direct, indirect, incidental, consequential
-or special damages arising out of or in any way connected with access to or use of
-the Site, including liability associated with any viruses which may infect your
-computer equipment.
+To the fullest extent permitted by applicable law, Oakbridge specifically disclaims
+any liability (whether based in contract, tort, strict liability or otherwise) for
+any direct, indirect, incidental, consequential or special damages arising out of or
+in any way connected with access to or use of the Site, including liability
+associated with any viruses which may infect your computer equipment. Nothing in
+these Terms limits any right you have, or any liability we cannot exclude, under the
+Consumer Protection Act, 2019, the Digital Personal Data Protection Act, 2023 or any
+other law.
 
 ## Due Care
 Due care has been taken while providing the information available on this Site.
@@ -115,10 +130,12 @@ Oakbridge holds no responsibility for any mistake that may have inadvertently cr
 in.
 
 ## Grievance Redressal
-Any complaints or concerns with regard to content and/or comment or breach of these
-Terms shall be submitted through an email addressed to the Grievance Officer,
-{_GRIEVANCE}, at {_EMAIL}, duly signed by the Complainant with his/her electronic
-signature.
+Any complaints or concerns with regard to content and/or comment, an order, your
+personal data or a breach of these Terms may be sent by email to the Grievance
+Officer, {_GRIEVANCE}, at {_EMAIL}, or by phone on {_PHONE}. Please include your
+name, contact details and order number (if any). We acknowledge every complaint
+within 48 hours and aim to resolve it within one month of receipt. For complaints
+about personal data, see also section 11 of our [Privacy Policy](/privacy).
 
 ## Arbitration
 Any dispute arising out of or in connection with this agreement, including any
@@ -126,10 +143,14 @@ question regarding its existence, amendment, validity or termination, shall be
 referred to and resolved by arbitration in accordance with the Indian Arbitration &
 Conciliation Act, 1996. The arbitration shall be a "documents only", evidence
 through affidavits "fast track" arbitration. The Tribunal shall consist of one (1)
-arbitrator to be appointed by Oakbridge. The exclusive seat of arbitration shall be
+arbitrator appointed by mutual agreement of the parties or, failing agreement,
+in accordance with the Arbitration & Conciliation Act, 1996. The exclusive seat of arbitration shall be
 New Delhi, India, and the language of the arbitration shall be English. This
 agreement shall be governed by and construed in accordance with the laws of India.
 User access to and use of the Site is subject to all applicable Indian laws.
+Nothing in this clause takes away your right as a consumer to approach a Consumer
+Commission under the Consumer Protection Act, 2019, or the Data Protection Board of
+India under the Digital Personal Data Protection Act, 2023.
 
 ## Jurisdiction
 In respect of all matters/disputes arising out of, in connection with or in
@@ -138,119 +159,186 @@ jurisdiction.
 """
 
 PRIVACY = f"""\
-_Last updated: {_UPDATED}_
+_Last updated: {_UPDATED_DPDP}_
 
-This Privacy Policy explains how **{_ENTITY}** ("we", "us"), as the Data
-Fiduciary, collects, uses, shares and protects your personal data when you use
-{_SITE}, in accordance with India's Digital Personal Data Protection Act, 2023
-(DPDP Act) and applicable rules.
+This Privacy Notice explains how **{_ENTITY}** ("we", "us"), as the Data Fiduciary,
+collects, uses, shares and protects your personal data when you use {_SITE}, buy from
+us, or hear from us by email or WhatsApp. It is written to meet India's Digital
+Personal Data Protection Act, 2023 (DPDP Act) and the Digital Personal Data
+Protection Rules, 2025. You can ask for this notice in English or in any language
+listed in the Eighth Schedule to the Constitution by writing to {_EMAIL}.
 
-## 1. Personal data we collect
-**Information you give us:**
-- Account: name, email address, mobile number, and a password (stored only in
-  hashed form).
-- Orders: billing/shipping name, phone, delivery address, and order details.
-- Other interactions: manuscript submissions (name, contact, affiliation,
-  synopsis, bio), waitlist sign-ups, product reviews (shown
-  publicly with your name), "notify me when in stock" requests, contact-form
-  messages, and messages you send to our AI assistant.
+## 1. Who is responsible
+{_ENTITY}, {_ADDR}. GSTIN {_GSTIN}. Questions about your data:
+{_GRIEVANCE} (Grievance Officer), {_EMAIL}, {_PHONE}.
 
-**Information collected automatically:**
-- We use your browser's local storage to keep you signed in and to remember your
-  cart. This is strictly necessary and always on.
-- **Only if you accept our cookie banner**, we use **PostHog** for analytics —
-  pages viewed, titles browsed, and where people get stuck while buying. Decline
-  and the analytics script is never loaded. We do **not** use advertising cookies
-  and we do not record your screen. See our [Cookie Policy](/cookie-policy).
-- Our servers may keep standard security logs (e.g. IP address) to operate and
-  protect the Site.
+## 2. What we collect, why, and on what basis
+We collect only what each purpose needs. Each item below lists the data, the
+purpose, and the basis under the DPDP Act: your **consent**, or a **legitimate use**
+under section 7 (for example, data you give us voluntarily for a specific purpose,
+or that we must keep by law).
 
-**Payments:** card, UPI and bank details are collected and processed directly by
-our payment partner, **Razorpay**. We do not receive or store your full payment
-credentials — only a transaction reference to confirm the payment.
+**2.1 Your account.** Name, email address, mobile number, password (stored only as a
+one-way hash) and whether your email or mobile has been verified with a one-time
+code. *Purpose:* create and run your account, sign you in, keep it secure.
+*Basis:* consent, which you give when you register.
 
-We do not knowingly process the personal data of children (persons under 18)
-without verifiable parental consent, and the Site is not directed at children.
+**2.2 Orders and invoices.** Billing and shipping name, phone, address, GSTIN (if you
+give one), the items and amounts, and the payment reference from our payment partner.
+*Purpose:* take payment, deliver your order, issue invoices, handle returns and
+support. *Basis:* legitimate use (you gave the data to buy from us) and our legal
+obligations under tax and company law.
 
-## 2. Purposes for which we process your data
-- To create and manage your account and verify it via a one-time code (email or
-  SMS).
-- To process, deliver and invoice your orders and send transactional messages
-  (order confirmations, verification codes, delivery and status updates,
-  password resets).
-- To provide customer support and respond to submissions, reviews and enquiries.
-- To operate the AI assistant (your message, and — if you are signed in — a
-  summary of your own orders, is used to answer your query).
-- With your consent, to send you updates about new titles and events. You can
-  withdraw consent at any time.
-- To detect and prevent fraud and to comply with legal, tax and accounting
-  obligations.
+**2.3 Order messages.** Your email address and mobile number. *Purpose:* order
+confirmation, dispatch and tracking, delivery updates, password and verification
+codes. On WhatsApp only if you ticked "WhatsApp me order updates" at checkout.
+*Basis:* legitimate use for email/SMS service messages; consent for WhatsApp.
 
-We process your data on the basis of your consent and, where applicable, for the
-performance of our contract with you and our legal obligations.
+**2.4 Marketing email.** Your email address and name, and a record of your consent
+(when, where and how you agreed, for example the checkout tick-box, our newsletter
+form with a confirmation email, or a sign-up sheet at one of our events). We also
+record what happens to the emails we send you: whether each one was delivered,
+bounced or opened, which links you clicked, whether you unsubscribed, and whether an
+order followed (we tag our own links so a purchase can be linked to the email).
+*Purpose:* tell you about new titles, events and offers, and send only what is
+useful. *Basis:* consent, which you can withdraw at any time (section 3).
 
-## 3. Who we share your data with
-We share personal data only with processors and partners who help us run the
-business, under appropriate safeguards, and never sell it:
-- **Razorpay** — payment processing.
-- **Resend** — sending transactional and (where opted in) marketing emails.
-- **Amazon Web Services (AWS S3)** — secure file storage, including invoice PDFs.
-- **Groq** — the AI provider that powers our assistant; your assistant messages
-  and, for signed-in users, a summary of your own orders are processed to generate
-  replies.
-- **MSG91** — sending one-time verification codes by SMS (uses your mobile number).
-- **Shipping / logistics partners** — to deliver your orders.
-- **MongoDB Atlas** — our managed database, where account and order records are
-  stored.
-- Government authorities, regulators or courts, where required by law.
+**2.5 Marketing WhatsApp.** Your mobile number and name, your consent record, and
+delivery/read status of our messages. *Purpose:* cart reminders and new-release news,
+only if you ticked "Also WhatsApp me cart reminders and new-release news".
+*Basis:* consent.
 
-## 4. Data retention
-We keep personal data only as long as necessary for the purposes above or as
-required by law (for example, tax and GST records are retained for the statutory
-period). When data is no longer needed, we delete or anonymise it. You may request
-erasure as described below.
+**2.6 Checking email addresses before we send marketing.** To avoid emailing
+addresses that do not work, we check the address format, whether its domain receives
+email and whether it is a throwaway address; we ask Amazon Web Services (Amazon SES
+Email Validation) whether the mailbox is likely to exist; and we keep a confidence
+score from these checks and from past delivery results. If an address shows no opens
+or clicks across 12 of our campaign emails, we stop sending it marketing. These
+checks decide only **whether we send you marketing email**. We make no other decision
+about you from them. *Basis:* the consent you gave to receive marketing.
 
-## 5. Security
-We use reasonable technical and organisational measures to protect your data,
-including password hashing, encrypted connections (HTTPS), access controls and a
-private storage bucket for files. No method of transmission or storage is 100%
-secure, and we cannot guarantee absolute security.
+**2.7 Contacts we receive from events or partners.** If you gave your details at an
+event, fair or seminar run by us or with a partner and agreed to hear from us, we
+record where and how you agreed. Every message lets you unsubscribe in one click, and
+we may first ask you to confirm that you still want to hear from us. If you did not
+agree, we do not send you marketing.
 
-## 6. Your rights as a Data Principal
-Under the DPDP Act, you have the right to:
-- **Access** — obtain a summary of the personal data we process about you and the
-  identities of the parties with whom it has been shared.
-- **Correction & completion** — have inaccurate or incomplete data corrected or
-  updated.
-- **Erasure** — request deletion of your personal data, unless we must retain it
-  for a legal purpose.
-- **Withdraw consent** — at any time, for processing based on consent (this does
-  not affect processing already carried out).
-- **Grievance redressal** — raise a complaint with us (see below).
-- **Nominate** — nominate another individual to exercise your rights in the event
-  of death or incapacity.
+**2.8 Submissions, reviews and requests.** Manuscript submissions (name, contact,
+affiliation, synopsis, bio), product reviews (shown publicly with the name you
+give), waitlist and "notify me when in stock" requests, and contact-form messages.
+*Purpose:* respond to you and do what you asked. *Basis:* legitimate use (you gave the
+data for that purpose); consent where we ask for it.
 
-To exercise any of these rights, email {_EMAIL}. We will respond within the
-timelines required by law.
+**2.9 Our AI assistant.** Your messages and, if you are signed in, a summary of your
+own orders. *Purpose:* answer your question. *Basis:* consent (you choose to use it).
 
-## 7. Grievance Officer & complaints
-Our Grievance Officer, who handles data-protection queries and complaints, is:
-{_GRIEVANCE}, {_ENTITY}, {_ADDR}. Email: {_EMAIL}. Phone: {_PHONE}. We acknowledge
-grievances promptly and aim to resolve them within the timelines prescribed under
-the DPDP Act and the Consumer Protection (E-Commerce) Rules, 2020. If you are not
-satisfied, you may escalate your complaint to the Data Protection Board of India.
+**2.10 Analytics and session recording.** Only if you allow them in our cookie
+banner: pages viewed, titles browsed and where people get stuck (analytics), and,
+separately, a recording of how pages were used with everything you type and all
+personal details masked (session recording). *Basis:* consent. See our
+[Cookie Policy](/cookie-policy).
 
-## 8. International processing
-Some of our service providers may process data on servers outside India. Where we
-do so, we take steps consistent with the DPDP Act and applicable transfer
-restrictions.
+**2.11 Security logs.** IP address, device/browser details and actions taken, to
+keep the Site and your data safe and to investigate misuse. *Basis:* legitimate use
+and the security duties in the DPDP Rules.
 
-## 9. Changes to this policy
-We may update this Privacy Policy from time to time; the current version is always
-on this page, with the "Last updated" date above.
+**Payments:** card, UPI and bank details are entered on and processed by **Razorpay**.
+We never receive or store your full payment credentials.
 
-## 10. Contact
-For any privacy question or request, contact us at {_EMAIL}, {_ENTITY}, {_ADDR}.
+## 3. Withdrawing consent — as easy as giving it
+- **Marketing email:** the "Unsubscribe" link at the bottom of every email (one
+  click, effective immediately), or email {_EMAIL}.
+- **Marketing WhatsApp:** reply **STOP**, or email {_EMAIL}; we act on your request
+  within 48 hours.
+- **Analytics / session recording:** "Cookie preferences" at the bottom of any page.
+- **Your account and everything else:** email {_EMAIL}.
+
+Withdrawing consent does not affect what was done before, and we then stop that
+processing unless the law requires us to keep the data. You may also give, manage or
+withdraw consent through a Consent Manager registered with the Data Protection Board
+of India once such services are available.
+
+## 4. Who we share your data with
+We never sell personal data. We share it only with service providers who process it
+on our instructions, under contracts with confidentiality and security obligations:
+- **Razorpay** — payments.
+- **Resend** — order, account and verification emails, and their delivery status.
+- **Amazon Web Services** — Amazon SES (marketing emails and their delivery, bounce
+  and complaint reports; email-address validation) and Amazon S3 (file storage,
+  including invoices).
+- **Interakt**, with **Meta (WhatsApp)** — WhatsApp order updates and, if you opted in,
+  marketing messages.
+- **MSG91** — one-time verification codes by SMS.
+- **Groq** — the AI provider behind our assistant.
+- **PostHog** — analytics and session recording, only with your consent.
+- **MongoDB Atlas** — our database; **Render** and **Vercel** — hosting for our
+  servers and website.
+- **DTDC** and other courier partners — delivering your orders.
+- Government authorities, regulators or courts, where the law requires it.
+
+## 5. Where your data is processed
+Some of these providers store or process data outside India, including in the
+United States. We transfer data only as the DPDP Act permits and comply with any
+restrictions the Government of India notifies on transfers to particular countries.
+
+## 6. How long we keep it
+- **Account data:** while your account is open; deleted or anonymised within 90 days
+  of an erasure request, unless the law requires us to keep part of it.
+- **Orders and invoices:** for 8 years, as tax and company law require.
+- **Marketing data:** until you unsubscribe, your consent lapses, or we stop mailing
+  an inactive address. After that we keep only a minimal "do not contact" record so
+  we never message you again by mistake. If you ask us to erase you, we keep only a
+  one-way fingerprint of your email address for the same reason — not the address.
+- **Submissions and enquiries:** as long as needed to respond and to follow up,
+  then deleted.
+- **Security logs:** at least one year, as the DPDP Rules require.
+
+## 7. Security and data breaches
+We protect your data with encrypted connections (HTTPS), password hashing, access
+controls with role-based permissions and audit logs, private file storage, and
+limits on who can see what. No system is perfectly secure. If a personal data breach
+affects you, we will tell you without delay — what happened, the likely
+consequences, what we are doing, and what you can do — and we will report it to the
+Data Protection Board of India within 72 hours of becoming aware of it, as the DPDP
+Rules require.
+
+## 8. Your rights
+Under the DPDP Act you can:
+- **Access** — a summary of the personal data we process about you, what we do with
+  it, and who we have shared it with;
+- **Correct, complete or update** it;
+- **Erase** it, unless the law requires us to keep it;
+- **Withdraw consent** at any time (section 3);
+- **Grievance redressal** — complain to us (section 10) and then, if unresolved, to
+  the Data Protection Board of India;
+- **Nominate** someone to exercise these rights if you die or become unable to.
+
+Email {_EMAIL} from the address we hold for you (or tell us how to verify you). We
+may ask for proof of identity before acting. We acknowledge requests within 48 hours
+and respond within 30 days, and in any case within the period the DPDP Rules allow.
+
+## 9. Children
+The Site is not directed at children, and accounts, orders and subscriptions are for
+adults (18+) only; a parent or guardian may buy for a child in their own name. We do
+not knowingly process a child's personal data without verifiable parental consent,
+and we never track, monitor the behaviour of, or target advertising at children. If
+we learn that we hold a child's data without such consent, we delete it.
+
+## 10. Grievance Officer and complaints
+{_GRIEVANCE}, Grievance Officer, {_ENTITY}, {_ADDR}. Email: {_EMAIL}.
+Phone: {_PHONE}. We acknowledge complaints within 48 hours and aim to resolve them
+within one month, in line with the DPDP Rules and the Consumer Protection
+(E-Commerce) Rules, 2020. If you are not satisfied with our response, you may
+complain to the Data Protection Board of India.
+
+## 11. Changes to this notice
+We will update this notice when what we do changes, with a new "Last updated" date.
+If we want to use your data for a new purpose, we will tell you first and, where the
+law requires, ask for your consent again — an earlier "yes" will not be stretched to
+cover it.
+
+## 12. Contact
+{_ENTITY}, {_ADDR}. {_EMAIL} · {_PHONE}.
 """
 
 REFUND = f"""\
@@ -334,69 +422,77 @@ We ship to all regions across India.
 """
 
 COOKIE = f"""\
-_Last updated: {_UPDATED}_
+_Last updated: {_UPDATED_DPDP}_
 
-This Cookie Policy explains how {_SITE}, operated by **{_ENTITY}**, uses cookies
-and similar browser storage technologies.
+This Cookie Policy explains how {_SITE}, operated by **{_ENTITY}**, uses cookies and
+similar technologies (your browser's local and session storage, and tracking in our
+emails), and the choices you have. It forms part of our [Privacy Policy](/privacy).
 
-## 1. Strictly necessary storage
-These are always on, because the Site cannot work without them. We use your
-browser's **local storage** for two purposes:
-- to keep you **signed in** to your account, and
-- to remember the items in your **shopping cart**.
+## 1. Strictly necessary — always on
+The Site cannot work without these, so they are not switched off by the banner. They
+are first-party only, and are not used for advertising or shared with anyone.
 
-We do **not** use advertising cookies, we do not build advertising profiles, and
-we do not sell your data.
+- **oakbridge_token** (local storage) — keeps you signed in. Kept until you sign out.
+- **oakbridge_cart_v1** (local storage) — remembers your cart. Kept until you clear
+  it or place your order.
+- **oakbridge_cookie_consent** (local storage) — remembers your banner choices. Kept
+  until you change them.
+- **oakbridge_attribution** (session storage) — the campaign tag of the link you
+  arrived through (for example one of our emails), so we know which of our own
+  campaigns led to an order. Discarded when you close the tab.
 
-We also store, for the length of your visit only, the campaign tag on the link
-you arrived through — so we can tell which of our own emails or posts led to an
-order. It holds nothing about you, is not shared, and is discarded when you
-close the tab.
+The campaign tag holds no personal data. If you place an order during that visit, the
+tag is saved with the order so we can measure our own campaigns; it is not shared.
 
-## 2. Your choices
-The banner asks about three things separately, and each is off until you turn it
-on. Nothing is pre-ticked. Rejecting is one click, exactly like accepting.
+## 2. Optional — only if you switch them on
+The banner asks about each of these separately. Nothing is pre-ticked, and rejecting
+is one click, exactly like accepting.
 
-**Analytics.** With your permission we use **PostHog** to understand how the Site
-is used: which pages are opened, which titles are viewed, and where people run
-into trouble while buying. If you do not agree, the analytics script is never
-downloaded at all — it is not loaded and then ignored.
+**Analytics (PostHog).** Pages opened, titles viewed, and where people run into
+trouble while buying. If you agree, PostHog stores an identifier in a first-party
+cookie and in local storage (names beginning "ph_") so visits can be counted. If you do
+not agree, the analytics script is never downloaded at all.
 
-**Session recording.** Separate from analytics, and off unless you ask for it.
-It records how a page was used — clicks, scrolling, the shape of the page — so we
-can see where checkout goes wrong. Everything you type is masked before it
-leaves your browser, and so is text shown about you: your name, address, email
-and order details are never captured. It requires analytics to be on, because it
-is delivered by the same library.
+**Session recording (PostHog).** Off unless you choose it, and only together with
+analytics. It records how a page was used — clicks, scrolling, the shape of the page —
+so we can see where checkout goes wrong. Everything you type is masked in your browser
+before it is sent, and so is text shown about you: your name, address, email and order
+details are never captured.
 
-**Marketing.** Advertising and remarketing. **We run none of this today.** The
-switch exists so that we would have to ask before we started, rather than
-quietly relying on a permission you gave for something else.
+**Marketing.** Advertising and remarketing cookies. **We run none today.** The switch
+exists so that we would have to ask you before we ever started.
 
-## 3. Changing your mind
-Select **Cookie preferences** at the bottom of any page. The same choices open
-again, and turning something off stops it immediately. Withdrawing is meant to be
-exactly as easy as agreeing was, and you should not have to clear your browser to
-do it.
+## 3. Third parties at checkout and in the page
+- **Razorpay**, our payment partner, loads its secure checkout when you pay and may
+  set its own cookies there to process and protect the payment. These are governed by
+  Razorpay's cookie and privacy policies.
+- **Google Fonts** supplies the Site's typefaces; your browser requests them from
+  Google's servers, which receive your IP address as part of that request. No cookies
+  are set for this.
 
-If we add a genuinely new purpose, we ask again rather than treating an old yes
-as covering it.
+## 4. Tracking in our marketing emails
+Our marketing emails (sent only if you opted in) contain a tiny image that tells us
+when an email is opened, and links that pass through our own address
+(api.oakbridge.in) so we know which link was clicked before taking you to the page.
+We use this to learn which emails are useful, to stop mailing people who never open
+them, and to measure orders that follow. Some email apps open or load images
+automatically, so an "open" is an estimate. You can block images in your email app,
+and you can unsubscribe in one click from any marketing email. Our order and account
+emails do not contain this open tracking.
 
-## 4. Third-party cookies
-When you make a payment, our payment partner **Razorpay** may set its own cookies
-within its secure checkout to process the transaction. These are governed by
-Razorpay's own cookie and privacy policies.
-
-## 5. Managing storage
-You can clear or block local storage and cookies at any time through your browser
-settings; note that doing so may sign you out and empty your cart.
+## 5. Changing your mind
+Select **Cookie preferences** at the bottom of any page. The same choices open again,
+and turning something off stops it immediately; withdrawing is as easy as agreeing
+was. You can also clear cookies and site storage in your browser settings, which will
+sign you out and empty your cart.
 
 ## 6. Changes
-If we introduce further non-essential cookies, we will update this policy and,
-where required, ask for your consent first.
+If we add a genuinely new purpose, we will update this policy and ask you again rather
+than treating an earlier "yes" as covering it.
 
 ## 7. Contact
-Questions about this policy? Email {_EMAIL}.
+Questions about this policy: {_EMAIL}, or our Grievance Officer, {_GRIEVANCE}
+({_PHONE}).
 """
 
 LEGAL_DEFAULTS = {

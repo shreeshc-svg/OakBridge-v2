@@ -74,6 +74,11 @@ function renderMarkdown(md) {
         } else if (line.startsWith("- ")) {
             flushPara();
             list.push(line.slice(2));
+        } else if (list.length && /^\s+\S/.test(line)) {
+            // An indented line right after a list item continues that item
+            // (policies wrap long bullets). Without this, the wrapped half
+            // became a separate paragraph and split the list in two.
+            list[list.length - 1] += ` ${line.trim()}`;
         } else {
             flushList();
             para.push(line.trim());
