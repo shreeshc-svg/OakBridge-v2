@@ -657,7 +657,7 @@ export const mkReverify = (listId) => api.post("/admin/marketing/reverify", null
 export const mkSync = () => api.post("/admin/marketing/sync", null, { timeout: 300000 }).then((r) => r.data);
 export const mkContacts = (params) => api.get("/admin/marketing/contacts", { params }).then((r) => r.data);
 export const mkPatchContact = (id, body) => api.patch(`/admin/marketing/contacts/${id}`, body).then((r) => r.data);
-export const mkDeleteContact = (id) => api.delete(`/admin/marketing/contacts/${id}`).then((r) => r.data);
+export const mkDeleteContact = (id, erase = false) => api.delete(`/admin/marketing/contacts/${id}`, { params: { erase } }).then((r) => r.data);
 export const mkLists = () => api.get("/admin/marketing/lists").then((r) => r.data);
 export const mkCreateList = (body) => api.post("/admin/marketing/lists", body).then((r) => r.data);
 export const mkDeleteList = (id) => api.delete(`/admin/marketing/lists/${id}`).then((r) => r.data);

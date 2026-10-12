@@ -233,6 +233,19 @@ async def _proven(emails_norm: list) -> set:
     return proven & set(emails_norm)
 
 
+def _erase_hash(norm: str) -> str:
+    return hashlib.sha256((norm or "").encode()).hexdigest()
+
+
+async def _erased(norms: list) -> set:
+    """Which of these mailboxes were erased at a privacy request (we keep only a hash)."""
+    by_hash = {_erase_hash(n): n for n in norms if n}
+    out = set()
+    async for e in db.mk_erased.find({"h": {"$in": list(by_hash)}}, {"_id": 0, "h": 1}):
+        out.add(by_hash[e["h"]])
+    return out
+
+
 async def note_delivered(norm: str, source: str) -> None:
     """A real email reached this mailbox: remember it (even before the person
     is a marketing contact), mark the contact verified, and count it towards
@@ -485,7 +498,8 @@ async def _probe_catch_all(domain: str) -> Optional[bool]:
     return res
 
 
-async def verify_emails(raw: list, *, autofix: bool = True, ses: str = "cache", names: Optional[list] = None) -> list:
+async def verify_emails(raw: list, *, autofix: bool = True, ses: str = "cache", names: Optional[list] = None,
+                        ignore_erased: bool = False) -> list:
     """Full verification for a batch of raw strings. One result per input row:
     {input, email, email_norm, status, reasons[], fixed_from, ses_checked,
      score, flags[], risk_kind}.
@@ -530,6 +544,12 @@ async def verify_emails(raw: list, *, autofix: bool = True, ses: str = "cache", 
         if c.get("suppressed"):
             supp[c["email_norm"]] = c["suppressed"]
         idle[c["email_norm"]] = int(c.get("since_engaged") or 0)
+    if not ignore_erased:
+        # Erased people are blocked from re-import — show it here, so "Check
+        # the file" and the import agree (they used to look valid, then
+        # vanish silently on import).
+        for n in await _erased([x for x in norms if x]):
+            supp.setdefault(n, "erased at a privacy request")
     out = []
     for x, n in zip(rows, norms):
         s = x["syntax"]
@@ -697,7 +717,8 @@ async def upsert_contact(email: str, *, name: str = "", phone: str = "", source:
                          email_consent: Optional[str] = None, wa_consent: Optional[str] = None,
                          lists: Optional[list] = None, status: Optional[str] = None, reasons: Optional[list] = None,
                          proven: Optional[bool] = None, customer: Optional[bool] = None, by: str = "",
-                         ses_checked: Optional[bool] = None, extra: Optional[dict] = None) -> Optional[dict]:
+                         ses_checked: Optional[bool] = None, extra: Optional[dict] = None,
+                         readd_erased: bool = False) -> Optional[dict]:
     """Create or update one contact (keyed on the real mailbox). Consent is
     only ever RAISED to subscribed by a new opt-in, never by an import of an
     already-unsubscribed contact: an unsubscribe is final."""
@@ -706,8 +727,12 @@ async def upsert_contact(email: str, *, name: str = "", phone: str = "", source:
     if not s["email"]:
         return None
     norm = core.normalise_email(s["email"])
-    if await db.mk_erased.find_one({"h": hashlib.sha256(norm.encode()).hexdigest()}, {"_id": 1}):
-        return None  # erased on request: an old export must not bring them back
+    if await db.mk_erased.find_one({"h": _erase_hash(norm)}, {"_id": 1}):
+        if not readd_erased:
+            return None  # erased on request: an old export must not bring them back
+        # The person opted in again themselves (or a superadmin confirmed they
+        # asked to be re-added): lift the block.
+        await db.mk_erased.delete_one({"h": _erase_hash(norm)})
     cur = await db.mk_contacts.find_one({"email_norm": norm}, {"_id": 0})
     now = _iso()
     if not cur:
@@ -763,8 +788,8 @@ async def on_newsletter(email: str, source: str = "newsletter") -> None:
         if st["double_opt_in"]:
             # Check the address the moment it arrives: a bot or a typo'd
             # sign-up would otherwise cost us a bounce on the confirmation email.
-            v = (await verify_emails([email], autofix=False, ses="live"))[0]
-            c = await upsert_contact(email, source=source or "newsletter", email_consent="pending", status=v["status"],
+            v = (await verify_emails([email], autofix=False, ses="live", ignore_erased=True))[0]
+            c = await upsert_contact(email, source=source or "newsletter", email_consent="pending", status=v["status"], readd_erased=True,
                                      reasons=v["reasons"], ses_checked=v.get("ses_checked") or None,
                                      extra={"risk_kind": v.get("risk_kind", ""), "ses_overall": v.get("ses_overall", ""), "score": v.get("score"),
                                     "flags": v.get("flags") or [], "role": bool(v.get("role"))})
@@ -773,7 +798,7 @@ async def on_newsletter(email: str, source: str = "newsletter") -> None:
             if c and c.get("email_consent", {}).get("status") == "pending":
                 await send_confirmation(c)
         else:
-            await upsert_contact(email, source=source or "newsletter", email_consent="subscribed")
+            await upsert_contact(email, source=source or "newsletter", email_consent="subscribed", readd_erased=True)
     except Exception:  # noqa: BLE001
         log.exception("marketing: newsletter hook failed for %s", email)
 
@@ -784,7 +809,8 @@ async def on_order_paid(order: dict) -> None:
     try:
         await upsert_contact(order.get("email", ""), name=order.get("full_name", ""), phone=order.get("phone", ""),
                              source="checkout", customer=True,
-                             email_consent="subscribed" if order.get("email_marketing_optin") else None)
+                             email_consent="subscribed" if order.get("email_marketing_optin") else None,
+                             readd_erased=bool(order.get("email_marketing_optin")))  # ticking the box is a fresh opt-in
         if order.get("email_marketing_optin"):
             kick_validation()  # check the new subscriber now, not on the next campaign
     except Exception:  # noqa: BLE001
@@ -1735,12 +1761,16 @@ async def adm_import(
     dry_run: bool = Form(True),
     statuses: str = Form("verified,valid,risky"),
     ses_live: bool = Form(False),
+    readd_erased: bool = Form(False),
     user: dict = Depends(require_admin),
 ):
     """Upload a sheet -> verification report. dry_run=True only reports;
     dry_run=False saves contacts (sendable + risky; invalid ones are kept out)
     into the named list. Consent can only be marked if the admin confirms it
     and says where it came from."""
+    from rbac import is_superadmin
+    if readd_erased and not is_superadmin(user.get("role")):
+        raise HTTPException(status_code=403, detail="Only a superadmin can re-add erased people")
     data = await file.read()
     if len(data) > 8_000_000:
         raise HTTPException(status_code=413, detail="File too large (8 MB max)")
@@ -1774,12 +1804,13 @@ async def adm_import(
     # (within the monthly budget; never twice for one address). Otherwise
     # cached verdicts only, and a real import hands the checks to the capped
     # background pass (kick_validation).
-    results = await verify_emails([r.get(ecol, "") for r in unique_rows], autofix=autofix, ses="live" if ses_live else "cache",
+    results = await verify_emails([r.get(ecol, "") for r in unique_rows], autofix=autofix, ses="live" if ses_live else "cache", ignore_erased=readd_erased,
                                   names=[(r.get(ncol, "") if ncol else "") for r in unique_rows])
     st = await get_settings()
     counts = _count(results)
     counts["duplicates_in_file"] = dups
     saved = 0
+    skipped: dict = {}
     lid = None
     if not dry_run:
         name = list_name.strip() or f"Import {_now():%d %b %Y %H:%M}"
@@ -1787,22 +1818,42 @@ async def adm_import(
         await db.mk_lists.insert_one({"id": lid, "name": name[:80], "kind": "static", "created_at": _iso(), "created_by": user.get("email", "")})
         src = f"import: {consent_source.strip() or name}"[:120]
         wanted = core.selected_statuses({"statuses": [x.strip() for x in statuses.split(",")]})
+        skipped: dict = {}
+
+        def skip(why: str) -> None:
+            skipped[why] = skipped.get(why, 0) + 1
+
+        readded = 0
         for r, v in zip(unique_rows, results):
-            if v["status"] in ("invalid", "suppressed") or v["status"] not in wanted:
+            if v["status"] == "invalid":
+                skip("invalid address")
                 continue
-            await upsert_contact(v["email"], name=r.get(ncol, "") if ncol else "", phone=r.get(pcol, "") if pcol else "",
+            if v["status"] == "suppressed":
+                skip("erased at a privacy request" if "previously erased at a privacy request" in v["reasons"]
+                     else "bounced / unsubscribed before")
+                continue
+            if v["status"] not in wanted:
+                skip(f"{v['status']} — not ticked")
+                continue
+            was_erased = readd_erased and bool(await _erased([v["email_norm"]]))
+            doc = await upsert_contact(v["email"], name=r.get(ncol, "") if ncol else "", phone=r.get(pcol, "") if pcol else "",
                                  source=src, lists=[lid], status=v["status"], reasons=v["reasons"],
                                  proven=v["status"] == "verified" or None, ses_checked=v.get("ses_checked") or None,
                                  extra={"risk_kind": v.get("risk_kind", ""), "ses_overall": v.get("ses_overall", ""), "score": v.get("score"),
                                     "flags": v.get("flags") or [], "role": bool(v.get("role"))},
                                  email_consent="subscribed" if consent_email else None,
-                                 wa_consent="subscribed" if consent_whatsapp else None, by=user.get("email", ""))
-            saved += 1
+                                 wa_consent="subscribed" if consent_whatsapp else None, by=user.get("email", ""),
+                                 readd_erased=readd_erased)
+            if doc:
+                saved += 1
+                readded += was_erased
+            else:
+                skip("erased at a privacy request")  # safety net: never count what wasn't saved
         await db.mk_imports.insert_one({"id": str(uuid.uuid4()), "at": _iso(), "by": user.get("email", ""), "file": file.filename,
                                         "list_id": lid, "counts": counts, "saved": saved, "consent_source": consent_source})
         await audit_log(db, "MARKETING_IMPORT", email=user.get("email", ""), role=user.get("role", ""),
                         meta={"file": file.filename, "saved": saved, "counts": counts, "consent_email": consent_email,
-                              "consent_whatsapp": consent_whatsapp})
+                              "consent_whatsapp": consent_whatsapp, "skipped": skipped, "readded_erased": readded})
         kick_validation()
     sample: dict = {}
     for v in results:
@@ -1816,6 +1867,8 @@ async def adm_import(
                   for r, v in zip(unique_rows[:2000], results[:2000])]
     return {"columns": {"email": ecol, "name": ncol, "phone": pcol}, "counts": counts, "sample": sample,
             "saved": saved, "list_id": lid, "dry_run": dry_run, "rows": row_report,
+            "skipped": skipped if not dry_run else {},
+            "erased": sum(1 for v in results if "previously erased at a privacy request" in v["reasons"]),
             "ses": {**(_u := await ses_usage()), "to_check": ses_todo, "est_inr": round(ses_todo * _u["per_check_inr"], 2)}}
 
 
@@ -1953,16 +2006,21 @@ async def adm_patch_contact(cid: str, body: ContactPatch, user: dict = Depends(r
 
 
 @admin_router.delete("/contacts/{cid}")
-async def adm_delete_contact(cid: str, user: dict = Depends(require_admin)):
-    """Erase a person (privacy request). Superadmin (DELETE). Their mailbox is
-    kept only as a hash so an old export can never re-add them by accident."""
+async def adm_delete_contact(cid: str, erase: bool = False, user: dict = Depends(require_admin)):
+    """Superadmin (DELETE). Two different things:
+    delete (default) — remove the record; the address can be imported again.
+    erase=true       — privacy request: also keep a hash so an old export can
+                       never re-add them by accident (only their own fresh
+                       opt-in, or a superadmin's deliberate re-add, can)."""
     c = await db.mk_contacts.find_one({"id": cid}, {"_id": 0, "email_norm": 1})
     if not c:
         raise HTTPException(status_code=404, detail="Contact not found")
     await db.mk_contacts.delete_one({"id": cid})
-    await db.mk_erased.update_one({"h": hashlib.sha256(c["email_norm"].encode()).hexdigest()}, {"$set": {"at": _iso()}}, upsert=True)
-    await audit_log(db, "MARKETING_CONTACT_ERASED", email=user.get("email", ""), role=user.get("role", ""), meta={"contact": cid})
-    return {"ok": True}
+    if erase:
+        await db.mk_erased.update_one({"h": _erase_hash(c["email_norm"])}, {"$set": {"at": _iso()}}, upsert=True)
+    await audit_log(db, "MARKETING_CONTACT_ERASED" if erase else "MARKETING_CONTACT_DELETED", email=user.get("email", ""),
+                    role=user.get("role", ""), meta={"contact": cid})
+    return {"ok": True, "erased": erase}
 
 
 class ContactBulk(BaseModel):
@@ -1981,10 +2039,10 @@ async def adm_contacts_bulk(body: ContactBulk, user: dict = Depends(require_admi
     single erase, which is a DELETE). Unsubscribe is reversible only by the
     person opting in again; erase keeps just a hash so they can't be re-added."""
     from rbac import is_superadmin
-    if body.action not in ("unsubscribe", "erase"):
+    if body.action not in ("unsubscribe", "delete", "erase"):
         raise HTTPException(status_code=400, detail="Unknown action")
-    if body.action == "erase" and not is_superadmin(user.get("role")):
-        raise HTTPException(status_code=403, detail="Only a superadmin can erase contacts")
+    if body.action in ("delete", "erase") and not is_superadmin(user.get("role")):
+        raise HTTPException(status_code=403, detail="Only a superadmin can delete or erase contacts")
     if body.ids:
         flt = {"id": {"$in": [str(x) for x in body.ids][:BULK_MAX]}}
     elif body.all_matching is not None:
@@ -2002,9 +2060,12 @@ async def adm_contacts_bulk(body: ContactBulk, user: dict = Depends(require_admi
         r = await db.mk_contacts.update_many({**flt, "email_consent.status": {"$nin": ["unsubscribed", "complained"]}},
                                              {"$set": {"email_consent": _consent("unsubscribed", "admin (bulk)", user.get("email", ""))}})
         done = r.modified_count
+    elif body.action == "delete":
+        r = await db.mk_contacts.delete_many(flt)  # can be imported again later
+        done = r.deleted_count
     else:
         async for c in db.mk_contacts.find(flt, {"_id": 0, "id": 1, "email_norm": 1}):
-            await db.mk_erased.update_one({"h": hashlib.sha256(c["email_norm"].encode()).hexdigest()}, {"$set": {"at": _iso()}}, upsert=True)
+            await db.mk_erased.update_one({"h": _erase_hash(c["email_norm"])}, {"$set": {"at": _iso()}}, upsert=True)
             await db.mk_contacts.delete_one({"id": c["id"]})
             done += 1
     await audit_log(db, f"MARKETING_CONTACTS_BULK_{body.action.upper()}", email=user.get("email", ""), role=user.get("role", ""),

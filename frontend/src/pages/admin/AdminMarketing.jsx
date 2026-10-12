@@ -765,15 +765,17 @@ function Contacts() {
     const count = allMatching ? (d?.total || 0) : sel.sel.size;
     const bulk = async (action) => {
         if (action === "erase") {
-            const typed = window.prompt(`Erase ${count} contact${count === 1 ? "" : "s"} completely (privacy deletion)?\nThis can't be undone, and they can never be re-imported.\n\nType ERASE to confirm.`);
+            const typed = window.prompt(`Erase ${count} contact${count === 1 ? "" : "s"} for a PRIVACY REQUEST?\nThey will be blocked from ever being imported again (only their own new sign-up brings them back).\nTo just remove them, use Delete instead.\n\nType ERASE to confirm.`);
             if (typed !== "ERASE") return;
+        } else if (action === "delete") {
+            if (!window.confirm(`Delete ${count} contact${count === 1 ? "" : "s"}? They can be imported again later.`)) return;
         } else if (!window.confirm(`Unsubscribe ${count} contact${count === 1 ? "" : "s"} from marketing email? Only they can opt in again.`)) return;
         try {
             const body = { action, expected: count, ...(allMatching
                 ? { all_matching: { q: dq || undefined, status: status || undefined, consent: consent || undefined } }
                 : { ids: [...sel.sel] }) };
             const r = await mkBulkContacts(body);
-            toast.success(`${action === "erase" ? "Erased" : "Unsubscribed"} ${r.done}.`);
+            toast.success(`${{ erase: "Erased", delete: "Deleted", unsubscribe: "Unsubscribed" }[action]} ${r.done}.`);
             sel.clear(); setAllMatching(false); load();
         } catch (e) { toast.error(formatApiError(e)); }
     };
@@ -782,9 +784,11 @@ function Contacts() {
         try { const r = await mkSync(); toast.success(`Synced. ${r.contacts} contacts in total.`); load(); } catch (e) { toast.error(formatApiError(e)); } finally { setBusy(false); }
     };
     const unsub = async (cid, field) => { try { await mkPatchContact(cid, { [field]: "unsubscribed" }); load(); } catch (e) { toast.error(formatApiError(e)); } };
-    const erase = async (cid) => {
-        if (!window.confirm("Erase this person completely (privacy request)? They can never be re-imported by accident.")) return;
-        try { await mkDeleteContact(cid); load(); } catch (e) { toast.error(formatApiError(e)); }
+    // Delete = remove the record (can be imported again). Erase = privacy
+    // request: blocked from ever being re-imported. Different on purpose.
+    const removeOne = async (cid) => {
+        if (!window.confirm("Delete this contact?\nThey can be imported again later. (For a privacy request, tick them and use Erase instead.)")) return;
+        try { await mkDeleteContact(cid, false); toast.success("Deleted."); load(); } catch (e) { toast.error(formatApiError(e)); }
     };
     const selCls = "border border-[#E5E7EB] bg-white px-2 py-2 text-sm";
     return (
@@ -807,7 +811,10 @@ function Contacts() {
             )}
             <BulkBar count={count} onClear={() => { sel.clear(); setAllMatching(false); }}>
                 <button type="button" className={bulkBtn} onClick={() => bulk("unsubscribe")} data-testid="mk-contacts-bulk-unsub">Unsubscribe</button>
-                {canDelete(user) && <button type="button" className={bulkBtn} onClick={() => bulk("erase")} data-testid="mk-contacts-bulk-erase">Erase</button>}
+                {canDelete(user) && <button type="button" className={bulkBtn} onClick={() => bulk("delete")} data-testid="mk-contacts-bulk-delete"
+                    title="Remove the records — they can be imported again later">Delete</button>}
+                {canDelete(user) && <button type="button" className={bulkBtn} onClick={() => bulk("erase")} data-testid="mk-contacts-bulk-erase"
+                    title="Privacy request — they can never be re-imported (only their own new sign-up brings them back)">Erase (privacy)</button>}
             </BulkBar>
             {d && pageAllOn && !allMatching && d.total > pageIds.length && (
                 <div className="text-xs bg-[#F5F7FA] p-2">All {pageIds.length} on this page are selected.{" "}
@@ -837,7 +844,7 @@ function Contacts() {
                                     <td className="text-xs">{c.wa_consent?.status}{c.wa_consent?.status === "subscribed" && <button type="button" className="block underline text-[#CC0033]" onClick={() => unsub(c.id, "wa_consent")}>opt out</button>}</td>
                                     <td className="text-xs text-[#4B5563] max-w-[20ch]">{c.source}</td>
                                     <td className="text-right text-xs">{c.stats?.sent || 0}/{c.stats?.opened || 0}/{c.stats?.clicked || 0}</td>
-                                    <td className="text-right pr-2">{canDelete(user) && <button type="button" aria-label="Erase contact" onClick={() => erase(c.id)}><Trash2 size={14} className="text-[#CC0033]" /></button>}</td>
+                                    <td className="text-right pr-2">{canDelete(user) && <button type="button" aria-label="Delete contact" onClick={() => removeOne(c.id)}><Trash2 size={14} className="text-[#CC0033]" /></button>}</td>
                                 </tr>
                             ))}
                             {!d.rows.length && <tr><td colSpan={9} className="p-4 text-[#4B5563]">No contacts {dq || status || consent ? "match" : "yet — import a list or press Sync website contacts"}.</td></tr>}
@@ -986,6 +993,8 @@ function VerifyImport() {
     const [opts, setOpts] = useState({ list_name: "", consent_email: false, consent_whatsapp: false, consent_source: "", autofix: true });
     const [pick, setPick] = useState({ verified: true, valid: true, risky: true });
     const [sesLive, setSesLive] = useState(true);
+    const [readd, setReadd] = useState(false);
+    const { user } = useAuth();
     const [busy, setBusy] = useState(false);
     const fileIn = useRef(null);
     const runQuick = async () => {
@@ -999,9 +1008,13 @@ function VerifyImport() {
         if (!dry && (opts.consent_email || opts.consent_whatsapp) && opts.consent_source.trim().length < 3) return toast.error("Say where these people agreed to hear from you.");
         setBusy(true);
         try {
-            const r = await mkImport(file, { ...opts, dry_run: dry, statuses: Object.keys(pick).filter((k) => pick[k]).join(","), ses_live: sesLive });
+            const r = await mkImport(file, { ...opts, dry_run: dry, statuses: Object.keys(pick).filter((k) => pick[k]).join(","), ses_live: sesLive, readd_erased: readd });
             setReport(r);
-            if (!dry) toast.success(`Imported ${r.saved} contacts into the list.`);
+            if (!dry) {
+                const sk = Object.entries(r.skipped || {});
+                const skN = sk.reduce((a, [, n]) => a + n, 0);
+                toast.success(`Imported ${r.saved} into the list.${skN ? ` Not imported: ${sk.map(([k, n]) => `${n} ${k}`).join(", ")}.` : ""}`, { duration: 10000 });
+            }
         } catch (e) { toast.error(formatApiError(e)); } finally { setBusy(false); }
     };
     const c = report?.counts || {};
@@ -1029,11 +1042,15 @@ function VerifyImport() {
                     <label className="flex items-center gap-2"><input type="checkbox" checked={opts.autofix} onChange={(e) => setOpts({ ...opts, autofix: e.target.checked })} /> Fix obvious typos (gmial.com → gmail.com)</label>
                     <label className="flex items-start gap-2"><input type="checkbox" className="mt-1" checked={sesLive} onChange={(e) => setSesLive(e.target.checked)} data-testid="mk-import-ses-live" />
                         <span>Also ask Amazon SES whether each mailbox exists (≈ $0.01 per new address, never twice for the same one — within the monthly budget)</span></label>
+                    {canDelete(user) && (
+                        <label className="flex items-start gap-2 text-[#B4750F]"><input type="checkbox" className="mt-1" checked={readd} onChange={(e) => { setReadd(e.target.checked); setReport(null); }} data-testid="mk-import-readd" />
+                            <span>Re-add people who were <b>erased</b> earlier — only if they asked to be added back (logged)</span></label>
+                    )}
                     <button type="button" className={`${btn} border border-[#002B5C] text-[#002B5C]`} onClick={() => run(true)} disabled={busy || !file} data-testid="mk-dry-run">{busy ? "Checking…" : "1. Check the file (nothing is saved)"}</button>
                     {report && (
                         <div className="space-y-3" data-testid="mk-import-report">
                             <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 text-center">
-                                {[["total", "Rows"], ["verified", "Verified"], ["valid", "Valid"], ["risky", "Risky"], ["invalid", "Invalid"], ["suppressed", "Bounced/unsub before"]].map(([k, l]) => {
+                                {[["total", "Rows"], ["verified", "Verified"], ["valid", "Valid"], ["risky", "Risky"], ["invalid", "Invalid"], ["suppressed", "Blocked before"]].map(([k, l]) => {
                                     const selectable = k in pick;
                                     const on = selectable && pick[k];
                                     const body = (
@@ -1058,6 +1075,15 @@ function VerifyImport() {
                                     Ones SES says don't exist become invalid; any still unchecked are checked automatically when a campaign is sent.
                                     <SesUsage u={report.ses} />
                                 </div>
+                            )}
+                            {report.erased > 0 && report.dry_run && (
+                                <div className="text-xs border border-[#B4750F] text-[#92400e] p-2" data-testid="mk-import-erased">
+                                    {report.erased} address{report.erased === 1 ? " was" : "es were"} <b>erased</b> earlier (Contacts → Erase) and won't be imported — counted under “Blocked before”.
+                                    {canDelete(user) ? " If they asked to be added back, tick “Re-add people who were erased” above and check again." : " A superadmin can re-add them if they asked to be."}
+                                </div>
+                            )}
+                            {!report.dry_run && Object.keys(report.skipped || {}).length > 0 && (
+                                <div className="text-xs bg-[#F5F7FA] p-2" data-testid="mk-import-skipped">Not imported: {Object.entries(report.skipped).map(([k, n]) => `${n} ${k}`).join(" · ")}</div>
                             )}
                             <RowReport rows={report.rows || []} />
                             <div className="text-xs text-[#4B5563]">{c.duplicates_in_file || 0} duplicates removed · {c.fixed || 0} typos fixed · columns: email “{report.columns.email}”{report.columns.name ? `, name “${report.columns.name}”` : ""}{report.columns.phone ? `, phone “${report.columns.phone}”` : ""}</div>

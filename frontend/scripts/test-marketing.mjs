@@ -107,7 +107,7 @@ check(/if reached:[\s\S]{0,200}"deleted": True/.test(mk) && /mk_sends\.delete_ma
     "sent campaigns are archived (unsubscribe links keep working); only never-sent ones are hard-deleted");
 check(/still sending — cancel it first/.test(mk), "a campaign that is sending can't be deleted");
 check(/"deleted": \{"\$ne": True\}/.test(mk), "archived campaigns are hidden from lists and the dashboard");
-check(/body\.action == "erase" and not is_superadmin/.test(mk), "bulk erase is superadmin-only");
+check(/body\.action in \("delete", "erase"\) and not is_superadmin/.test(mk), "bulk delete / erase are superadmin-only");
 check(/if n != body\.expected:/.test(mk) && /_contact_filter\(m\.get\("q"\)/.test(mk), "bulk on 'all matching' re-uses the page filter and must match the confirmed count");
 check(/Type ERASE to confirm/.test(page), "bulk erase needs ERASE typed");
 
@@ -140,6 +140,17 @@ check(/if \(camp or \{\}\)\.get\("kind"\) == "reconfirm":/.test(mk) && /"email_c
     "re-confirm: a click renews consent, never over an unsubscribe");
 check(/_consent\("lapsed"/.test(mk) && /"email_consent\.at": \{"\$lt":/.test(mk), "re-confirm: non-clickers lapse, unless they re-subscribed since");
 check(/"rows": row_report/.test(mk) && /function RowReport/.test(page), "import shows every row");
+
+console.log("-- import vs erased (bug 2026-10-12) --");
+check(/if doc:\s*\n\s*saved \+= 1/.test(mk) && !/\)\s*\n\s*saved \+= 1\s*\n\s*await db\.mk_imports/.test(mk),
+    "import counts a row as saved only if the contact was really saved");
+check(/supp\.setdefault\(n, "erased at a privacy request"\)/.test(mk), "'Check the file' shows erased people as blocked (no more silent drop)");
+check(/if readd_erased and not is_superadmin\(/.test(mk) && /readd_erased=readd_erased\)/.test(mk), "re-adding erased people: superadmin only, deliberate, logged");
+check(/async def adm_delete_contact\(cid: str, erase: bool = False/.test(mk) && /elif body\.action == "delete":/.test(mk),
+    "Delete (can re-import) and Erase (privacy block) are separate actions");
+check(/email_consent="subscribed", readd_erased=True\)/.test(mk) && /status=v\["status"\], readd_erased=True,/.test(mk),
+    "a person's own new sign-up lifts their erasure (fresh consent)");
+check(/onClick=\{\(\) => removeOne\(c\.id\)\}/.test(page) && !/onClick=\{\(\) => erase\(c\.id\)\}/.test(page), "row 🗑 deletes, it no longer erases");
 
 console.log("-- screen --");
 for (const t of ["mk-dashboard", "mk-editor", "mk-contacts", "mk-lists", "mk-verify", "mk-settings", "mk-report", "mk-dry-run"]) {
