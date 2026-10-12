@@ -1149,7 +1149,12 @@ function SystemHealth() {
         <div className="text-sm space-y-3" data-testid="mk-system-health">
             <div className="flex flex-wrap gap-x-6 gap-y-1">
                 <span>Background work: <b>{q.mode === "external" ? "separate worker" : "inside the website (inline)"}</b></span>
-                {q.mode === "external" && <span>Worker: {ok(q.worker_alive)} {w.seconds_ago != null && <span className="text-xs text-[#6B7280]">(heartbeat {w.seconds_ago}s ago)</span>}</span>}
+                {/* Shown whenever a worker has checked in — also in inline mode, so
+                    you can see it come alive before switching WORKER_MODE. */}
+                {(q.mode === "external" || w.seconds_ago != null) && (
+                    <span>Worker: {q.worker_alive ? <b className="text-[#15803D]">running</b> : <b className="text-[#CC0033]">not running</b>}{" "}
+                        {w.seconds_ago != null && <span className="text-xs text-[#6B7280]">(last heartbeat {w.seconds_ago}s ago)</span>}</span>
+                )}
                 <span>Queue lag: {ok(h.checks?.queue_lag_ok)} <span className="text-xs text-[#6B7280]">{q.lag_seconds != null ? `${q.lag_seconds}s` : "nothing waiting"}</span></span>
                 <button type="button" className="underline ml-auto" disabled={busy} onClick={load}>{busy ? "Refreshing…" : "Refresh"}</button>
             </div>
