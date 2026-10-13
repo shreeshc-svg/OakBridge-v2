@@ -28,6 +28,8 @@ const CATEGORIES = [
 
 export default function Submissions() {
     const { website, setWebsite, shield } = useFormShield();
+    // DPDP: the author's own tick; the server refuses the submission without it.
+    const [agreed, setAgreed] = useState(false);
     const [form, setForm] = useState({
         name: "",
         email: "",
@@ -62,6 +64,7 @@ export default function Submissions() {
                 ...shield(),
                 ...form,
                 word_count: Number(form.word_count || 0),
+                consent: agreed,
             });
             setDone(true);
             toast.success("Submission received.");
@@ -285,9 +288,26 @@ export default function Submissions() {
                                 />
                             </div>
 
+                            <label className="flex items-start gap-3 text-xs text-[#4B5563] cursor-pointer leading-relaxed">
+                                <input
+                                    type="checkbox"
+                                    required
+                                    checked={agreed}
+                                    onChange={(e) => setAgreed(e.target.checked)}
+                                    data-testid="sub-consent"
+                                    className="mt-0.5 accent-[#002B5C] w-4 h-4 flex-shrink-0"
+                                />
+                                <span>
+                                    I consent to Oakbridge Publishing keeping my name, contact details and this submission to
+                                    review it and reply to me about publishing it, as described in the{" "}
+                                    <Link to="/privacy" target="_blank" rel="noopener" className="text-[#002B5C] underline">Privacy Policy</Link>.
+                                    It is deleted once it is no longer needed, or sooner if I ask at info@oakbridge.in.
+                                </span>
+                            </label>
+
                             <button
                                 type="submit"
-                                disabled={submitting}
+                                disabled={submitting || !agreed}
                                 data-testid="sub-submit"
                                 className="bg-[#002B5C] text-[#FFFFFF] px-10 py-4 text-sm font-medium hover:bg-[#001F42] disabled:opacity-60"
                             >

@@ -104,6 +104,8 @@ export const authLogin = (email, password) =>
 export const authRegister = (payload) =>
     api.post("/auth/register", payload).then((r) => r.data);
 export const authMe = () => api.get("/auth/me").then((r) => r.data);
+// Existing customer agrees to the current Privacy Notice (components/PolicyUpdateNotice).
+export const authPolicyConsent = () => api.post("/auth/policy-consent", { agree: true }).then((r) => r.data);
 export const verifyOtp = (code) =>
     api.post("/auth/verify-otp", { code }).then((r) => r.data);
 export const resendOtp = () =>
@@ -468,13 +470,17 @@ export const adminUploadCover = (file) => {
 
 // ---- Careers ----
 export const fetchJobs = () => api.get("/collections/careers_jobs").then((r) => r.data);
-export const applyForJob = ({ name, phone, email, role, cv }) => {
+export const applyForJob = ({ name, phone, email, role, cv, consent, website, form_ms }) => {
     const form = new FormData();
     form.append("name", name);
     form.append("phone", phone);
     form.append("email", email);
     form.append("role", role || "");
     form.append("cv", cv);
+    // DPDP tick + the bot screen (honeypot, time on form) — all checked server-side.
+    form.append("consent", consent ? "true" : "false");
+    form.append("website", website || "");
+    if (form_ms != null) form.append("form_ms", String(form_ms));
     return api
         .post("/careers/apply", form, { headers: { "Content-Type": "multipart/form-data" } })
         .then((r) => r.data);

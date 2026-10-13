@@ -194,6 +194,9 @@ export default function Checkout() {
                 // Which link produced this sale. Read from the landing URL,
                 // not from here — by now the query string is four pages gone.
                 attribution: readAttribution(),
+                // The Terms/Privacy/Shipping tick, recorded with the order
+                // (the button is disabled without it; the server re-checks).
+                consent_terms: agreed,
             });
 
             // 2. Create a Razorpay order tied to it

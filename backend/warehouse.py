@@ -59,7 +59,7 @@ import warehouse_core as core
 from audit import audit_log
 from extensions import _notify_back_in_stock, db, get_current_user, require_admin, require_superadmin
 from features import APP_NAME, delete_object, get_object, put_object
-from uploads_guard import is_pdf, read_limited, sniff_image
+from uploads_guard import is_pdf, read_limited, require_safe_pdf, sniff_image
 
 log = logging.getLogger(__name__)
 
@@ -506,6 +506,9 @@ async def _create_doc(direction: str, practice: bool, file: Optional[UploadFile]
         kind = "pdf" if is_pdf(data) else ("image" if sniff_image(data) in ("jpg", "png", "webp") else None)
         if not kind:
             raise HTTPException(status_code=400, detail="Send a PDF or a photo (JPG/PNG).")
+        if kind == "pdf":
+            # Opened by staff in their browsers: nothing in it may run.
+            require_safe_pdf(data, "This PDF", allow_encrypted=True)
         sha = hashlib.sha256(data).hexdigest()
         dup = await db.warehouse_docs.find_one(
             {"sha256": sha, "practice": False, "status": {"$in": TAKEN_STATUSES}}, {"_id": 0, "id": 1, "doc_number": 1})

@@ -70,12 +70,13 @@ console.log("\n-- a PDF has to be a PDF --");
    an `or` between two values the uploader writes. */
 check(!/"pdf" not in ctype and not fname\.endswith/.test(feat),
       "the careers endpoint no longer decides from the filename and the declared type");
-check(/uploads_guard\.require_pdf\(data, "CV"\)/.test(feat),
+// require_safe_pdf = require_pdf (the bytes) + no active content (uploads_guard).
+check(/uploads_guard\.require_safe_pdf\(data, "CV"\)/.test(feat) && /def require_safe_pdf[\s\S]*?require_pdf\(data, label\)/.test(guard),
       "it checks the bytes instead");
-check((feat.match(/uploads_guard\.require_pdf\(/g) || []).length >= 4,
+check((feat.match(/uploads_guard\.require_safe_pdf\(/g) || []).length >= 4,
       "and so do the eBook, preview and document intakes");
 check(/PDF_MAGIC = b"%PDF-"/.test(guard), "against the real signature");
-check(/uploads_guard\.require_pdf\([\s\S]{0,400}?import pypdfium2/.test(feat),
+check(/uploads_guard\.require_safe_pdf\([\s\S]{0,400}?import pypdfium2/.test(feat),
       "the preview check runs BEFORE pypdfium2 parses it — handing a rendering library the wrong "
       + "format is how a parser bug becomes a crash on the request thread");
 

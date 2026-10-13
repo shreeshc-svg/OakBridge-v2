@@ -113,6 +113,25 @@ class UserPublic(BaseModel):
     # explicit override, and no array means "use the preset for their role".
     # An empty list would read as "this person may see nothing".
     sections: Optional[List[str]] = None
+    # True for a customer whose last agreement predates the current Privacy
+    # Notice (accounts made before consent was recorded, or before an update):
+    # the site shows the update once and records their tick (POST
+    # /auth/policy-consent). Declared here or it would be filtered out.
+    policy_update_due: bool = False
+
+
+def _policy_update_due(user: dict) -> bool:
+    if (user.get("role") or "customer") != "customer":
+        return False
+    from legal_defaults import POLICY_VERSION
+    return ((user.get("consents") or {}).get("account") or {}).get("policy_version") != POLICY_VERSION
+
+
+def public_user(user: dict) -> "UserPublic":
+    """One place that turns a user document into the API shape, so login and
+    /auth/me can't drift apart (login used to build it by hand and dropped
+    `sections`, so a staff member's sidebar was wrong until they reloaded)."""
+    return UserPublic(**{**user, "policy_update_due": _policy_update_due(user)})
 
 
 class AuthResponse(BaseModel):
@@ -459,14 +478,14 @@ auth_router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 def _signup_consents(payload: "UserCreate", now: str) -> dict:
-    from legal_defaults import _UPDATED_DPDP
+    from legal_defaults import POLICY_VERSION
     rec = {"account": {"given": True, "at": now, "source": "register",
                        "purpose": "create and run the account: verification, orders, delivery, support",
-                       "policy_version": _UPDATED_DPDP}}
+                       "policy_version": POLICY_VERSION}}
     if payload.email_marketing_optin:
         rec["email_marketing"] = {"given": True, "at": now, "source": "register",
                                   "purpose": "emails about new books, events and offers",
-                                  "policy_version": _UPDATED_DPDP}
+                                  "policy_version": POLICY_VERSION}
     return rec
 
 
@@ -586,23 +605,34 @@ async def login(payload: UserLogin):
     role = user.get("role", "customer")
     await audit_log(db, LOGIN, email=user["email"], role=role, meta={"role": role})
     token = create_access_token(user["id"], user["email"], role)
-    return AuthResponse(
-        user=UserPublic(
-            id=user["id"],
-            email=user["email"],
-            name=user["name"],
-            phone=user.get("phone"),
-            role=user.get("role", "customer"),
-            created_at=user["created_at"],
-            email_verified=user.get("email_verified", False),
-        ),
-        access_token=token,
-    )
+    return AuthResponse(user=public_user(user), access_token=token)
 
 
 @auth_router.get("/me", response_model=UserPublic)
 async def me(user: dict = Depends(get_current_user)):
-    return UserPublic(**user)
+    return public_user(user)
+
+
+class PolicyConsent(BaseModel):
+    agree: bool = False
+
+
+@auth_router.post("/policy-consent", response_model=UserPublic)
+async def policy_consent(payload: PolicyConsent, user: dict = Depends(get_current_user)):
+    """An existing customer ticked "I have read the updated Privacy Notice and
+    agree". Recorded the same way as at sign-up (DPDP s.6(10): provable)."""
+    if not payload.agree:
+        raise HTTPException(status_code=400, detail="Please tick the box to agree.")
+    from legal_defaults import POLICY_VERSION
+    now = datetime.now(timezone.utc).isoformat()
+    rec = {"given": True, "at": now, "source": "policy update notice",
+           "purpose": "create and run the account: verification, orders, delivery, support",
+           "policy_version": POLICY_VERSION}
+    await db.users.update_one({"id": user["id"]}, {"$set": {"consents.account": rec}})
+    await audit_log(db, "POLICY_CONSENT", email=user.get("email", ""), role=user.get("role", ""),
+                    meta={"policy_version": POLICY_VERSION})
+    fresh = await db.users.find_one({"id": user["id"]}, {"_id": 0}) or user
+    return public_user(fresh)
 
 
 @auth_router.post("/logout")

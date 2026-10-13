@@ -165,6 +165,10 @@ export default function ReviewsSection({ bookId }) {
                     >
                         {submitting ? "Submitting…" : "Publish Review"}
                     </button>
+                    <p className="text-xs text-[#4B5563]" data-testid="review-privacy-notice">
+                        Your review and the name on your account are shown publicly on this page. You can ask us to
+                        remove them at any time. See our <Link to="/privacy" className="underline">Privacy Policy</Link>.
+                    </p>
                 </form>
             )}
 

@@ -9,6 +9,7 @@ Adds:
 from __future__ import annotations
 
 import csv
+import asyncio
 import io
 import json
 import os
@@ -151,6 +152,34 @@ def put_object(path: str, data: bytes, content_type: str) -> dict:
         with open(full, "wb") as f:
             f.write(data)
     return {"url": f"/api/files/{path}", "path": path, "size": len(data), "content_type": content_type}
+
+
+# Amazon GuardDuty Malware Protection for S3 (optional, switched on in the AWS
+# console) scans every new object with antivirus signatures and writes the
+# result onto it as this tag. The download paths below refuse a file tagged
+# THREATS_FOUND. With the feature off, or before the scan finishes, there is
+# no tag and the answer is "unknown" — downloads behave exactly as before
+# (fail-open on purpose: the file checks in uploads_guard already ran on
+# upload; this is the extra signature layer, not the only one).
+SCAN_TAG = "GuardDutyMalwareScanStatus"
+
+
+def scan_verdict(path: str) -> str:
+    """clean | threat | unknown, from the object's GuardDuty tag."""
+    if not _s3_enabled() or not path:
+        return "unknown"
+    try:
+        tags = _s3().get_object_tagging(Bucket=_bucket_for(path), Key=_safe_key(path)).get("TagSet") or []
+    except Exception:  # noqa: BLE001 — no permission / no object / S3 hiccup: never block on this
+        return "unknown"
+    val = next((t.get("Value") for t in tags if t.get("Key") == SCAN_TAG), "")
+    return {"NO_THREATS_FOUND": "clean", "THREATS_FOUND": "threat"}.get(val, "unknown")
+
+
+def refuse_if_infected(path: str, what: str) -> None:
+    if scan_verdict(path) == "threat":
+        log.warning("download refused: %s at %s is tagged THREATS_FOUND", what, path)
+        raise HTTPException(status_code=409, detail=f"This {what} was flagged by the virus scan and can't be downloaded.")
 
 
 def delete_object(path: str) -> bool:
@@ -369,6 +398,8 @@ class SubmissionCreate(BaseModel):
     website: Optional[str] = ""
     # Milliseconds between the form rendering and being submitted.
     form_ms: Optional[int] = None
+    # DPDP Act 2023: the author's own tick on the form (checked server-side).
+    consent: bool = False
 
 
 class Submission(BaseModel):
@@ -603,9 +634,18 @@ async def create_submission(payload: SubmissionCreate, request: Request):
             created_at=datetime.now(timezone.utc).isoformat(),
         )
 
+    if not payload.consent:
+        raise HTTPException(status_code=400, detail=(
+            "Please tick the box to agree to us keeping your submission and contact details to review it "
+            "(refresh the page if you don't see it)."))
+
+    now_iso = datetime.now(timezone.utc).isoformat()
     doc = {
         "id": str(uuid.uuid4()),
         **payload.model_dump(),
+        "consent": {"given": True, "at": now_iso, "source": "submissions form",
+                    "purpose": "review the submission and reply about publishing it",
+                    "policy_version": _policy_version()},
         "email": payload.email.lower(),
         "phone": payload.phone or "",
         "affiliation": payload.affiliation or "",
@@ -649,17 +689,27 @@ async def create_submission(payload: SubmissionCreate, request: Request):
     return Submission(**doc)
 
 
+def _policy_version() -> str:
+    """The Privacy Policy's 'last updated' date, stored with every consent."""
+    from legal_defaults import POLICY_VERSION
+    return POLICY_VERSION
+
+
 # ============== CAREERS ==============
 # Job listings are stored in the generic content collection `careers_jobs`
 # (admin-editable). Applications come in via the multipart endpoint below.
 
 @public_router.post("/careers/apply")
 async def apply_for_job(
+    request: Request,
     name: str = Form(...),
     phone: str = Form(...),
     email: str = Form(...),
     role: str = Form(""),
     cv: UploadFile = File(...),
+    consent: bool = Form(False),
+    website: str = Form(""),
+    form_ms: Optional[int] = Form(None),
 ):
     """Job application: name/phone/email required, CV must be a PDF (max 8 MB)."""
     name = (name or "").strip()
@@ -667,6 +717,24 @@ async def apply_for_job(
     email = (email or "").strip().lower()
     if not name or not phone or not email:
         raise HTTPException(status_code=400, detail="Name, phone and email are required")
+    # The same bot screen as every other public form (honeypot, time on the
+    # form, per-IP and per-email limits). This one stores a FILE and mails the
+    # hiring inbox, so a script hammering it used to cost storage and inbox
+    # noise with nothing in the way. Checked before the upload is read.
+    from antispam import screen, record_rejection
+    reason = await screen(request, kind="careers", email=email, name=name, honeypot=website,
+                          form_ms=form_ms, ip_limit=3, email_limit=2)
+    if reason:
+        await record_rejection("careers", reason, request, {"name": name, "email": email, "phone": phone, "role": role})
+        if reason.startswith("rate"):
+            raise HTTPException(status_code=429, detail="Too many applications from here. Please try again later.")
+        # Bots get the same answer as people, and nothing is stored or mailed.
+        return {"ok": True, "message": "Application received — thank you. We'll be in touch."}
+    # DPDP Act 2023: the applicant's own tick, recorded with the application.
+    if not consent:
+        raise HTTPException(status_code=400, detail=(
+            "Please tick the box to agree to us keeping your details and CV for recruitment "
+            "(refresh the page if you don't see it)."))
     """
     THE ONLY UNAUTHENTICATED FILE UPLOAD ON THE SITE. Everything below is here
     because of that.
@@ -681,7 +749,10 @@ async def apply_for_job(
     rejected it), and the bytes themselves have to say PDF.
     """
     data = await uploads_guard.read_limited(cv, 8 * 1024 * 1024, "CV")
-    uploads_guard.require_pdf(data, "CV")
+    # A real PDF with nothing in it that can run (JavaScript, launch actions,
+    # attached files) and no encryption hiding its insides — this file is
+    # opened by the hiring team.
+    uploads_guard.require_safe_pdf(data, "CV")
 
     cv_path = f"{APP_NAME}/cv/{uuid.uuid4()}.pdf"
     put_object(cv_path, data, "application/pdf")
@@ -697,6 +768,10 @@ async def apply_for_job(
         "status": "received",
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
+    doc["consent"] = {"given": True, "at": doc["created_at"], "source": "careers form",
+                      "purpose": "consider this application and contact the applicant about roles",
+                      "retention": "while we consider this application and similar roles; deleted on request",
+                      "policy_version": _policy_version()}
     await db.job_applications.insert_one({**doc})
 
     # Notify the hiring inbox (fire-and-forget; a mail failure must not lose the application).
@@ -765,6 +840,7 @@ async def download_my_ebook(book_id: str, user: dict = Depends(get_current_user)
     book = await db.books.find_one({"id": book_id}, {"_id": 0})
     if not book or not book.get("ebook_path"):
         raise HTTPException(status_code=404, detail="No eBook available for this title")
+    await asyncio.to_thread(refuse_if_infected, book["ebook_path"], "eBook file")
     data, content_type = get_object(book["ebook_path"])
     filename = book.get("ebook_filename") or f"{book['title']}.pdf"
     return Response(
@@ -822,6 +898,7 @@ async def admin_download_cv(app_id: str):
     path = storage_path_from_url(app.get("cv_url", ""))
     if not path:
         raise HTTPException(status_code=404, detail="No CV on this application")
+    await asyncio.to_thread(refuse_if_infected, path, "CV")
     data, _ = get_object(path)
     return Response(
         content=data,
@@ -967,7 +1044,8 @@ async def admin_upload_ebook(book_id: str, file: UploadFile = File(...)):
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are accepted")
     data = await uploads_guard.read_limited(file, 60 * 1024 * 1024, "File")
-    uploads_guard.require_pdf(data, "eBook")
+    # Sold to customers and opened on their devices: nothing that can run.
+    uploads_guard.require_safe_pdf(data, "eBook", allow_encrypted=True)
     path = f"{APP_NAME}/ebooks/{book_id}/{uuid.uuid4()}.pdf"
     result = put_object(path, data, "application/pdf")
     await db.books.update_one(
@@ -1705,7 +1783,7 @@ async def admin_upload_preview(book_id: str, file: UploadFile = File(...), max_p
     # Checked before pypdfium2 touches it. Handing a rendering library a file
     # that is not the format it expects is how a parser bug becomes a crash on
     # the API process, and this one runs inline on the request.
-    uploads_guard.require_pdf(data, "Preview PDF")
+    uploads_guard.require_safe_pdf(data, "Preview PDF", allow_encrypted=True)
 
     try:
         import pypdfium2 as pdfium
@@ -1819,20 +1897,25 @@ async def admin_upload_doc(file: UploadFile = File(...)):
     is the mismatch that matters, an executable declared as application/pdf and
     published on the Media page as a company brochure.
     """
+    # Published on the Media page for anyone to download, so beyond "is it
+    # really that type": nothing in it may run — no PDF JavaScript, no macros,
+    # no programs inside a ZIP, no remote templates (uploads_guard).
     if ext == "pdf":
-        uploads_guard.require_pdf(data, "File")
+        uploads_guard.require_safe_pdf(data, "File", allow_encrypted=True)
     elif ext in ("zip", "docx", "xlsx"):
         if not uploads_guard.is_zip_container(data):
             raise HTTPException(
                 status_code=400,
                 detail="That file is not really a ZIP/Word/Excel document.",
             )
+        uploads_guard.require_safe_archive(data, "File", office=ext != "zip")
     elif ext in ("doc", "xls"):
         if not uploads_guard.is_ole_document(data):
             raise HTTPException(
                 status_code=400,
                 detail="That file is not really a Word/Excel document.",
             )
+        uploads_guard.require_safe_ole(data, "File")
     path = f"{APP_NAME}/docs/{uuid.uuid4()}.{ext}"
     put_object(path, data, ctype)
     return {
@@ -2142,6 +2225,7 @@ async def admin_bulk_import(file: UploadFile = File(...)):
     # already absurdly generous and the wrong file picked by accident should
     # bounce rather than take the API down with it.
     file_bytes = await uploads_guard.read_limited(file, 25 * 1024 * 1024, "Import file")
+    uploads_guard.require_not_zip_bomb(file_bytes, "Import file")
     if name.endswith(".xlsx"):
         rows_iter = enumerate(_parse_xlsx_rows(file_bytes), start=2)
     elif name.endswith(".csv"):
@@ -2209,6 +2293,7 @@ async def admin_upload_ebook_price_list(file: UploadFile = File(...), dry_run: b
     """
     name = (file.filename or "").lower()
     file_bytes = await uploads_guard.read_limited(file, 25 * 1024 * 1024, "Price list")
+    uploads_guard.require_not_zip_bomb(file_bytes, "Price list")
     if name.endswith(".xlsx"):
         try:
             wb = load_workbook(io.BytesIO(file_bytes), data_only=True, read_only=True)

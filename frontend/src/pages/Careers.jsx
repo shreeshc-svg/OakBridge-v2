@@ -8,7 +8,9 @@ import { hiddenSet, resolveSectionOrder } from "../lib/sections";
 
 const CAREERS_DEFAULT_ORDER = ["roles", "form"];
 import { toast } from "sonner";
+import { Link } from "react-router-dom";
 import { breadcrumbLd } from "../lib/schema";
+import { useFormShield, HoneypotField } from "../lib/formShield";
 
 export default function Careers() {
     const [jobs, setJobs] = useState([]);
@@ -19,6 +21,9 @@ export default function Careers() {
     const [done, setDone] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [dragCv, setDragCv] = useState(false);
+    // DPDP tick (required; the server refuses without it) and the bot screen.
+    const [agreed, setAgreed] = useState(false);
+    const { website, setWebsite, shield } = useFormShield();
     const fileRef = useRef(null);
     const formRef = useRef(null);
 
@@ -60,7 +65,7 @@ export default function Careers() {
         }
         setSubmitting(true);
         try {
-            await applyForJob({ ...form, cv });
+            await applyForJob({ ...form, cv, consent: agreed, ...shield() });
             setDone(true);
         } catch (err) {
             toast.error(formatApiError(err));
@@ -154,6 +159,7 @@ export default function Careers() {
                         </div>
                     ) : (
                         <form onSubmit={onSubmit} className="border border-[#E5E7EB] p-6 md:p-8">
+                            <HoneypotField value={website} onChange={setWebsite} />
                             <div className="overline">Apply now</div>
                             <h2 className="font-serif text-2xl mt-2 text-[#002B5C]">Send us your details.</h2>
 
@@ -201,18 +207,31 @@ export default function Careers() {
                                 </div>
                             </div>
 
+                            <label className="mt-5 flex items-start gap-3 text-xs text-[#4B5563] cursor-pointer leading-relaxed">
+                                <input
+                                    type="checkbox"
+                                    required
+                                    checked={agreed}
+                                    onChange={(e) => setAgreed(e.target.checked)}
+                                    data-testid="careers-consent"
+                                    className="mt-0.5 accent-[#002B5C] w-4 h-4 flex-shrink-0"
+                                />
+                                <span>
+                                    I consent to Oakbridge Publishing keeping my details and CV to consider this application and
+                                    contact me about it and similar roles, as described in the{" "}
+                                    <Link to="/privacy" target="_blank" rel="noopener" className="text-[#002B5C] underline">Privacy Policy</Link>.
+                                    I can ask for them to be deleted at any time at info@oakbridge.in.
+                                </span>
+                            </label>
+
                             <button
                                 type="submit"
-                                disabled={submitting}
+                                disabled={submitting || !agreed}
                                 data-testid="careers-submit"
                                 className="mt-6 w-full bg-[#002B5C] text-white py-4 text-sm font-medium hover:bg-[#001F42] transition-colors disabled:opacity-60"
                             >
                                 {submitting ? "Submitting…" : "Submit application"}
                             </button>
-                            <p className="text-xs text-[#4B5563] mt-3">
-                                By applying you consent to us storing your details for recruitment. We'll only
-                                use them to consider your application.
-                            </p>
                         </form>
                     )}
                 </div>

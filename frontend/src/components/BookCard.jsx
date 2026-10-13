@@ -669,6 +669,11 @@ export default function BookCard({ book, index = 0, compact = false, toEbook = f
                     </button>
                 </form>
                 )}
+                {oos && notifyOpen && !notified && (
+                <p className="mt-1 text-[10px] leading-snug text-[#4B5563]">
+                    Only to tell you it's back. <Link to="/privacy" className="underline">Privacy</Link>
+                </p>
+                )}
             </div>
         </div>
     );

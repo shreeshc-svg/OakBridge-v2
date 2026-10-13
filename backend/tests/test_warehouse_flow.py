@@ -86,7 +86,7 @@ async def _notify(book):
 _mod("extensions", db=db, _notify_back_in_stock=_notify, get_current_user=_noop,
      require_admin=_noop, require_superadmin=_noop)
 _mod("features", APP_NAME="oakbridge", delete_object=_noop, get_object=_noop, put_object=_noop)
-_mod("uploads_guard", is_pdf=_noop, read_limited=_anoop, sniff_image=_noop)
+_mod("uploads_guard", is_pdf=_noop, read_limited=_anoop, sniff_image=_noop, require_safe_pdf=_noop)
 _mod("audit", audit_log=_anoop)
 _mod("rbac", ADMIN_ROLES=("admin", "superadmin"), effective_sections=lambda u: ["warehouse"])
 

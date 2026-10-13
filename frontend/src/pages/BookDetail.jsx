@@ -823,6 +823,9 @@ export default function BookDetail() {
                                             {notifyBusy ? "…" : "Notify me"}
                                         </button>
                                     </form>
+                                    <p className="mt-2 text-xs text-[#4B5563]" data-testid="notify-privacy-notice">
+                                        Used only to email you when this book is back — nothing else. See our <Link to="/privacy" className="underline">Privacy Policy</Link>.
+                                    </p>
                                 </>
                             )}
                         </div>

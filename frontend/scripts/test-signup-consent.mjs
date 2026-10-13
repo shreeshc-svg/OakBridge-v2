@@ -47,7 +47,7 @@ const refuse = regFn.indexOf("if not payload.consent_account");
 const insert = regFn.indexOf("db.users.insert_one");
 check(refuse > 0 && insert > refuse, "the refusal comes before the account is created");
 check(/"consents": _signup_consents\(payload, now\)/.test(regFn), "what was agreed is stored on the account");
-check(/"policy_version": _UPDATED_DPDP/.test(ext) && /"at": now/.test(ext), "with the time and the policy version");
+check(/"policy_version": POLICY_VERSION/.test(ext) && /"at": now/.test(ext), "with the time and the policy version");
 check(/if payload\.email_marketing_optin:\s*rec\["email_marketing"\]/.test(ext), "marketing consent recorded only when ticked");
 check(/if doc\["email_marketing_optin"\]:[\s\S]*?on_newsletter\(email, "account sign-up"\)/.test(regFn),
       "marketing opt-in goes through the double opt-in newsletter path");

@@ -20,7 +20,14 @@ mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
-app = FastAPI(title="Oakbridge Publishing API")
+# The interactive API docs list every endpoint, admin ones included, with
+# their parameters — a map for anyone probing the site. Off unless API_DOCS=on
+# (set it locally, never on Render).
+_API_DOCS = os.environ.get("API_DOCS", "off").strip().lower() == "on"
+app = FastAPI(title="Oakbridge Publishing API",
+              docs_url="/docs" if _API_DOCS else None,
+              redoc_url="/redoc" if _API_DOCS else None,
+              openapi_url="/openapi.json" if _API_DOCS else None)
 api_router = APIRouter(prefix="/api")
 
 logging.basicConfig(
@@ -330,6 +337,12 @@ class OrderCreate(BaseModel):
     # because campaign tags are whatever the person building the link typed,
     # and rejecting an order over an unexpected key would be absurd.
     attribution: Optional[dict] = None
+    # The "I agree to the Terms, Privacy Policy and Shipping Policy" tick.
+    # It always existed in the browser but never reached the server, so no
+    # order could prove it (DPDP s.6(10)). True = ticked. None = a page loaded
+    # before this field existed — that page also refused to submit without
+    # the tick, so it is recorded as such. False = refused.
+    consent_terms: Optional[bool] = None
 
 
 _ATTRIBUTION_KEYS = frozenset(
@@ -1779,6 +1792,22 @@ def _preorder_active(bdoc: dict) -> bool:
     return at > datetime.now(timezone.utc)
 
 
+def _checkout_consents(payload: "OrderCreate", at: str) -> dict:
+    """What the buyer agreed to with this order, provably (stored on the order
+    document only — the Order response model does not carry it)."""
+    from legal_defaults import POLICY_VERSION
+    base = {"given": True, "at": at, "policy_version": POLICY_VERSION}
+    rec = {"terms_privacy_shipping": {**base, "source": "checkout" if payload.consent_terms
+                                      else "checkout (older page; tick enforced in the browser)"}}
+    if payload.email_marketing_optin:
+        rec["email_marketing"] = {**base, "source": "checkout"}
+    if payload.wa_optin:
+        rec["whatsapp_order_updates"] = {**base, "source": "checkout"}
+    if payload.wa_marketing_optin:
+        rec["whatsapp_marketing"] = {**base, "source": "checkout"}
+    return rec
+
+
 @api_router.post("/orders", response_model=Order)
 async def create_order(payload: OrderCreate, user: Optional[dict] = Depends(get_current_user_optional)):
     # Fallback verification gate: a signed-in but unverified account must verify
@@ -1790,6 +1819,8 @@ async def create_order(payload: OrderCreate, user: Optional[dict] = Depends(get_
         )
     if not payload.items:
         raise HTTPException(status_code=400, detail="Cart is empty")
+    if payload.consent_terms is False:
+        raise HTTPException(status_code=400, detail="Please tick the box to agree to the Terms, Privacy Policy and Shipping Policy.")
 
     # Load authoritative book data and guard availability. Prices, titles and
     # covers come from the DB, never the client, so totals cannot be tampered with.
@@ -1899,6 +1930,7 @@ async def create_order(payload: OrderCreate, user: Optional[dict] = Depends(get_
         created_at=datetime.now(timezone.utc).isoformat(),
     )
     doc = order.model_dump()
+    doc["consents"] = _checkout_consents(payload, doc["created_at"])
     await db.orders.insert_one({**doc})
     if user and payload.wa_marketing_optin:
         await db.users.update_one({"id": user["id"]}, {"$set": {
@@ -2030,6 +2062,11 @@ if os.environ.get("PUBLIC_CACHE", "on").strip().lower() != "off":
 # status and milliseconds.
 from perf import TimingMiddleware  # noqa: E402
 app.add_middleware(TimingMiddleware)
+
+# Browser security headers (backend/security_headers.py). Outermost of all, so
+# cache hits carry them too.
+from security_headers import SecurityHeadersMiddleware  # noqa: E402
+app.add_middleware(SecurityHeadersMiddleware)
 
 
 @app.on_event("shutdown")

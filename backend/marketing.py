@@ -1924,7 +1924,11 @@ async def adm_import(
     from rbac import is_superadmin
     if readd_erased and not is_superadmin(user.get("role")):
         raise HTTPException(status_code=403, detail="Only a superadmin can re-add erased people")
-    data = await file.read()
+    # Bounded read (an unbounded file.read() materialises any size on the
+    # 512 MB server) and no zip bomb for openpyxl.
+    import uploads_guard
+    data = await uploads_guard.read_limited(file, 25 * 1024 * 1024, "File")
+    uploads_guard.require_not_zip_bomb(data, "File")
     if len(data) > 8_000_000:
         raise HTTPException(status_code=413, detail="File too large (8 MB max)")
     try:

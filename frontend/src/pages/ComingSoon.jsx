@@ -133,6 +133,12 @@ export default function ComingSoon({
                                 <ArrowUpRight size={16} strokeWidth={1.5} />
                             </button>
                         </form>
+                    ) : null}
+                    {!submitted ? (
+                        <p className="mt-3 text-xs text-white/60 max-w-xl" data-testid="waitlist-privacy-notice">
+                            We'll use your email only to tell you about this launch — no newsletter unless you sign up for it
+                            separately. Unsubscribe any time. See our <Link to="/privacy" className="underline">Privacy Policy</Link>.
+                        </p>
                     ) : (
                         <div
                             data-testid="waitlist-thanks"

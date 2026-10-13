@@ -24,6 +24,13 @@ _UPDATED = "24 July 2026"
 # and the email + WhatsApp marketing system (Oct 2026). Refund / Shipping keep
 # their own date. Not legal advice — counsel should review before relying on it.
 _UPDATED_DPDP = "12 October 2026"
+# The Privacy Notice alone was revised again on 13 Oct 2026 (job applications
+# added; consent records at sign-up, checkout, submissions and careers).
+_UPDATED_PRIVACY = "13 October 2026"
+# What a person agrees to is "the Privacy Notice as dated": stored with every
+# consent record (sign-up, checkout, careers, submissions), and an account
+# whose last agreement is older than this is asked once to read the update.
+POLICY_VERSION = _UPDATED_PRIVACY
 
 TERMS = f"""\
 _Last updated: {_UPDATED_DPDP}_
@@ -159,7 +166,7 @@ jurisdiction.
 """
 
 PRIVACY = f"""\
-_Last updated: {_UPDATED_DPDP}_
+_Last updated: {_UPDATED_PRIVACY}_
 
 This Privacy Notice explains how **{_ENTITY}** ("we", "us"), as the Data Fiduciary,
 collects, uses, shares and protects your personal data when you use {_SITE}, buy from
@@ -242,6 +249,11 @@ personal details masked (session recording). *Basis:* consent. See our
 keep the Site and your data safe and to investigate misuse. *Basis:* legitimate use
 and the security duties in the DPDP Rules.
 
+**2.12 Job applications.** Name, mobile number, email address, the role you apply
+for and your CV, from our Careers page. *Purpose:* consider your application and
+contact you about it and similar roles. *Basis:* consent, which you give with the
+tick-box on the form. Only the people hiring can open CVs.
+
 **Payments:** card, UPI and bank details are entered on and processed by **Razorpay**.
 We never receive or store your full payment credentials.
 
@@ -291,6 +303,8 @@ restrictions the Government of India notifies on transfers to particular countri
   one-way fingerprint of your email address for the same reason — not the address.
 - **Submissions and enquiries:** as long as needed to respond and to follow up,
   then deleted.
+- **Job applications:** while we consider you for the role and similar openings,
+  then deleted; sooner if you ask us at {_EMAIL}.
 - **Security logs:** at least one year, as the DPDP Rules require.
 
 ## 7. Security and data breaches

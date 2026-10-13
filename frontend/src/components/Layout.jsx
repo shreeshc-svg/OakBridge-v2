@@ -6,6 +6,7 @@ import ChatWidget from "./ChatWidget";
 import BackToTop from "./BackToTop";
 import BottomTray from "./BottomTray";
 import CookieConsent from "./CookieConsent";
+import PolicyUpdateNotice from "./PolicyUpdateNotice";
 import { Toaster } from "./ui/sonner";
 import { trackPageview } from "../lib/analytics";
 
@@ -44,6 +45,7 @@ export default function Layout() {
             <ChatWidget />
             <BottomTray />
             <CookieConsent />
+            <PolicyUpdateNotice />
             <Toaster position="bottom-right" />
         </div>
     );

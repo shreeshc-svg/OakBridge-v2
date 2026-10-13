@@ -8,6 +8,7 @@ import CONTENT_DEFAULTS from "../lib/contentDefaults";
 
 const CONTACT_DEFAULT_ORDER = ["form", "details"];
 import { toast } from "sonner";
+import { Link } from "react-router-dom";
 import { useFormShield, HoneypotField } from "../lib/formShield";
 import { breadcrumbLd } from "../lib/schema";
 
@@ -178,6 +179,12 @@ export default function Contact() {
                         >
                             {submitting ? "Sending…" : "Send Message"}
                         </button>
+                        {/* DPDP notice: what these details are used for (s.5). No tick
+                            needed — the details are given only to get a reply. */}
+                        <p className="text-xs text-[#4B5563] mt-3 max-w-md leading-relaxed" data-testid="contact-privacy-notice">
+                            We use your name, email, phone and message only to reply to you, and delete them once
+                            they're no longer needed. See our <Link to="/privacy" className="underline">Privacy Policy</Link>.
+                        </p>
                         {/* Third and last placement: beside the button, where the
                             expectation is set BEFORE they commit. Someone who
                             knows a reply takes a day or two waits; someone who
