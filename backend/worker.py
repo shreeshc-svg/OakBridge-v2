@@ -40,6 +40,7 @@ log = logging.getLogger("oakbridge.worker")
 
 import jobs  # noqa: E402
 import marketing  # noqa: E402  (registers the marketing job handlers)
+import newsletter  # noqa: E402,F401  (registers the newsletter job handler)
 from extensions import db  # noqa: E402
 
 CONCURRENCY = max(1, int(os.environ.get("WORKER_CONCURRENCY", "3")))

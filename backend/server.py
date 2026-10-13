@@ -1953,6 +1953,8 @@ from marketing import (admin_router as marketing_admin_router, public_router as 
 app.include_router(marketing_public_router)
 app.include_router(marketing_admin_router)
 app.include_router(marketing_tasks_router)
+from newsletter import router as newsletter_router  # noqa: E402  (also registers the nl_tick job)
+app.include_router(newsletter_router)
 
 # The production domains, Vercel preview and local dev are always allowed; any
 # extra origins in the CORS_ORIGINS env var (comma-separated) are merged in. This

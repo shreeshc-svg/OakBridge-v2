@@ -77,6 +77,16 @@ Every 5 minutes
 - **Per-row import report:** every address (first 2,000) with status, score and reasons, filterable.
 - **Re-confirm campaign:** Campaigns → New re-confirm campaign. Any link click renews consent and verifies the address; after the window (default 30 days) non-clickers become "lapsed" and stop getting campaigns. Includes retired addresses.
 
+## 4d. Automated newsletter (Marketing → Newsletter)
+
+- **Schedule** (superadmin): every week / two weeks / month (1st–4th weekday), day, time in IST. Off by default.
+- **Each issue builds itself** `lead_days` before sending: new releases since the last sent issue (never repeated), readers' favourites (home-page bestsellers), optional announcement. It is an ordinary draft campaign — edit it in Campaigns.
+- **Never empty:** no new releases and no announcement (or fewer books than the minimum) → the issue is skipped and the dashboard says why.
+- **Approve mode** (default): a dashboard alert; Approve sends it at the scheduled time through the normal send path (consent, mailbox checks, risk rules, bounce guard). Not approved by the send time → *missed*, never sent late. **Autopilot** approves automatically.
+- **Who gets it:** only contacts with marketing consent (all, or newsletter sign-ups only). Waitlist ("notify me when … launches") sign-ups are NOT newsletter consent; earlier syncs that marked them subscribed are corrected automatically (logged).
+- **Notice at sign-up:** the footer form now says what the newsletter is, that people confirm by email, can unsubscribe anytime, with a Privacy Policy link.
+- Runs on the background worker (`nl_tick` every ~10 minutes); "Build the next issue now" previews it early.
+
 ## 5. Safety rails (automatic)
 
 - Only `subscribed` people get campaigns; unsubscribed, bounced and complained addresses are excluded whatever list they are in.

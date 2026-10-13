@@ -5,7 +5,7 @@ import {
     mkDashboard, mkHealth, mkSettings, mkSaveSettings, mkVerify, mkImport, mkReverify, mkSync, mkContacts, mkPatchContact,
     mkDeleteContact, mkLists, mkCreateList, mkCampaigns, mkNewCampaign, mkCampaign, mkSaveCampaign, mkDuplicate,
     mkAudience, mkPreview, mkTestSend, mkSend, mkCampaignAction, mkReport, mkDismissAlert, mkSuppressionSync,
-    mkBulkContacts, mkBulkDeleteLists, mkBulkDeleteCampaigns, mkRenameCampaign, mkLearn, mkDisposableRefresh, mkSystemHealth, fetchBooks, fetchCategories, mediaUrl, formatApiError,
+    mkBulkContacts, mkBulkDeleteLists, mkBulkDeleteCampaigns, mkRenameCampaign, mkLearn, mkDisposableRefresh, mkSystemHealth, nlOverview, nlSave, nlDraftNow, nlApprove, nlSkip, fetchBooks, fetchCategories, mediaUrl, formatApiError,
 } from "../../lib/api";
 import { useAuth } from "../../context/AuthContext";
 import { isSuperadmin, canDelete } from "../../lib/rbac";
@@ -23,7 +23,7 @@ import { LineChart, BarChart, Funnel, Donut, Kpi, pct, inr } from "../../compone
  *   Verify      paste or upload addresses -> free verification report -> import
  *   Settings    sender, footer, double opt-in, auto-pause, SES/SNS health
  */
-const TABS = [["dash", "Dashboard"], ["campaigns", "Campaigns"], ["contacts", "Contacts"], ["lists", "Lists & segments"], ["verify", "Verify & import"], ["settings", "Settings"]];
+const TABS = [["dash", "Dashboard"], ["campaigns", "Campaigns"], ["newsletter", "Newsletter"], ["contacts", "Contacts"], ["lists", "Lists & segments"], ["verify", "Verify & import"], ["settings", "Settings"]];
 const STATUS_COLORS = { verified: "#15803D", valid: "#38bdf8", risky: "#F59E0B", invalid: "#CC0033", suppressed: "#6B7280", unknown: "#D1D5DB" };
 const SELECTABLE = [["verified", "Verified", "proven: confirmed account or delivered before"],
     ["valid", "Valid", "mailbox checked"], ["risky", "Risky", "follows the risk rules in Settings"]];
@@ -89,6 +89,7 @@ export default function AdminMarketing() {
                 {tab === "contacts" && <Contacts />}
                 {tab === "lists" && <Lists />}
                 {tab === "verify" && <VerifyImport />}
+                {tab === "newsletter" && <Newsletter onOpen={(id) => { setTab("campaigns"); setOpenCampaign(id); }} />}
                 {tab === "settings" && <Settings />}
             </div>
         </div>
@@ -1192,6 +1193,140 @@ function SystemHealth() {
                 <summary className="cursor-pointer text-[#002B5C]">Storefront book endpoints</summary>
                 <table className="w-full text-xs mt-2"><tbody>{(h.storefront || []).map(row)}</tbody></table>
             </details>
+        </div>
+    );
+}
+
+/* ----------------------------------------------------------- newsletter --- */
+const NL_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+const NL_TONE = { drafted: "border-[#7c3aed] text-[#7c3aed]", approved: "border-[#38bdf8] text-[#0369a1]", sent: "border-[#15803D] text-[#15803D]",
+    skipped: "border-[#9CA3AF] text-[#6B7280]", missed: "border-[#CC0033] text-[#CC0033]", cancelled: "border-[#9CA3AF] text-[#9CA3AF]" };
+const istTime = (iso) => (iso ? new Date(iso).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", weekday: "short", day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—");
+
+/** Marketing -> Newsletter: the automatic schedule, its settings, and every issue. */
+function Newsletter({ onOpen }) {
+    const { user } = useAuth();
+    const su = isSuperadmin(user?.role);
+    const [d, setD] = useState(null);
+    const [cfg, setCfg] = useState(null);
+    const [busy, setBusy] = useState(false);
+    const load = useCallback(() => { nlOverview().then((r) => { setD(r); setCfg(r.config); }).catch((e) => toast.error(formatApiError(e))); }, []);
+    useEffect(load, [load]);
+    if (!d || !cfg) return <p className="text-sm">Loading…</p>;
+    const set = (p) => setCfg({ ...cfg, ...p });
+    const save = async () => {
+        if (cfg.enabled && cfg.mode === "autopilot" && !window.confirm("Autopilot sends each issue to every subscriber without anyone approving it. Turn it on?")) return;
+        setBusy(true);
+        try { const r = await nlSave(cfg); setD(r); setCfg(r.config); toast.success("Saved."); } catch (e) { toast.error(formatApiError(e)); } finally { setBusy(false); }
+    };
+    const act = async (fn, msg) => { setBusy(true); try { await fn(); toast.success(msg); load(); } catch (e) { toast.error(formatApiError(e)); } finally { setBusy(false); } };
+    const inp = "border border-[#E5E7EB] px-2 py-1.5 text-sm";
+    const sec = cfg.sections || {};
+    const ann = cfg.announcement || {};
+    return (
+        <div className="space-y-6" data-testid="mk-newsletter">
+            <div className={`border p-3 text-sm ${d.config.enabled ? "border-[#15803D] bg-white" : "border-[#E5E7EB] bg-[#F5F7FA]"}`}>
+                {d.config.enabled ? (
+                    <>Newsletter is <b className="text-[#15803D]">on</b> · {d.describe} · next issue <b>{istTime(d.next_slot)}</b>,
+                        draft built {istTime(d.draft_at)} · {d.config.mode === "approve" ? "needs approval" : <b className="text-[#B4750F]">autopilot</b>}
+                        · ≈ {d.audience_now} subscribers</>
+                ) : <>Newsletter is <b>off</b>. Choose a schedule below and switch it on.</>}
+            </div>
+            <div className="grid xl:grid-cols-2 gap-6">
+                <Panel title="Schedule">
+                    <div className="space-y-3 text-sm">
+                        <label className="flex items-center gap-2"><input type="checkbox" checked={!!cfg.enabled} disabled={!su} onChange={(e) => set({ enabled: e.target.checked })} data-testid="nl-enabled" /> Send the newsletter automatically</label>
+                        <div className="flex flex-wrap gap-2 items-center">
+                            <select className={inp} value={cfg.frequency} disabled={!su} onChange={(e) => set({ frequency: e.target.value })} data-testid="nl-frequency">
+                                <option value="weekly">Every week</option><option value="fortnightly">Every two weeks</option><option value="monthly">Every month</option>
+                            </select>
+                            {cfg.frequency === "monthly" && (
+                                <select className={inp} value={cfg.week_of_month} disabled={!su} onChange={(e) => set({ week_of_month: Number(e.target.value) })}>
+                                    {[1, 2, 3, 4].map((n) => <option key={n} value={n}>{["1st", "2nd", "3rd", "4th"][n - 1]}</option>)}
+                                </select>
+                            )}
+                            <select className={inp} value={cfg.weekday} disabled={!su} onChange={(e) => set({ weekday: Number(e.target.value) })}>
+                                {NL_DAYS.map((x, i) => <option key={x} value={i}>{x}</option>)}
+                            </select>
+                            at <input type="time" className={inp} value={cfg.time} disabled={!su} onChange={(e) => set({ time: e.target.value })} /> IST
+                        </div>
+                        <label className="block">Build the draft <input type="number" min="1" max="7" className={`${inp} w-16 mx-1`} value={cfg.lead_days} disabled={!su}
+                            onChange={(e) => set({ lead_days: Number(e.target.value) })} /> days before sending</label>
+                        <div className="space-y-1">
+                            <label className="flex items-start gap-2"><input type="radio" className="mt-1" checked={cfg.mode === "approve"} disabled={!su} onChange={() => set({ mode: "approve" })} />
+                                <span><b>Approve each issue</b> — you get a dashboard alert; it is sent only after someone approves it. Unapproved issues are never sent late.</span></label>
+                            <label className="flex items-start gap-2"><input type="radio" className="mt-1" checked={cfg.mode === "autopilot"} disabled={!su} onChange={() => set({ mode: "autopilot" })} />
+                                <span><b>Autopilot</b> — sent on schedule without approval.</span></label>
+                        </div>
+                        <label className="block">Send to
+                            <select className={`${inp} ml-2`} value={cfg.audience} disabled={!su} onChange={(e) => set({ audience: e.target.value })}>
+                                <option value="all_subscribed">Everyone who opted in to marketing emails</option>
+                                <option value="newsletter_only">Only newsletter sign-ups</option>
+                            </select></label>
+                        <p className="text-xs text-[#6B7280]">Only people who agreed to marketing emails ever receive it; waitlist sign-ups don't count as newsletter consent. Every issue has one-click unsubscribe.</p>
+                    </div>
+                </Panel>
+                <Panel title="What goes in each issue">
+                    <div className="space-y-3 text-sm">
+                        <label className="flex items-center gap-2"><input type="checkbox" checked={!!sec.new_releases} disabled={!su} onChange={(e) => set({ sections: { ...sec, new_releases: e.target.checked } })} /> New releases since the last issue</label>
+                        <label className="flex items-center gap-2"><input type="checkbox" checked={!!sec.bestsellers} disabled={!su} onChange={(e) => set({ sections: { ...sec, bestsellers: e.target.checked } })} /> Readers' favourites (your home-page bestsellers)</label>
+                        <label className="flex items-center gap-2"><input type="checkbox" checked={!!sec.announcement} disabled={!su} onChange={(e) => set({ sections: { ...sec, announcement: e.target.checked } })} /> Announcement (event, offer, news)</label>
+                        {sec.announcement && (
+                            <div className="space-y-2 pl-6">
+                                <input className={`${inp} w-full`} placeholder="Title, e.g. Law Summit 2026" value={ann.title} disabled={!su} onChange={(e) => set({ announcement: { ...ann, title: e.target.value } })} />
+                                <textarea rows={3} className={`${inp} w-full`} placeholder="Text" value={ann.text} disabled={!su} onChange={(e) => set({ announcement: { ...ann, text: e.target.value } })} />
+                                <div className="grid grid-cols-2 gap-2">
+                                    <input className={inp} placeholder="Button label" value={ann.button_label} disabled={!su} onChange={(e) => set({ announcement: { ...ann, button_label: e.target.value } })} />
+                                    <input className={inp} placeholder="https://www.oakbridge.in/…" value={ann.button_url} disabled={!su} onChange={(e) => set({ announcement: { ...ann, button_url: e.target.value } })} />
+                                </div>
+                            </div>
+                        )}
+                        <div className="flex flex-wrap gap-3">
+                            <label>Books per section <input type="number" min="1" max="8" className={`${inp} w-16 ml-1`} value={cfg.max_books} disabled={!su} onChange={(e) => set({ max_books: Number(e.target.value) })} /></label>
+                            <label>Skip the issue if fewer than <input type="number" min="1" max="10" className={`${inp} w-16 mx-1`} value={cfg.min_items} disabled={!su} onChange={(e) => set({ min_items: Number(e.target.value) })} /> books</label>
+                        </div>
+                        <label className="block">Subject <span className="text-xs text-[#6B7280]">— {"{month}"} becomes e.g. "November 2026"</span>
+                            <input className={`${inp} w-full`} value={cfg.subject} disabled={!su} onChange={(e) => set({ subject: e.target.value })} /></label>
+                        <label className="block">Preview text<input className={`${inp} w-full`} value={cfg.preheader} disabled={!su} onChange={(e) => set({ preheader: e.target.value })} /></label>
+                        <label className="block">Opening line <span className="text-xs text-[#6B7280]">— {"{{first_name}}"}, {"{period}"}</span>
+                            <input className={`${inp} w-full`} value={cfg.intro} disabled={!su} onChange={(e) => set({ intro: e.target.value })} /></label>
+                        <p className="text-xs text-[#6B7280]">An issue with no new releases and no announcement is skipped automatically — subscribers never get the same list twice.</p>
+                    </div>
+                </Panel>
+            </div>
+            <div className="flex flex-wrap gap-2">
+                {su ? <button type="button" className={`${btn} bg-[#002B5C] text-white`} disabled={busy} onClick={save} data-testid="nl-save">Save schedule</button>
+                    : <span className="text-xs text-[#6B7280]">Only a superadmin can change the schedule.</span>}
+                <button type="button" className={`${btn} border`} disabled={busy} onClick={() => act(nlDraftNow, "Next issue built — see below.")}>Build the next issue now</button>
+            </div>
+            <Panel title="Issues">
+                <table className="w-full text-sm" data-testid="nl-issues"><thead><tr className="text-left text-[#4B5563]"><th className="py-2">Send time (IST)</th><th>Status</th><th>Contents</th><th className="text-right">Sent / open / click</th><th></th></tr></thead>
+                    <tbody>{(d.issues || []).map((i) => {
+                        const st = i.campaign?.stats || {};
+                        const base = st.delivered || st.sent || 0;
+                        return (
+                            <tr key={i.id} className="border-t align-top">
+                                <td className="py-2">{istTime(i.slot)}</td>
+                                <td><span className={`text-[10px] font-mono uppercase border px-1.5 py-0.5 ${NL_TONE[i.status] || ""}`}>{i.status}</span>
+                                    {i.reason && <div className="text-xs text-[#6B7280] max-w-[28ch]">{i.reason}</div>}</td>
+                                <td className="text-xs">{i.counts ? `${i.counts.new_releases} new · ${i.counts.bestsellers} favourites${i.counts.announcement ? " · announcement" : ""}` : ""}</td>
+                                <td className="text-right text-xs">{st.sent ? `${st.sent} / ${pct(base ? (st.opened || 0) / base : null)} / ${pct(base ? (st.clicked || 0) / base : null)}` : "—"}</td>
+                                <td className="text-right whitespace-nowrap">
+                                    {i.campaign_id && <button type="button" className="underline text-xs mr-2" onClick={() => onOpen(i.campaign_id)}>{i.status === "drafted" ? "Review / edit" : "Open"}</button>}
+                                    {i.status === "drafted" && <>
+                                        <button type="button" className="text-xs border border-[#15803D] text-[#15803D] px-2 py-0.5 mr-1" disabled={busy}
+                                            onClick={() => window.confirm(`Send this issue at ${istTime(i.slot)} to everyone eligible?`) && act(() => nlApprove(i.id), "Approved — it will go out on schedule.")}
+                                            data-testid="nl-approve">Approve</button>
+                                        <button type="button" className="text-xs border px-2 py-0.5" disabled={busy}
+                                            onClick={() => window.confirm("Skip this issue? It will not be sent.") && act(() => nlSkip(i.id), "Skipped.")}>Skip</button>
+                                    </>}
+                                </td>
+                            </tr>
+                        );
+                    })}
+                        {!(d.issues || []).length && <tr><td colSpan={5} className="py-4 text-[#6B7280]">No issues yet — the first draft is built {d.config.lead_days} days before the next send time, or press “Build the next issue now”.</td></tr>}
+                    </tbody></table>
+            </Panel>
         </div>
     );
 }

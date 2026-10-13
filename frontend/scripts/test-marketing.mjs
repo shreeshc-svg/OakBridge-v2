@@ -166,6 +166,19 @@ check(/async def on_newsletter[\s\S]{0,300}dispatch\("mk_newsletter"/.test(mk), 
 check(/@admin_router\.patch\("\/campaigns\/\{cid\}\/name"\)/.test(mk) && /data-testid="mk-camp-rename"/.test(page),
     "any campaign can be renamed (list + header), on its own PATCH route");
 
+console.log("-- newsletter --");
+const nl = code("backend/newsletter.py");
+const footer = code("frontend/src/components/Footer.jsx");
+check(/r = await mk\.queue_send\(c, slot\.isoformat\(\)/.test(nl) && /async def queue_send\(/.test(mk),
+    "approved issues go through the same send path (consent, checks, bounce guard) as the Send button");
+check(/"status": "drafted", "slot": \{"\$lte": now\.isoformat\(\)\}/.test(nl) && /"status": "missed"/.test(nl), "unapproved past its slot -> missed, never sent late");
+check(/create_index\("slot", unique=True\)/.test(nl), "one issue per slot even with two ticks");
+check(/@router\.put\(""\)\s*\nasync def nl_save\(body: ConfigBody, user: dict = Depends\(require_superadmin\)\)/.test(nl), "schedule changes are superadmin-only");
+check(/if is_waitlist_source\(source\):\s*\n\s*await upsert_contact\(email, source=source\)\s*\n\s*return/.test(mk)
+    && /email_consent=None if is_waitlist_source\(src\)/.test(mk), "waitlist sign-ups are not newsletter consent (DPDP purpose limitation)");
+check(/dispatch\("nl_tick"/.test(mk) && /import newsletter/.test(code("backend/worker.py")), "the worker runs the newsletter schedule");
+check(/data-testid="newsletter-notice"/.test(footer) && /to="\/privacy"/.test(footer), "notice + Privacy link at the sign-up form");
+
 console.log("-- screen --");
 for (const t of ["mk-dashboard", "mk-editor", "mk-contacts", "mk-lists", "mk-verify", "mk-settings", "mk-report", "mk-dry-run"]) {
     check(page.includes(`"${t}"`), `screen has ${t}`);

@@ -257,6 +257,13 @@ export default function Footer() {
                                 {loading ? "…" : c.news_button}
                             </button>
                         </form>
+                        {/* DPDP notice at the point of consent: what this is for, how
+                            to withdraw, where the full notice is. Static text, so the
+                            prerendered footer and the hydrated one match. */}
+                        <p className="mt-2 text-[11px] leading-snug text-white/50" data-testid="newsletter-notice">
+                            Our newsletter: new books, events and offers by email. We&apos;ll ask you to confirm by email;
+                            unsubscribe anytime. See our <Link to="/privacy" className="underline hover:text-white">Privacy Policy</Link>.
+                        </p>
                     </div>
 
                     <div className="md:col-span-8 grid grid-cols-2 lg:grid-cols-4 gap-x-8 gap-y-10">

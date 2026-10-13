@@ -884,10 +884,22 @@ async def on_newsletter(email: str, source: str = "newsletter") -> None:
     dispatch("mk_newsletter", {"email": email, "source": source})
 
 
+def is_waitlist_source(source: str) -> bool:
+    """Coming-soon / product waitlists post to the same endpoint as the
+    newsletter, but their purpose is narrower: "tell me when X launches".
+    Under the DPDP Act consent is purpose-specific, so a waitlist sign-up is
+    NOT a newsletter / marketing opt-in."""
+    return "waitlist" in (source or "").lower()
+
+
 async def _newsletter_signup(email: str, source: str = "newsletter") -> None:
     """Website sign-up. With double opt-in on, the contact waits as 'pending'
-    until they click the confirmation link we email them."""
+    until they click the confirmation link we email them. Waitlist sign-ups are
+    recorded as contacts with NO marketing consent (see is_waitlist_source)."""
     try:
+        if is_waitlist_source(source):
+            await upsert_contact(email, source=source)
+            return
         st = await get_settings()
         if st["double_opt_in"]:
             # Check the address the moment it arrives: a bot or a typo'd
@@ -2085,7 +2097,9 @@ async def adm_sync(user: dict = Depends(require_admin)):
     OTP-confirmed accounts (proven)."""
     n = 0
     async for s in db.newsletter.find({}, {"_id": 0, "email": 1, "source": 1}):
-        await upsert_contact(s["email"], source=s.get("source") or "newsletter", email_consent="subscribed")
+        src = s.get("source") or "newsletter"
+        # Waitlist sign-ups asked about one launch, not the newsletter: no consent.
+        await upsert_contact(s["email"], source=src, email_consent=None if is_waitlist_source(src) else "subscribed")
         n += 1
     async for o in db.orders.find({"payment_status": "paid"}, {"_id": 0, "email": 1, "full_name": 1, "phone": 1, "email_marketing_optin": 1}):
         await upsert_contact(o.get("email", ""), name=o.get("full_name", ""), phone=o.get("phone", ""), source="checkout",
@@ -2534,21 +2548,31 @@ async def adm_send(cid: str, body: SendBody, user: dict = Depends(require_admin)
         raise HTTPException(status_code=400, detail="Add a subject and some content first")
     if c["channel"] == "whatsapp" and not c.get("wa_template"):
         raise HTTPException(status_code=400, detail="Choose the approved WhatsApp template first")
+    return await queue_send(c, body.schedule_at, by_email=user.get("email", ""), by_role=user.get("role", ""),
+                            confirm_count=body.confirm_count)
+
+
+async def queue_send(c: dict, schedule_at: Optional[str], *, by_email: str, by_role: str,
+                     confirm_count: Optional[int] = None) -> dict:
+    """Start sending a draft (or scheduled) campaign: the one path for both the
+    admin's Send button and approved newsletter issues, so every send gets the
+    same checks (audience, mailbox checks, risk rules, bounce guard)."""
+    cid = c["id"]
     n = await db.mk_contacts.count_documents(await audience_filter(c))
     if not n:
         raise HTTPException(status_code=400, detail="Nobody in this audience can be sent to (no one has opted in, or all are unsubscribed / bounced)")
-    if abs(n - body.confirm_count) > max(5, n // 50):
+    if confirm_count is not None and abs(n - confirm_count) > max(5, n // 50):
         raise HTTPException(status_code=409, detail=f"The audience changed to {n} — check it again before sending")
     await _ensure_indexes()
     now = _iso()
     # Status guard: a double click can't start two preparations.
     r = await db.mk_campaigns.update_one({"id": cid, "status": {"$in": ["draft", "scheduled"]}}, {"$set": {
-        "status": "preparing", "schedule_at": body.schedule_at or "", "sent_by": user.get("email", ""), "prepare_error": "",
+        "status": "preparing", "schedule_at": schedule_at or "", "sent_by": by_email, "prepare_error": "",
         "prepare": {"started_at": now, "candidates": n, "checked": 0}, "prepare_heartbeat": now}})
     if not r.modified_count:
         raise HTTPException(status_code=409, detail="This campaign is already being sent")
-    await audit_log(db, "MARKETING_CAMPAIGN_SEND", email=user.get("email", ""), role=user.get("role", ""),
-                    meta={"campaign": cid, "channel": c["channel"], "candidates": n, "schedule_at": body.schedule_at or ""})
+    await audit_log(db, "MARKETING_CAMPAIGN_SEND", email=by_email, role=by_role,
+                    meta={"campaign": cid, "channel": c["channel"], "candidates": n, "schedule_at": schedule_at or ""})
     start_prepare(cid)
     return {"ok": True, "status": "preparing", "recipients": n}
 
@@ -2733,6 +2757,19 @@ async def marketing_tick(x_task_token: Optional[str] = Header(None)):
     return await periodic()
 
 
+async def fix_waitlist_consent() -> int:
+    """One-time correction (idempotent): earlier syncs marked waitlist sign-ups
+    as subscribed. Withdraw that consent unless they confirmed the newsletter
+    themselves (double opt-in) or opted in elsewhere since."""
+    r = await db.mk_contacts.update_many(
+        {"email_consent.status": "subscribed", "email_consent.source": {"$regex": "waitlist", "$options": "i"}},
+        {"$set": {"email_consent": _consent("none", "waitlist sign-up is not a newsletter opt-in (DPDP purpose limitation)")}})
+    if r.modified_count:
+        log.warning("marketing: withdrew %s waitlist-only marketing consents", r.modified_count)
+        await audit_log(db, "MARKETING_WAITLIST_CONSENT_FIXED", email="system", role="system", meta={"count": r.modified_count})
+    return r.modified_count
+
+
 async def periodic() -> dict:
     """Start scheduled campaigns that are due, resume ones whose sender stopped
     (e.g. a deploy), and queue the routine background work."""
@@ -2761,7 +2798,10 @@ async def periodic() -> dict:
         except Exception:  # noqa: BLE001
             log.warning("marketing: queue lag check failed", exc_info=True)
     hour = _now().strftime("%Y%m%d%H")
-    dispatch("mk_stats", dedupe=_now().strftime("%Y%m%d%H") + str(_now().minute // 10))
+    ten_min = _now().strftime("%Y%m%d%H") + str(_now().minute // 10)
+    dispatch("mk_stats", dedupe=ten_min)
+    dispatch("nl_tick", dedupe=ten_min)          # newsletter: draft / approve / send on schedule (newsletter.py)
+    dispatch("mk_waitlist_fix", dedupe=_now().strftime("%Y%m%d"))
     dispatch("mk_suppression", dedupe=hour)   # no-op unless 24h have passed
     dispatch("mk_learn", dedupe=hour)         # likewise daily
     dispatch("mk_disposable", dedupe=hour)    # weekly
@@ -2835,3 +2875,8 @@ async def _job_newsletter(p: dict) -> None:
 @_jobs.handler("mk_stats")
 async def _job_stats(p: dict) -> None:
     await refresh_recent_stats()
+
+
+@_jobs.handler("mk_waitlist_fix")
+async def _job_waitlist_fix(p: dict) -> None:
+    await fix_waitlist_consent()

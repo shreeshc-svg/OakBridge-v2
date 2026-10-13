@@ -644,6 +644,11 @@ export const mkBulkContacts = (body) => api.post("/admin/marketing/contacts/bulk
 export const mkBulkDeleteLists = (ids) => api.post("/admin/marketing/lists/bulk-delete", { ids }).then((r) => r.data);
 export const mkBulkDeleteCampaigns = (ids) => api.post("/admin/marketing/campaigns/bulk-delete", { ids }).then((r) => r.data);
 export const mkDisposableRefresh = () => api.post("/admin/marketing/disposable-refresh", null, { timeout: 60000 }).then((r) => r.data);
+export const nlOverview = () => api.get("/admin/marketing/newsletter").then((r) => r.data);
+export const nlSave = (body) => api.put("/admin/marketing/newsletter", body).then((r) => r.data);
+export const nlDraftNow = () => api.post("/admin/marketing/newsletter/draft-now").then((r) => r.data);
+export const nlApprove = (id) => api.post(`/admin/marketing/newsletter/issues/${id}/approve`).then((r) => r.data);
+export const nlSkip = (id) => api.post(`/admin/marketing/newsletter/issues/${id}/skip`).then((r) => r.data);
 export const mkSystemHealth = () => api.get("/admin/marketing/system-health").then((r) => r.data);
 export const mkLearn = () => api.post("/admin/marketing/learn", null, { timeout: 120000 }).then((r) => r.data);
 export const mkDismissAlert = (id) => api.post(`/admin/marketing/alerts/${id}/dismiss`).then((r) => r.data);

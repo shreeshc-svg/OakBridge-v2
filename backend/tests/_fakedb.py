@@ -172,6 +172,21 @@ class Coll:
             n += r.modified_count
         return Result(n)
 
+    async def create_index(self, *a, **k):
+        return None
+
+    async def delete_one(self, q):
+        for i, d in enumerate(self.docs):
+            if _match(d, q):
+                del self.docs[i]
+                return Result(1)
+        return Result(0)
+
+    async def delete_many(self, q):
+        before = len(self.docs)
+        self.docs = [d for d in self.docs if not _match(d, q)]
+        return Result(before - len(self.docs))
+
     async def count_documents(self, q):
         return len([d for d in self.docs if _match(d, q)])
 
