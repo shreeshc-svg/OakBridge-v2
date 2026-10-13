@@ -86,6 +86,7 @@ Every 5 minutes
 - **Who gets it:** only contacts with marketing consent (all, or newsletter sign-ups only). Waitlist ("notify me when … launches") sign-ups are NOT newsletter consent; earlier syncs that marked them subscribed are corrected automatically (logged).
 - **Notice at sign-up:** the footer form now says what the newsletter is, that people confirm by email, can unsubscribe anytime, with a Privacy Policy link.
 - Runs on the background worker (`nl_tick` every ~10 minutes); "Build the next issue now" previews it early.
+- **After a deploy:** if the website restarts before the worker, the worker (still the old build) hands unknown jobs back instead of failing them. Only if no worker can run a job for an hour does the dashboard say "could not run … is the worker deployed with the latest code?" → Render → oakbridge-worker → Manual Deploy → Deploy latest commit.
 
 ## 5. Safety rails (automatic)
 

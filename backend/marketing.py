@@ -796,8 +796,12 @@ def dispatch(kind: str, payload: Optional[dict] = None, *, dedupe: Optional[str]
 
 
 async def job_dead_alert(job: dict, error: str) -> None:
-    await raise_alert("job", f"Background task '{job.get('kind')}' failed 3 times and was stopped: {error.splitlines()[0][:150]}",
-                      key=f"job:{job.get('kind')}")
+    first = error.splitlines()[0][:150]
+    if first.startswith("no worker could run"):
+        msg = f"Background task '{job.get('kind')}' could not run: {first}"
+    else:
+        msg = f"Background task '{job.get('kind')}' failed 3 times and was stopped: {first}"
+    await raise_alert("job", msg, key=f"job:{job.get('kind')}")
 
 
 def kick_validation() -> None:

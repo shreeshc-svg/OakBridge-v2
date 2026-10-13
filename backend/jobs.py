@@ -38,6 +38,7 @@ log = logging.getLogger("oakbridge.jobs")
 BACKOFF = (30, 120, 600)          # seconds before retry 1, 2, 3
 DEFAULT_LEASE = 120               # seconds a claim is valid without renewal
 HEARTBEAT_STALE = 180             # a worker silent this long is considered gone
+UNKNOWN_KIND_GRACE = 3600         # how long a job nobody recognises waits for a newer worker
 _HANDLERS: dict[str, Callable[[dict], Awaitable[Any]]] = {}
 
 
@@ -138,7 +139,21 @@ async def run_job(db, job: dict, worker_id: str, *, lease: int = DEFAULT_LEASE,
     """Run one claimed job with lease renewal. Returns done | queued | dead."""
     fn = _HANDLERS.get(job["kind"])
     if fn is None:
-        return await fail(db, {**job, "attempts": job.get("max_attempts", 3)}, worker_id, f"no handler for {job['kind']}", on_dead)
+        # This worker doesn't know the job — almost always version skew during a
+        # deploy (the website restarted with new code first, this worker is
+        # still the old build). Hand it back untouched for an up-to-date worker
+        # instead of killing it; park it only if nobody could run it for an hour.
+        created = job.get("created_at")
+        if created is not None and created.tzinfo is None:
+            created = created.replace(tzinfo=timezone.utc)
+        if created is None or now() - created < timedelta(seconds=UNKNOWN_KIND_GRACE):
+            await db.jobs.update_one({"id": job["id"], "worker": worker_id},
+                                     {"$set": {"status": "queued", "run_at": now() + timedelta(seconds=60),
+                                               "error": f"worker {worker_id} has no handler (older build?)"},
+                                      "$inc": {"attempts": -1}, "$unset": {"lease_until": ""}})
+            return "queued"
+        return await fail(db, {**job, "attempts": job.get("max_attempts", 3)}, worker_id,
+                          f"no worker could run '{job['kind']}' for an hour — is the worker deployed with the latest code?", on_dead)
     stop = asyncio.Event()
 
     async def keep_alive():

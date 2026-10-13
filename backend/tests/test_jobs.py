@@ -111,10 +111,26 @@ async def main():
     jobs.renew = orig
     check(st == "done" and renewed, "lease renewed while a slow job runs")
 
-    print("-- unknown kind --")
+    print("-- unknown kind (a worker on an older build) --")
     jid = await jobs.enqueue(db, "t_nobody")
-    st = await jobs.run_job(db, await jobs.claim(db, "w1"), "w1")
-    check(st == "dead", "job with no handler parks immediately (no retry loop)")
+    j = await jobs.claim(db, "w1")
+    st = await jobs.run_job(db, j, "w1")
+    doc = next(d for d in db.jobs.docs if d["id"] == jid)
+    check(st == "queued" and doc["status"] == "queued" and doc["attempts"] == 0, "fresh unknown job is handed back, attempt not counted")
+    check(await jobs.claim(db, "w1") is None, "and waits ~60 s before anyone retries it")
+
+    @jobs.handler("t_nobody")
+    async def late(p):
+        ran.append("late")
+
+    doc["run_at"] = jobs.now() - timedelta(seconds=1)
+    st = await jobs.run_job(db, await jobs.claim(db, "w2"), "w2")
+    check(st == "done" and ran[-1] == "late", "an up-to-date worker then runs it")
+    old = await jobs.enqueue(db, "t_ghost")
+    od = next(d for d in db.jobs.docs if d["id"] == old)
+    od["created_at"] = jobs.now() - timedelta(seconds=jobs.UNKNOWN_KIND_GRACE + 5)
+    st = await jobs.run_job(db, await jobs.claim(db, "w1"), "w1", on_dead=on_dead)
+    check(st == "dead" and "no worker could run" in od.get("error", ""), "unknown for over an hour -> parked with a clear reason")
 
     print("-- heartbeat --")
     check(not await jobs.worker_alive(db), "no heartbeat -> not alive")
