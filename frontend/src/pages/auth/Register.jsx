@@ -9,6 +9,11 @@ import { useFormShield, HoneypotField } from "../../lib/formShield";
 export default function Register() {
     const { website, setWebsite, shield } = useFormShield();
     const [form, setForm] = useState({ name: "", email: "", phone: "", password: "" });
+    // DPDP Act 2023: consent to use the sign-up details is a separate, unticked
+    // box the person ticks themselves; marketing is a second, optional box —
+    // never bundled with the account consent. The server re-checks both.
+    const [agreed, setAgreed] = useState(false);
+    const [marketing, setMarketing] = useState(false);
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
     const { register } = useAuth();
@@ -19,9 +24,18 @@ export default function Register() {
     const onSubmit = async (e) => {
         e.preventDefault();
         setError("");
+        if (!agreed) {
+            setError("Please tick the box to agree to the Terms and Privacy Policy.");
+            return;
+        }
         setLoading(true);
         try {
-            const user = await register({ ...form, ...shield() });
+            const user = await register({
+                ...form,
+                consent_account: true,
+                email_marketing_optin: marketing,
+                ...shield(),
+            });
             toast.success(`Welcome to Oakbridge, ${user.name.split(" ")[0]}.`);
             nav(from, { replace: true });
         } catch (err) {
@@ -116,6 +130,51 @@ export default function Register() {
                             />
                         </div>
 
+                        <label
+                            htmlFor="register-consent"
+                            className="flex items-start gap-3 text-xs text-[#4B5563] cursor-pointer leading-relaxed"
+                        >
+                            <input
+                                id="register-consent"
+                                type="checkbox"
+                                checked={agreed}
+                                onChange={(e) => setAgreed(e.target.checked)}
+                                data-testid="register-consent"
+                                className="mt-0.5 accent-[#002B5C] w-4 h-4 flex-shrink-0"
+                            />
+                            <span>
+                                I agree to the{" "}
+                                <Link to="/terms" target="_blank" rel="noopener" className="text-[#002B5C] underline">
+                                    Terms &amp; Conditions
+                                </Link>{" "}
+                                and{" "}
+                                <Link to="/privacy" target="_blank" rel="noopener" className="text-[#002B5C] underline">
+                                    Privacy Policy
+                                </Link>
+                                , and I consent to Oakbridge Publishing using my name, email and phone number to
+                                create and run my account — verifying it, handling my orders and delivery, and
+                                support. I can withdraw this consent at any time by emailing info@oakbridge.in
+                                (Privacy Policy, section 3).
+                            </span>
+                        </label>
+                        <label
+                            htmlFor="register-marketing"
+                            className="flex items-start gap-3 text-xs text-[#4B5563] cursor-pointer leading-relaxed"
+                        >
+                            <input
+                                id="register-marketing"
+                                type="checkbox"
+                                checked={marketing}
+                                onChange={(e) => setMarketing(e.target.checked)}
+                                data-testid="register-marketing"
+                                className="mt-0.5 accent-[#002B5C] w-4 h-4 flex-shrink-0"
+                            />
+                            <span>
+                                Optional: email me about new books, events and offers. We'll send a confirmation
+                                email first; unsubscribe any time.
+                            </span>
+                        </label>
+
                         {error && (
                             <div
                                 data-testid="register-error"
@@ -127,7 +186,7 @@ export default function Register() {
 
                         <button
                             type="submit"
-                            disabled={loading}
+                            disabled={loading || !agreed}
                             data-testid="register-submit"
                             className="w-full bg-[#002B5C] text-[#FFFFFF] py-4 text-sm font-medium hover:bg-[#001F42] transition-colors disabled:opacity-60"
                         >

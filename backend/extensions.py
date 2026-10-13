@@ -78,6 +78,13 @@ class UserCreate(BaseModel):
     website: Optional[str] = ""
     # Milliseconds between the form rendering and being submitted.
     form_ms: Optional[int] = None
+    # DPDP Act 2023 s.6: consent to process the sign-up details must be a
+    # clear affirmative action — the unticked box on the sign-up form. Checked
+    # again here so no client (old cached bundle, script) can skip it.
+    consent_account: bool = False
+    # Separate, optional and unticked: marketing is a different purpose and
+    # may not be bundled with the account consent (s.6(1) "specified purpose").
+    email_marketing_optin: bool = False
 
 
 class UserLogin(BaseModel):
@@ -451,6 +458,18 @@ async def ensure_indexes():
 auth_router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
+def _signup_consents(payload: "UserCreate", now: str) -> dict:
+    from legal_defaults import _UPDATED_DPDP
+    rec = {"account": {"given": True, "at": now, "source": "register",
+                       "purpose": "create and run the account: verification, orders, delivery, support",
+                       "policy_version": _UPDATED_DPDP}}
+    if payload.email_marketing_optin:
+        rec["email_marketing"] = {"given": True, "at": now, "source": "register",
+                                  "purpose": "emails about new books, events and offers",
+                                  "policy_version": _UPDATED_DPDP}
+    return rec
+
+
 @auth_router.post("/register", response_model=AuthResponse)
 async def register(payload: UserCreate, request: Request):
     from antispam import screen, record_rejection, normalise_email
@@ -479,6 +498,12 @@ async def register(payload: UserCreate, request: Request):
         # and it tells a script nothing it did not already know.
         raise HTTPException(status_code=429, detail="Too many attempts. Please try again later.")
 
+    if not payload.consent_account:
+        raise HTTPException(
+            status_code=400,
+            detail="Please tick the box to agree to the Terms and Privacy Policy — we need your consent to create the account.",
+        )
+
     existing = await db.users.find_one({"email": email})
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -505,12 +530,28 @@ async def register(payload: UserCreate, request: Request):
         "otp_hash": hash_password(otp),
         "otp_expires_at": (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat(),
         "otp_attempts": 0,
+        # Proof of consent (DPDP s.6(10): the business must be able to show
+        # when and to what the person agreed). The policy version is the
+        # "last updated" date of the Privacy Policy/Terms in force at sign-up.
+        "consents": _signup_consents(payload, now),
+        "email_marketing_optin": bool(payload.email_marketing_optin),
     }
     await db.users.insert_one({**doc})
     # Logged right after the insert, before the OTP and welcome mail: those are
     # best-effort and swallow their own failures, so hanging the audit line off
     # them would lose the record of accounts that were genuinely created.
-    await audit_log(db, REGISTER, email=email, role="customer", meta={"name": doc["name"]})
+    await audit_log(db, REGISTER, email=email, role="customer",
+                    meta={"name": doc["name"], "consent_account": True,
+                          "email_marketing_optin": doc["email_marketing_optin"],
+                          "policy_version": doc["consents"]["account"]["policy_version"]})
+    if doc["email_marketing_optin"]:
+        # Same path as the footer newsletter form: double opt-in confirmation
+        # email, address check, consent stored on the marketing contact.
+        try:
+            from marketing import on_newsletter
+            await on_newsletter(email, "account sign-up")
+        except Exception:  # noqa: BLE001 — the account exists; marketing is best-effort
+            logging.getLogger(__name__).exception("marketing opt-in at sign-up failed for %s", email)
     try:
         from sms import send_otp_sms, sms_configured
         if sms_configured():
