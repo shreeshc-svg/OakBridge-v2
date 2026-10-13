@@ -54,6 +54,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 
 import rbac
+import order_stock
 import warehouse_core as core
 from audit import audit_log
 from extensions import _notify_back_in_stock, db, get_current_user, require_admin, require_superadmin
@@ -73,6 +74,7 @@ LIVE_STATUSES = ["confirmed", "awaiting_approval"]
 TAKEN_STATUSES = LIVE_STATUSES + ["sent_back"]
 TEXTRACT_REGION = os.environ.get("TEXTRACT_REGION") or os.environ.get("S3_REGION") or "us-east-1"
 
+NOT_COUNTED = ("hamper", "pack")
 IN_REASONS = {"printer", "return", "correction_in", "opening"}
 OUT_REASONS = {"damaged", "sample", "author_copy", "sale_offline", "correction_out"}
 
@@ -122,6 +124,7 @@ async def _apply(book_id: str, qty: int, reason: str, *, actor: dict, doc_id: st
         inc["stock"] = qty
     await db.books.update_one({"id": book_id}, {"$inc": inc})
     released = False
+    filled = {"filled": [], "copies": 0}
     if touch and qty > 0:
         fresh = await db.books.find_one({"id": book_id}, {"_id": 0})
         # Copies have arrived: a pre-order becomes an ordinary listed book,
@@ -129,17 +132,56 @@ async def _apply(book_id: str, qty: int, reason: str, *, actor: dict, doc_id: st
         if fresh.get("coming_soon"):
             await db.books.update_one({"id": book_id}, {"$set": {"coming_soon": False}})
             released = True
-        if int(book.get("stock") or 0) <= 0 < int(fresh.get("stock") or 0) or released:
+        # Paid pre-orders and backorders get these copies first; only what is
+        # left goes on sale (order_stock.fill_waiting_orders). The warehouse
+        # count already took them off when those orders were paid.
+        filled = await order_stock.fill_waiting_orders(db, book_id, by=actor.get("email", "") or "warehouse")
+        if filled["copies"]:
+            fresh = await db.books.find_one({"id": book_id}, {"_id": 0})
+        if int(fresh.get("stock") or 0) > 0 and (int(book.get("stock") or 0) <= 0 or released):
             await _notify_back_in_stock(fresh)
     mv = {
         "id": str(uuid.uuid4()), "at": _now().isoformat(), "book_id": book_id,
         "isbn": book.get("isbn", ""), "title": (book.get("title") or "")[:120],
         "qty": qty, "reason": reason, "doc_id": doc_id, "party": party[:120], "note": note[:300],
         "mode": state["mode"], "touched_stock": touch, "released_preorder": released,
+        "filled_orders": [{"order": o, "qty": q} for o, q in filled["filled"]],
         "by": actor.get("email", ""), "undone": False,
     }
     await db.stock_movements.insert_one(dict(mv))
     return mv
+
+
+async def _not_tracked(book_ids) -> set:
+    """Hampers and packs among these ids. The warehouse counts books; a
+    hamper's contents are counted as the books they are (order_stock expands
+    them), and a pack is its own website-only stock. Counting the box as well
+    sent hamper counts below zero during the trial — and Go live copies
+    warehouse counts onto the site, so every hamper sold in the trial would
+    have shown out of stock the moment the warehouse went live."""
+    ids = list({b for b in book_ids if b})
+    if not ids:
+        return set()
+    return {b["id"] async for b in db.books.find(
+        {"id": {"$in": ids}, "product_type": {"$in": list(NOT_COUNTED)}}, {"_id": 0, "id": 1})}
+
+
+async def _below_zero(book_ids) -> list:
+    """Books among these whose warehouse count is now under 0, with how many
+    copies waiting orders account for — so the phone can say "count this"."""
+    ids = list({b for b in book_ids if b})
+    if not ids:
+        return []
+    neg = await db.books.find({"id": {"$in": ids}, "wh_stock": {"$lt": 0}},
+                              {"_id": 0, "id": 1, "title": 1, "wh_stock": 1, "stock": 1}).to_list(200)
+    if not neg:
+        return []
+    owed = await order_stock.owed_by_book(db)
+    mode = (await get_state())["mode"]
+    return [{"book_id": b["id"], "title": b.get("title", ""), "wh_stock": int(b["wh_stock"]),
+             "owed": owed.get(b["id"], 0),
+             "note": core.below_zero_note(int(b["wh_stock"]), owed.get(b["id"], 0), int(b.get("stock") or 0), mode)}
+            for b in neg]
 
 
 async def record_website_sale(order: dict, lines: list) -> None:
@@ -151,11 +193,37 @@ async def record_website_sale(order: dict, lines: list) -> None:
     try:
         if (await get_state())["mode"] == "off":
             return
+        skip = await _not_tracked(b for b, _ in lines)
         for bid, qty in lines:
+            if bid in skip:
+                continue
             await _apply(bid, -int(qty), "website_order", actor={"email": "website"},
                          doc_id=order.get("order_number", ""), touch_stock=False)
     except Exception:  # noqa: BLE001
         log.exception("warehouse: could not record website order %s", order.get("order_number"))
+
+
+async def record_fill(order: dict, book_id: str, qty: int) -> None:
+    """Copies given to a waiting order (order_stock.fill_waiting_orders).
+
+    An order paid during the trial already has its website_order movement —
+    the warehouse count took the copies off at payment. One paid BEFORE the
+    trial does not, so the opening count still includes those copies: take
+    them off now. Never raises."""
+    try:
+        if (await get_state())["mode"] == "off" or not order.get("order_number"):
+            return
+        if book_id in await _not_tracked([book_id]):
+            return
+        if await db.stock_movements.find_one(
+                {"doc_id": order["order_number"], "book_id": book_id, "reason": "website_order", "undone": False},
+                {"_id": 0, "id": 1}):
+            return
+        await _apply(book_id, -int(qty), "website_order", actor={"email": "website"},
+                     doc_id=order["order_number"], touch_stock=False,
+                     note="Order paid before the warehouse trial — copies given now")
+    except Exception:  # noqa: BLE001
+        log.exception("warehouse: could not record fill for %s", order.get("order_number"))
 
 
 RETAKE_NOTE = core.RETAKE_NOTE
@@ -178,7 +246,10 @@ async def sync_order_ledger(order: dict, *, out: bool, lines: Optional[list] = N
             {"doc_id": order["order_number"], "reason": {"$in": ["website_order", "website_return"]},
              "undone": False}, {"_id": 0, "book_id": 1, "qty": 1, "reason": 1, "note": 1}).to_list(500)
         actor = {"email": by or "website"}
-        for bid, diff in core.order_ledger_diffs(moves, lines or [], out=out).items():
+        skip = await _not_tracked([m["book_id"] for m in moves] + [b for b, _ in lines or []])
+        moves = [m for m in moves if m["book_id"] not in skip]
+        lines = [(b, q) for b, q in lines or [] if b not in skip]
+        for bid, diff in core.order_ledger_diffs(moves, lines, out=out).items():
             await _apply(bid, diff, "website_return" if diff > 0 else "website_order", actor=actor,
                          doc_id=order["order_number"], touch_stock=False,
                          # A re-take must carry RETAKE_NOTE: it is how the next
@@ -454,6 +525,17 @@ async def _create_doc(direction: str, practice: bool, file: Optional[UploadFile]
             else:
                 hdr = core.header_fields(res["text"], direction)
                 doc.update({"source": res["source"], **hdr})
+                doc["read_text"] = core.masked_text(res["text"])
+                if hdr.get("party_gstin"):
+                    # The name the office last confirmed for this GSTIN beats
+                    # whatever line the photo put after "Consignee".
+                    known = await db.warehouse_docs.find_one(
+                        {"party_gstin": hdr["party_gstin"], "direction": direction, "practice": False,
+                         "status": {"$in": TAKEN_STATUSES}, "party_name": {"$nin": ["", None]}},
+                        {"_id": 0, "party_name": 1}, sort=[("confirmed_at", -1)])
+                    if known and known["party_name"] != hdr.get("party_name"):
+                        doc["party_name_read"] = hdr.get("party_name", "")
+                        doc["party_name"] = known["party_name"]
                 doc["read_lines"] = await _suggest(res["rows"], await _catalogue())
                 if not res["rows"]:
                     doc["error"] = "No book lines could be read — enter them by hand."
@@ -475,7 +557,20 @@ async def _create_doc(direction: str, practice: bool, file: Optional[UploadFile]
                 {"_id": 0, "id": 1, "confirmed_at": 1})
             if prior:
                 doc["duplicate_of"] = prior["id"]
-        if not practice:
+        if not practice and direction != "courier" and not doc.get("duplicate_of"):
+            # No number read (most photos): a document with the same party and
+            # the same books is very likely the same invoice photographed
+            # again. Warn now; confirm asks once more before counting it.
+            sim = await _similar_doc(doc, doc.get("party_name", ""), doc.get("read_lines") or [],
+                                     statuses=TAKEN_STATUSES)
+            if sim:
+                doc["similar_to"] = sim
+            draft = await _similar_doc(doc, doc.get("party_name", ""), doc.get("read_lines") or [],
+                                       statuses=["draft"], days=1)
+            if draft:
+                doc["open_draft_of"] = {"id": draft["id"], "created_by": draft.get("created_by", ""),
+                                        "created_at": draft.get("created_at", "")}
+        if not practice and not doc.get("open_draft_of"):
             # Not blocking: the first photo may have been blurry. He is told
             # another screen has it open; the real check runs at confirm.
             open_q = [{"sha256": sha}]
@@ -492,6 +587,7 @@ async def _create_doc(direction: str, practice: bool, file: Optional[UploadFile]
     if direction == "courier" and "parcels" not in doc:
         doc["parcels"] = []
     await db.warehouse_docs.insert_one(dict(doc))
+    doc.pop("read_text", None)        # kept for diagnosis in Admin, not sent to the phone
     return doc
 
 
@@ -517,7 +613,43 @@ class ConfirmBody(BaseModel):
     party_name: Optional[str] = None
     party_kind: Optional[str] = None   # out: sale_offline | author_copy
     allow_duplicate: bool = False
+    # "Yes, this really is a second carton/bill" after the same-party,
+    # same-books warning. Narrower than allow_duplicate: it never overrides a
+    # same-file or same-number duplicate.
+    confirm_similar: bool = False
     note: Optional[str] = None
+
+
+async def _similar_doc(doc: dict, party: str, lines: list, *, statuses: list, days: int = 7) -> Optional[dict]:
+    """Another real document, same direction, same party and exactly the same
+    books and quantities, within `days` (1 day when no party is known).
+    Carton quantities are compared as invoiced, so a short-packed carton still
+    matches its earlier photo."""
+    if not core.line_set(lines):
+        return None
+    days = days if core.party_key(party) or doc.get("party_gstin") else 1
+    since = (_now() - timedelta(days=days)).isoformat()
+    when = "created_at" if statuses == ["draft"] else "confirmed_at"
+    cands = await db.warehouse_docs.find(
+        {"id": {"$ne": doc["id"]}, "direction": doc["direction"], "practice": False,
+         "status": {"$in": statuses}, when: {"$gte": since}},
+        {"_id": 0, "id": 1, "party_name": 1, "party_gstin": 1, "doc_number": 1, "status": 1,
+         "confirmed_lines": 1, "read_lines": 1, "confirmed_at": 1, "confirmed_by": 1,
+         "created_at": 1, "created_by": 1}).sort(when, -1).to_list(500)
+
+    def as_invoiced(ls):
+        return [{**ln, "qty": ln["invoiced"]} if ln.get("invoiced") is not None else ln for ln in ls or []]
+
+    me = {"direction": doc["direction"], "party_gstin": doc.get("party_gstin", ""), "party_name": party,
+          "doc_number": doc.get("doc_number", ""), "lines": as_invoiced(lines)}
+    for c in cands:
+        other = {"direction": doc["direction"], "party_gstin": c.get("party_gstin", ""),
+                 "party_name": c.get("party_name", ""), "doc_number": c.get("doc_number", ""),
+                 "lines": as_invoiced(c.get("confirmed_lines") if statuses != ["draft"] else c.get("read_lines"))}
+        if core.same_document(me, other):
+            return {k: c.get(k) for k in ("id", "party_name", "doc_number", "status", "confirmed_at",
+                                          "confirmed_by", "created_at", "created_by")}
+    return None
 
 
 async def _taken_twin(doc: dict, doc_number: str) -> Optional[dict]:
@@ -587,6 +719,18 @@ async def wh_confirm(doc_id: str, body: ConfirmBody, user: dict = Depends(requir
                 f"{twin['status'].replace('_', ' ')} by {twin.get('confirmed_by') or '?'}"
                 f"{' at ' + twin['confirmed_at'][11:16] if twin.get('confirmed_at') else ''}. "
                 "Not added again. Ask a manager if it really is a second delivery."))
+    if not doc["practice"] and not courier and not body.allow_duplicate and not body.confirm_similar:
+        sim = await _similar_doc({**doc, "doc_number": doc_number}, party,
+                                 [ln.model_dump() for ln in body.lines], statuses=TAKEN_STATUSES)
+        if sim:
+            at = (sim.get("confirmed_at") or "")
+            raise HTTPException(status_code=409, detail={
+                "code": "similar_doc", "twin": sim,
+                "msg": (f"The same books and quantities{(' for ' + sim['party_name']) if sim.get('party_name') else ''} "
+                        f"were already {'packed' if doc['direction'] == 'out' else 'received'}"
+                        f"{' by ' + sim['confirmed_by'] if sim.get('confirmed_by') else ''}"
+                        f"{' on ' + at[:10] + ' at ' + at[11:16] + ' UTC' if at else ''}. "
+                        "Is this really a second " + ("carton" if doc["direction"] == "out" else "delivery") + "?")})
     if not doc["practice"] and courier:
         read_parcels = {p["no"]: p for p in doc.get("parcels") or []}
         for p in body.parcels:
@@ -641,9 +785,13 @@ async def wh_confirm(doc_id: str, body: ConfirmBody, user: dict = Depends(requir
     }})
     await audit_log(db, "WAREHOUSE_DOC_CONFIRMED", email=user.get("email", ""), role=user.get("role", ""),
                     meta={"doc": doc_id, "direction": doc["direction"], "number": doc_number,
-                          "practice": doc["practice"], "units": sum(ln.qty for ln in kept)})
+                          "practice": doc["practice"], "units": sum(ln.qty for ln in kept),
+                          "confirmed_similar": bool(body.confirm_similar)})
+    below = []
+    if not doc["practice"] and (doc["direction"] == "out" or courier):
+        below = await _below_zero([ln.book_id for ln in kept])
     return {"ok": True, "metrics": metrics, "total_matches": total_ok, "practice": doc["practice"],
-            "awaiting_approval": needs_approval}
+            "awaiting_approval": needs_approval, "below_zero": below}
 
 
 async def _lines_view(doc: dict) -> list:
@@ -764,7 +912,7 @@ async def wh_ack(doc_id: str, body: AckBody, user: dict = Depends(require_wareho
 async def wh_get_doc(doc_id: str, _: dict = Depends(require_warehouse)):
     """Open a draft (e.g. one the office sent) on the phone."""
     doc = await db.warehouse_docs.find_one(
-        {"id": doc_id, "status": "draft", "archived": {"$ne": True}}, {"_id": 0, "read_error": 0})
+        {"id": doc_id, "status": "draft", "archived": {"$ne": True}}, {"_id": 0, "read_error": 0, "read_text": 0})
     if not doc:
         raise HTTPException(status_code=404, detail="This document is no longer waiting — pull down to refresh.")
     return doc
@@ -805,7 +953,7 @@ async def wh_move(body: MoveBody, user: dict = Depends(require_warehouse)):
         return {"ok": True, "practice": True, "book": hit}
     sign = 1 if body.reason in IN_REASONS else -1
     mv = await _apply(hit["id"], sign * body.qty, body.reason, actor=user, note=body.note or "")
-    return {"ok": True, "movement": mv}
+    return {"ok": True, "movement": mv, "below_zero": await _below_zero([hit["id"]]) if sign < 0 else []}
 
 
 @wh_router.post("/docs/{doc_id}/report")
@@ -848,7 +996,21 @@ async def adm_overview():
         for b in books if "wh_stock" in b and int(b.get("wh_stock") or 0) != int(b.get("stock") or 0)
     ]
     diffs.sort(key=lambda d: -abs(d["diff"]))
-    return {**state, "books": len(books), "differences": diffs[:300], "difference_count": len(diffs)}
+    # Below zero cannot be a shelf. Up to what waiting orders are owed it is
+    # expected (pre-orders/backorders take their copies when paid); beyond
+    # that the count is wrong and the book needs counting before Go live.
+    neg = [b for b in books if int(b.get("wh_stock") or 0) < 0]
+    below = []
+    if neg:
+        owed = await order_stock.owed_by_book(db, since=state.get("started_at"))
+        for b in sorted(neg, key=lambda x: int(x["wh_stock"])):
+            o = owed.get(b["id"], 0)
+            below.append({"id": b["id"], "title": b.get("title", ""), "isbn": b.get("isbn", ""),
+                          "wh_stock": int(b["wh_stock"]), "stock": int(b.get("stock") or 0), "owed": o,
+                          "unexplained": max(0, -int(b["wh_stock"]) - o),
+                          "note": core.below_zero_note(int(b["wh_stock"]), o, int(b.get("stock") or 0), state["mode"])})
+    return {**state, "books": len(books), "differences": diffs[:300], "difference_count": len(diffs),
+            "below_zero": below, "below_zero_unexplained": sum(1 for b in below if b["unexplained"] > 0)}
 
 
 @wh_admin_router.get("/docs")
@@ -881,7 +1043,7 @@ async def adm_docs(limit: int = 100, status: Optional[str] = None, q: Optional[s
                       {"confirmed_by": rx}, {"parcels.name": rx}, {"parcels.org": rx},
                       {"read_lines.doc_title": rx}]
     return await db.warehouse_docs.find(
-        flt, {"_id": 0, "read_error": 0}).sort("created_at", -1).to_list(min(max(limit, 1), 500))
+        flt, {"_id": 0, "read_error": 0, "read_text": 0}).sort("created_at", -1).to_list(min(max(limit, 1), 500))
 
 
 def _approval_refusal(user: dict, doc: dict) -> Optional[str]:
@@ -1180,10 +1342,23 @@ async def adm_movements(book_id: Optional[str] = None, limit: int = 200, q: Opti
 
 
 async def _reverse(mv: dict, user: dict) -> None:
-    inc = {"wh_stock": -mv["qty"]}
+    await db.books.update_one({"id": mv["book_id"]}, {"$inc": {"wh_stock": -mv["qty"]}})
     if mv.get("touched_stock"):
-        inc["stock"] = -mv["qty"]
-    await db.books.update_one({"id": mv["book_id"]}, {"$inc": inc})
+        if mv["qty"] < 0:
+            await db.books.update_one({"id": mv["book_id"]}, {"$inc": {"stock": -mv["qty"]}})
+        else:
+            # Undoing copies IN: some may already be sold or given to waiting
+            # orders. Website stock stops at 0; the warehouse count (which went
+            # down by the full amount above) shows the shortfall.
+            for _ in range(3):
+                cur = await db.books.find_one({"id": mv["book_id"]}, {"_id": 0, "stock": 1})
+                have = int((cur or {}).get("stock") or 0)
+                take = min(have, mv["qty"])
+                if take <= 0:
+                    break
+                r = await db.books.update_one({"id": mv["book_id"], "stock": have}, {"$inc": {"stock": -take}})
+                if r.modified_count == 1:
+                    break
     await db.stock_movements.update_one({"id": mv["id"]}, {"$set": {
         "undone": True, "undone_by": user.get("email", ""), "undone_at": _now().isoformat()}})
 
@@ -1316,8 +1491,25 @@ async def adm_mode(body: ModeBody, user: dict = Depends(require_superadmin)):
         if state["mode"] != "trial":
             raise HTTPException(status_code=409, detail="Start the trial first.")
         # The warehouse becomes the stock master: its counts go onto the site.
-        async for b in db.books.find({"wh_stock": {"$exists": True}}, {"_id": 0, "id": 1, "wh_stock": 1}):
-            await db.books.update_one({"id": b["id"]}, {"$set": {"stock": max(0, int(b.get("wh_stock") or 0))}})
+        # Books only — hampers and packs keep their own website stock (the
+        # warehouse never counted them; see _not_tracked).
+        #
+        # The warehouse count is already net of copies owed to waiting orders
+        # (pre-orders/backorders), while those orders still show as owed on
+        # the website side. So the site gets count + owed, and the owed
+        # copies are then handed to those orders — otherwise they would be
+        # taken off twice, once now and again when they are filled.
+        owed = await order_stock.owed_by_book(db, since=state.get("started_at"))
+        async for b in db.books.find({"wh_stock": {"$exists": True}, "product_type": {"$nin": list(NOT_COUNTED)}},
+                                     {"_id": 0, "id": 1, "wh_stock": 1}):
+            o = owed.get(b["id"], 0)
+            await db.books.update_one({"id": b["id"]},
+                                      {"$set": {"stock": max(0, int(b.get("wh_stock") or 0) + o)}})
+        # Fill every waiting order (also ones paid before the trial, which the
+        # warehouse count does not know about — record_fill takes those off).
+        # Mode is still "trial" here, so record_fill's ledger write is allowed.
+        for bid in set(owed) | set((await order_stock.owed_by_book(db)).keys()):
+            await order_stock.fill_waiting_orders(db, bid, by="go-live")
         fields = {"mode": "live", "live_at": now}
     elif body.mode == "off":
         fields = {"mode": "off"}

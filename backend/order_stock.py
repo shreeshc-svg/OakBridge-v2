@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
+from typing import Optional
 
 log = logging.getLogger(__name__)
 
@@ -128,6 +129,16 @@ async def restore_order_stock(db, order_id: str, *, by: str, why: str) -> dict:
         await sync_order_ledger(order, out=False, lines=lines, by=by, note=why)
     except Exception:  # noqa: BLE001 — stock is back; the ledger must not undo that
         log.exception("warehouse: could not record return for %s", order.get("order_number"))
+    try:
+        # Once the warehouse is live, copies coming back go to orders that are
+        # waiting for them before they go on sale again.
+        import warehouse
+        is_master = getattr(warehouse, "warehouse_is_master", None)
+        if is_master and await is_master():
+            for bid, _ in lines:
+                await fill_waiting_orders(db, bid, by=by or "cancellation")
+    except Exception:  # noqa: BLE001
+        log.exception("stock: could not fill waiting orders after cancelling %s", order.get("order_number"))
     return {"copies": sum(q for _, q in lines), "lines": lines}
 
 
@@ -164,3 +175,114 @@ async def retake_order_stock(db, order_id: str, *, by: str) -> dict:
     except Exception:  # noqa: BLE001
         log.exception("warehouse: could not record re-take for %s", order.get("order_number"))
     return {"copies": sum(q for _, q in taken), "short": short}
+
+
+# --------------------------------------------------------------------------
+# Copies owed to paid orders that are still waiting (pre-orders, backorders)
+# --------------------------------------------------------------------------
+# A paid pre-order takes nothing off website stock (there is none yet) and a
+# backorder takes only what was there. Before this, when the copies arrived
+# the whole delivery went on sale: 150 printed with 10 pre-orders waiting
+# showed 150 on the site although only 140 were free. Now arriving copies fill
+# the waiting orders first, oldest first, and only the rest goes on sale.
+#
+# Only orders that carry stock_taken (everything paid since that field was
+# added) are considered: for older ones what was taken cannot be known.
+
+NOT_WAITING = ["shipped", "delivered", "cancelled"]
+
+
+def waiting_filter() -> dict:
+    """Paid, not shipped/cancelled/put back, not yet on a courier sheet."""
+    q = {"payment_status": "paid", "stock_decremented": True, "stock_restored": {"$ne": True},
+         "status": {"$nin": NOT_WAITING}, "warehouse_doc_id": {"$in": [None, ""]},
+         "stock_taken": {"$exists": True}}
+    return q
+
+
+async def order_owed(db, order: dict) -> dict:
+    """{book_id: copies this order bought but did not take off stock}."""
+    want: dict = {}
+    for bid, q in await expand_order_lines(db, order.get("items")):
+        want[bid] = want.get(bid, 0) + int(q)
+    for ln in order.get("stock_taken") or []:
+        if ln.get("book_id") in want:
+            want[ln["book_id"]] -= int(ln.get("qty") or 0)
+    return {b: q for b, q in want.items() if q > 0}
+
+
+async def owed_by_book(db, limit: int = 2000, since: Optional[str] = None) -> dict:
+    """{book_id: copies owed to waiting orders} — paid since `since` (ISO
+    time) when given: only those are already off the warehouse count."""
+    out: dict = {}
+    q = waiting_filter()
+    if since:
+        q["created_at"] = {"$gte": since}
+    orders = await db.orders.find(q, {"_id": 0, "id": 1, "items": 1, "stock_taken": 1}) \
+        .sort("created_at", 1).to_list(limit)
+    for o in orders:
+        for bid, q in (await order_owed(db, o)).items():
+            out[bid] = out.get(bid, 0) + q
+    return out
+
+
+async def fill_waiting_orders(db, book_id: str, *, by: str = "stock-arrived") -> dict:
+    """Copies of book_id have become available: give them to waiting orders,
+    oldest first, before anyone else can buy them. Returns
+    {"filled": [(order_number, qty)], "copies": n}.
+
+    Safe to run twice and concurrently: each order's stock_taken is only
+    replaced if it is still exactly what was read (compare-and-set), and the
+    copies come off with the same guarded decrement as a sale, so stock never
+    goes below zero and no copy is given to two orders.
+    """
+    filled: list = []
+    orders = await db.orders.find(
+        {**waiting_filter(), "$or": [{"items.book_id": book_id}, {"backorder_items": book_id}]},
+        {"_id": 0, "id": 1, "order_number": 1, "items": 1, "stock_taken": 1, "backorder_items": 1},
+    ).sort("created_at", 1).to_list(500)
+    # Orders that hold the book only inside a hamper are found through the hamper.
+    hamper_ids = [h["id"] for h in await db.books.find(
+        {"product_type": "hamper", "hamper_items.book_id": book_id}, {"_id": 0, "id": 1}).to_list(200)]
+    if hamper_ids:
+        seen = {o["id"] for o in orders}
+        more = await db.orders.find(
+            {**waiting_filter(), "items.book_id": {"$in": hamper_ids}},
+            {"_id": 0, "id": 1, "order_number": 1, "items": 1, "stock_taken": 1, "backorder_items": 1},
+        ).sort("created_at", 1).to_list(500)
+        orders += [o for o in more if o["id"] not in seen]
+    for o in orders:
+        owed = (await order_owed(db, o)).get(book_id, 0)
+        if owed <= 0:
+            continue
+        book = await db.books.find_one({"id": book_id}, {"_id": 0, "stock": 1})
+        have = int((book or {}).get("stock") or 0)
+        give = min(owed, have)
+        if give <= 0:
+            break
+        res = await db.books.update_one({"id": book_id, "stock": {"$gte": give}}, {"$inc": {"stock": -give}})
+        if res.modified_count != 1:
+            break                     # sold meanwhile; the next arrival tries again
+        old = o.get("stock_taken") or []
+        new = old + [{"book_id": book_id, "qty": give}]
+        upd = {"$set": {"stock_taken": new, "stock_filled_at": _now(), "stock_filled_by": by}}
+        if give >= owed:
+            upd["$pull"] = {"backorder_items": book_id}
+        claim = await db.orders.update_one({"id": o["id"], "stock_taken": old}, upd)
+        if claim.modified_count != 1:
+            # Another run filled this order first: hand the copies back.
+            await db.books.update_one({"id": book_id}, {"$inc": {"stock": give}})
+            continue
+        filled.append((o.get("order_number") or o["id"], give))
+        try:
+            # An order paid before the warehouse trial has no movement for
+            # these copies; the warehouse records them now (no-op otherwise).
+            import warehouse
+            hook = getattr(warehouse, "record_fill", None)
+            if hook:
+                await hook(o, book_id, give)
+        except Exception:  # noqa: BLE001 — the order has its copies; the ledger must not undo that
+            log.exception("warehouse: could not record fill of %s for %s", book_id, o.get("order_number"))
+    if filled:
+        log.info("stock: %s copies of %s went to waiting orders %s", sum(q for _, q in filled), book_id, filled)
+    return {"filled": filled, "copies": sum(q for _, q in filled)}

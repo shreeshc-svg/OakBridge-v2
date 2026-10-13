@@ -242,6 +242,52 @@ photo = "TAX INVOICE\nConsignee (Ship to)\nTerms of Delivery\nDispatched through
 check(w.header_fields(photo, "out")["party_name"] == "Acme Book House",
       "column label after 'Consignee' is skipped ('Terms of Delivery' is not a party)")
 
+print("-- party and number from photos (13 Oct 2026 misreads) --")
+# Textract put the "Dispatched through" value straight after Consignee.
+ph = ("TAX INVOICE\nConsignee (Ship to)\nDispatched through\nAmerican Transport\n"
+      "Thakkar Law House\nInvoice No.\nDated\nP/2026-27/0611\n13-Oct-26")
+h = w.header_fields(ph, "out")
+check(h["party_name"] == "Thakkar Law House", f"transport company is not the party ({h['party_name']!r})")
+check(h["doc_number"] == "P/2026-27/0611", f"number found past the 'Dated' label ({h['doc_number']!r})")
+h = w.header_fields("Consignee (Ship to)\nABC Transports\nAnsari Road,\nM & J Services\n4762/23 Ansari Road", "out")
+check(h["party_name"] == "M & J Services", f"street line and transporter skipped ({h['party_name']!r})")
+h = w.header_fields("Consignee (Ship to) Pooja Law House\nKalbadevi Road", "out")
+check(h["party_name"] == "Pooja Law House", "party on the same line as the label")
+h = w.header_fields("Consignee (Ship to)\nMall Road Book Depot\n12 Mall Road", "out")
+check(h["party_name"] == "Mall Road Book Depot", "a shop with 'Road' in its name is still a shop")
+h = w.header_fields("Consignee (Ship to)\nTerms of Delivery\n110002\nBuyer (Bill to)\nArora Book Agency", "out")
+check(h["party_name"] == "Arora Book Agency", "falls back to Buyer (Bill to) when Consignee gives nothing")
+h = w.header_fields("Invoice No.\n13-Oct-26\nP/2026-27/0700", "out")
+check(h["doc_number"] == "P/2026-27/0700", f"a date is never taken as the invoice number ({h['doc_number']!r})")
+h = w.header_fields("Invoice No.\nDated\n2026-27\n13-Oct-26", "out")
+check(h["doc_number"] == "", "a financial year alone is not a number")
+h = w.header_fields("OAK BRIDGE PUBLISHING PVT LTD\nSaurabh Printers Pvt Ltd\nInvoice No. S/12/2026-27", "in")
+check(h["party_name"] == "Saurabh Printers Pvt Ltd", f"our own name with a space is not the printer ({h['party_name']!r})")
+check(w.is_us("Oak-Bridge Publishing") and not w.is_us("Oak Tree Books"), "is_us")
+
+print("-- near-duplicates --")
+A = {"direction": "out", "party_name": "M/s. Commercial House", "lines": [{"book_id": "a", "qty": 2}, {"book_id": "b", "qty": 1}]}
+B = {"direction": "out", "party_name": "commercial house", "lines": [{"book_id": "b", "qty": 1}, {"book_id": "a", "qty": 2}]}
+check(w.same_document(A, B), "same party (case, M/s.) and same books in any order = same document")
+check(not w.same_document(A, {**B, "lines": [{"book_id": "a", "qty": 3}, {"book_id": "b", "qty": 1}]}), "different quantity = different")
+check(not w.same_document(A, {**B, "party_name": "Arora Book Agency"}), "different party = different")
+check(not w.same_document({**A, "doc_number": "P/1"}, {**B, "doc_number": "P/2"}), "two different numbers are never the same")
+check(w.same_document({**A, "party_gstin": "07AAAAA0000A1Z5"}, {**B, "party_name": "x", "party_gstin": "07AAAAA0000A1Z5"}),
+      "same GSTIN beats a differently read name")
+check(not w.same_document({**A, "lines": []}, {**B, "lines": []}), "no lines = never a match")
+check(w.line_set([{"book_id": "a", "qty": 1, "include": False}, {"book_id": "a", "qty": 2}]) == [("a", 2)], "unticked lines ignored")
+
+print("-- below zero --")
+check("fine until" in w.below_zero_note(-3, 3, 0, "live"), "fully owed -> expected")
+check("printer bill" in w.below_zero_note(-11, 11, 47, "trial"), "owed but the sheet has copies -> enter the printer bill")
+n = w.below_zero_note(-11, 4, 0, "trial")
+check("7 more copies" in n and "Count" in n, f"unexplained part named ({n})")
+check(w.below_zero_note(0, 0, 0, "trial") == "", "zero is not below zero")
+
+print("-- read text kept for diagnosis --")
+m = w.masked_text("A/c No 50200012345678 ISBN 9788169999090 IFSC HDFC0001234")
+check("50200012345678" not in m and "9788169999090" in m, f"account number masked, ISBN kept ({m})")
+
 print("-- helpers --")
 check(w.isbn13_valid("9788169999090") and not w.isbn13_valid("9788196413513"), "ISBN check digit")
 check(w.norm_isbn("978-81-6999-912-0") == "9788169999120", "hyphenated ISBN normalised")

@@ -114,7 +114,7 @@ function TrialTab({ canSwitch }) {
                         )}
                         {ov.mode === "trial" && (
                             <button type="button" className="bg-[#15803D] text-white px-4 py-2 text-sm" data-testid="wh-go-live"
-                                onClick={() => setMode("live", `Go live?\n\n• Website stock is replaced by the warehouse counts (${ov.difference_count} books differ today).\n• The Google-sheet sync stops.\n• From now on stock changes only through the warehouse screen and website orders.`)}>
+                                onClick={() => setMode("live", `Go live?\n\n• Website stock is replaced by the warehouse counts (${ov.difference_count} books differ today).${ov.below_zero_unexplained ? `\n• ⚠️ ${ov.below_zero_unexplained} book(s) have a warehouse count below zero that waiting orders do not explain — count them first (list below).` : ""}\n• Copies owed to paid pre-orders/backorders are given to those orders first.\n• Hampers and packs keep their own website stock.\n• The Google-sheet sync stops.\n• From now on stock changes only through the warehouse screen and website orders.`)}>
                                 Go live
                             </button>
                         )}
@@ -127,6 +127,30 @@ function TrialTab({ canSwitch }) {
                     </div>
                 ) : <p className="mt-3 text-xs text-[#4B5563]">Only a superadmin can start, go live or stop.</p>}
             </div>
+
+            {ov.mode !== "off" && (ov.below_zero || []).length > 0 && (
+                <div className={`border-2 bg-white p-5 ${ov.below_zero_unexplained ? "border-[#CC0033]" : "border-[#F59E0B]"}`} data-testid="wh-below-zero">
+                    <h2 className="font-serif text-2xl text-[#002B5C]">Below zero — {ov.below_zero.length} book{ov.below_zero.length === 1 ? "" : "s"}</h2>
+                    <p className="text-sm text-[#4B5563] mt-1">
+                        A shelf can't hold fewer than 0 copies. Paid pre-orders and backorders take their copies off the count when they are paid, so a count
+                        below zero is expected up to what those orders are owed. Anything beyond that is a counting mistake: count the book and save a correction.
+                    </p>
+                    <table className="mt-3 w-full text-sm">
+                        <thead><tr className="text-left text-[#4B5563]"><th className="py-1">Book</th><th className="text-right">Warehouse</th><th className="text-right">Owed to orders</th><th className="text-right">Website</th><th className="pl-4">What to do</th></tr></thead>
+                        <tbody>
+                            {ov.below_zero.map((b) => (
+                                <tr key={b.id} className="border-t border-[#E5E7EB] align-top">
+                                    <td className="py-1 pr-2">{b.title}<div className="font-mono text-xs text-[#4B5563]">{b.isbn}</div></td>
+                                    <td className="text-right font-mono text-[#CC0033]">{b.wh_stock}</td>
+                                    <td className="text-right font-mono">{b.owed}</td>
+                                    <td className="text-right font-mono">{b.stock}</td>
+                                    <td className={`pl-4 ${b.unexplained ? "text-[#CC0033]" : "text-[#4B5563]"}`}>{b.note}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
 
             {ov.mode !== "off" && (
                 <div className="border border-[#E5E7EB] bg-white p-5" data-testid="wh-compare">
@@ -284,6 +308,17 @@ function DocsTab({ status = null, onChange = () => {}, canDelete = false }) {
                     </div>
                     {open.archived && (
                         <div className="border border-[#CC0033] text-[#CC0033] p-2 text-xs">Archived {when(open.archived_at)} by {open.archived_by}{open.status === "undone" ? " — its stock changes were reversed" : ""}.</div>
+                    )}
+                    {open.party_name_read && (
+                        <div className="text-xs text-[#4B5563]" data-testid="wh-party-memory">
+                            Party taken from earlier documents with the same GSTIN — the photo read “{open.party_name_read}”.
+                        </div>
+                    )}
+                    {open.read_text && (
+                        <details className="text-xs" data-testid="wh-read-text">
+                            <summary className="cursor-pointer text-[#4B5563]">What the system read (for fixing misreads; account numbers masked)</summary>
+                            <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap bg-[#F9FAFB] border border-[#E5E7EB] p-2">{open.read_text}</pre>
+                        </details>
                     )}
                     {open.lines_edited_at && (
                         <div className="text-xs text-[#B4750F]">Lines corrected {when(open.lines_edited_at)} by {open.lines_edited_by}: “{open.lines_edit_note}”</div>

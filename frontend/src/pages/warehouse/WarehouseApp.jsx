@@ -1,6 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
+
+// A count that went below zero after packing/removing books: tell the person
+// holding the phone which books to count, while they are standing there.
+const warnBelowZero = (list) => {
+    (list || []).forEach((b) => toast.warning(`${b.title}: warehouse count is now ${b.wh_stock}. ${b.note}`, { duration: 12000 }));
+};
+// The server refuses a document with the same party and the same books as
+// one already done (two photos of one invoice have nothing else in common
+// when no number was read). Ask once; "yes" sends confirm_similar.
+const isSimilarDoc = (e) => e?.response?.status === 409 && e?.response?.data?.detail?.code === "similar_doc";
 import { ArrowLeft, Camera, FileText, PackagePlus, PackageMinus, Search, ScanBarcode, Truck } from "lucide-react";
 import {
     whState, whLookup, whBooks, whUploadDoc, whConfirmDoc, whReport, whMove, whDocFile, whInbox, whAck, whReopen, whCancelledParcel, whGetDoc,
@@ -336,18 +346,27 @@ function DocFlow({ direction, practice, onDone, initialDoc = null }) {
             send = lines.map((l) => (l.include && l.book_id ? { ...l, invoiced: Number(l.qty) || 0, qty: l.packed } : l));
         }
         setBusy(true);
+        const body = {
+            lines: send.map((l) => ({
+                line_no: l.line_no, book_id: l.book_id, qty: Number(l.qty) || 0, include: !!l.include,
+                invoiced: l.invoiced ?? null,
+            })),
+            doc_number: head.doc_number, party_name: head.party_name,
+            party_kind: isOut ? head.party_kind : undefined,
+        };
         try {
-            const res = await whConfirmDoc(doc.id, {
-                lines: send.map((l) => ({
-                    line_no: l.line_no, book_id: l.book_id, qty: Number(l.qty) || 0, include: !!l.include,
-                    invoiced: l.invoiced ?? null,
-                })),
-                doc_number: head.doc_number, party_name: head.party_name,
-                party_kind: isOut ? head.party_kind : undefined,
-            });
+            let res;
+            try {
+                res = await whConfirmDoc(doc.id, body);
+            } catch (e) {
+                if (!isSimilarDoc(e)) throw e;
+                if (!window.confirm(`${formatApiError(e)}\n\nOK = yes, count it as a second ${isOut ? "carton" : "delivery"}.\nCancel = no, it is the same one (nothing is counted).`)) return;
+                res = await whConfirmDoc(doc.id, { ...body, confirm_similar: true });
+            }
             toast.success(res.practice ? "Practice saved — stock not changed."
                 : res.awaiting_approval ? "Carton packed. Waiting for the office to approve — don't ship yet."
                 : "Synced. Stock updated.");
+            warnBelowZero(res.below_zero);
             onDone();
         } catch (e) {
             toast.error(formatApiError(e));
@@ -410,6 +429,12 @@ function DocFlow({ direction, practice, onDone, initialDoc = null }) {
             {doc.duplicate_of && (
                 <div className="border-2 border-[#CC0033] bg-white p-3 text-[#CC0033] font-medium">
                     ⚠️ This {isOut ? "invoice" : "bill"} is already done (packed, waiting for approval, or sent back — use “Pack again” on the home screen for that one). It will not be added twice; ask your manager if it really is a second delivery.
+                </div>
+            )}
+            {!doc.duplicate_of && doc.similar_to && (
+                <div className="border-2 border-[#F59E0B] bg-white p-3 text-[#B4750F] font-medium" data-testid="wh-similar">
+                    ⚠️ Looks like a {isOut ? "carton" : "bill"} already done: same {doc.similar_to.party_name ? `party (${doc.similar_to.party_name})` : "party"} and the same books,
+                    {doc.similar_to.confirmed_by ? ` by ${doc.similar_to.confirmed_by}` : ""}. If it is the same paper photographed again, stop here.
                 </div>
             )}
             {doc.error && <div className="border border-[#F59E0B] bg-white p-3 text-sm">{doc.error}</div>}
@@ -578,6 +603,7 @@ function CourierFlow({ practice, onDone, initialDoc = null }) {
                 })),
             });
             toast.success(res.practice ? "Practice saved — stock not changed." : `Done. ${freeCopies} free copies removed from stock.`);
+            warnBelowZero(res.below_zero);
             onDone();
         } catch (e) {
             toast.error(formatApiError(e));
@@ -697,8 +723,9 @@ function SingleMove({ practice }) {
     const save = async () => {
         setBusy(true);
         try {
-            await whMove({ code: found.book.isbn, qty: Number(qty), reason, note, practice });
+            const res = await whMove({ code: found.book.isbn, qty: Number(qty), reason, note, practice });
             toast.success(practice ? "Practice — not saved to stock." : "Saved.");
+            warnBelowZero(res?.below_zero);
             setFound(null); setQty(1); setNote("");
         } catch (e) { toast.error(formatApiError(e)); } finally { setBusy(false); }
     };

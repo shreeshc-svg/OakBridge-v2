@@ -230,22 +230,32 @@ async def task_inventory_sync(x_task_token: Optional[str] = Header(None)):
 
 @inventory_router.get("/admin/inventory/sold-today")
 async def admin_sold_today(_: dict = Depends(require_admin)):
-    """Units sold online since UTC midnight, per title — to reconcile the master sheet."""
-    start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+    """Copies sold online today (India time), per title — to reconcile the master sheet.
+
+    What the shelf actually lost, so the sheet can be brought in line:
+      * the day starts at midnight IST, not UTC (UTC midnight is 5:30 am here,
+        so night orders landed on the wrong day);
+      * a hamper counts as the books inside it, as well as the box;
+      * cancelled orders are left out — their copies are back on the shelf.
+    """
+    from datetime import timedelta
+    from order_stock import expand_order_lines
+
+    ist = timezone(timedelta(hours=5, minutes=30))
+    start_ist = datetime.now(ist).replace(hour=0, minute=0, second=0, microsecond=0)
+    start = start_ist.astimezone(timezone.utc).isoformat()
     cursor = db.orders.find(
-        {"payment_status": "paid", "created_at": {"$gte": start}},
+        {"payment_status": "paid", "created_at": {"$gte": start}, "status": {"$ne": "cancelled"}},
         {"_id": 0, "items": 1},
     )
     tally: dict = {}
     async for o in cursor:
-        for it in (o.get("items") or []):
-            bid = it.get("book_id")
-            qty = int(it.get("quantity", 0) or 0)
-            if bid and qty:
-                tally[bid] = tally.get(bid, 0) + qty
+        for bid, qty in await expand_order_lines(db, o.get("items")):
+            tally[bid] = tally.get(bid, 0) + int(qty)
     rows = []
     for bid, qty in tally.items():
-        b = await db.books.find_one({"id": bid}, {"_id": 0, "isbn": 1, "title": 1})
-        rows.append({"isbn": (b or {}).get("isbn"), "title": (b or {}).get("title"), "units_sold": qty})
+        b = await db.books.find_one({"id": bid}, {"_id": 0, "isbn": 1, "title": 1, "product_type": 1})
+        rows.append({"isbn": (b or {}).get("isbn"), "title": (b or {}).get("title"), "units_sold": qty,
+                     "kind": (b or {}).get("product_type") or "book"})
     rows.sort(key=lambda r: r["units_sold"], reverse=True)
-    return {"since": start, "titles": len(rows), "rows": rows}
+    return {"since": start, "since_ist": start_ist.isoformat(), "titles": len(rows), "rows": rows}

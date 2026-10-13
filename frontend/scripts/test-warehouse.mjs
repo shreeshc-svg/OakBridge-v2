@@ -109,7 +109,7 @@ check(/why = _approval_refusal\(user, doc\)\s*\n\s*if why:\s*\n\s*raise HTTPExce
 check(/update_one\(\{"id": doc_id, "status": "awaiting_approval"\}/.test(reviewFn) && /modified_count != 1/.test(reviewFn), "approval: two reviewers cannot both act");
 check(/if body\.action != "approve":[\s\S]*?_reverse\(mv, user\)/.test(reviewFn), "approval: send back / cancel put the copies back");
 check(/needs_approval = doc\["direction"\] == "out" and not doc\["practice"\]/.test(wh) && /"awaiting_approval" if needs_approval else "confirmed"/.test(wh), "approval: a packed carton waits instead of being final");
-check(/LIVE_STATUSES = \["confirmed", "awaiting_approval"\]/.test(wh) && (wh.match(/\$in": TAKEN_STATUSES/g) || []).length === 3, "approval: a carton awaiting approval still counts for duplicate checks (upload x2, confirm)");
+check(/LIVE_STATUSES = \["confirmed", "awaiting_approval"\]/.test(wh) && (wh.match(/\$in": TAKEN_STATUSES/g) || []).length === 4, "approval: a carton awaiting approval still counts for duplicate checks (upload x2, confirm) and party memory");
 check(/if doc\.get\("shipped_at"\):\s*\n\s*raise HTTPException/.test(wh), "approval: a shipped carton cannot be undone");
 check(/<Inbox onRepack=/.test(screen) && /setInterval\(load, INBOX_POLL_MS\)/.test(screen), "warehouse phone checks for approvals");
 check(/data-testid="wh-shipped"/.test(screen) && /data-testid="wh-repack"/.test(screen) && /data-testid="wh-unpacked"/.test(screen), "…and can mark shipped / repack / unpacked");
@@ -158,6 +158,24 @@ check(/db\.categories\.find\(\{"\$or": \[\{"id": rx\}, \{"name": rx\}\]\}/.test(
       "movements search covers book, ISBN, author, category (id or name), person, party, reason, note and invoice number");
 check(/m\["category"\] = cats\.get\(c, c\)/.test(mvFn) && /<th>Category<\/th>/.test(admin), "each movement shows its book's category");
 check(/data-testid="wh-moves-search"/.test(admin) && /tab === "moves" && \(/.test(admin), "search box sits in the tab row on the Movements tab");
+
+// 13 Oct 2026 audit fixes (behaviour is tested in backend/tests/test_warehouse_flow.py
+// and test_waiting_orders.py; these pin the wiring between server and screens).
+check(/"code": "similar_doc"/.test(fnOf("wh_confirm")) && /not body\.confirm_similar/.test(fnOf("wh_confirm")),
+      "same party + same books is stopped at confirm unless confirmed as a second one");
+check(/isSimilarDoc\(e\)/.test(screen) && /confirm_similar: true/.test(screen), "the phone asks once and resends with confirm_similar");
+check(/warnBelowZero\(res\.below_zero\)/.test(screen) && /warnBelowZero\(res\?\.below_zero\)/.test(screen),
+      "the phone warns when a count goes below zero (cartons, courier sheets, single moves)");
+check(/data-testid="wh-below-zero"/.test(admin) && /ov\.below_zero_unexplained/.test(admin), "Admin lists below-zero books and warns before Go live");
+check(/data-testid="wh-similar"/.test(screen), "upload shows 'looks like a carton already done'");
+check(/skip = await _not_tracked/.test(fnOf("record_website_sale")) && /skip = await _not_tracked/.test(fnOf("sync_order_ledger")),
+      "hampers and packs never enter the warehouse ledger");
+// adm_mode is the last function in the file, so fnOf (which ends at the next
+// top-level line) cannot find its end.
+const modeFn = wh.slice(wh.indexOf("async def adm_mode("));
+check(modeFn.length > 100 && /"product_type": \{"\$nin": list\(NOT_COUNTED\)\}/.test(modeFn), "Go live never copies a count onto a hamper or pack");
+check(/fill_waiting_orders/.test(fnOf("_apply")) && /fill_waiting_orders/.test(modeFn), "arriving copies fill waiting orders first");
+check(!/"read_text": 0/.test(fnOf("adm_doc")) && /"read_text": 0/.test(fnOf("wh_get_doc")), "read text goes to Admin only, not the phone");
 
 console.log();
 if (failed) {

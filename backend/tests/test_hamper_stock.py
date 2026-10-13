@@ -43,8 +43,11 @@ class Coll:
         if "stock" in inc:
             doc = self.docs.get(flt.get("id"))
             have = (doc or {}).get("stock", 0)
-            need = flt.get("stock", {}).get("$gte", 0)
-            if doc is None or have < need:
+            cond = flt.get("stock", {"$gte": 0})
+            # {"$gte": n} guarded sale, or an exact count (compare-and-set
+            # used when taking the last copies of a short line).
+            ok = have >= cond["$gte"] if isinstance(cond, dict) else have == cond
+            if doc is None or not ok:
                 return type("R", (), {"modified_count": 0})()
             doc["stock"] = have + inc["stock"]
             self.incs.append((flt["id"], inc["stock"]))
@@ -154,8 +157,9 @@ check(db2.wh.recorded == [[("bk-c", 1)]], f"a repeat call records nothing new {d
 print("\n-- the order records exactly what came off --")
 db = run([{"book_id": "bk-a", "quantity": 2}, {"book_id": "bk-c", "quantity": 500}])
 taken = [p["$set"]["stock_taken"] for f, p in db.orders.updates if "stock_taken" in p.get("$set", {})]
-check(taken == [[{"book_id": "bk-a", "qty": 2}]],
-      f"a short line is not recorded as taken, so a cancel cannot put it back {taken}")
+check(taken == [[{"book_id": "bk-a", "qty": 2}, {"book_id": "bk-c", "qty": 100}]],
+      f"a short line takes what is there (100 of 500) and records exactly that {taken}")
+check(db.books.docs["bk-c"]["stock"] == 0, "so the last copies can't be sold to someone else as well")
 
 print("\n-- a hamper and a loose copy of a book inside it --")
 db = run([{"book_id": "hamper-1", "quantity": 1}, {"book_id": "bk-a", "quantity": 1}])
@@ -182,7 +186,7 @@ print("\n-- a component that has run out --")
 books = BOOKS(); books["bk-b"]["stock"] = 1     # needs 2
 db = DB(books, {"o1": {"id": "o1", "items": [{"book_id": "hamper-1", "quantity": 1}]}})
 asyncio.run(load(db)("o1"))
-check(books["bk-b"]["stock"] == 1, "a short component is never driven negative")
+check(books["bk-b"]["stock"] == 0, "a short component gives this order the 1 copy left, never goes negative")
 flagged = [u for u in db.orders.updates if "$addToSet" in u[1]]
 check(any(u[1]["$addToSet"].get("backorder_items") == "bk-b" for u in flagged),
       "and the order is flagged for attention naming the component, not the hamper")

@@ -50,6 +50,8 @@ Scan a book to see its count and the last 10 things that happened to it.
 - **Practice** (top right): try anything — nothing changes stock. Use it to learn.
 - **Something wrong?** Tap **Report it** at the bottom of the bill screen and write what happened.
 - **Made a mistake after syncing?** Tell your manager — they can undo it for 24 hours.
+- **"Looks like a carton already done"** (yellow box): same shop and exactly the same books as one already packed. If it is the same paper photographed again, stop. When you press Packed the phone asks once more — OK only if it really is a second carton.
+- **"Warehouse count is now below 0"** after packing: count that book on the shelf and tell your manager.
 - **The automatic reading is a helper, not the boss.** You always check and can change everything before you press Sync / Packed. If it can't read a bill, tap **Enter by hand instead**.
 
 ---
@@ -80,7 +82,8 @@ Who can approve: anyone with **Orders** and **Warehouse** access (e.g. the Fulfi
 - Cancelled **after shipping** → stock is not put back yet. When the parcel returns, press **Returned — put back in stock** on the order.
 - Cancelled after the warehouse **packed it on a courier sheet** → the warehouse phone asks whether the parcel is still there.
 - Changed back from Cancelled → the copies are taken off again. If they have been sold meanwhile, the order is flagged as a backorder.
-- Only what payment actually took comes back (pre-order lines and short-stock lines took nothing).
+- Only what payment actually took comes back. A short line takes the copies that were left (so they can't be sold twice) and the order is flagged as a backorder; a pre-order line takes nothing until copies arrive.
+- Once the warehouse is **live**, arriving copies (printer bill, return, cancellation) go to paid pre-orders and backorders first, oldest order first; only the rest goes on sale.
 
 ## Managing documents (Admin → Warehouse → Bills & invoices)
 - **Search** by number, party, author, person or book title; filter by type, status, real/practice, dates; tick **Archived** to see deleted ones.
@@ -92,11 +95,15 @@ Who can approve: anyone with **Orders** and **Warehouse** access (e.g. the Fulfi
 ## The trial week
 - Admin → Warehouse → **Trial & comparison** shows every book where the warehouse count and the website (sheet) count differ, and by how much.
 - **Bills & invoices** shows each document with its photo/PDF, what was read vs what was confirmed, **Undo** (24 h), and **Use as test case**.
+- **Below zero** (top of Trial & comparison): books whose warehouse count is under 0. Up to what waiting pre-orders/backorders are owed this is expected; anything beyond is a counting mistake — count the book and save a correction. If the website (sheet) has copies but the count is below zero, the printer bill was probably not entered on the warehouse screen.
+- Bill/invoice details: the party is taken from the Consignee (or Buyer) block, skipping transport companies and street lines; once a GSTIN has a confirmed name, that name is used. **What the system read** (bank numbers masked) is shown on each document so misreads can be fixed.
 - **Accuracy** shows how often the automatic reading was right, by document type and by printer, with the corrections people had to make and the problems they reported. **Run test cases** re-reads the marked documents to check an improvement does not break anything.
 
 ## Going live
 When the comparison shows the two counts agree (or every difference is explained), a superadmin clicks **Go live**:
-- website stock is replaced by the warehouse counts;
+- website stock is replaced by the warehouse counts (books only — hampers and packs keep their own website stock);
+- copies owed to waiting paid pre-orders/backorders are handed to those orders straight away, including orders paid before the trial;
+- the confirm box warns if any book is below zero in a way waiting orders don't explain — count those first;
 - the Google-sheet sync stops (its button and cron stand down);
 - stock then changes only through the warehouse screen and website orders; a stock number typed in Admin is logged as a correction;
 - a pre-order becomes a normal listed book the moment copies are booked in.

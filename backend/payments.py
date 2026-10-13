@@ -366,6 +366,20 @@ async def _apply_stock_decrement(order_id: str) -> None:
             if (book or {}).get("coming_soon"):
                 logger.info("Pre-order line, no stock to decrement: book=%s order=%s", bid, order_id)
                 continue
+            # Short: take what IS there for this order. Leaving 1 copy on sale
+            # when a paid order needs 2 lets a second customer buy it, and then
+            # two orders are short instead of one. Compare-and-set on the exact
+            # count read, so a concurrent sale can't be double-counted; the rest
+            # is filled when copies arrive (order_stock.fill_waiting_orders).
+            for _ in range(3):
+                cur = await db.books.find_one({"id": bid}, {"_id": 0, "stock": 1})
+                have = int((cur or {}).get("stock") or 0)
+                if have <= 0:
+                    break
+                part = await db.books.update_one({"id": bid, "stock": have}, {"$inc": {"stock": -have}})
+                if part.modified_count == 1:
+                    taken.append({"book_id": bid, "qty": have})
+                    break
             logger.warning("Insufficient stock at capture for book=%s order=%s — flagged backorder", bid, order_id)
             await db.orders.update_one(
                 {"id": order_id},

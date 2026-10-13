@@ -98,31 +98,108 @@ TALLY_LABEL_RE = re.compile(
     r"consignee|supplier'?s ref)", re.I)
 
 
+# Lines that can sit right after "Consignee" in a photo but are not the party.
+# Textract interleaves Tally's two columns, so the VALUE of "Dispatched
+# through" (the transport company) and the consignee's street address both
+# turn up there. Seen live: cartons recorded as going to "American Transport",
+# "ABC Transport" and "Ansari Road,".
+TRANSPORT_RE = re.compile(
+    r"\b(transports?|transporters?|logistics?|roadways|roadlines|road\s*lines|cargo|carriers?|couriers?|"
+    r"freight|movers|goods\s+carrier|parcel\s+service)\b", re.I)
+ADDRESS_RE = re.compile(
+    r"\b(road|rd|street|marg|lane|gali|nagar|colony|sector|block|plot|floor|chowk|near|opp|opposite|"
+    r"phase|enclave|vihar|extn|extension|district|dist|pin|pincode|tehsil)\b|\b\d{6}\b", re.I)
+# ...but a shop can have one of those words in its name ("Mall Road Book
+# Depot"), so a line that also reads like a business is kept.
+BUSINESS_RE = re.compile(
+    r"\b(house|books?|agenc(?:y|ies)|depot|stores?|distributors?|cent(?:re|er)|publishers?|publications?|"
+    r"traders?|enterprises?|services|company|co|pvt|private|ltd|limited|llp|sons|brothers|bros|mart|"
+    r"emporium|library|stall|academy|institute|college|school|university|law)\b", re.I)
+# A document number on the line(s) after its "Invoice No." label — a photo
+# puts "Dated" (the right-hand column label) in between, which the one-line
+# INVOICE_NO_RE cannot cross. Every photo on 13 Oct 2026 came back "no number",
+# which also switched off duplicate protection for them.
+DOCNO_TOKEN_RE = re.compile(r"^[A-Z0-9]{1,12}(?:[/-][A-Z0-9]{1,12}){1,4}$", re.I)
+DATE_TOKEN_RE = re.compile(r"^\d{1,2}[-/.](?:[A-Za-z]{3,9}|\d{1,2})[-/.]\d{2,4}$")
+FY_TOKEN_RE = re.compile(r"^\d{2,4}-\d{2,4}$")
+
+
+def is_us(line: str) -> bool:
+    """Oakbridge's own name however it is spaced or punctuated — "OAK BRIDGE
+    PUBLISHING PVT LTD" slipped through a plain "oakbridge" check and was
+    recorded as the printer on two bills."""
+    return "oakbridge" in re.sub(r"[^a-z]", "", (line or "").lower())
+
+
+def _party_candidate(line: str) -> bool:
+    x = (line or "").strip(" ,.:;-")
+    if len(x) < 3 or re.match(r"\d", x) or TALLY_LABEL_RE.match(x) or is_us(x):
+        return False
+    if not re.search(r"[A-Za-z]{2}", x):
+        return False
+    if TRANSPORT_RE.search(x):
+        return False
+    if ADDRESS_RE.search(x) and not BUSINESS_RE.search(x):
+        return False
+    if re.search(r"@|\+?\d[\d\s-]{8,}", x):        # e-mail or phone number
+        return False
+    return True
+
+
+def _doc_number_after_label(lines: list) -> str:
+    for i, ln in enumerate(lines):
+        if not re.search(r"invoice\s*no", ln, re.I):
+            continue
+        tail = re.split(r"invoice\s*no\.?", ln, flags=re.I)[-1]
+        for cand_line in [tail] + lines[i + 1:i + 7]:
+            for tok in re.split(r"[\s:]+", cand_line or ""):
+                tok = tok.strip(".,;")
+                if (DOCNO_TOKEN_RE.match(tok) and re.search(r"\d", tok)
+                        and not DATE_TOKEN_RE.match(tok) and not FY_TOKEN_RE.match(tok)):
+                    return tok
+    return ""
+
+
+def party_key(name: str) -> str:
+    """Comparable form of a party name: case, punctuation and M/s. ignored."""
+    s = fold(name)
+    s = re.sub(r"^(m s|ms|messrs)\s+", "", s)
+    return s
+
+
 def header_fields(text: str, direction: str) -> dict:
     """Invoice number, other party, total quantity — from the document's text."""
     out = {"doc_number": "", "party_gstin": "", "party_name": "", "total_qty": None}
     m = INVOICE_NO_RE.search(text or "")
-    if m:
-        out["doc_number"] = re.sub(r"\s+", "", m.group(1))
+    lines = [ln.strip() for ln in (text or "").splitlines()]
+    num = re.sub(r"\s+", "", m.group(1)) if m else ""
+    if not num or DATE_TOKEN_RE.match(num) or FY_TOKEN_RE.match(num):
+        # The one-line pattern found nothing, or found the date column.
+        num = _doc_number_after_label(lines)
+    out["doc_number"] = num
     gstins = [g for g in GSTIN_RE.findall(text or "") if g != OUR_GSTIN]
     if gstins:
         out["party_gstin"] = gstins[0]
-    lines = [ln.strip() for ln in (text or "").splitlines()]
     if direction == "out":
-        for i, ln in enumerate(lines):
-            if re.match(r"consignee", ln, re.I):
-                # A photo read by Textract interleaves Tally's two columns, so
-                # the line after "Consignee" can be a right-hand label ("Terms
-                # of Delivery", "Dispatched through") — skip those.
-                nxt = next((x for x in lines[i + 1:i + 8]
-                            if x and not re.match(r"\d", x) and not TALLY_LABEL_RE.match(x)), "")
-                out["party_name"] = nxt
+        # Consignee (ship to) first; the buyer (bill to) block when the
+        # consignee block gave nothing usable.
+        for label in (r"consignee", r"buyer"):
+            for i, ln in enumerate(lines):
+                if re.match(label, ln, re.I):
+                    # Same line: "Consignee (Ship to) Acme Book House".
+                    same = re.sub(r"^(consignee|buyer)\s*(\((ship|bill) to\))?\s*[:\-]?\s*", "", ln, flags=re.I)
+                    pool = ([same] if same and same != ln else []) + lines[i + 1:i + 8]
+                    nxt = next((x.strip(" ,") for x in pool if _party_candidate(x)), "")
+                    if nxt:
+                        out["party_name"] = nxt
+                        break
+            if out["party_name"]:
                 break
     else:
         # The supplier is the first company line on the bill, before "Consignee".
         for ln in lines:
             if re.search(r"\b(pvt|private|ltd|limited|printers?|press|llp)\b", ln, re.I) \
-                    and "oakbridge" not in ln.lower():
+                    and not is_us(ln):
                 out["party_name"] = re.sub(r"\s*\(.*?\)\s*$", "", ln).strip()
                 break
     t = TOTAL_QTY_RE.search(text or "")
@@ -554,6 +631,68 @@ def order_ledger_diffs(moves: list, lines: list, *, out: bool) -> dict:
         if d:
             out_diffs[bid] = d
     return out_diffs
+
+
+# ------------------------------------------------- near-duplicates ---
+def line_set(lines: Iterable[dict]) -> list:
+    """Sorted (book_id, qty) of the lines that move stock — the carton's
+    fingerprint. Two photos of one invoice have different files and, when no
+    number was read, nothing else in common."""
+    out: dict = {}
+    for ln in lines or []:
+        if ln.get("include", True) and ln.get("book_id") and int(ln.get("qty") or 0) > 0:
+            out[ln["book_id"]] = out.get(ln["book_id"], 0) + int(ln["qty"])
+    return sorted(out.items())
+
+
+def same_document(a: dict, b: dict) -> bool:
+    """Same direction, same party (GSTIN when both have one, else the name)
+    and exactly the same books and quantities."""
+    if a.get("direction") != b.get("direction"):
+        return False
+    na, nb = (a.get("doc_number") or "").strip(), (b.get("doc_number") or "").strip()
+    if na and nb and na != nb:
+        return False                  # two different invoices, however alike
+    ga, gb = a.get("party_gstin") or "", b.get("party_gstin") or ""
+    if ga and gb:
+        if ga != gb:
+            return False
+    elif party_key(a.get("party_name", "")) != party_key(b.get("party_name", "")):
+        return False
+    la, lb = line_set(a.get("lines") or []), line_set(b.get("lines") or [])
+    return bool(la) and la == lb
+
+
+def masked_text(text: str, limit: int = 4000) -> str:
+    """The top of what was read, kept on the document so a misread can be
+    diagnosed later without opening the file. Long digit runs (bank account
+    numbers on Tally invoices) are masked; ISBNs are kept."""
+    def mask(m):
+        d = m.group(0)
+        return d if (len(d) == 13 and d.startswith(("978", "979"))) else "#" * len(d)
+    return re.sub(r"\d{9,18}", mask, (text or "")[:limit])
+
+
+# ------------------------------------------------- impossible counts ---
+def below_zero_note(wh_stock: int, owed: int, website: int, mode: str) -> str:
+    """Why a warehouse count is below 0, in words the office can act on.
+
+    The warehouse count is "on the shelf minus what is promised": a paid
+    pre-order or backorder takes its copies off when it is paid, before they
+    exist. So below zero is fine while orders are waiting — up to what they
+    owe. Anything beyond that cannot be true and needs a shelf count.
+    """
+    if wh_stock >= 0:
+        return ""
+    unexplained = -wh_stock - max(0, owed)
+    if unexplained <= 0:
+        if mode == "trial" and website > 0:
+            return (f"{owed} cop{'y' if owed == 1 else 'ies'} owed to waiting orders, but the website (sheet) "
+                    "has copies — the printer bill was probably not entered on the warehouse screen.")
+        return f"{owed} cop{'y' if owed == 1 else 'ies'} owed to waiting orders — fine until the copies arrive."
+    return (f"{unexplained} more cop{'y' if unexplained == 1 else 'ies'} out than ever came in"
+            f"{f' (plus {owed} owed to waiting orders)' if owed > 0 else ''}. "
+            "Count this book on the shelf and save the count as a correction.")
 
 
 # ---------------------------------------------- admin line corrections ---

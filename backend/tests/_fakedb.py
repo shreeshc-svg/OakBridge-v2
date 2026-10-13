@@ -1,7 +1,7 @@
 """A tiny in-memory stand-in for the Motor collection methods jobs.py and
 dbutil.py use, so their logic is tested without MongoDB. Supports only what
 those modules call: equality, $or/$and, $lt/$lte/$gt/$gte/$in/$nin/$ne/$exists,
-$set/$inc/$unset/$setOnInsert, sort, limit, projection, unique (sparse) indexes."""
+$set/$inc/$unset/$setOnInsert/$pull/$addToSet, array paths, sort, limit, projection, unique (sparse) indexes."""
 import copy
 
 
@@ -14,6 +14,32 @@ def _get(doc, path):
     return cur, True
 
 
+def _values(doc, path):
+    """Every value at path, walking into arrays the way MongoDB does
+    ("items.book_id" matches any line's book_id)."""
+    cur = [doc]
+    for p in path.split("."):
+        nxt = []
+        for c in cur:
+            if isinstance(c, dict) and p in c:
+                nxt.append(c[p])
+            elif isinstance(c, list):
+                nxt.extend(x[p] for x in c if isinstance(x, dict) and p in x)
+        cur = nxt
+    return cur
+
+
+def _flat(vals):
+    out = []
+    for v in vals:
+        out.extend(v if isinstance(v, list) else [v])
+    return out
+
+
+def _eq(vals, v):
+    return any(c == v or (isinstance(c, list) and not isinstance(v, list) and v in c) for c in vals)
+
+
 def _match(doc, q):
     for k, v in q.items():
         if k == "$or":
@@ -24,18 +50,20 @@ def _match(doc, q):
             if not all(_match(doc, s) for s in v):
                 return False
             continue
-        val, present = _get(doc, k)
+        vals = _values(doc, k)
+        present = bool(vals)
+        flat = _flat(vals)
         if isinstance(v, dict) and any(op.startswith("$") for op in v):
             for op, arg in v.items():
-                if op == "$lt" and not (present and val is not None and val < arg): return False
-                if op == "$lte" and not (present and val is not None and val <= arg): return False
-                if op == "$gt" and not (present and val is not None and val > arg): return False
-                if op == "$gte" and not (present and val is not None and val >= arg): return False
-                if op == "$in" and val not in arg: return False
-                if op == "$nin" and val in arg: return False
-                if op == "$ne" and val == arg: return False
-                if op == "$exists" and bool(present) != bool(arg): return False
-        elif val != v:
+                if op == "$lt" and not any(x is not None and x < arg for x in flat): return False
+                if op == "$lte" and not any(x is not None and x <= arg for x in flat): return False
+                if op == "$gt" and not any(x is not None and x > arg for x in flat): return False
+                if op == "$gte" and not any(x is not None and x >= arg for x in flat): return False
+                if op == "$in" and not (any(x in arg for x in flat) or (not present and None in arg)): return False
+                if op == "$nin" and (any(x in arg for x in flat) or (not present and None in arg)): return False
+                if op == "$ne" and (_eq(vals, arg) or (not present and arg is None)): return False
+                if op == "$exists" and present != bool(arg): return False
+        elif not (_eq(vals, v) or (not present and v is None)):
             return False
     return True
 
@@ -104,6 +132,11 @@ class Coll:
         self.docs.append(copy.deepcopy(doc))
         return Result(inserted=doc.get("id"))
 
+    async def insert_many(self, docs):
+        for d in docs:
+            await self.insert_one(d)
+        return Result(len(docs))
+
     def find(self, q=None, proj=None):
         return Cursor([_project(d, proj) for d in self.docs if _match(d, q or {})])
 
@@ -120,6 +153,14 @@ class Coll:
             d[k] = (d.get(k) or 0) + v
         for k in (upd.get("$unset") or {}):
             d.pop(k, None)
+        for k, v in (upd.get("$pull") or {}).items():
+            d[k] = [x for x in d.get(k) or [] if x != v]
+        for k, v in (upd.get("$addToSet") or {}).items():
+            cur = list(d.get(k) or [])
+            for x in (v["$each"] if isinstance(v, dict) and "$each" in v else [v]):
+                if x not in cur:
+                    cur.append(x)
+            d[k] = cur
         if inserting:
             for k, v in (upd.get("$setOnInsert") or {}).items():
                 d[k] = v
