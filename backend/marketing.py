@@ -2402,6 +2402,25 @@ async def adm_patch_campaign(cid: str, body: CampaignBody):
     return await db.mk_campaigns.find_one({"id": cid}, {"_id": 0})
 
 
+class RenameBody(BaseModel):
+    name: str
+
+
+@admin_router.patch("/campaigns/{cid}/name")
+async def adm_rename_campaign(cid: str, body: RenameBody, user: dict = Depends(require_admin)):
+    """Rename any campaign, whatever its status. The name is internal (never
+    shown to recipients), so unlike content it is safe to change after sending.
+    PATCH on its own path: POST /campaigns/{cid}/{action} would swallow it."""
+    name = (body.name or "").strip()[:120]
+    if not name:
+        raise HTTPException(status_code=400, detail="Give the campaign a name")
+    r = await db.mk_campaigns.update_one({"id": cid, "deleted": {"$ne": True}}, {"$set": {"name": name, "updated_at": _iso()}})
+    if not r.matched_count:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    await audit_log(db, "MARKETING_CAMPAIGN_RENAMED", email=user.get("email", ""), role=user.get("role", ""), meta={"campaign": cid})
+    return {"ok": True, "name": name}
+
+
 @admin_router.post("/campaigns/{cid}/duplicate")
 async def adm_dup_campaign(cid: str, user: dict = Depends(require_admin)):
     c = await db.mk_campaigns.find_one({"id": cid}, {"_id": 0})

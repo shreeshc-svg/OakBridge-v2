@@ -666,6 +666,7 @@ export const mkCampaigns = () => api.get("/admin/marketing/campaigns").then((r) 
 export const mkNewCampaign = (body) => api.post("/admin/marketing/campaigns", body).then((r) => r.data);
 export const mkCampaign = (id) => api.get(`/admin/marketing/campaigns/${id}`).then((r) => r.data);
 export const mkSaveCampaign = (id, body) => api.patch(`/admin/marketing/campaigns/${id}`, body).then((r) => r.data);
+export const mkRenameCampaign = (id, name) => api.patch(`/admin/marketing/campaigns/${id}/name`, { name }).then((r) => r.data);
 export const mkDuplicate = (id) => api.post(`/admin/marketing/campaigns/${id}/duplicate`).then((r) => r.data);
 export const mkAudience = (id) => api.get(`/admin/marketing/campaigns/${id}/audience`).then((r) => r.data);
 export const mkPreview = (id) => api.get(`/admin/marketing/campaigns/${id}/preview`).then((r) => r.data);

@@ -163,6 +163,9 @@ for (const k of ["mk_validate", "mk_prepare", "mk_send", "mk_role_rule", "mk_sup
 }
 check(/async def on_newsletter[\s\S]{0,300}dispatch\("mk_newsletter"/.test(mk), "newsletter sign-up no longer waits for the address check");
 
+check(/@admin_router\.patch\("\/campaigns\/\{cid\}\/name"\)/.test(mk) && /data-testid="mk-camp-rename"/.test(page),
+    "any campaign can be renamed (list + header), on its own PATCH route");
+
 console.log("-- screen --");
 for (const t of ["mk-dashboard", "mk-editor", "mk-contacts", "mk-lists", "mk-verify", "mk-settings", "mk-report", "mk-dry-run"]) {
     check(page.includes(`"${t}"`), `screen has ${t}`);

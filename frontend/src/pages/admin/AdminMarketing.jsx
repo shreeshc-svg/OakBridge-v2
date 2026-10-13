@@ -1,11 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { ArrowDown, ArrowUp, Mail, MessageCircle, Plus, Search, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Mail, MessageCircle, Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import {
     mkDashboard, mkHealth, mkSettings, mkSaveSettings, mkVerify, mkImport, mkReverify, mkSync, mkContacts, mkPatchContact,
     mkDeleteContact, mkLists, mkCreateList, mkCampaigns, mkNewCampaign, mkCampaign, mkSaveCampaign, mkDuplicate,
     mkAudience, mkPreview, mkTestSend, mkSend, mkCampaignAction, mkReport, mkDismissAlert, mkSuppressionSync,
-    mkBulkContacts, mkBulkDeleteLists, mkBulkDeleteCampaigns, mkLearn, mkDisposableRefresh, mkSystemHealth, fetchBooks, fetchCategories, mediaUrl, formatApiError,
+    mkBulkContacts, mkBulkDeleteLists, mkBulkDeleteCampaigns, mkRenameCampaign, mkLearn, mkDisposableRefresh, mkSystemHealth, fetchBooks, fetchCategories, mediaUrl, formatApiError,
 } from "../../lib/api";
 import { useAuth } from "../../context/AuthContext";
 import { isSuperadmin, canDelete } from "../../lib/rbac";
@@ -241,7 +241,7 @@ function Panel({ title, children, right }) {
     );
 }
 
-function CampaignTable({ rows = [], onOpen, sel, onDelete }) {
+function CampaignTable({ rows = [], onOpen, sel, onDelete, onRename }) {
     const ids = rows.map((r) => r.id);
     const allOn = !!sel && ids.length > 0 && ids.every((x) => sel.sel.has(x));
     const cols = 8 + (sel ? 1 : 0) + (onDelete ? 1 : 0);
@@ -257,7 +257,9 @@ function CampaignTable({ rows = [], onOpen, sel, onDelete }) {
                     return (
                         <tr key={c.id} className="border-t border-[#E5E7EB] hover:bg-[#F5F7FA] cursor-pointer" onClick={() => onOpen(c.id)}>
                             {sel && <td onClick={(e) => e.stopPropagation()}><input type="checkbox" aria-label={`Select ${c.name}`} checked={sel.sel.has(c.id)} onChange={() => sel.toggle(c.id)} /></td>}
-                            <td className="py-2">{c.channel === "whatsapp" ? <MessageCircle size={13} className="inline mr-1 text-[#15803D]" /> : <Mail size={13} className="inline mr-1 text-[#002B5C]" />}{c.name}</td>
+                            <td className="py-2">{c.channel === "whatsapp" ? <MessageCircle size={13} className="inline mr-1 text-[#15803D]" /> : <Mail size={13} className="inline mr-1 text-[#002B5C]" />}{c.name}
+                                {onRename && <button type="button" aria-label={`Rename ${c.name}`} title="Rename" className="ml-2 text-[#6B7280] hover:text-[#002B5C] align-middle"
+                                    onClick={(e) => { e.stopPropagation(); onRename(c); }} data-testid="mk-camp-rename"><Pencil size={12} /></button>}</td>
                             <td><span className={`text-[10px] font-mono uppercase border px-1.5 py-0.5 ${CAMP_TONE[c.status] || ""}`}>{c.status}</span></td>
                             <td className="text-right">{(s.sent || 0).toLocaleString("en-IN")}</td>
                             <td className="text-right">{pct(base ? (s.opened || 0) / base : null)}</td>
@@ -277,6 +279,14 @@ function CampaignTable({ rows = [], onOpen, sel, onDelete }) {
 }
 
 /* ------------------------------------------------------------ campaigns --- */
+/** Rename any campaign (internal name — safe even after sending). Returns the new name or null. */
+async function renameCampaign(id, current) {
+    const name = window.prompt("Campaign name (only your team sees this)", current || "");
+    if (name === null || !name.trim() || name.trim() === current) return null;
+    try { const r = await mkRenameCampaign(id, name.trim()); toast.success("Renamed."); return r.name; }
+    catch (e) { toast.error(formatApiError(e)); return null; }
+}
+
 /** Delete (drafts) / archive (sent) campaigns, after one clear confirmation. */
 async function deleteCampaigns(ids, rows) {
     const picked = (rows || []).filter((r) => ids.includes(r.id));
@@ -302,7 +312,10 @@ function CampaignList({ onOpen }) {
     useEffect(load, [load]);
     const del = async (ids) => { if (await deleteCampaigns(ids, rows)) { sel.clear(); load(); } };
     const create = async (channel, kind) => {
-        const name = kind === "reconfirm" ? "Re-confirm subscribers" : channel === "email" ? "New email campaign" : "New WhatsApp campaign";
+        const suggested = kind === "reconfirm" ? "Re-confirm subscribers" : channel === "email" ? "New email campaign" : "New WhatsApp campaign";
+        const asked = window.prompt("Name this campaign (only your team sees this)", suggested);
+        if (asked === null) return;
+        const name = asked.trim() || suggested;
         try { const c = await mkNewCampaign({ channel, name, kind }); onOpen(c.id); } catch (e) { toast.error(formatApiError(e)); }
     };
     return (
@@ -318,7 +331,8 @@ function CampaignList({ onOpen }) {
             </BulkBar>
             {!rows ? <p className="text-sm text-[#4B5563]">Loading…</p> : (
                 <div className="bg-white border border-[#E5E7EB] p-4">
-                    <CampaignTable rows={rows} onOpen={onOpen} sel={canDelete(user) ? sel : undefined} onDelete={canDelete(user) ? del : undefined} />
+                    <CampaignTable rows={rows} onOpen={onOpen} sel={canDelete(user) ? sel : undefined} onDelete={canDelete(user) ? del : undefined}
+                        onRename={async (c) => { if (await renameCampaign(c.id, c.name)) load(); }} />
                 </div>
             )}
         </div>
@@ -337,6 +351,9 @@ function CampaignView({ id, onBack, onOpen }) {
             <div className="flex flex-wrap items-center gap-3">
                 <button type="button" className="underline text-sm" onClick={onBack}>← All campaigns</button>
                 <span className={`text-[10px] font-mono uppercase border px-1.5 py-0.5 ${CAMP_TONE[c.status] || ""}`}>{c.status}</span>
+                <span className="font-medium text-[#002B5C]">{c.name}</span>
+                <button type="button" aria-label="Rename campaign" title="Rename" className="text-[#6B7280] hover:text-[#002B5C]" data-testid="mk-camp-rename-view"
+                    onClick={async () => { const n = await renameCampaign(c.id, c.name); if (n) setC({ ...c, name: n }); }}><Pencil size={14} /></button>
                 <button type="button" className="ml-auto border px-3 py-1 text-sm" onClick={async () => { try { const d = await mkDuplicate(id); toast.success("Copied as a new draft."); onOpen(d.id); } catch (e) { toast.error(formatApiError(e)); } }}>Duplicate</button>
                 {canDelete(user) && <button type="button" className="border border-[#CC0033] text-[#CC0033] px-3 py-1 text-sm inline-flex items-center gap-1"
                     onClick={async () => { if (await deleteCampaigns([id], [c])) onBack(); }} data-testid="mk-camp-delete"><Trash2 size={13} /> Delete</button>}
