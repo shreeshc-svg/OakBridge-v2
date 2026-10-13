@@ -81,6 +81,7 @@ async def main():
     check(C.should_bump("PUT", "/api/admin/books/1", 200) and C.should_bump("POST", "/api/webhooks/razorpay", 200), "admin/webhook writes bump")
     check(not C.should_bump("GET", "/api/admin/books", 200) and not C.should_bump("POST", "/api/admin/books", 500), "reads / failed writes don't bump")
     check(not C.should_bump("POST", "/api/cart", 200), "cart writes don't thrash the cache")
+    check(C.should_bump("POST", "/api/warehouse/scan", 200), "warehouse phone-screen stock moves clear the cache")
 
     print("-- hit / miss --")
     app = FakeApp()

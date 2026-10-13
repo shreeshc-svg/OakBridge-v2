@@ -135,7 +135,7 @@ personal data or a breach of these Terms may be sent by email to the Grievance
 Officer, {_GRIEVANCE}, at {_EMAIL}, or by phone on {_PHONE}. Please include your
 name, contact details and order number (if any). We acknowledge every complaint
 within 48 hours and aim to resolve it within one month of receipt. For complaints
-about personal data, see also section 11 of our [Privacy Policy](/privacy).
+about personal data, see also section 10 of our [Privacy Policy](/privacy).
 
 ## Arbitration
 Any dispute arising out of or in connection with this agreement, including any

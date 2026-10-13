@@ -53,7 +53,7 @@ PUBLIC_TTLS = [
 ]
 # Writes after which public data may have changed. Deliberately broad: admin
 # writes are rare, and refilling the cache is cheap; a missed bump is not.
-BUMP_PATHS = re.compile(r"^/api/(admin/|payments/|webhooks/|tasks/|orders(/|$)|books/[^/]+/reviews$|legal|settings)")
+BUMP_PATHS = re.compile(r"^/api/(admin/|payments/|webhooks/|tasks/|warehouse/|orders(/|$)|books/[^/]+/reviews$|legal|settings)")
 
 ENTRY_BYTES_MAX = 1_000_000
 TOTAL_BYTES_MAX = 40_000_000
