@@ -26,6 +26,10 @@ const BLANK = {
     title: "", subtitle: "", isbn: "", category: "", subject: "Pack",
     description: "", cover_image: "", original_price: "", pricing_mode: "fixed",
     pricing_value: "", stock: 0, enabled: true, pack_items: [],
+    // Specifications of the pack itself. The year defaults to the year the
+    // pack is made — the books inside may be older (backend/packs.py).
+    publication_year: new Date().getFullYear(), pages: "", size: "", binding: "",
+    language: "English", publisher: "Oakbridge Publishing",
 };
 
 /* Mirrors packs.compute_price. Returns { price } or { error }. */
@@ -49,6 +53,14 @@ function PackEditor({ initial, categories, catalogue, onClose, onSaved }) {
         pricing_mode: initial?.pack_pricing?.mode || "fixed",
         pricing_value: initial?.pack_pricing?.value ?? initial?.price ?? "",
         pack_items: (initial?.pack_items || []).map((x) => x.book_id),
+        // Packs saved before specifications existed have no year: start from
+        // the year they were created rather than a blank box.
+        publication_year: initial?.publication_year
+            ?? (initial?.created_at ? new Date(initial.created_at).getFullYear() : new Date().getFullYear()),
+        // Blank = add up the books' pages; a number = the admin's own figure.
+        pages: initial?.pages_manual ?? "",
+        size: initial?.size || "", binding: initial?.binding || "",
+        language: initial?.language || "English", publisher: initial?.publisher || "Oakbridge Publishing",
     }));
     const [q, setQ] = useState("");
     const [busy, setBusy] = useState(false);
@@ -65,6 +77,8 @@ function PackEditor({ initial, categories, catalogue, onClose, onSaved }) {
     }, [q, catalogue, f.pack_items]);
 
     const pv = previewPrice(f.original_price, f.pricing_mode, f.pricing_value);
+    const autoPages = f.pack_items.reduce((n, id) => n + (Number(byId[id]?.pages) || 0), 0);
+    const thisYear = new Date().getFullYear();
     const move = (i, d) =>
         setF((s) => {
             const a = [...s.pack_items];
@@ -87,6 +101,9 @@ function PackEditor({ initial, categories, catalogue, onClose, onSaved }) {
     const save = async () => {
         if (f.pack_items.length < 2) return toast.error("A pack needs at least 2 books.");
         if (pv.error) return toast.error(pv.error);
+        const year = Number(f.publication_year);
+        if (!(year >= 1900 && year <= thisYear + 1)) return toast.error(`Publication year must be between 1900 and ${thisYear + 1}.`);
+        if (f.pages !== "" && !(Number(f.pages) >= 0)) return toast.error("Pages must be a number (leave blank to add up the books).");
         setBusy(true);
         const payload = {
             title: f.title.trim(), subtitle: (f.subtitle || "").trim() || null,
@@ -95,6 +112,11 @@ function PackEditor({ initial, categories, catalogue, onClose, onSaved }) {
             original_price: Number(f.original_price), pricing_mode: f.pricing_mode,
             pricing_value: Number(f.pricing_value), stock: Number(f.stock) || 0,
             enabled: Boolean(f.enabled), pack_items: f.pack_items,
+            publication_year: year,
+            pages: f.pages === "" ? 0 : Number(f.pages),
+            size: (f.size || "").trim(), binding: (f.binding || "").trim(),
+            language: (f.language || "").trim() || "English",
+            publisher: (f.publisher || "").trim() || "Oakbridge Publishing",
         };
         try {
             if (isEdit) await adminUpdatePack(initial.id, payload);
@@ -152,7 +174,7 @@ function PackEditor({ initial, categories, catalogue, onClose, onSaved }) {
                                     </span>
                                     <span className="flex-1 min-w-0 text-sm text-[#002B5C] truncate">
                                         {b ? b.title : `Missing book (${id})`}
-                                        {b && <span className="block text-xs text-[#4B5563] truncate">{b.author} · {b.isbn}</span>}
+                                        {b && <span className="block text-xs text-[#4B5563] truncate">{b.author} · {b.isbn}{b.publication_year ? ` · ${b.publication_year}` : ""}{b.pages ? ` · ${b.pages} pp` : ""}</span>}
                                     </span>
                                     <button type="button" onClick={() => move(i, -1)} aria-label="Move up" disabled={i === 0} className="p-1 disabled:opacity-30"><ArrowUp size={13} /></button>
                                     <button type="button" onClick={() => move(i, 1)} aria-label="Move down" disabled={i === f.pack_items.length - 1} className="p-1 disabled:opacity-30"><ArrowDown size={13} /></button>
@@ -179,6 +201,38 @@ function PackEditor({ initial, categories, catalogue, onClose, onSaved }) {
                             )}
                         </div>
                     )}
+                </div>
+
+                {/* Specifications — what the pack's own "Specifications" tab shows. */}
+                <div className="mt-6" data-testid="pack-specs">
+                    <div className="overline !text-[10px]">Specifications (shown on the pack's page)</div>
+                    <div className="mt-2 grid grid-cols-2 gap-4">
+                        <label className="text-xs text-[#4B5563]">Publication year *
+                            <input type="number" min="1900" max={thisYear + 1} className={input} value={f.publication_year}
+                                onChange={(e) => set("publication_year", e.target.value)} data-testid="pack-year" />
+                            <span className="text-[11px] text-[#4B5563]/80">The pack's year — the books inside can be older.</span>
+                        </label>
+                        <label className="text-xs text-[#4B5563]">Pages
+                            <input type="number" min="0" className={input} value={f.pages} placeholder={`${autoPages} (added up from the books)`}
+                                onChange={(e) => set("pages", e.target.value)} data-testid="pack-pages" />
+                            <span className="text-[11px] text-[#4B5563]/80">Leave blank to add up the books' pages.</span>
+                        </label>
+                        <label className="text-xs text-[#4B5563]">Size
+                            <input className={input} value={f.size} placeholder="e.g. Royal · 24 × 16 cm" onChange={(e) => set("size", e.target.value)} data-testid="pack-size" />
+                        </label>
+                        <label className="text-xs text-[#4B5563]">Binding
+                            <input className={input} value={f.binding} placeholder="e.g. Paperback" onChange={(e) => set("binding", e.target.value)} data-testid="pack-binding" />
+                        </label>
+                        <label className="text-xs text-[#4B5563]">Language
+                            <input className={input} value={f.language} onChange={(e) => set("language", e.target.value)} data-testid="pack-language" />
+                        </label>
+                        <label className="text-xs text-[#4B5563]">Publisher
+                            <input className={input} value={f.publisher} onChange={(e) => set("publisher", e.target.value)} data-testid="pack-publisher" />
+                        </label>
+                        <label className="col-span-2 text-xs text-[#4B5563]">Subject
+                            <input className={input} value={f.subject} onChange={(e) => set("subject", e.target.value)} data-testid="pack-subject" />
+                        </label>
+                    </div>
                 </div>
 
                 {/* Pricing */}

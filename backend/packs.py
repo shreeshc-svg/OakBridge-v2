@@ -35,13 +35,13 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from extensions import db, require_admin
+from extensions import db, rank_for_year, require_admin
 
 log = logging.getLogger(__name__)
 
@@ -101,6 +101,14 @@ class PackBase(BaseModel):
     language: Optional[str] = None
     publisher: Optional[str] = None
     binding: Optional[str] = None
+    # Specifications of the PACK, edited by the admin. A pack made this year
+    # can hold books published years ago, so its year is not any book's year:
+    # it defaults to the year the pack is created and is the admin's to set.
+    # Pages: 0 = "add up the books" (the default); any other number is the
+    # admin's figure and stays put when books are added or removed.
+    publication_year: Optional[int] = None
+    pages: Optional[int] = Field(default=None, ge=0)
+    size: Optional[str] = None
 
 
 class PackCreate(PackBase):
@@ -182,6 +190,28 @@ def _derived(items: List[dict]) -> dict:
     }
 
 
+def _this_year() -> int:
+    # India time: a pack created at 1 am IST on 1 January is that year's.
+    return (datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)).year
+
+
+def _year_or_400(year: Optional[int]) -> Optional[int]:
+    if year is None:
+        return None
+    y = int(year)
+    if not 1900 <= y <= _this_year() + 1:
+        raise HTTPException(status_code=400, detail=f"Publication year must be between 1900 and {_this_year() + 1}.")
+    return y
+
+
+def _pages_fields(manual: Optional[int], derived_pages: int) -> dict:
+    """pages_manual = the admin's number (None = automatic); pages = what the
+    Specifications tab shows."""
+    if manual:
+        return {"pages_manual": int(manual), "pages": int(manual)}
+    return {"pages_manual": None, "pages": int(derived_pages)}
+
+
 def _price_or_400(mrp, mode, value) -> float:
     try:
         return compute_price(mrp, mode, value)
@@ -210,7 +240,7 @@ async def pack_items(pack_id: str):
     docs = await db.books.find(
         {"id": {"$in": ids}},
         {"_id": 0, "id": 1, "title": 1, "author": 1, "cover_image": 1,
-         "isbn": 1, "pages": 1, "original_price": 1, "price": 1},
+         "isbn": 1, "pages": 1, "original_price": 1, "price": 1, "publication_year": 1},
     ).to_list(None)
     by_id = {d["id"]: d for d in docs}
     return {"items": [by_id[i] for i in ids if i in by_id]}
@@ -280,10 +310,15 @@ async def admin_create_pack(payload: PackCreate):
         "language": payload.language or "English",
         "publisher": payload.publisher or "Oakbridge Publishing",
         "binding": payload.binding or None,
+        "size": (payload.size or "").strip() or None,
         "rating": 4.5,
         "created_at": datetime.now(timezone.utc).isoformat(),
         **_derived(items),
     }
+    doc["publication_year"] = _year_or_400(payload.publication_year) or _this_year()
+    doc.update(_pages_fields(payload.pages, doc["pages"]))
+    # Without a rank the "Newest" sort puts the pack after every book.
+    doc["release_rank"] = rank_for_year(doc["publication_year"])
     await db.books.insert_one(dict(doc))
     log.info("Pack created: %s (%s)", doc["title"], doc["id"])
     return doc
@@ -296,16 +331,38 @@ async def admin_update_pack(pack_id: str, payload: PackBase):
         raise HTTPException(status_code=404, detail="Pack not found")
     updates = {
         k: v for k, v in payload.model_dump().items()
-        if v is not None and k not in ("pricing_mode", "pricing_value", "pack_items")
+        if v is not None and k not in ("pricing_mode", "pricing_value", "pack_items", "pages")
     }
     if "isbn" in updates:
         await _check_isbn_unique(updates["isbn"], pack_id)
+    if "size" in updates:
+        updates["size"] = (updates["size"] or "").strip() or None
 
     if payload.pack_items is not None:
         ids = normalise_items(payload.pack_items)
         items = await _resolve_items(ids)
         updates["pack_items"] = [{"book_id": i} for i in ids]
         updates.update(_derived(items))
+
+    # Pages: the admin's own number wins over the sum; 0 hands it back to the sum.
+    if payload.pages is not None or "pages" in updates:
+        manual = payload.pages if payload.pages is not None else prev.get("pages_manual")
+        auto = updates.get("pages")
+        if auto is None:
+            # Lenient on purpose: a book removed from the catalogue since must
+            # not stop the admin from correcting the page count.
+            ids = normalise_items(prev.get("pack_items"))
+            docs = await db.books.find({"id": {"$in": ids}}, {"_id": 0, "pages": 1}).to_list(None)
+            auto = sum(int(d.get("pages") or 0) for d in docs)
+        updates.update(_pages_fields(manual, auto))
+
+    if "publication_year" in updates:
+        updates["publication_year"] = _year_or_400(updates["publication_year"])
+        # Same rule as books: re-slot under "Newest" unless the rank came from
+        # the release master (a whole number).
+        rank = prev.get("release_rank")
+        if rank is None or float(rank) != int(float(rank)):
+            updates["release_rank"] = rank_for_year(updates["publication_year"])
 
     # Re-price against the MERGED state: changing only the MRP must re-apply
     # the stored percentage, and changing only the mode must use the stored MRP.

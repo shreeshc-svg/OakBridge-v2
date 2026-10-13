@@ -575,8 +575,11 @@ export default function BookDetail() {
                                                 <span className="block text-sm text-[#002B5C] leading-snug line-clamp-2 group-hover:text-[#CC0033]">
                                                     {it.title}
                                                 </span>
-                                                {it.author && (
-                                                    <span className="block text-xs text-[#4B5563] truncate">{it.author}</span>
+                                                {(it.author || it.publication_year) && (
+                                                    <span className="block text-xs text-[#4B5563] truncate">
+                                                        {/* Each book's own year: the pack's year (Specifications) is when the pack was made. */}
+                                                        {[it.author, it.publication_year].filter(Boolean).join(" · ")}
+                                                    </span>
                                                 )}
                                             </span>
                                         </Link>
