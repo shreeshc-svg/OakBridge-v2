@@ -262,6 +262,12 @@ export default function AdminPages() {
                                 onSave={(v) => saveSite("home_stores_title", v)}
                             />
                             <TextSlotRow
+                                label="“Available on” line under the heading"
+                                value={site.home_stores_subtitle}
+                                defaultValue="Find Oakbridge titles on your favourite store"
+                                onSave={(v) => saveSite("home_stores_subtitle", v)}
+                            />
+                            <TextSlotRow
                                 label="Strip scroll speed — pixels per second (default 30; it only scrolls when the logos don't fit)"
                                 value={site.home_stores_speed}
                                 defaultValue="30"

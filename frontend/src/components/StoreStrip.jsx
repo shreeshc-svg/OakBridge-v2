@@ -18,7 +18,7 @@ import { mediaUrl } from "../lib/api";
  * on hover/touch. With prefers-reduced-motion, or when everything fits on
  * screen, it is a still, centred row instead.
  */
-export default function StoreStrip({ stores = [], title = "", speed = 30 }) {
+export default function StoreStrip({ stores = [], title = "", subtitle = "", speed = 30 }) {
     const items = stores.filter((s) => s && s.enabled !== false && s.logo);
     const trackRef = useRef(null);
     const wrapRef = useRef(null);
@@ -52,11 +52,15 @@ export default function StoreStrip({ stores = [], title = "", speed = 30 }) {
         <section
             data-testid="store-strip"
             aria-label={title || "Also available on"}
-            className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-8 md:py-10 border-b border-[#E5E7EB] bg-white"
+            className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-12 md:py-16 border-b border-[#E5E7EB] bg-[#F5F7FA]"
         >
             {title && (
-                <p className="text-center overline !text-[10px] text-[#4B5563] mb-5">{title}</p>
+                <h2 className="text-center font-serif text-2xl md:text-3xl text-[#002B5C]">{title}</h2>
             )}
+            {subtitle && (
+                <p className="text-center text-sm md:text-base text-[#4B5563] mt-2">{subtitle}</p>
+            )}
+            <div className={title || subtitle ? "mt-8 md:mt-10" : ""} />
             <div
                 ref={wrapRef}
                 className="relative overflow-hidden"
@@ -68,22 +72,29 @@ export default function StoreStrip({ stores = [], title = "", speed = 30 }) {
                 <style>{`@keyframes oakStores{from{transform:translateX(0)}to{transform:translateX(-50%)}}`}</style>
                 <ul
                     ref={trackRef}
-                    className={`flex items-center ${scroll ? "w-max" : "flex-wrap justify-center gap-y-4"}`}
+                    className={`flex items-center ${scroll ? "w-max" : "flex-wrap justify-center gap-y-4 md:gap-y-6"}`}
                     style={scroll ? { animation: `oakStores ${dur}s linear infinite`, animationPlayState: paused ? "paused" : "running" } : undefined}
                 >
                     {loop.map((s, i) => (
                         <li
                             key={`${s.id || s.name}-${i}`}
                             aria-hidden={i >= items.length ? "true" : undefined}
-                            className="flex-none px-6 md:px-10"
+                            className="flex-none px-2 md:px-3"
                         >
-                            <img
-                                src={mediaUrl(s.logo)}
-                                alt={i >= items.length ? "" : (s.alt || s.name || "")}
-                                loading="lazy"
-                                decoding="async"
-                                className="h-8 md:h-10 w-auto max-w-[160px] object-contain"
-                            />
+                            {/* Every logo sits in the same white tile, so square
+                                icons and wide wordmarks read as one even row
+                                instead of a ragged line of mismatched sizes.
+                                mix-blend-multiply lets a logo uploaded on a
+                                plain white background melt into the tile. */}
+                            <div className="w-36 h-20 sm:w-44 sm:h-24 md:w-56 md:h-28 bg-white border border-[#E5E7EB] shadow-sm flex items-center justify-center px-5 md:px-7 transition-shadow hover:shadow-md">
+                                <img
+                                    src={mediaUrl(s.logo)}
+                                    alt={i >= items.length ? "" : (s.alt || s.name || "")}
+                                    loading="lazy"
+                                    decoding="async"
+                                    className="max-h-10 sm:max-h-12 md:max-h-14 max-w-full w-auto object-contain mix-blend-multiply"
+                                />
+                            </div>
                         </li>
                     ))}
                 </ul>

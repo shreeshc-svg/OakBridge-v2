@@ -834,7 +834,7 @@ export default function Home() {
             {/* ============== TESTIMONIALS (carousel) ============== */}
             {!hidden.has("home.stores") && stores.length > 0 && (
                 <div style={{ order: homeOrd("stores") }}>
-                    <StoreStrip stores={stores} title={site.home_stores_title || "Also available on"} speed={Number(site.home_stores_speed) || 30} />
+                    <StoreStrip stores={stores} title={site.home_stores_title || "Also available on"} subtitle={site.home_stores_subtitle || "Find Oakbridge titles on your favourite store"} speed={Number(site.home_stores_speed) || 30} />
                 </div>
             )}
             {!hidden.has("home.testimonials") && testimonials.length > 0 && (
