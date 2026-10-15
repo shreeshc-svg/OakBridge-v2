@@ -131,7 +131,7 @@ function Dashboard({ onOpen }) {
                 ))}
                 <HealthBadge h={health} />
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-3">
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3">
                 <Kpi label="Subscribed (email)" value={k.subscribed.toLocaleString("en-IN")} sub={`${k.contacts.toLocaleString("en-IN")} contacts`} testid="mk-kpi-subscribed" />
                 <Kpi label="Emails sent" value={k.email_sent.toLocaleString("en-IN")} sub={`${k.campaigns} campaigns`} />
                 <Kpi label="Open rate" value={pct(k.open_rate)} sub="of delivered" />
@@ -1120,12 +1120,19 @@ function CampaignReport({ id, status, reload }) {
                         : <>Those who don't click stop getting campaigns {r.campaign.reconfirm_days || 30} days after sending finishes.</>}
                 </div>
             )}
-            <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3">
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3">
                 <Kpi label="Sent" value={(s.sent || 0).toLocaleString("en-IN")} sub={s.queued ? `${s.queued} waiting` : ""} />
                 <Kpi label="Delivered" value={pct(r.rates.delivery)} />
                 <Kpi label={isWa ? "Read" : "Opened"} value={pct(r.rates.open)} />
                 <Kpi label="Clicked" value={pct(r.rates.click)} sub={isWa ? "" : `CTOR ${pct(r.rates.ctor)}`} />
-                <Kpi label="Bounced" value={pct(r.rates.bounce, 2)} warn={(r.rates.bounce || 0) > 0.02} />
+                {/* Hard bounces in the big number; soft bounces and "no report yet"
+                    underneath, so delivered + these add up to Sent. */}
+                <Kpi
+                    label="Bounced"
+                    value={pct(r.rates.bounce, 2)}
+                    warn={(r.rates.bounce || 0) > 0.02}
+                    sub={isWa ? "" : [s.soft_bounced ? `${s.soft_bounced} soft` : "", s.no_report ? `${s.no_report} no report yet` : ""].filter(Boolean).join(" · ")}
+                />
                 <Kpi label="Unsubscribed" value={pct(r.rates.unsubscribe, 2)} />
                 <Kpi label="Orders" value={s.paid || 0} sub={`${s.orders || 0} started`} />
                 <Kpi label="Revenue" value={inr(s.revenue)} sub={isWa && s.cost ? `cost ${inr(s.cost)}` : ""} />
@@ -1153,9 +1160,9 @@ function CampaignReport({ id, status, reload }) {
             {r.problems.length > 0 && (
                 <Panel title={`Bounces, complaints and failures (${r.problems.length})`}>
                     <table className="w-full text-xs"><tbody>{r.problems.map((p, i) => (
-                        <tr key={i} className="border-t"><td className="py-1 pr-3 font-mono">{p.to}</td><td className="pr-3">{p.status}{p.bounce_type ? ` (${p.bounce_type})` : ""}</td><td className="text-[#6B7280]">{p.error}</td></tr>
+                        <tr key={i} className="border-t"><td className="py-1 pr-3 font-mono">{p.to}</td><td className="pr-3">{p.status === "sent" && p.bounce_type ? `soft bounce (${p.bounce_type})` : `${p.status}${p.bounce_type ? ` (${p.bounce_type})` : ""}`}</td><td className="text-[#6B7280]">{p.error}</td></tr>
                     ))}</tbody></table>
-                    <p className="text-xs text-[#6B7280] mt-2">Hard bounces and complaints are removed from all future sends automatically.</p>
+                    <p className="text-xs text-[#6B7280] mt-2">Hard bounces and complaints are removed from all future sends automatically. A soft bounce (full mailbox, server busy) is retried next campaign; three in a row and the address is removed.</p>
                 </Panel>
             )}
         </div>

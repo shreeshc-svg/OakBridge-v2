@@ -142,8 +142,10 @@ export function Donut({ data = {}, colors = {}, size = 140, label = "" }) {
 /** KPI card; `warn` turns the value red (e.g. bounce rate over the limit). */
 export function Kpi({ label, value, sub, warn, testid }) {
     return (
-        <div className="bg-white border border-[#E5E7EB] p-4" data-testid={testid}>
-            <div className="text-[11px] uppercase tracking-wider text-[#6B7280]">{label}</div>
+        // min-w-0: a grid item otherwise refuses to shrink below its longest
+        // word, and a long label ("UNSUBSCRIBED") ran into the next card.
+        <div className="bg-white border border-[#E5E7EB] p-4 min-w-0" data-testid={testid}>
+            <div className="text-[11px] uppercase tracking-wider text-[#6B7280] leading-snug [overflow-wrap:anywhere]">{label}</div>
             <div className={`font-serif text-2xl mt-1 ${warn ? "text-[#CC0033]" : "text-[#002B5C]"}`}>{value}</div>
             {sub && <div className="text-xs text-[#6B7280] mt-0.5">{sub}</div>}
         </div>
