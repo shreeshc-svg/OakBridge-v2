@@ -42,9 +42,28 @@ Every 5 minutes
 ## 4. Daily use
 
 1. **Contacts → Sync website contacts**: pulls newsletter sign-ups, paying customers and confirmed accounts.
-2. **Verify & import**: upload an Excel/CSV → *Check the file* (nothing saved) → review → name the list, tick consent only if those people agreed, say where → *Import*.
+2. **Verify & import**: choose an Excel/CSV — the **cost of checking it** with Amazon SES shows above the button (already-checked and proven addresses are free) → *Check the file* (OK/Cancel shows the cost; nothing saved) → review → name the list and choose **who these people are** → *Send for approval*.
+   - **Known clients / customers** → can receive marketing emails once approved; the consent record names the approver.
+   - **Not known to us** → saved without consent; they can get ONE permission email (Campaigns → New re-confirm campaign, pick the list). A click opts them in; no click by the end of the window means never mailed again.
+   - **Approval:** someone else with Marketing access approves or rejects it (top of Verify & import, and a dashboard alert). A superadmin may approve their own; imports that re-add erased people need a superadmin. Nothing reaches Contacts before approval.
+   - **Budget:** Settings → *Monthly budget for mailbox checks, ₹* (superadmin). Default ₹850 ≈ 965 checks; checks beyond it wait for next month or happen when a campaign is sent.
 3. **Campaigns → New email campaign**: subject, blocks, audience → **Send test** to yourself → **Send now** / **Schedule**. The count you confirm must still match at send time.
 4. **Dashboard / report**: opens, clicks, bounces, orders and revenue (orders are tied to a campaign by the `utm_campaign=mk-…` tag on our links).
+
+## 4. Templates and variables (Marketing → Templates)
+
+- **Built-in templates** (read-only): new release, monthly round-up, event invitation, offer, author spotlight, welcome. **Use** makes a draft campaign; **Duplicate to edit** makes your own copy.
+- **Your templates:** **New template**, or **Save this email as a template** in any campaign editor. A campaign made from a template is a copy — editing the template later changes nothing already written or sent.
+- **Variables** (subject, preview text, headings, text, buttons): `{{first_name}}`, `{{last_name}}`, `{{name}}`, `{{email}}`, `{{month}}`, `{{year}}`. Fallback per use: `{{first_name|Reader}}`. Click a variable to copy it. An unknown variable (e.g. `{{company}}`) blocks sending; `[placeholder]` text left from a template asks before sending.
+- **Images:** drag & drop (or click) into an Image block. Resized to 1200 px, re-encoded (JPEG/PNG; GIFs kept), stored publicly, and inserted as a full https link.
+
+## 4. Reports, exports and database clean-up
+
+- **Export a campaign report** (campaign → *Export report (Excel)* / *CSV*): Recipients (each address with its outcome — delivered, opened, clicked, bounced, skipped and why), Summary and Links. CSV = recipients only.
+- **Export contacts** (Contacts → *Export*): exactly the rows the current search and filters show.
+- **Clean up after sending** (campaign report, or Contacts → *Clean up the database*): tick what to remove — bounced, blocked by AWS, invalid (on by default); spam complaints, unsubscribed (off by default) → *Count them* → *Download* → *Remove* (superadmin, OK/Cancel).
+  - Removed contacts leave Contacts and every list. A one-way fingerprint of each address is kept so an order sync or an old spreadsheet can't add it back (it shows as "removed in a clean-up" when a file is checked). Their own new sign-up still works. Campaign reports keep the history.
+- Spreadsheet cells starting with `=`, `+`, `-` or `@` are written as text, so a name like `=HYPERLINK(...)` can't run in Excel. Every export is logged.
 
 ## 4a. Amazon SES Email Validation (mailbox checks)
 

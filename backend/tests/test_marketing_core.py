@@ -193,6 +193,37 @@ check(m.add_utm("https://amazon.in/x", "abcdef123") == "https://amazon.in/x", "o
 f = m.funnel({"sent": 1000, "delivered": 980, "opened": 300, "clicked": 60, "orders": 6, "paid": 5})
 check([s["count"] for s in f] == [1000, 980, 300, 60, 6, 5] and f[2]["from_prev"] == round(300 / 980, 4), "funnel steps and step conversion")
 
+print("-- merge variables & templates (15 Oct 2026) --")
+from datetime import datetime as _dt
+_now = _dt(2026, 10, 15)
+_p = lambda t, c: m.personalise(t, c, now=_now)  # noqa: E731
+check(_p("Hi {{first_name}} {{last_name}}", {"name": "Asha  Rani Verma"}) == "Hi Asha Rani Verma", "first and last name split on spaces")
+check(_p("Hi {{first_name}}", {}) == "Hi there", "no name: the variable's default")
+check(_p("Hi {{ first_name | Reader }}", {}) == "Hi Reader", "per-use fallback, spaces allowed")
+check(_p("{{month}} {{year}}", {}) == "October 2026", "month and year (India time)")
+check(_p("Dear {{company}}!", {"name": "A"}) == "Dear !", "unknown variable is blanked, never mailed as raw braces")
+check(m.unknown_variables("{{first_name}}", "{{company}} {{Company}}") == ["company"], "unknown variables are reported once")
+check(_p("{{email}}", {"email": "a@b.co"}) == "a@b.co", "email")
+keys = {v["key"] for v in m.VARIABLES}
+used = set()
+for t in m.STARTER_TEMPLATES:
+    for txt in [t["subject"], t["preheader"]] + [b.get("text", "") + b.get("label", "") for b in t["blocks"]]:
+        used |= {m.group(1) for m in m._VAR_RE.finditer(txt)}
+check(used <= keys and "first_name" in used, f"starter templates use only known variables ({sorted(used)})")
+check(len({t["key"] for t in m.STARTER_TEMPLATES}) == len(m.STARTER_TEMPLATES) >= 5, "starter templates have unique keys")
+
+print("-- exports & clean-up (15 Oct 2026) --")
+check([m.safe_cell(x) for x in ["=HYPERLINK(\"x\")", "+91 98", "-5", "@SUM(A1)", "Asha", 5, None, True]]
+      == ["'=HYPERLINK(\"x\")", "'+91 98", "'-5", "'@SUM(A1)", "Asha", 5, "", "yes"], "spreadsheet formulas are neutralised")
+check([m.send_outcome(x) for x in [{"status": "sent", "clicked_at": "t", "opened_at": "t"}, {"status": "sent", "opened_at": "t"},
+       {"status": "sent", "delivered_at": "t"}, {"status": "bounced", "opened_at": "t"}, {"status": "skipped"},
+       {"status": "sent", "unsubscribed_at": "t", "clicked_at": "t"}]]
+      == ["clicked", "opened", "delivered", "bounced", "skipped", "unsubscribed"], "one outcome per recipient")
+check([m.cleanup_kind(x) for x in [{"suppressed": "bounced"}, {"suppressed": "invalid (SES validation)"},
+       {"email_status": "invalid"}, {"suppressed": "complained"}, {"email_consent": {"status": "unsubscribed"}},
+       {"email_status": "valid", "email_consent": {"status": "subscribed"}}]]
+      == ["bounced", "blocked", "invalid", "complained", "unsubscribed", ""], "clean-up groups")
+
 print()
 if failed:
     print(f"{failed} assertion(s) failed")

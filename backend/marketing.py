@@ -224,6 +224,8 @@ async def _ensure_indexes() -> None:
     await _index(db.mk_sends, "sent_at")
     await _index(db.mk_sends, [("campaign_id", 1), ("tail", 1), ("status", 1)])
     await _index(db.mk_contacts, [("email_consent.status", 1), ("email_status", 1)])
+    await _index(db.mk_import_rows, [("import_id", 1), ("i", 1)])
+    await _unique_index(db.mk_removed, "h")
     await _index(db.mk_contacts, "created_at")
     await _index(db.mk_events, "at")
     await _jobs.ensure_indexes(db)
@@ -308,6 +310,17 @@ async def _erased(norms: list) -> set:
     out = set()
     async for e in db.mk_erased.find({"h": {"$in": list(by_hash)}}, {"_id": 0, "h": 1}):
         out.add(by_hash[e["h"]])
+    return out
+
+
+async def _removed(norms: list) -> dict:
+    """{mailbox: reason} for addresses removed in a database clean-up (only a
+    hash is kept, like an erase) — so they can never be imported or synced
+    back in by accident."""
+    by_hash = {_erase_hash(n): n for n in norms if n}
+    out = {}
+    async for e in db.mk_removed.find({"h": {"$in": list(by_hash)}}, {"_id": 0, "h": 1, "reason": 1}):
+        out[by_hash[e["h"]]] = e.get("reason") or "removed"
     return out
 
 
@@ -619,6 +632,8 @@ async def verify_emails(raw: list, *, autofix: bool = True, ses: str = "cache", 
         # vanish silently on import).
         for n in await _erased([x for x in norms if x]):
             supp.setdefault(n, "erased at a privacy request")
+        for n, why in (await _removed([x for x in norms if x])).items():
+            supp.setdefault(n, f"removed in a clean-up ({why})")
     out = []
     for x, n in zip(rows, norms):
         s = x["syntax"]
@@ -834,6 +849,13 @@ async def upsert_contact(email: str, *, name: str = "", phone: str = "", source:
         # The person opted in again themselves (or a superadmin confirmed they
         # asked to be re-added): lift the block.
         await db.mk_erased.delete_one({"h": _erase_hash(norm)})
+    if await db.mk_removed.find_one({"h": _erase_hash(norm)}, {"_id": 1}):
+        if not readd_erased:
+            # Removed in a clean-up (bounced / invalid / …): a sync of old
+            # orders or an old file must not bring the address back. Their
+            # own new sign-up (double opt-in) or a superadmin re-add does.
+            return None
+        await db.mk_removed.delete_one({"h": _erase_hash(norm)})
     cur = await db.mk_contacts.find_one({"email_norm": norm}, {"_id": 0})
     now = _iso()
     if not cur:
@@ -1062,6 +1084,15 @@ async def audience_filter(campaign: dict) -> dict:
     if campaign.get("channel") == "whatsapp":
         flt["wa_consent.status"] = "subscribed"
         flt["phone"] = {"$nin": [None, ""]}
+    elif campaign.get("kind") == "reconfirm":
+        # A re-confirm / permission email also reaches people imported as "not
+        # known to us" (permission_pending): it is the ONE email they can get,
+        # and a click is their opt-in. Never anyone who said no.
+        flt.setdefault("$and", []).append({"$or": [
+            {"email_consent.status": "subscribed"},
+            {"permission_pending": True, "email_consent.status": {"$nin": ["unsubscribed", "complained", "lapsed"]}}]})
+        flt["suppressed"] = {"$in": [None, ""]}
+        flt["email_status"] = {"$in": sorted(core.selected_statuses(aud)) + ["unknown"]}
     else:
         flt["email_consent.status"] = "subscribed"
         flt["suppressed"] = {"$in": [None, ""]}
@@ -1288,7 +1319,10 @@ async def _run_campaign(cid: str) -> None:
                 return
             for s in batch:
                 contact = await db.mk_contacts.find_one({"id": s["contact_id"]}, {"_id": 0}) or {}
-                ok_now = (contact.get("email_consent", {}).get("status") == "subscribed" and not contact.get("suppressed")) \
+                cs = contact.get("email_consent", {}).get("status")
+                ok_now = (not contact.get("suppressed") and (cs == "subscribed" or (
+                    camp.get("kind") == "reconfirm" and contact.get("permission_pending")
+                    and cs not in ("unsubscribed", "complained", "lapsed")))) \
                     if camp["channel"] == "email" else contact.get("wa_consent", {}).get("status") == "subscribed"
                 if not ok_now:  # unsubscribed / bounced since the campaign was queued
                     await db.mk_sends.update_one({"id": s["id"]}, {"$set": {"status": "skipped", "error": "no longer subscribed"}})
@@ -1423,7 +1457,8 @@ async def track_click(send_id: str, idx: int, sig: str):
             await db.mk_contacts.update_one({"id": s["contact_id"], "suppressed": {"$in": [None, ""]},
                                              "email_consent.status": {"$nin": ["unsubscribed", "complained"]}},
                                             {"$set": {"email_consent": _consent("subscribed", "re-confirmed (campaign click)"),
-                                                      "email_status": "verified", "reconfirmed_at": _iso()}})
+                                                      "email_status": "verified", "reconfirmed_at": _iso(),
+                                                      "permission_pending": False}})
     if not s.get("opened_at"):
         sets["opened_at"] = _iso()  # a click proves the open (images may be blocked)
     if sets:
@@ -1634,6 +1669,17 @@ async def lapse_reconfirm() -> dict:
                 {"id": x["contact_id"], "email_consent.status": "subscribed", "email_consent.at": {"$lt": c.get("started_at") or c["finished_at"]}},
                 {"$set": {"email_consent": _consent("lapsed", f"no reply to re-confirm “{c.get('name', '')}”")}})
             n += r.modified_count
+            # Imported "not known to us" and did not click the permission
+            # email: that was the one ask — never mailed again.
+            r2 = await db.mk_contacts.update_one(
+                {"id": x["contact_id"], "permission_pending": True,
+                 "email_consent.status": {"$nin": ["subscribed", "unsubscribed", "complained"]}},
+                {"$set": {"permission_pending": False, "permission_declined_at": _iso(),
+                          "email_consent": _consent("lapsed", f"no reply to permission email “{c.get('name', '')}”")}})
+            n += r2.modified_count
+            # Whatever else happened (they unsubscribed instead), the one ask is used up.
+            await db.mk_contacts.update_one({"id": x["contact_id"], "permission_pending": True},
+                                            {"$set": {"permission_pending": False}})
         await db.mk_campaigns.update_one({"id": c["id"]}, {"$set": {"lapsed_done": True, "lapsed_count": n, "lapsed_at": _iso()}})
         await audit_log(db, "MARKETING_RECONFIRM_LAPSED", email="system", role="system", meta={"campaign": c["id"], "lapsed": n})
         done += n
@@ -1915,12 +1961,22 @@ async def adm_import(
     statuses: str = Form("verified,valid,risky"),
     ses_live: bool = Form(False),
     readd_erased: bool = Form(False),
+    audience: str = Form(""),
     user: dict = Depends(require_admin),
 ):
     """Upload a sheet -> verification report. dry_run=True only reports;
-    dry_run=False saves contacts (sendable + risky; invalid ones are kept out)
-    into the named list. Consent can only be marked if the admin confirms it
-    and says where it came from."""
+    dry_run=False STAGES the import for approval (nothing is saved to
+    Contacts until someone else with Marketing access approves it — see
+    adm_import_approve).
+
+    audience (15 Oct 2026, replaces the "these people agreed" tick box):
+      known   — existing clients/customers known to the company: imported as
+                consented to marketing email, source recorded at approval
+                ("existing client/customer — <list>, approved by <approver>");
+      unknown — not known to us: imported WITHOUT consent and marked
+                permission_pending, so the only email they can get is one
+                permission request (a re-confirm campaign); a click opts them
+                in, no click means never mailed again."""
     from rbac import is_superadmin
     if readd_erased and not is_superadmin(user.get("role")):
         raise HTTPException(status_code=403, detail="Only a superadmin can re-add erased people")
@@ -1945,8 +2001,12 @@ async def adm_import(
         raise HTTPException(status_code=400, detail=f"No email column found (columns: {', '.join(cols[:12])})")
     ncol = _pick(cols, "name", "full name", "first name")
     pcol = _pick(cols, "phone", "mobile", "whatsapp", "contact")
-    if (consent_email or consent_whatsapp) and len(consent_source.strip()) < 3:
-        raise HTTPException(status_code=400, detail="Say where these people agreed to hear from you (e.g. 'Law summit 2026 registration form')")
+    if not dry_run and audience not in ("known", "unknown"):
+        raise HTTPException(status_code=400, detail=(
+            "Choose who these people are (known clients/customers, or not known to us). "
+            "Refresh the page if you don't see the choice."))
+    if consent_whatsapp and len(consent_source.strip()) < 3:
+        raise HTTPException(status_code=400, detail="Say where these people agreed to WhatsApp messages (e.g. 'Law summit 2026 registration form')")
     # duplicates inside the file (same mailbox)
     seen, unique_rows, dups = set(), [], 0
     for r in rows:
@@ -1969,18 +2029,20 @@ async def adm_import(
     saved = 0
     skipped: dict = {}
     lid = None
+    pending_id = None
+    would_save = 0
     if not dry_run:
+        # Staged, not saved: what WOULD be imported is kept with its verdicts
+        # (no second paid check at approval), and someone else with Marketing
+        # access approves or rejects it (adm_import_approve / _reject).
         name = list_name.strip() or f"Import {_now():%d %b %Y %H:%M}"
-        lid = str(uuid.uuid4())
-        await db.mk_lists.insert_one({"id": lid, "name": name[:80], "kind": "static", "created_at": _iso(), "created_by": user.get("email", "")})
-        src = f"import: {consent_source.strip() or name}"[:120]
         wanted = core.selected_statuses({"statuses": [x.strip() for x in statuses.split(",")]})
-        skipped: dict = {}
 
         def skip(why: str) -> None:
             skipped[why] = skipped.get(why, 0) + 1
 
-        readded = 0
+        pending_id = str(uuid.uuid4())
+        staged = []
         for r, v in zip(unique_rows, results):
             if v["status"] == "invalid":
                 skip("invalid address")
@@ -1992,26 +2054,25 @@ async def adm_import(
             if v["status"] not in wanted:
                 skip(f"{v['status']} — not ticked")
                 continue
-            was_erased = readd_erased and bool(await _erased([v["email_norm"]]))
-            doc = await upsert_contact(v["email"], name=r.get(ncol, "") if ncol else "", phone=r.get(pcol, "") if pcol else "",
-                                 source=src, lists=[lid], status=v["status"], reasons=v["reasons"],
-                                 proven=v["status"] == "verified" or None, ses_checked=v.get("ses_checked") or None,
-                                 extra={"risk_kind": v.get("risk_kind", ""), "ses_overall": v.get("ses_overall", ""), "score": v.get("score"),
-                                    "flags": v.get("flags") or [], "role": bool(v.get("role"))},
-                                 email_consent="subscribed" if consent_email else None,
-                                 wa_consent="subscribed" if consent_whatsapp else None, by=user.get("email", ""),
-                                 readd_erased=readd_erased)
-            if doc:
-                saved += 1
-                readded += was_erased
-            else:
-                skip("erased at a privacy request")  # safety net: never count what wasn't saved
-        await db.mk_imports.insert_one({"id": str(uuid.uuid4()), "at": _iso(), "by": user.get("email", ""), "file": file.filename,
-                                        "list_id": lid, "counts": counts, "saved": saved, "consent_source": consent_source})
-        await audit_log(db, "MARKETING_IMPORT", email=user.get("email", ""), role=user.get("role", ""),
-                        meta={"file": file.filename, "saved": saved, "counts": counts, "consent_email": consent_email,
-                              "consent_whatsapp": consent_whatsapp, "skipped": skipped, "readded_erased": readded})
-        kick_validation()
+            staged.append({"import_id": pending_id, "i": len(staged), "email": v["email"],
+                           "name": str(r.get(ncol, "") if ncol else "")[:120], "phone": str(r.get(pcol, "") if pcol else "")[:40],
+                           "v": {k: v.get(k) for k in ("status", "reasons", "email_norm", "ses_checked", "risk_kind",
+                                                       "ses_overall", "score", "flags", "role")}})
+        for k in range(0, len(staged), 1000):
+            await db.mk_import_rows.insert_many(staged[k:k + 1000])
+        would_save = len(staged)
+        await db.mk_imports.insert_one({
+            "id": pending_id, "status": "pending", "at": _iso(), "by": user.get("email", ""), "by_role": user.get("role", ""),
+            "file": file.filename, "list_name": name[:80], "audience": audience, "consent_whatsapp": bool(consent_whatsapp),
+            "consent_source": consent_source.strip()[:120], "readd_erased": bool(readd_erased),
+            "counts": counts, "would_save": would_save, "skipped": skipped,
+            "ses_after": sum(1 for x in staged if not x["v"].get("ses_checked") and x["v"]["status"] in ("valid", "risky"))})
+        await raise_alert("import", f"Import “{name[:60]}” — {would_save} contacts "
+                          f"({'known clients/customers' if audience == 'known' else 'not known to us'}) is waiting for approval. "
+                          f"Uploaded by {user.get('email', '')}. Marketing → Verify & import.", key=f"import:{pending_id}")
+        await audit_log(db, "MARKETING_IMPORT_STAGED", email=user.get("email", ""), role=user.get("role", ""),
+                        meta={"import": pending_id, "file": file.filename, "would_save": would_save, "audience": audience,
+                              "counts": counts, "skipped": skipped})
     sample: dict = {}
     for v in results:
         sample.setdefault(v["status"], [])
@@ -2024,9 +2085,185 @@ async def adm_import(
                   for r, v in zip(unique_rows[:2000], results[:2000])]
     return {"columns": {"email": ecol, "name": ncol, "phone": pcol}, "counts": counts, "sample": sample,
             "saved": saved, "list_id": lid, "dry_run": dry_run, "rows": row_report,
+            "pending_id": pending_id, "would_save": would_save,
             "skipped": skipped if not dry_run else {},
             "erased": sum(1 for v in results if "previously erased at a privacy request" in v["reasons"]),
             "ses": {**(_u := await ses_usage()), "to_check": ses_todo, "est_inr": round(ses_todo * _u["per_check_inr"], 2)}}
+
+
+# ------------------------------------------------- import: cost + approval ---
+async def _estimate_checks(raw_emails: list, autofix: bool = True) -> dict:
+    """What a paid SES check of these addresses would cost — read from our own
+    records only, so the estimate itself is free.
+
+    Counted: distinct, well-formed addresses (after the same typo fixes) that
+    have no fresh SES verdict and are not already proven. That is the most a
+    check can spend; it can spend less (budget cap, catch-all domains). Company
+    domains may cost one extra catch-all test each (at most once per 90 days).
+    """
+    st = await get_settings()
+    norms = set()
+    for r in raw_emails:
+        sx = core.check_syntax(r)
+        if autofix and sx["ok"] and sx["suggestion"]:
+            sx = core.check_syntax(sx["suggestion"])
+        if sx["ok"]:
+            n = core.normalise_email(sx["email"])
+            if n:
+                norms.add(n)
+    norms = list(norms)
+    cached = set((await _ses_cached(norms)).keys()) if norms else set()
+    proven = await _proven(norms) if norms else set()
+    todo = [n for n in norms if n not in cached and n not in proven]
+    company = {n.split("@")[-1] for n in todo} - set(core.WEBMAIL)
+    u = await ses_usage()
+    per = u["per_check_inr"]
+    return {"addresses": len(norms), "already_checked": len(cached | proven), "to_check": len(todo),
+            "est_inr": round(len(todo) * per, 2), "company_domains": len(company),
+            "domain_tests_max_inr": round(len(company) * per, 2), "per_check_inr": per,
+            "budget_left_checks": u["left"], "budget_left_inr": round(u["left"] * per, 2),
+            "budget_inr": u["budget_inr"], "enabled": u["enabled"] and u["supported"],
+            "over_budget": len(todo) > u["left"]}
+
+
+@admin_router.post("/import/estimate")
+async def adm_import_estimate(file: Optional[UploadFile] = File(None), emails: str = Form(""),
+                              autofix: bool = Form(True), user: dict = Depends(require_admin)):
+    """Cost of checking a file (or pasted addresses) with Amazon SES, shown
+    above the Check button before anything is spent."""
+    raw: list = []
+    if file is not None:
+        import uploads_guard
+        data = await uploads_guard.read_limited(file, 25 * 1024 * 1024, "File")
+        uploads_guard.require_not_zip_bomb(data, "File")
+        try:
+            rows = _read_table(data, file.filename)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=400, detail=f"Could not read the file: {str(e)[:120]}")
+        if rows:
+            ecol = _pick(list(rows[0].keys()), "email", "e-mail", "email address", "mail")
+            if not ecol:
+                raise HTTPException(status_code=400, detail="No email column found")
+            raw = [r.get(ecol, "") for r in rows[:50000]]
+    else:
+        raw = [x.strip() for x in re.split(r"[\n,;]+", emails or "") if x.strip()][:5000]
+    return await _estimate_checks(raw, autofix)
+
+
+def _import_view(d: dict) -> dict:
+    return {k: d.get(k) for k in ("id", "status", "at", "by", "file", "list_name", "audience", "consent_whatsapp",
+                                  "consent_source", "counts", "would_save", "skipped", "ses_after", "readd_erased",
+                                  "approved_by", "approved_at", "rejected_by", "rejected_at", "reject_note", "saved", "list_id")}
+
+
+@admin_router.get("/imports")
+async def adm_imports(status: str = "pending", user: dict = Depends(require_admin)):
+    """Imports waiting for approval (or recent decided ones), with a few rows
+    each so the approver can see who is in it."""
+    q = {"status": status} if status in ("pending", "approved", "rejected") else {}
+    out = []
+    for d in await db.mk_imports.find(q, {"_id": 0}).sort("at", -1).limit(50).to_list(50):
+        v = _import_view(d)
+        if d.get("status") == "pending":
+            v["sample"] = [{"email": r["email"], "name": r.get("name", ""), "status": r["v"]["status"]}
+                           async for r in db.mk_import_rows.find({"import_id": d["id"]}, {"_id": 0}).sort("i", 1).limit(15)]
+        v["can_approve"] = _approval_refusal(d, user) is None
+        v["approval_refusal"] = _approval_refusal(d, user)
+        out.append(v)
+    return {"imports": out}
+
+
+def _approval_refusal(d: dict, user: dict) -> Optional[str]:
+    from rbac import is_superadmin
+    if d.get("status") != "pending":
+        return "Already decided."
+    if (d.get("by") or "").lower() == (user.get("email") or "").lower() and not is_superadmin(user.get("role")):
+        return "Uploaded by you — someone else with Marketing access must approve it."
+    if d.get("readd_erased") and not is_superadmin(user.get("role")):
+        return "This import re-adds erased people — only a superadmin can approve it."
+    return None
+
+
+class ImportDecision(BaseModel):
+    note: Optional[str] = ""
+
+
+@admin_router.post("/imports/{iid}/approve")
+async def adm_import_approve(iid: str, user: dict = Depends(require_admin)):
+    """Save a staged import into Contacts. Only someone other than the
+    uploader (a superadmin may approve their own). The approver's name goes
+    on the consent record of a "known clients/customers" import."""
+    d = await db.mk_imports.find_one({"id": iid}, {"_id": 0})
+    if not d:
+        raise HTTPException(status_code=404, detail="Import not found")
+    why = _approval_refusal(d, user)
+    if why:
+        raise HTTPException(status_code=403 if "someone else" in why or "superadmin" in why else 409, detail=why)
+    claim = await db.mk_imports.update_one({"id": iid, "status": "pending"}, {"$set": {"status": "approving"}})
+    if claim.modified_count != 1:
+        raise HTTPException(status_code=409, detail="Someone else is deciding this import right now.")
+    lid = str(uuid.uuid4())
+    await db.mk_lists.insert_one({"id": lid, "name": d["list_name"], "kind": "static", "created_at": _iso(),
+                                  "created_by": d.get("by", ""), "approved_by": user.get("email", ""),
+                                  "audience": d.get("audience")})
+    known = d.get("audience") == "known"
+    src = (f"import: existing client/customer — {d['list_name']} (approved by {user.get('email', '')})" if known
+           else f"import: {d['list_name']} (not known — permission email first)")[:120]
+    wa = bool(d.get("consent_whatsapp"))
+    readd = bool(d.get("readd_erased"))
+    saved, readded, pending_perm = 0, 0, 0
+    skipped = dict(d.get("skipped") or {})
+    async for r in db.mk_import_rows.find({"import_id": iid}, {"_id": 0}).sort("i", 1):
+        v = r["v"]
+        was_erased = readd and bool(await _erased([v.get("email_norm")]))
+        doc = await upsert_contact(r["email"], name=r.get("name", ""), phone=r.get("phone", ""), source=src, lists=[lid],
+                                   status=v["status"], reasons=v.get("reasons") or [],
+                                   proven=v["status"] == "verified" or None, ses_checked=v.get("ses_checked") or None,
+                                   extra={"risk_kind": v.get("risk_kind", ""), "ses_overall": v.get("ses_overall", ""),
+                                          "score": v.get("score"), "flags": v.get("flags") or [], "role": bool(v.get("role"))},
+                                   email_consent="subscribed" if known else None,
+                                   wa_consent="subscribed" if wa else None, by=user.get("email", ""), readd_erased=readd)
+        if not doc:
+            skipped["erased at a privacy request"] = skipped.get("erased at a privacy request", 0) + 1
+            continue
+        saved += 1
+        readded += was_erased
+        if not known:
+            # Only people with no consent decision yet. Someone already
+            # subscribed stays subscribed; someone who unsubscribed, complained
+            # or lapsed is never asked again.
+            pr = await db.mk_contacts.update_one(
+                {"id": doc["id"], "email_consent.status": {"$nin": ["subscribed", "unsubscribed", "complained", "lapsed"]}},
+                {"$set": {"permission_pending": True, "permission_list": lid, "permission_since": _iso()}})
+            pending_perm += pr.modified_count
+    await db.mk_import_rows.delete_many({"import_id": iid})
+    await db.mk_imports.update_one({"id": iid}, {"$set": {
+        "status": "approved", "approved_by": user.get("email", ""), "approved_at": _iso(), "list_id": lid,
+        "saved": saved, "skipped": skipped, "permission_pending": pending_perm}})
+    await db.mk_alerts.update_many({"key": f"import:{iid}", "resolved": False},
+                                   {"$set": {"resolved": True, "resolved_at": _iso(), "resolved_by": user.get("email", "")}})
+    await audit_log(db, "MARKETING_IMPORT", email=user.get("email", ""), role=user.get("role", ""),
+                    meta={"import": iid, "file": d.get("file"), "uploaded_by": d.get("by"), "saved": saved,
+                          "audience": d.get("audience"), "consent_email": known, "consent_whatsapp": wa,
+                          "permission_pending": pending_perm, "skipped": skipped, "readded_erased": readded})
+    kick_validation()
+    return {"ok": True, "saved": saved, "list_id": lid, "skipped": skipped, "permission_pending": pending_perm}
+
+
+@admin_router.post("/imports/{iid}/reject")
+async def adm_import_reject(iid: str, body: ImportDecision, user: dict = Depends(require_admin)):
+    """Nothing is saved; the staged rows are deleted. Anyone with Marketing
+    access may reject, the uploader included (withdrawing their own)."""
+    r = await db.mk_imports.update_one({"id": iid, "status": "pending"}, {"$set": {
+        "status": "rejected", "rejected_by": user.get("email", ""), "rejected_at": _iso(), "reject_note": (body.note or "")[:300]}})
+    if r.modified_count != 1:
+        raise HTTPException(status_code=409, detail="This import is no longer waiting for approval.")
+    await db.mk_import_rows.delete_many({"import_id": iid})
+    await db.mk_alerts.update_many({"key": f"import:{iid}", "resolved": False},
+                                   {"$set": {"resolved": True, "resolved_at": _iso(), "resolved_by": user.get("email", "")}})
+    await audit_log(db, "MARKETING_IMPORT_REJECTED", email=user.get("email", ""), role=user.get("role", ""),
+                    meta={"import": iid, "note": (body.note or "")[:300]})
+    return {"ok": True}
 
 
 @admin_router.post("/alerts/{aid}/dismiss")
@@ -2124,11 +2361,24 @@ async def adm_sync(user: dict = Depends(require_admin)):
 
 
 # ---- contacts ----
+# Addresses that can never be mailed: bounced / complained / blocked by SES
+# (status "suppressed") and failed checks ("invalid"). Hidden from the
+# Contacts list by default — NOT deleted: the record is what keeps them out
+# of every future campaign and stops a later import from bringing them back.
+DEAD_STATUSES = ["suppressed", "invalid"]
+
+
 def _contact_filter(q: Optional[str] = None, status: Optional[str] = None, list_id: Optional[str] = None,
-                    consent: Optional[str] = None) -> dict:
+                    consent: Optional[str] = None, removed: str = "hide") -> dict:
     """One filter for the Contacts page AND its "select all N matching" bulk
-    actions, so a bulk action can never hit more people than the admin saw."""
+    actions, so a bulk action can never hit more people than the admin saw.
+    removed: hide (default) | show | only — bounced & invalid addresses."""
     flt: dict = {}
+    if not status:
+        if removed == "only":
+            flt["email_status"] = {"$in": DEAD_STATUSES}
+        elif removed != "show":
+            flt["email_status"] = {"$nin": DEAD_STATUSES}
     if q and q.strip():
         rx = {"$regex": re.escape(q.strip()[:80]), "$options": "i"}
         flt["$or"] = [{"email": rx}, {"name": rx}, {"phone": rx}, {"source": rx}]
@@ -2143,14 +2393,202 @@ def _contact_filter(q: Optional[str] = None, status: Optional[str] = None, list_
 
 @admin_router.get("/contacts")
 async def adm_contacts(q: Optional[str] = None, status: Optional[str] = None, list_id: Optional[str] = None,
-                       consent: Optional[str] = None, page: int = 1, per: int = 50):
-    flt = _contact_filter(q, status, list_id, consent)
+                       consent: Optional[str] = None, page: int = 1, per: int = 50, removed: str = "hide"):
+    flt = _contact_filter(q, status, list_id, consent, removed)
     per = min(max(per, 10), 200)
     total = await db.mk_contacts.count_documents(flt)
     rows = await db.mk_contacts.find(flt, {"_id": 0}).sort("created_at", -1).skip((max(page, 1) - 1) * per).limit(per).to_list(per)
     by_status = {r["_id"]: r["n"] async for r in db.mk_contacts.aggregate([{"$group": {"_id": "$email_status", "n": {"$sum": 1}}}])}
     by_consent = {r["_id"]: r["n"] async for r in db.mk_contacts.aggregate([{"$group": {"_id": "$email_consent.status", "n": {"$sum": 1}}}])}
-    return {"rows": rows, "total": total, "page": page, "per": per, "by_status": by_status, "by_consent": by_consent}
+    return {"rows": rows, "total": total, "page": page, "per": per, "by_status": by_status, "by_consent": by_consent,
+            "removed_count": sum(n for k, n in by_status.items() if k in DEAD_STATUSES)}
+
+
+# --------------------------------------------------------------- exports ---
+EXPORT_MAX = 100_000
+
+
+def _table_bytes(sheets: list, fmt: str) -> tuple[bytes, str, str]:
+    """sheets: [(title, header, rows)] -> (bytes, media type, extension).
+    CSV carries the first sheet only. Every cell goes through core.safe_cell
+    so a name like "=HYPERLINK(...)" cannot run in Excel."""
+    if fmt == "csv":
+        import csv as _csv
+        buf = io.StringIO()
+        w = _csv.writer(buf)
+        _, header, rows = sheets[0]
+        w.writerow(header)
+        for r in rows:
+            w.writerow([core.safe_cell(v) for v in r])
+        # BOM so Excel opens UTF-8 (Hindi names, ₹) correctly.
+        return ("\ufeff" + buf.getvalue()).encode("utf-8"), "text/csv; charset=utf-8", "csv"
+    from openpyxl import Workbook
+    from openpyxl.styles import Font
+    wb = Workbook()
+    wb.remove(wb.active)
+    for title, header, rows in sheets:
+        ws = wb.create_sheet(title[:31])
+        ws.append(header)
+        for c in ws[1]:
+            c.font = Font(bold=True)
+        for r in rows:
+            ws.append([core.safe_cell(v) for v in r])
+        ws.freeze_panes = "A2"
+        for i, h in enumerate(header, start=1):
+            ws.column_dimensions[ws.cell(1, i).column_letter].width = max(12, min(48, len(str(h)) + 6))
+    out = io.BytesIO()
+    wb.save(out)
+    return out.getvalue(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "xlsx"
+
+
+def _download(data: bytes, media: str, name: str) -> Response:
+    return Response(content=data, media_type=media, headers={
+        "Content-Disposition": f'attachment; filename="{name}"', "Cache-Control": "private, no-store"})
+
+
+def _slug(s: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", (s or "").lower()).strip("-")[:50] or "export"
+
+
+@admin_router.get("/campaigns/{cid}/export")
+async def adm_campaign_export(cid: str, format: str = "xlsx", user: dict = Depends(require_admin)):
+    """Campaign report as a spreadsheet: Summary, every Recipient with what
+    happened (delivered / opened / clicked / bounced / skipped and why), and
+    Links. CSV = the recipients only. Personal data: logged."""
+    fmt = "csv" if format == "csv" else "xlsx"
+    c = await db.mk_campaigns.find_one({"id": cid}, {"_id": 0})
+    if not c:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    stats = await refresh_campaign_stats(cid)
+    names = {}
+    rows = []
+    sends = await db.mk_sends.find({"campaign_id": cid}, {"_id": 0}).limit(EXPORT_MAX).to_list(EXPORT_MAX)
+    ids = list({x.get("contact_id") for x in sends if x.get("contact_id")})
+    for k in range(0, len(ids), 1000):
+        async for ct in db.mk_contacts.find({"id": {"$in": ids[k:k + 1000]}}, {"_id": 0, "id": 1, "name": 1}):
+            names[ct["id"]] = ct.get("name", "")
+    for x in sends:
+        rows.append([x.get("to", ""), names.get(x.get("contact_id"), ""), core.send_outcome(x), x.get("status", ""),
+                     (x.get("sent_at") or "")[:19], (x.get("delivered_at") or "")[:19], (x.get("opened_at") or "")[:19],
+                     (x.get("clicked_at") or "")[:19], int(x.get("click_count") or 0), (x.get("unsubscribed_at") or "")[:19],
+                     x.get("bounce_type") or "", x.get("bounce_sub") or "", x.get("error") or "", x.get("band") or "", x.get("score")])
+    header = ["Email", "Name", "Outcome", "Send status", "Sent at (UTC)", "Delivered at", "Opened at", "Clicked at", "Clicks",
+              "Unsubscribed at", "Bounce type", "Bounce detail", "Reason / error", "Address status when sent", "Score when sent"]
+    links = c.get("links") or []
+    clicks = [0] * len(links)
+    for x in sends:
+        for k in {y.get("i") for y in x.get("clicks") or []}:
+            if isinstance(k, int) and 0 <= k < len(clicks):
+                clicks[k] += 1
+    rates = {"Delivery rate": core.rate(stats.get("delivered", 0), stats.get("sent", 0)),
+             "Open rate": core.rate(stats.get("opened", 0), stats.get("delivered", 0) or stats.get("sent", 0)),
+             "Click rate": core.rate(stats.get("clicked", 0), stats.get("delivered", 0) or stats.get("sent", 0)),
+             "Bounce rate": core.rate(stats.get("bounced", 0), stats.get("sent", 0))}
+    summary = [["Campaign", c.get("name", "")], ["Subject", c.get("subject", "")], ["Status", c.get("status", "")],
+               ["Started", (c.get("started_at") or "")[:19]], ["Finished", (c.get("finished_at") or "")[:19]]]
+    summary += [[k.replace("_", " ").capitalize(), v] for k, v in stats.items() if isinstance(v, (int, float))]
+    summary += [[k, f"{round(v * 100, 1)}%" if v is not None else ""] for k, v in rates.items()]
+    data, media, ext = _table_bytes([("Recipients", header, rows), ("Summary", ["Metric", "Value"], summary),
+                                     ("Links", ["Link", "People who clicked"], [[u, n] for u, n in zip(links, clicks)])], fmt)
+    await audit_log(db, "MARKETING_EXPORT", email=user.get("email", ""), role=user.get("role", ""),
+                    meta={"what": "campaign report", "campaign": cid, "rows": len(rows), "format": ext})
+    return _download(data, media, f"campaign-{_slug(c.get('name'))}-{_now():%Y-%m-%d}.{ext}")
+
+
+@admin_router.get("/contacts/export")
+async def adm_contacts_export(q: Optional[str] = None, status: Optional[str] = None, list_id: Optional[str] = None,
+                              consent: Optional[str] = None, removed: str = "hide", format: str = "xlsx",
+                              user: dict = Depends(require_admin)):
+    """The Contacts list as shown (same filters), for fixing records outside
+    the site or keeping a copy before a clean-up. Personal data: logged."""
+    fmt = "csv" if format == "csv" else "xlsx"
+    flt = _contact_filter(q, status, list_id, consent, removed)
+    list_names = {x["id"]: x.get("name", "") async for x in db.mk_lists.find({}, {"_id": 0, "id": 1, "name": 1})}
+    rows = []
+    async for page in dbutil.batches(db.mk_contacts, flt, {"_id": 0}, size=1000):
+        for ct in page:
+            ec, wc = ct.get("email_consent") or {}, ct.get("wa_consent") or {}
+            st = ct.get("stats") or {}
+            rows.append([ct.get("email", ""), ct.get("name", ""), ct.get("phone", ""), ct.get("email_status", ""), ct.get("score"),
+                         "; ".join((ct.get("reasons") or [])[:3]), ec.get("status", ""), ec.get("source", ""), (ec.get("at") or "")[:19],
+                         wc.get("status", ""), ct.get("suppressed") or "", core.CLEANUP_KINDS.get(core.cleanup_kind(ct), ""),
+                         ", ".join(list_names.get(i, i) for i in ct.get("lists") or []), ct.get("source", ""),
+                         int(st.get("sent") or 0), int(st.get("opened") or 0), int(st.get("clicked") or 0), (ct.get("created_at") or "")[:19]])
+            if len(rows) >= EXPORT_MAX:
+                break
+        if len(rows) >= EXPORT_MAX:
+            break
+    header = ["Email", "Name", "Phone", "Address status", "Score", "Why", "Email consent", "Consent source", "Consent date",
+              "WhatsApp consent", "Suppressed (why)", "Clean-up group", "Lists", "Source", "Emails sent", "Opened", "Clicked", "Added"]
+    data, media, ext = _table_bytes([("Contacts", header, rows)], fmt)
+    await audit_log(db, "MARKETING_EXPORT", email=user.get("email", ""), role=user.get("role", ""),
+                    meta={"what": "contacts", "rows": len(rows), "format": ext, "filters": {"q": q, "status": status, "list": list_id,
+                                                                                           "consent": consent, "removed": removed}})
+    return _download(data, media, f"contacts-{removed if not status else status}-{_now():%Y-%m-%d}.{ext}")
+
+
+# -------------------------------------------------------------- clean-up ---
+class CleanupBody(BaseModel):
+    kinds: list = ["bounced", "blocked", "invalid"]
+    campaign_id: Optional[str] = None   # only people this campaign was sent to
+    dry_run: bool = True
+    expected: Optional[int] = None      # the count the admin confirmed
+
+
+async def _cleanup_candidates(kinds: set, campaign_id: Optional[str]) -> list:
+    flt: dict = {"$or": [{"suppressed": {"$nin": [None, ""]}}, {"email_status": "invalid"},
+                         {"email_consent.status": {"$in": ["unsubscribed", "complained"]}}]}
+    if campaign_id:
+        ids = [x["contact_id"] async for x in db.mk_sends.find({"campaign_id": campaign_id}, {"_id": 0, "contact_id": 1})]
+        flt = {"$and": [flt, {"id": {"$in": ids}}]}
+    out = []
+    async for ct in db.mk_contacts.find(flt, {"_id": 0, "id": 1, "email": 1, "email_norm": 1, "suppressed": 1,
+                                              "email_status": 1, "email_consent": 1}):
+        k = core.cleanup_kind(ct)
+        if k in kinds:
+            out.append({**ct, "kind": k})
+    return out
+
+
+@admin_router.post("/contacts/cleanup")
+async def adm_contacts_cleanup(body: CleanupBody, user: dict = Depends(require_admin)):
+    """Fix the database after sending: remove bounced / blocked / invalid
+    contacts (and, if chosen, complaints and unsubscribes).
+
+    Removed contacts leave Contacts and every list, but a one-way hash of the
+    address is kept with the reason (db.mk_removed) — the same idea as an
+    erase. Without it, the next order sync or an old spreadsheet would add
+    the address back as new and it would be mailed (and bounce) again. Their
+    own new sign-up still works. Send history (reports) is kept.
+
+    dry_run=True counts by kind (any marketing admin); removing needs a
+    superadmin and the confirmed count must still match."""
+    from rbac import is_superadmin
+    kinds = {k for k in body.kinds or [] if k in core.CLEANUP_KINDS}
+    if not kinds:
+        raise HTTPException(status_code=400, detail="Choose what to remove")
+    cands = await _cleanup_candidates(kinds, body.campaign_id)
+    by_kind: dict = {}
+    for ct in cands:
+        by_kind[ct["kind"]] = by_kind.get(ct["kind"], 0) + 1
+    if body.dry_run:
+        return {"total": len(cands), "by_kind": by_kind, "labels": core.CLEANUP_KINDS,
+                "sample": [{"email": ct["email"], "kind": ct["kind"]} for ct in cands[:20]]}
+    if not is_superadmin(user.get("role")):
+        raise HTTPException(status_code=403, detail="Only a superadmin can remove contacts")
+    if body.expected is not None and body.expected != len(cands):
+        raise HTTPException(status_code=409, detail=f"The count changed to {len(cands)} — check again")
+    done = 0
+    for ct in cands:
+        if not ct.get("email_norm"):
+            continue
+        await db.mk_removed.update_one({"h": _erase_hash(ct["email_norm"])},
+                                       {"$set": {"reason": ct["kind"], "at": _iso(), "by": user.get("email", "")}}, upsert=True)
+        r = await db.mk_contacts.delete_one({"id": ct["id"]})
+        done += r.deleted_count
+    await audit_log(db, "MARKETING_CLEANUP", email=user.get("email", ""), role=user.get("role", ""),
+                    meta={"removed": done, "by_kind": by_kind, "campaign": body.campaign_id})
+    return {"ok": True, "removed": done, "by_kind": by_kind}
 
 
 class ContactPatch(BaseModel):
@@ -2232,7 +2670,7 @@ async def adm_contacts_bulk(body: ContactBulk, user: dict = Depends(require_admi
         flt = {"id": {"$in": [str(x) for x in body.ids][:BULK_MAX]}}
     elif body.all_matching is not None:
         m = body.all_matching
-        flt = _contact_filter(m.get("q"), m.get("status"), m.get("list_id"), m.get("consent"))
+        flt = _contact_filter(m.get("q"), m.get("status"), m.get("list_id"), m.get("consent"), m.get("removed") or "hide")
     else:
         raise HTTPException(status_code=400, detail="Nothing selected")
     n = await db.mk_contacts.count_documents(flt)
@@ -2536,8 +2974,201 @@ async def adm_preview(cid: str):
         raise HTTPException(status_code=404, detail="Campaign not found")
     st = await get_settings()
     html_doc, _ = core.render_email(c.get("blocks") or [], brand={"name": "Oakbridge Publishing", "logo": st.get("logo"), "footer": st.get("footer")},
-                                    contact={"name": "Asha Verma"}, link_for=lambda u: u, unsubscribe_url="#", preheader=c.get("preheader") or "")
-    return {"html": html_doc}
+                                    contact=PREVIEW_CONTACT, link_for=lambda u: u, unsubscribe_url="#",
+                                    preheader=core.personalise(c.get("preheader") or "", PREVIEW_CONTACT))
+    return {"html": html_doc, "subject": core.personalise(c.get("subject") or "", PREVIEW_CONTACT),
+            "unknown_variables": _unknown_vars(c)}
+
+
+# The sample recipient for every preview (campaigns and templates).
+PREVIEW_CONTACT = {"name": "Asha Verma", "email": "asha@example.com"}
+
+
+def _unknown_vars(c: dict) -> list:
+    texts = [c.get("subject") or "", c.get("preheader") or ""]
+    for b in c.get("blocks") or []:
+        texts += [b.get("text") or "", b.get("label") or ""]
+    return core.unknown_variables(*texts)
+
+
+# ------------------------------------------------------------- templates ---
+class TemplateBody(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    subject: Optional[str] = None
+    preheader: Optional[str] = None
+    blocks: Optional[list] = None
+    from_campaign_id: Optional[str] = None
+    from_template_id: Optional[str] = None
+
+
+def _starters() -> list:
+    return [{"id": f"starter:{t['key']}", "starter": True, "name": t["name"], "description": t["description"],
+             "subject": t["subject"], "preheader": t["preheader"], "blocks": [dict(b) for b in t["blocks"]]}
+            for t in core.STARTER_TEMPLATES]
+
+
+async def _template(tid: str) -> dict:
+    if tid.startswith("starter:"):
+        t = next((x for x in _starters() if x["id"] == tid), None)
+    else:
+        t = await db.mk_templates.find_one({"id": tid}, {"_id": 0})
+    if not t:
+        raise HTTPException(status_code=404, detail="Template not found")
+    return t
+
+
+@admin_router.get("/templates")
+async def adm_templates():
+    """Saved templates first, then the built-in starters; plus the merge
+    variables the renderer fills (one list — marketing_core.VARIABLES)."""
+    saved = await db.mk_templates.find({}, {"_id": 0}).sort("updated_at", -1).to_list(500)
+    return {"templates": saved + _starters(), "variables": core.VARIABLES}
+
+
+@admin_router.post("/templates")
+async def adm_new_template(body: TemplateBody, user: dict = Depends(require_admin)):
+    """New template: blank, a copy of a campaign ("Save as template"), or a
+    copy of another template (starters are read-only, so "Duplicate")."""
+    src: dict = {}
+    if body.from_campaign_id:
+        src = await db.mk_campaigns.find_one({"id": body.from_campaign_id}, {"_id": 0}) or {}
+        if not src:
+            raise HTTPException(status_code=404, detail="Campaign not found")
+        if src.get("channel") != "email":
+            raise HTTPException(status_code=400, detail="Only email campaigns can be saved as templates")
+    elif body.from_template_id:
+        src = await _template(body.from_template_id)
+    name = (body.name or (f"{src.get('name')} (copy)" if src else "") or "Untitled template").strip()[:120]
+    doc = {"id": str(uuid.uuid4()), "name": name,
+           "description": (body.description if body.description is not None else src.get("description", ""))[:300],
+           "subject": (body.subject if body.subject is not None else src.get("subject", ""))[:300],
+           "preheader": (body.preheader if body.preheader is not None else src.get("preheader", ""))[:300],
+           "blocks": _clean_blocks(body.blocks if body.blocks is not None else src.get("blocks") or []),
+           "created_by": user.get("email", ""), "created_at": _iso(), "updated_at": _iso(), "updated_by": user.get("email", "")}
+    await db.mk_templates.insert_one(dict(doc))
+    await audit_log(db, "MARKETING_TEMPLATE_CREATED", email=user.get("email", ""), role=user.get("role", ""),
+                    meta={"template": doc["id"], "name": name, "from_campaign": body.from_campaign_id, "from_template": body.from_template_id})
+    return doc
+
+
+@admin_router.patch("/templates/{tid}")
+async def adm_save_template(tid: str, body: TemplateBody, user: dict = Depends(require_admin)):
+    if tid.startswith("starter:"):
+        raise HTTPException(status_code=400, detail="Built-in templates can't be changed — Duplicate it and edit the copy.")
+    upd = {}
+    for k in ("name", "description", "subject", "preheader"):
+        v = getattr(body, k)
+        if v is not None:
+            upd[k] = v.strip()[:120 if k == "name" else 300] if isinstance(v, str) else v
+    if body.blocks is not None:
+        upd["blocks"] = _clean_blocks(body.blocks)
+    if "name" in upd and not upd["name"]:
+        raise HTTPException(status_code=400, detail="Give the template a name")
+    upd.update(updated_at=_iso(), updated_by=user.get("email", ""))
+    r = await db.mk_templates.update_one({"id": tid}, {"$set": upd})
+    if r.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Template not found")
+    return await db.mk_templates.find_one({"id": tid}, {"_id": 0})
+
+
+@admin_router.delete("/templates/{tid}")
+async def adm_delete_template(tid: str, user: dict = Depends(require_admin)):
+    """Campaigns made from a template keep their own copy, so deleting one
+    changes nothing already written or sent."""
+    if tid.startswith("starter:"):
+        raise HTTPException(status_code=400, detail="Built-in templates can't be deleted")
+    r = await db.mk_templates.delete_one({"id": tid})
+    if r.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Template not found")
+    await audit_log(db, "MARKETING_TEMPLATE_DELETED", email=user.get("email", ""), role=user.get("role", ""), meta={"template": tid})
+    return {"ok": True}
+
+
+class UseTemplateBody(BaseModel):
+    name: Optional[str] = None
+
+
+@admin_router.post("/templates/{tid}/use")
+async def adm_use_template(tid: str, body: UseTemplateBody, user: dict = Depends(require_admin)):
+    """A new draft email campaign with the template's subject, preview text
+    and content. The campaign is a COPY: later edits to the template don't
+    change it."""
+    t = await _template(tid)
+    blocks = _clean_blocks(t.get("blocks") or [])
+    doc = {"id": str(uuid.uuid4()), "name": (body.name or t["name"]).strip()[:120], "channel": "email", "kind": "standard",
+           "reconfirm_days": None, "subject": t.get("subject", ""), "preheader": t.get("preheader", ""),
+           "blocks": blocks, "links": core.collect_links(blocks), "audience": {"list_ids": [], "rules": []},
+           "wa_template": "", "wa_language": "en", "wa_variables": [], "status": "draft", "created_at": _iso(),
+           "created_by": user.get("email", ""), "stats": {}, "template_id": tid, "template_name": t["name"]}
+    await db.mk_campaigns.insert_one(dict(doc))
+    return doc
+
+
+EMAIL_IMAGE_MAX = 8 * 1024 * 1024
+EMAIL_IMAGE_WIDTH = 1200   # emails show images at 600 px; 2x for sharp phone screens
+
+
+def _email_image(data: bytes, ext: str) -> tuple[bytes, str]:
+    """Shrink to EMAIL_IMAGE_WIDTH and re-encode, so a 6 MB camera photo does
+    not land in thousands of inboxes (Gmail clips heavy emails) and anything
+    smuggled after the picture data is dropped. Animated GIFs are kept as
+    they are (re-encoding would freeze them)."""
+    if ext == "gif":
+        return data, "gif"
+    try:
+        from io import BytesIO
+        from PIL import Image
+        im = Image.open(BytesIO(data))
+        im.load()
+        if im.width > EMAIL_IMAGE_WIDTH:
+            im = im.resize((EMAIL_IMAGE_WIDTH, round(im.height * EMAIL_IMAGE_WIDTH / im.width)))
+        out = BytesIO()
+        if im.mode in ("RGBA", "LA", "P") and ext == "png":
+            im.save(out, "PNG", optimize=True)
+            return out.getvalue(), "png"
+        im.convert("RGB").save(out, "JPEG", quality=82, optimize=True, progressive=True)
+        return out.getvalue(), "jpg"
+    except Exception:  # noqa: BLE001 — Pillow can't read it (e.g. AVIF): keep the checked original
+        return data, ext
+
+
+@admin_router.post("/images")
+async def adm_email_image(file: UploadFile = File(...), user: dict = Depends(require_admin)):
+    """Image for an email block (drag & drop in the editor). Stored as a
+    public file and returned as an absolute https URL — the only kind a mail
+    client can load (and the only kind _clean_blocks keeps)."""
+    import uploads_guard
+    from features import put_object, APP_NAME
+    data = await uploads_guard.read_limited(file, EMAIL_IMAGE_MAX, "Image")
+    ext = uploads_guard.require_image(data, "Image")
+    # BMP/AVIF are converted to JPEG below when Pillow can read them.
+    data, ext = await asyncio.to_thread(_email_image, data, ext)
+    if ext in ("bmp", "avif"):
+        raise HTTPException(status_code=400, detail="Use a JPEG, PNG or GIF — many mail apps can't show this format.")
+    path = f"{APP_NAME}/email/{uuid.uuid4()}.{ext}"
+    await asyncio.to_thread(put_object, path, data, f"image/{'jpeg' if ext == 'jpg' else ext}")
+    await audit_log(db, "MARKETING_IMAGE_UPLOADED", email=user.get("email", ""), role=user.get("role", ""),
+                    meta={"path": path, "bytes": len(data)})
+    return {"url": f"{PUBLIC_API}/api/files/{path}", "bytes": len(data)}
+
+
+class TemplatePreviewBody(BaseModel):
+    subject: Optional[str] = ""
+    preheader: Optional[str] = ""
+    blocks: Optional[list] = None
+
+
+@admin_router.post("/templates/preview")
+async def adm_template_preview(body: TemplatePreviewBody):
+    """Render unsaved template content for the sample recipient."""
+    st = await get_settings()
+    blocks = _clean_blocks(body.blocks or [])
+    html_doc, _ = core.render_email(blocks, brand={"name": "Oakbridge Publishing", "logo": st.get("logo"), "footer": st.get("footer")},
+                                    contact=PREVIEW_CONTACT, link_for=lambda u: u, unsubscribe_url="#",
+                                    preheader=core.personalise(body.preheader or "", PREVIEW_CONTACT))
+    return {"html": html_doc, "subject": core.personalise(body.subject or "", PREVIEW_CONTACT),
+            "unknown_variables": _unknown_vars({"subject": body.subject, "preheader": body.preheader, "blocks": blocks})}
 
 
 class SendBody(BaseModel):
@@ -2554,6 +3185,12 @@ async def adm_send(cid: str, body: SendBody, user: dict = Depends(require_admin)
         raise HTTPException(status_code=409, detail="This campaign has already been sent")
     if c["channel"] == "email" and (not c.get("subject") or not c.get("blocks")):
         raise HTTPException(status_code=400, detail="Add a subject and some content first")
+    bad = _unknown_vars(c) if c["channel"] == "email" else []
+    if bad:
+        # Unknown {{variables}} are blanked when sent ("Dear ,"), so stop here.
+        raise HTTPException(status_code=400, detail=(
+            f"Unknown variable(s): {', '.join('{{' + b + '}}' for b in bad)}. "
+            f"Use one of: {', '.join('{{' + v['key'] + '}}' for v in core.VARIABLES)}."))
     if c["channel"] == "whatsapp" and not c.get("wa_template"):
         raise HTTPException(status_code=400, detail="Choose the approved WhatsApp template first")
     return await queue_send(c, body.schedule_at, by_email=user.get("email", ""), by_role=user.get("role", ""),

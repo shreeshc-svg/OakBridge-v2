@@ -133,6 +133,7 @@ export const whReport = (id, note, lineNo) =>
     api.post(`/warehouse/docs/${id}/report`, { note, line_no: lineNo ?? null }).then((r) => r.data);
 export const whMove = (body) => api.post("/warehouse/move", body).then((r) => r.data);
 export const whInbox = () => api.get("/warehouse/inbox").then((r) => r.data);
+export const whOpenOrders = () => api.get("/warehouse/open-orders").then((r) => r.data);
 export const whAck = (id, action) => api.post(`/warehouse/docs/${id}/ack`, { action }).then((r) => r.data);
 export const whGetDoc = (id) => api.get(`/warehouse/docs/${id}`).then((r) => r.data);
 export const whReopen = (id) => api.post(`/warehouse/docs/${id}/reopen`).then((r) => r.data);
@@ -665,6 +666,17 @@ export const mkImport = (file, opts) => {
     Object.entries(opts || {}).forEach(([k, v]) => fd.append(k, typeof v === "boolean" ? String(v) : v ?? ""));
     return api.post("/admin/marketing/import", fd, { timeout: 300000 }).then((r) => r.data);
 };
+// Cost of an Amazon SES check before anything is spent; import approval (marketing.py).
+export const mkImportEstimate = ({ file, emails, autofix = true }) => {
+    const fd = new FormData();
+    if (file) fd.append("file", file);
+    if (emails) fd.append("emails", emails);
+    fd.append("autofix", String(autofix));
+    return api.post("/admin/marketing/import/estimate", fd, { timeout: 120000 }).then((r) => r.data);
+};
+export const mkImports = (status = "pending") => api.get("/admin/marketing/imports", { params: { status } }).then((r) => r.data);
+export const mkImportApprove = (id) => api.post(`/admin/marketing/imports/${id}/approve`, null, { timeout: 300000 }).then((r) => r.data);
+export const mkImportReject = (id, note = "") => api.post(`/admin/marketing/imports/${id}/reject`, { note }).then((r) => r.data);
 export const mkReverify = (listId) => api.post("/admin/marketing/reverify", null, { params: listId ? { list_id: listId } : {}, timeout: 300000 }).then((r) => r.data);
 export const mkSync = () => api.post("/admin/marketing/sync", null, { timeout: 300000 }).then((r) => r.data);
 export const mkContacts = (params) => api.get("/admin/marketing/contacts", { params }).then((r) => r.data);
@@ -681,6 +693,26 @@ export const mkRenameCampaign = (id, name) => api.patch(`/admin/marketing/campai
 export const mkDuplicate = (id) => api.post(`/admin/marketing/campaigns/${id}/duplicate`).then((r) => r.data);
 export const mkAudience = (id) => api.get(`/admin/marketing/campaigns/${id}/audience`).then((r) => r.data);
 export const mkPreview = (id) => api.get(`/admin/marketing/campaigns/${id}/preview`).then((r) => r.data);
+// Email templates (marketing.py): saved + built-in starters, and the merge variables.
+// Exports (Excel/CSV) and the post-send database clean-up (marketing.py).
+export const mkExportCampaign = (id, format = "xlsx") =>
+    api.get(`/admin/marketing/campaigns/${id}/export`, { params: { format }, responseType: "blob", timeout: 300000 })
+        .then((r) => downloadBlob(r, `campaign-report.${format}`));
+export const mkExportContacts = (params = {}, format = "xlsx") =>
+    api.get("/admin/marketing/contacts/export", { params: { ...params, format }, responseType: "blob", timeout: 300000 })
+        .then((r) => downloadBlob(r, `contacts.${format}`));
+export const mkCleanup = (body) => api.post("/admin/marketing/contacts/cleanup", body, { timeout: 300000 }).then((r) => r.data);
+export const mkTemplates = () => api.get("/admin/marketing/templates").then((r) => r.data);
+export const mkNewTemplate = (body) => api.post("/admin/marketing/templates", body).then((r) => r.data);
+export const mkSaveTemplate = (id, body) => api.patch(`/admin/marketing/templates/${encodeURIComponent(id)}`, body).then((r) => r.data);
+export const mkDeleteTemplate = (id) => api.delete(`/admin/marketing/templates/${encodeURIComponent(id)}`).then((r) => r.data);
+export const mkUseTemplate = (id, name) => api.post(`/admin/marketing/templates/${encodeURIComponent(id)}/use`, { name }).then((r) => r.data);
+export const mkUploadEmailImage = (file) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return api.post("/admin/marketing/images", fd, { timeout: 120000 }).then((r) => r.data);
+};
+export const mkTemplatePreview = (body) => api.post("/admin/marketing/templates/preview", body).then((r) => r.data);
 export const mkTestSend = (id, to) => api.post(`/admin/marketing/campaigns/${id}/test`, { to }).then((r) => r.data);
 export const mkSend = (id, confirmCount, scheduleAt) =>
     api.post(`/admin/marketing/campaigns/${id}/send`, { confirm_count: confirmCount, schedule_at: scheduleAt || null }).then((r) => r.data);

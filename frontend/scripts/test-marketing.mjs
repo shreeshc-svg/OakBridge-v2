@@ -142,10 +142,10 @@ check(/_consent\("lapsed"/.test(mk) && /"email_consent\.at": \{"\$lt":/.test(mk)
 check(/"rows": row_report/.test(mk) && /function RowReport/.test(page), "import shows every row");
 
 console.log("-- import vs erased (bug 2026-10-12) --");
-check(/if doc:\s*\n\s*saved \+= 1/.test(mk) && !/\)\s*\n\s*saved \+= 1\s*\n\s*await db\.mk_imports/.test(mk),
+check(/if not doc:[\s\S]{0,200}?continue\s*\n\s*saved \+= 1/.test(mk) && !/\)\s*\n\s*saved \+= 1\s*\n\s*await db\.mk_imports/.test(mk),
     "import counts a row as saved only if the contact was really saved");
 check(/supp\.setdefault\(n, "erased at a privacy request"\)/.test(mk), "'Check the file' shows erased people as blocked (no more silent drop)");
-check(/if readd_erased and not is_superadmin\(/.test(mk) && /readd_erased=readd_erased\)/.test(mk), "re-adding erased people: superadmin only, deliberate, logged");
+check(/if readd_erased and not is_superadmin\(/.test(mk) && /readd_erased=readd\)/.test(mk) && /only a superadmin can approve it/.test(mk), "re-adding erased people: superadmin only (upload and approval), deliberate, logged");
 check(/async def adm_delete_contact\(cid: str, erase: bool = False/.test(mk) && /elif body\.action == "delete":/.test(mk),
     "Delete (can re-import) and Erase (privacy block) are separate actions");
 check(/email_consent="subscribed", readd_erased=True\)/.test(mk) && /status=v\["status"\], readd_erased=True,/.test(mk),
@@ -185,6 +185,48 @@ for (const t of ["mk-dashboard", "mk-editor", "mk-contacts", "mk-lists", "mk-ver
 }
 check(/sandbox=""/.test(page), "email preview iframe is sandboxed (no scripts)");
 check(!/localStorage|sessionStorage/.test(page), "no browser storage on the admin page");
+
+// Import approval + cost + prompts (15 Oct 2026). Behaviour of who-may-approve
+// and the permission audience: backend/tests/test_import_approval.py.
+const importFn = (mk.match(/async def adm_import\([\s\S]*?\n(?=\n\S)/) || [""])[0];
+check(/if not dry_run:[\s\S]*?db\.mk_import_rows\.insert_many/.test(importFn) && !/upsert_contact\(/.test(importFn),
+      "import: 'Import' only stages the rows — nothing reaches Contacts until approved");
+check(/@admin_router\.post\("\/imports\/\{iid\}\/approve"\)/.test(mk) && /claim = await db\.mk_imports\.update_one\(\{"id": iid, "status": "pending"\}/.test(mk),
+      "import: approval is claimed atomically (two approvers can't both save it)");
+check(/email_consent="subscribed" if known else None/.test(mk) && /\(approved by \{user\.get\('email', ''\)\}\)/.test(mk),
+      "import: 'known' contacts are consented, recorded with the approver's name; 'unknown' get no consent");
+check(/@admin_router\.post\("\/import\/estimate"\)/.test(mk) && /_ses_cached\(norms\)/.test(mk) && /_proven\(norms\)/.test(mk),
+      "import: the cost estimate reads our records only (free) and skips already-checked/proven addresses");
+check(/data-testid="mk-import-cost"/.test(page) && /data-testid="mk-pending-imports"/.test(page) && /data-testid="mk-import-audience"/.test(page),
+      "import screen: cost above the button, approvals panel, 'who are these people' choice");
+check((page.match(/window\.confirm\(/g) || []).length >= 4 && /Check this file\?/.test(page) && /Approve “\$\{imp\.list_name\}”\?/.test(page),
+      "import screen: OK/Cancel before Check (with the cost), Send for approval, Approve and Reject");
+check(!/These people agreed to receive marketing <b>emails<\/b>/.test(page), "import screen: the old email-consent tick box is gone");
+
+// Templates + variables + image drop (15 Oct 2026). Rendering is tested in test_marketing_core.py.
+check(/\["templates", "Templates"\]/.test(page) && /function Templates\(/.test(page) && /data-testid="mk-template-use"/.test(page), "Templates tab with Use");
+check(/@admin_router\.post\("\/templates\/\{tid\}\/use"\)/.test(mk) && /"template_id": tid/.test(mk), "a campaign made from a template is a copy that records its template");
+check(/Built-in templates can't be changed/.test(mk) && /Built-in templates can't be deleted/.test(mk), "built-in templates are read-only");
+check(/"variables": core\.VARIABLES/.test(mk) && /function VariablesHelp/.test(page) && /<VariablesHelp \/>/.test(page),
+      "the variables shown come from the renderer's own list");
+check(/Unknown variable\(s\)/.test(mk) && /bad = _unknown_vars\(c\)/.test(mk), "send refuses unknown {{variables}}");
+check(/placeholdersIn\(\[c\.subject/.test(page), "send warns about '[placeholder]' text left from a template");
+check(/@admin_router\.post\("\/images"\)/.test(mk) && /require_image\(data, "Image"\)/.test(mk) && /f"\{PUBLIC_API\}\/api\/files\/\{path\}"/.test(mk),
+      "email images: real-image check, absolute https URL");
+check(/DEAD_STATUSES = \["suppressed", "invalid"\]/.test(mk) && /removed: str = "hide"/.test(mk) && /data-testid="mk-contacts-removed"/.test(page)
+      && /m\.get\("removed"\) or "hide"/.test(mk), "Contacts: bounced & invalid hidden by default (bulk 'all matching' uses the same view)");
+check(/flt\["suppressed"\] = \{"\$in": \[None, ""\]\}/.test(mk) && /await suppress\(\{"email_norm": norm\}, "bounced"\)/.test(mk),
+      "bounced addresses are suppressed and every campaign excludes suppressed");
+check(/@admin_router\.get\("\/campaigns\/\{cid\}\/export"\)/.test(mk) && /@admin_router\.get\("\/contacts\/export"\)/.test(mk)
+      && /core\.safe_cell\(v\)/.test(mk) && /"what": "campaign report"/.test(mk), "exports: campaign report + contacts, formula-safe, logged");
+check(/@admin_router\.post\("\/contacts\/cleanup"\)/.test(mk) && /db\.mk_removed\.update_one\(\{"h": _erase_hash/.test(mk)
+      && /Only a superadmin can remove contacts/.test(mk) && /body\.expected != len\(cands\)/.test(mk),
+      "clean-up: superadmin, confirmed count, a hash is kept so they can't come back");
+check(/if await db\.mk_removed\.find_one\(\{"h": _erase_hash\(norm\)\}/.test(mk) && /removed in a clean-up/.test(mk),
+      "removed addresses are refused by sync/import and shown as 'removed' when a file is checked");
+check(/function CleanupPanel/.test(page) && /<CleanupPanel campaignId=\{id\} \/>/.test(page) && /<CleanupPanel onDone=\{load\} \/>/.test(page)
+      && /function ExportButtons/.test(page), "clean-up and export on the campaign report and Contacts");
+check(/function ImageDrop/.test(page) && /onDrop=\{/.test(page) && /<ImageDrop src=\{b\.src\}/.test(page), "image block: drag & drop or click to upload");
 
 console.log();
 if (failed) {

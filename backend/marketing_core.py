@@ -567,10 +567,109 @@ def inline_md(s: str) -> str:
     return t.replace("\n", "<br>")
 
 
-def personalise(text: str, contact: dict) -> str:
-    name = (contact.get("name") or "").strip()
-    first = name.split(" ")[0] if name else ""
-    return (text or "").replace("{{first_name}}", first or "there").replace("{{name}}", name or "there")
+# Merge variables for campaigns and templates. Shown to the admin (Templates
+# tab, campaign editor) from this one list, so the help text can never offer a
+# variable the renderer does not fill.
+#   key: what goes between {{ }}; default: used when the contact has no value.
+# A fallback can be given per use: {{first_name|Reader}}.
+VARIABLES = [
+    {"key": "first_name", "label": "First name", "default": "there", "example": "Asha"},
+    {"key": "last_name", "label": "Last name", "default": "", "example": "Verma"},
+    {"key": "name", "label": "Full name", "default": "there", "example": "Asha Verma"},
+    {"key": "email", "label": "Email address", "default": "", "example": "asha@example.com"},
+    {"key": "month", "label": "Current month", "default": "", "example": "October"},
+    {"key": "year", "label": "Current year", "default": "", "example": "2026"},
+]
+_VAR_RE = re.compile(r"\{\{\s*([a-z_]+)\s*(?:\|\s*([^}]*?)\s*)?\}\}", re.I)
+_MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August",
+           "September", "October", "November", "December"]
+
+
+def variable_values(contact: dict, now=None) -> dict:
+    """{key: value} for one recipient; "" when unknown (the default applies)."""
+    from datetime import datetime, timedelta, timezone
+    now = now or (datetime.now(timezone.utc) + timedelta(hours=5, minutes=30))   # India time
+    name = re.sub(r"\s+", " ", (contact.get("name") or "")).strip()
+    parts = name.split(" ") if name else []
+    return {"first_name": parts[0] if parts else "", "last_name": " ".join(parts[1:]) if len(parts) > 1 else "",
+            "name": name, "email": (contact.get("email") or "").strip(),
+            "month": _MONTHS[now.month - 1], "year": str(now.year)}
+
+
+def personalise(text: str, contact: dict, now=None) -> str:
+    """Fill {{variables}}. {{first_name|Reader}} uses "Reader" when there is no
+    first name; otherwise the variable's own default. An unknown {{thing}} is
+    removed rather than mailed to thousands of people as raw braces."""
+    if not text or "{{" not in text:
+        return text or ""
+    vals = variable_values(contact, now)
+    defaults = {v["key"]: v["default"] for v in VARIABLES}
+
+    def sub(m):
+        key, fallback = m.group(1).lower(), m.group(2)
+        if key not in vals:
+            return fallback or ""
+        return vals[key] or (fallback if fallback is not None else defaults.get(key, ""))
+
+    return _VAR_RE.sub(sub, text)
+
+
+def unknown_variables(*texts: str) -> list:
+    """{{names}} used that the renderer does not know — shown as a warning."""
+    known = {v["key"] for v in VARIABLES}
+    out = []
+    for t in texts:
+        for m in _VAR_RE.finditer(t or ""):
+            k = m.group(1).lower()
+            if k not in known and k not in out:
+                out.append(k)
+    return out
+
+
+# Starter templates: read-only, always available. "Use" makes a campaign from
+# one; "Duplicate" makes an editable copy in the team's own templates. Links
+# point at real site pages; book blocks are left for the admin to pick.
+STARTER_TEMPLATES = [
+    {"key": "new-release", "name": "New release", "description": "Announce one new book.",
+     "subject": "New from Oakbridge: [book title]", "preheader": "Out now — {{first_name|you}} heard it here first",
+     "blocks": [{"type": "heading", "text": "Just published"},
+                {"type": "text", "text": "Hi {{first_name}}, our newest title is out today. Here is why we think you'll want it:"},
+                {"type": "book"},
+                {"type": "text", "text": "**Who it's for:** …\n**What's inside:** …"},
+                {"type": "button", "label": "Get your copy", "url": "https://www.oakbridge.in/books"}]},
+    {"key": "monthly-roundup", "name": "Monthly round-up", "description": "Several books and news for the month.",
+     "subject": "Oakbridge in {{month}}: new books and what's coming", "preheader": "Our {{month}} {{year}} picks",
+     "blocks": [{"type": "heading", "text": "{{month}} at Oakbridge"},
+                {"type": "text", "text": "Hi {{first_name}}, here's what we published this month and what's coming next."},
+                {"type": "book"}, {"type": "book"}, {"type": "book"},
+                {"type": "divider"},
+                {"type": "text", "text": "**Coming soon:** …"},
+                {"type": "button", "label": "See all new books", "url": "https://www.oakbridge.in/books"}]},
+    {"key": "event-invite", "name": "Event invitation", "description": "Invite readers to a launch, talk or summit.",
+     "subject": "You're invited: [event name]", "preheader": "[date] · [city / online]",
+     "blocks": [{"type": "heading", "text": "You're invited, {{first_name}}"},
+                {"type": "text", "text": "**What:** …\n**When:** …\n**Where:** …"},
+                {"type": "image"},
+                {"type": "button", "label": "Reserve your place", "url": "https://www.oakbridge.in/events"}]},
+    {"key": "offer", "name": "Offer / discount", "description": "A time-limited price or coupon.",
+     "subject": "{{first_name|Readers}}, [offer] until [date]", "preheader": "Use code [CODE] at checkout",
+     "blocks": [{"type": "heading", "text": "[Offer headline]"},
+                {"type": "text", "text": "Hi {{first_name}}, until **[date]** use code **[CODE]** at checkout. [Terms in one line.]"},
+                {"type": "book"},
+                {"type": "button", "label": "Shop the offer", "url": "https://www.oakbridge.in/books"}]},
+    {"key": "author-spotlight", "name": "Author spotlight", "description": "Introduce an author and their books.",
+     "subject": "Meet [author name]", "preheader": "The person behind [book title]",
+     "blocks": [{"type": "heading", "text": "Meet [author name]"},
+                {"type": "image"},
+                {"type": "text", "text": "Hi {{first_name}}, [two or three lines about the author and why their work matters]."},
+                {"type": "book"},
+                {"type": "button", "label": "All books by [author]", "url": "https://www.oakbridge.in/authors"}]},
+    {"key": "welcome", "name": "Welcome", "description": "First email to a new subscriber.",
+     "subject": "Welcome to Oakbridge, {{first_name|there}}", "preheader": "What to expect from us",
+     "blocks": [{"type": "heading", "text": "Welcome, {{first_name}}"},
+                {"type": "text", "text": "Thanks for joining. We'll write when there's a new book, an event or an offer worth your time — no more than a few times a month."},
+                {"type": "button", "label": "Browse the bookstore", "url": "https://www.oakbridge.in/books"}]},
+]
 
 
 def collect_links(blocks: list) -> list:
@@ -710,3 +809,67 @@ def unique_emails(rows: Iterable[str]) -> list:
             seen.add(k)
             out.append(r)
     return out
+
+
+# ------------------------------------------------------------- exports ---
+def safe_cell(v):
+    """A value for a CSV/Excel cell that a spreadsheet will not run.
+
+    Anything starting with = + - @ (or a tab / carriage return) is a formula
+    to Excel and Google Sheets — and contact names, sources and bounce
+    messages come from outside ("=HYPERLINK(...)" typed into a sign-up form).
+    Such text gets a leading apostrophe, which spreadsheets show as plain text.
+    """
+    if v is None:
+        return ""
+    if isinstance(v, bool):
+        return "yes" if v else ""
+    if isinstance(v, (int, float)):
+        return v
+    s = str(v)
+    return "'" + s if s[:1] in ("=", "+", "-", "@", "\t", "\r") else s
+
+
+def send_outcome(s: dict) -> str:
+    """One word per recipient for the report: the furthest it got."""
+    st = s.get("status") or ""
+    if st in ("bounced", "complained", "blocked", "skipped", "failed", "queued"):
+        return st
+    if s.get("unsubscribed_at"):
+        return "unsubscribed"
+    if s.get("clicked_at"):
+        return "clicked"
+    if s.get("opened_at"):
+        return "opened"
+    if s.get("delivered_at"):
+        return "delivered"
+    return st or "unknown"
+
+
+# Clean-up kinds -> how a contact qualifies. Bounced / blocked / invalid are
+# removed by default; complaints and unsubscribes only when chosen (they are
+# the person's own "no", and the hash kept afterwards still honours it).
+CLEANUP_KINDS = {
+    "bounced": "bounced (hard bounce, or 3 soft bounces)",
+    "blocked": "blocked by AWS (address unlikely to exist)",
+    "invalid": "invalid address (failed our checks)",
+    "complained": "marked our email as spam",
+    "unsubscribed": "unsubscribed",
+}
+
+
+def cleanup_kind(c: dict) -> str:
+    """Which clean-up kind this contact falls under, or "" if none."""
+    sup = (c.get("suppressed") or "").lower()
+    if sup.startswith("bounced"):
+        return "bounced"
+    if "ses validation" in sup or sup.startswith("invalid"):
+        return "blocked"
+    if sup.startswith("complained") or (c.get("email_consent") or {}).get("status") == "complained":
+        return "complained"
+    if (c.get("email_consent") or {}).get("status") == "unsubscribed" or sup.startswith("unsubscribed"):
+        return "unsubscribed"
+    if c.get("email_status") == "invalid":
+        return "invalid"
+    return ""
+
