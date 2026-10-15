@@ -722,3 +722,57 @@ body:has(.hx-top) .hdr:not(.is-solid):not(:hover):not(:focus-within) [data-testi
   .hx-w,.hx-reveal{opacity:1 !important; transform:none !important; filter:none !important}
   .hx-progress button.is-on i{width:100%}
 }
+
+/* ==== "Available on" store strip (components/StoreStrip.jsx) ===============
+   Dark band that continues the hero: same navy, aurora and moving grid, and
+   the hero's keyframes (hx-drift, hx-gridmove, hx-up, hx-float, hx-shine,
+   hx-sweep) so the two sections move with one rhythm. Prefixed st-. */
+.st-strip{position:relative; overflow:hidden; isolation:isolate; color:#fff;
+  background:radial-gradient(120% 140% at 50% 0%, #0b2a5c 0%, #061633 55%, #040c1c 100%)}
+.st-inner{position:relative; z-index:1}
+.st-aurora{position:absolute; inset:-30%; z-index:0; pointer-events:none; mix-blend-mode:screen; opacity:.55;
+  background:radial-gradient(38% 45% at 78% 25%, rgba(56,189,248,.38), transparent 70%),
+             radial-gradient(32% 40% at 15% 85%, rgba(204,0,51,.30), transparent 70%);
+  animation:hx-drift 14s ease-in-out infinite alternate}
+.st-grid{position:absolute; left:-50%; right:-50%; bottom:-25%; height:75%; z-index:0; pointer-events:none; opacity:.22;
+  background-image:linear-gradient(rgba(120,200,255,.35) 1px, transparent 1px), linear-gradient(90deg, rgba(120,200,255,.35) 1px, transparent 1px);
+  background-size:60px 60px; transform:perspective(500px) rotateX(62deg); transform-origin:bottom;
+  -webkit-mask-image:linear-gradient(to top, #000 0%, transparent 85%); mask-image:linear-gradient(to top, #000 0%, transparent 85%);
+  animation:hx-gridmove 6s linear infinite}
+.st-title{font-family:"Public Sans", ui-sans-serif, system-ui, sans-serif; font-weight:700; letter-spacing:-.02em; line-height:1.1;
+  font-size:clamp(28px, 3.4vw, 48px); color:transparent; -webkit-background-clip:text; background-clip:text;
+  background-image:linear-gradient(100deg, #fff 0%, #fff 40%, #7dd3fc 50%, #fff 60%, #fff 100%); background-size:200% 100%;
+  animation:hx-shine 7s linear infinite}
+.st-rule{width:72px; height:3px; margin:16px auto 0; border-radius:3px;
+  background:linear-gradient(90deg, #CC0033, #F59E0B, #38bdf8); background-size:200% 100%; animation:hx-shine 4s linear infinite}
+/* Badge: a comet of light orbits the border (a spinning conic gradient behind
+   an inner fill), and the shield's tick draws in once the strip is in view. */
+.st-badge{position:relative; isolation:isolate; overflow:hidden; display:inline-flex; align-items:center; gap:9px;
+  padding:8px 16px; border-radius:999px; color:#fff;
+  font:600 clamp(10px,.75vw,13px)/1.2 ui-monospace, "Cascadia Code", Consolas, monospace; letter-spacing:.2em; text-transform:uppercase}
+.st-badge::before{content:""; position:absolute; left:50%; top:50%; width:150%; aspect-ratio:1; z-index:-2;
+  background:conic-gradient(from 0deg, transparent 0 62%, rgba(56,189,248,.9) 78%, #F59E0B 88%, transparent 96%);
+  animation:st-orbit 3.6s linear infinite}
+.st-badge::after{content:""; position:absolute; inset:1.5px; border-radius:inherit; z-index:-1;
+  background:linear-gradient(180deg, #0d2a57, #081c3d)}
+@keyframes st-orbit{from{transform:translate(-50%,-50%) rotate(0deg)}to{transform:translate(-50%,-50%) rotate(360deg)}}
+.st-tick{stroke-dasharray:14}
+.st-strip.is-in .st-tick{animation:st-draw .7s .6s cubic-bezier(.65,0,.35,1) both}
+@keyframes st-draw{from{stroke-dashoffset:14}to{stroke-dashoffset:0}}
+.st-fade{-webkit-mask-image:linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+  mask-image:linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent)}
+.st-reveal{opacity:0; transform:translateY(18px)}
+.st-strip.is-in .st-reveal{animation:hx-up .8s cubic-bezier(.2,.8,.2,1) forwards; animation-delay:var(--d,0s)}
+.st-float{animation:hx-float 6s ease-in-out infinite; animation-delay:var(--f,0s)}
+.st-tile{position:relative; overflow:hidden; background:#fff; border-radius:14px;
+  box-shadow:0 18px 40px -18px rgba(0,0,0,.7), 0 0 0 1px rgba(255,255,255,.10);
+  transition:transform .35s cubic-bezier(.2,.8,.2,1), box-shadow .35s}
+.st-tile::after{content:""; position:absolute; inset:0; pointer-events:none;
+  background:linear-gradient(110deg, transparent 30%, rgba(56,189,248,.16) 50%, transparent 70%);
+  transform:translateX(-120%); animation:hx-sweep 4.8s 1.5s infinite}
+.st-tile:hover{transform:translateY(-6px) scale(1.03);
+  box-shadow:0 28px 50px -18px rgba(56,189,248,.55), 0 0 0 2px rgba(56,189,248,.6)}
+@media (prefers-reduced-motion: reduce){
+  .st-strip *,.st-strip *::before,.st-strip *::after{animation:none !important; transition:none !important}
+  .st-reveal{opacity:1 !important; transform:none !important}
+}

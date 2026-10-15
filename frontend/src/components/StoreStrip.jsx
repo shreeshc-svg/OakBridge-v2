@@ -14,6 +14,10 @@ import { mediaUrl } from "../lib/api";
  * The artwork is the store's official logo uploaded by an admin — nothing is
  * drawn here, and an entry without a logo is simply not shown.
  *
+ * Look: the dark navy band with the hero's aurora + moving grid (styles
+ * .st-* in index.css, reusing the hero's hx- keyframes), white logo tiles that
+ * rise in, bob gently and lift with a light sweep on hover.
+ *
  * Motion: a slow endless marquee (two copies, translated by -50%) that pauses
  * on hover/touch. With prefers-reduced-motion, or when everything fits on
  * screen, it is a still, centred row instead.
@@ -25,6 +29,26 @@ export default function StoreStrip({ stores = [], title = "", subtitle = "", spe
     const [dur, setDur] = useState(30);
     const [paused, setPaused] = useState(false);
     const [scroll, setScroll] = useState(false);
+    const sectionRef = useRef(null);
+    // Tiles rise in when the strip scrolls into view (like the hero's text).
+    // No IntersectionObserver (old browsers, the prerender) -> shown at once,
+    // so the logos are never stuck invisible.
+    const [inView, setInView] = useState(false);
+    useEffect(() => {
+        const el = sectionRef.current;
+        if (!el || typeof IntersectionObserver === "undefined") {
+            setInView(true);
+            return undefined;
+        }
+        const io = new IntersectionObserver((entries) => {
+            if (entries.some((e) => e.isIntersecting)) {
+                setInView(true);
+                io.disconnect();
+            }
+        }, { threshold: 0.15 });
+        io.observe(el);
+        return () => io.disconnect();
+    }, [items.length]);
 
     useEffect(() => {
         const measure = () => {
@@ -50,54 +74,79 @@ export default function StoreStrip({ stores = [], title = "", subtitle = "", spe
 
     return (
         <section
+            ref={sectionRef}
             data-testid="store-strip"
             aria-label={title || "Also available on"}
-            className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-12 md:py-16 border-b border-[#E5E7EB] bg-[#F5F7FA]"
+            className={`st-strip px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-14 md:py-20 ${inView ? "is-in" : ""}`}
+            style={{ "--accent": "#38bdf8" }}
         >
-            {title && (
-                <h2 className="text-center font-serif text-2xl md:text-3xl text-[#002B5C]">{title}</h2>
-            )}
-            {subtitle && (
-                <p className="text-center text-sm md:text-base text-[#4B5563] mt-2">{subtitle}</p>
-            )}
-            <div className={title || subtitle ? "mt-8 md:mt-10" : ""} />
-            <div
-                ref={wrapRef}
-                className="relative overflow-hidden"
-                onMouseEnter={() => setPaused(true)}
-                onMouseLeave={() => setPaused(false)}
-                onTouchStart={() => setPaused(true)}
-                onTouchEnd={() => setPaused(false)}
-            >
-                <style>{`@keyframes oakStores{from{transform:translateX(0)}to{transform:translateX(-50%)}}`}</style>
-                <ul
-                    ref={trackRef}
-                    className={`flex items-center ${scroll ? "w-max" : "flex-wrap justify-center gap-y-4 md:gap-y-6"}`}
-                    style={scroll ? { animation: `oakStores ${dur}s linear infinite`, animationPlayState: paused ? "paused" : "running" } : undefined}
+            {/* Same moving backdrop as the hero (aurora + perspective grid),
+                so the strip reads as part of the same dark opening band. */}
+            <div className="st-aurora" aria-hidden="true" />
+            <div className="st-grid" aria-hidden="true" />
+            <div className="st-inner">
+                <div className="text-center st-reveal" style={{ "--d": "0s" }}>
+                    {/* A light runs round the pill's border and the tick
+                        draws itself — deliberately not the hero's pulsing-dot
+                        pill, so the two sections don't repeat each other. */}
+                    <span className="st-badge">
+                        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                            <path d="M12 2.5l7.5 3v6c0 4.6-3.2 8.4-7.5 10-4.3-1.6-7.5-5.4-7.5-10v-6z" fill="none" stroke="#38bdf8" strokeWidth="1.6" strokeLinejoin="round" />
+                            <path className="st-tick" d="M8.2 12.3l2.6 2.6 5-5.2" fill="none" stroke="#F59E0B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                        Sold on {items.length} trusted {items.length === 1 ? "store" : "stores"}
+                    </span>
+                </div>
+                {title && (
+                    <h2 className="st-title st-reveal mt-5 text-center" style={{ "--d": ".1s" }}>{title}</h2>
+                )}
+                <div className="st-rule st-reveal" style={{ "--d": ".2s" }} aria-hidden="true" />
+                {subtitle && (
+                    <p className="st-reveal text-center text-sm md:text-base text-white/75 mt-4" style={{ "--d": ".25s" }}>{subtitle}</p>
+                )}
+                <div
+                    ref={wrapRef}
+                    className={`relative overflow-hidden mt-10 md:mt-12 py-3 ${scroll ? "st-fade" : ""}`}
+                    onMouseEnter={() => setPaused(true)}
+                    onMouseLeave={() => setPaused(false)}
+                    onTouchStart={() => setPaused(true)}
+                    onTouchEnd={() => setPaused(false)}
                 >
-                    {loop.map((s, i) => (
-                        <li
-                            key={`${s.id || s.name}-${i}`}
-                            aria-hidden={i >= items.length ? "true" : undefined}
-                            className="flex-none px-2 md:px-3"
-                        >
-                            {/* Every logo sits in the same white tile, so square
-                                icons and wide wordmarks read as one even row
-                                instead of a ragged line of mismatched sizes.
-                                mix-blend-multiply lets a logo uploaded on a
-                                plain white background melt into the tile. */}
-                            <div className="w-36 h-20 sm:w-44 sm:h-24 md:w-56 md:h-28 bg-white border border-[#E5E7EB] shadow-sm flex items-center justify-center px-5 md:px-7 transition-shadow hover:shadow-md">
-                                <img
-                                    src={mediaUrl(s.logo)}
-                                    alt={i >= items.length ? "" : (s.alt || s.name || "")}
-                                    loading="lazy"
-                                    decoding="async"
-                                    className="max-h-10 sm:max-h-12 md:max-h-14 max-w-full w-auto object-contain mix-blend-multiply"
-                                />
-                            </div>
-                        </li>
-                    ))}
-                </ul>
+                    <style>{`@keyframes oakStores{from{transform:translateX(0)}to{transform:translateX(-50%)}}`}</style>
+                    <ul
+                        ref={trackRef}
+                        className={`flex items-center ${scroll ? "w-max" : "flex-wrap justify-center gap-y-5 md:gap-y-6"}`}
+                        style={scroll ? { animation: `oakStores ${dur}s linear infinite`, animationPlayState: paused ? "paused" : "running" } : undefined}
+                    >
+                        {loop.map((s, i) => (
+                            <li
+                                key={`${s.id || s.name}-${i}`}
+                                aria-hidden={i >= items.length ? "true" : undefined}
+                                className="flex-none px-2.5 md:px-4 st-reveal"
+                                style={{ "--d": `${0.35 + (i % items.length) * 0.12}s` }}
+                            >
+                                {/* li = entrance, st-float = idle bob (staggered so
+                                    the tiles never move in lockstep), st-tile =
+                                    hover lift + sweep. Three elements because each
+                                    animation owns a different transform. White tile
+                                    so every brand's dark-on-transparent logo stays
+                                    legible on the dark band; mix-blend-multiply
+                                    melts a logo uploaded on plain white into it. */}
+                                <div className="st-float" style={{ "--f": `${(i % items.length) * -1.3}s` }}>
+                                    <div className="st-tile w-36 h-20 sm:w-44 sm:h-24 md:w-56 md:h-28 flex items-center justify-center px-5 md:px-7">
+                                        <img
+                                            src={mediaUrl(s.logo)}
+                                            alt={i >= items.length ? "" : (s.alt || s.name || "")}
+                                            loading="lazy"
+                                            decoding="async"
+                                            className="relative z-[1] max-h-10 sm:max-h-12 md:max-h-14 max-w-full w-auto object-contain mix-blend-multiply"
+                                        />
+                                    </div>
+                                </div>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
             </div>
         </section>
     );
