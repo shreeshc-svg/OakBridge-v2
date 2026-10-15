@@ -704,6 +704,15 @@ export const mkExportContacts = (params = {}, format = "xlsx") =>
     api.get("/admin/marketing/contacts/export", { params: { ...params, format }, responseType: "blob", timeout: 300000 })
         .then((r) => downloadBlob(r, `contacts.${format}`));
 export const mkCleanup = (body) => api.post("/admin/marketing/contacts/cleanup", body, { timeout: 300000 }).then((r) => r.data);
+// Growth (growth.py): channels funnel, partner links, automations, Merchant feed.
+export const mkGrowthFunnel = (days = 30) => api.get("/admin/marketing/growth/funnel", { params: { days } }).then((r) => r.data);
+export const mkPartners = (days = 90) => api.get("/admin/marketing/growth/partners", { params: { days } }).then((r) => r.data);
+export const mkNewPartner = (body) => api.post("/admin/marketing/growth/partners", body).then((r) => r.data);
+export const mkSavePartner = (id, body) => api.patch(`/admin/marketing/growth/partners/${id}`, body).then((r) => r.data);
+export const mkAutomations = () => api.get("/admin/marketing/growth/automations").then((r) => r.data);
+export const mkSaveAutomations = (body) => api.put("/admin/marketing/growth/automations", body).then((r) => r.data);
+export const mkAutomationsPreview = () => api.post("/admin/marketing/growth/automations/preview").then((r) => r.data);
+export const MERCHANT_FEED_URL = `${API}/feeds/google-merchant.xml`;
 export const mkTemplates = () => api.get("/admin/marketing/templates").then((r) => r.data);
 export const mkNewTemplate = (body) => api.post("/admin/marketing/templates", body).then((r) => r.data);
 export const mkSaveTemplate = (id, body) => api.patch(`/admin/marketing/templates/${encodeURIComponent(id)}`, body).then((r) => r.data);

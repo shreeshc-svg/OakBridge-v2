@@ -13,7 +13,8 @@ import OrderConfirmation from "@/pages/OrderConfirmation";
 import About from "@/pages/About";
 import Solutions from "@/pages/Solutions";
 import Gifting from "@/pages/Gifting";
-import { captureAttribution } from "@/lib/attribution";
+import { captureAttribution, sendVisitBeacon } from "@/lib/attribution";
+import { API } from "@/lib/api";
 import Contact from "@/pages/Contact";
 import Authors from "@/pages/Authors";
 import Account from "@/pages/Account";
@@ -90,6 +91,7 @@ const lazyPage = (C) => <Suspense fallback={<AdminFallback />}><C /></Suspense>;
  * no-op either way.
  */
 captureAttribution();
+sendVisitBeacon(API);
 
 function App() {
     return (

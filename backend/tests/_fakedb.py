@@ -1,6 +1,6 @@
 """A tiny in-memory stand-in for the Motor collection methods jobs.py and
 dbutil.py use, so their logic is tested without MongoDB. Supports only what
-those modules call: equality, $or/$and, $lt/$lte/$gt/$gte/$in/$nin/$ne/$exists,
+those modules call: equality, $or/$and, $lt/$lte/$gt/$gte/$in/$nin/$ne/$exists/$regex,
 $set/$inc/$unset/$setOnInsert/$pull/$addToSet, array paths, sort, limit, projection, unique (sparse) indexes."""
 import copy
 
@@ -63,6 +63,10 @@ def _match(doc, q):
                 if op == "$nin" and (any(x in arg for x in flat) or (not present and None in arg)): return False
                 if op == "$ne" and (_eq(vals, arg) or (not present and arg is None)): return False
                 if op == "$exists" and present != bool(arg): return False
+                if op == "$regex":
+                    import re as _re
+                    rx = _re.compile(arg, _re.I if "i" in (v.get("$options") or "") else 0)
+                    if not any(isinstance(x, str) and rx.search(x) for x in flat): return False
         elif not (_eq(vals, v) or (not present and v is None)):
             return False
     return True

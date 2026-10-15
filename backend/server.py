@@ -351,7 +351,7 @@ class OrderCreate(BaseModel):
 
 _ATTRIBUTION_KEYS = frozenset(
     {"utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
-     "referrer", "landed_at"}
+     "referrer", "landed_at", "ref"}   # ref = partner code from a share link (growth.py)
 )
 
 
@@ -1998,6 +1998,9 @@ app.include_router(marketing_admin_router)
 app.include_router(marketing_tasks_router)
 from newsletter import router as newsletter_router  # noqa: E402  (also registers the nl_tick job)
 app.include_router(newsletter_router)
+from growth import public_router as growth_public_router, admin_router as growth_admin_router  # noqa: E402
+app.include_router(growth_public_router)
+app.include_router(growth_admin_router)
 
 # The production domains, Vercel preview and local dev are always allowed; any
 # extra origins in the CORS_ORIGINS env var (comma-separated) are merged in. This

@@ -26,7 +26,9 @@
 
 const KEY = "oakbridge_attribution";
 
-const FIELDS = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"];
+// "ref" = a partner's code from a share link (?ref=KANNAN10). Kept with the
+// order, credits the partner, and pre-fills their discount at checkout.
+const FIELDS = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "ref"];
 
 /** Read the tags off the current URL, once, and keep them for the session. */
 export function captureAttribution() {
@@ -34,7 +36,8 @@ export function captureAttribution() {
         const params = new URLSearchParams(window.location.search);
         const found = {};
         for (const f of FIELDS) {
-            const v = (params.get(f) || "").trim().slice(0, 120);
+            let v = (params.get(f) || "").trim().slice(0, 120);
+            if (f === "ref") v = v.toUpperCase().replace(/[^A-Z0-9_-]/g, "").slice(0, 24);
             if (v) found[f] = v;
         }
         // A referrer is worth keeping even with no tags on the URL — it is how
@@ -61,3 +64,38 @@ export function readAttribution() {
         return null;
     }
 }
+
+/**
+ * One cookie-free visit count per browser session, for Marketing → Growth
+ * (visits → checkouts → paid, by channel). Sends only the tags, partner code,
+ * referring SITE (host) and landing path — nothing that identifies a person —
+ * so, like the attribution above, it needs no consent. text/plain + sendBeacon
+ * means no CORS preflight and it never delays the page. Skipped for automated
+ * browsers (our own prerenderer runs this code too).
+ */
+export function sendVisitBeacon(apiBase) {
+    try {
+        if (!apiBase || navigator.webdriver || sessionStorage.getItem("oakbridge_visit_sent")) return;
+        sessionStorage.setItem("oakbridge_visit_sent", "1");
+        const params = new URLSearchParams(window.location.search);
+        const a = readAttribution() || {};
+        const body = {
+            utm_source: a.utm_source || params.get("utm_source") || "",
+            utm_medium: a.utm_medium || params.get("utm_medium") || "",
+            utm_campaign: a.utm_campaign || params.get("utm_campaign") || "",
+            ref: a.ref || (params.get("ref") || "").toUpperCase().replace(/[^A-Z0-9_-]/g, "").slice(0, 24),
+            referrer: (() => {
+                try { return document.referrer ? new URL(document.referrer).origin : ""; } catch { return ""; }
+            })(),
+            path: window.location.pathname.slice(0, 120),
+        };
+        const blob = new Blob([JSON.stringify(body)], { type: "text/plain" });
+        if (!(navigator.sendBeacon && navigator.sendBeacon(`${apiBase}/t/visit`, blob))) {
+            fetch(`${apiBase}/t/visit`, { method: "POST", body: JSON.stringify(body), keepalive: true,
+                headers: { "Content-Type": "text/plain" } }).catch(() => {});
+        }
+    } catch {
+        /* private mode / old browser: no count, nothing breaks */
+    }
+}
+

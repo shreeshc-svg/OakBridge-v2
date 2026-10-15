@@ -65,6 +65,16 @@ Every 5 minutes
   - Removed contacts leave Contacts and every list. A one-way fingerprint of each address is kept so an order sync or an old spreadsheet can't add it back (it shows as "removed in a clean-up" when a file is checked). Their own new sign-up still works. Campaign reports keep the history.
 - Spreadsheet cells starting with `=`, `+`, `-` or `@` are written as text, so a name like `=HYPERLINK(...)` can't run in Excel. Every export is logged.
 
+## 4. Growth (Marketing → Growth)
+
+- **Where buyers come from:** visits → checkouts started → paid orders and revenue per channel (Partner, Email, WhatsApp, Google Shopping, Search, Social, Paid ads, Referral sites, Direct) for 7/30/90/365 days. Visits are counted once per browser session with no cookies and no personal data (bots and the prerenderer excluded), from the day this went live. Orders use the link the buyer first arrived from; a partner code wins.
+- **Partner links:** create a partner (author, educator, coaching/university, dealer) with a code and a discount % → a normal coupon is created and a share link (`/authors/<id>?ref=CODE` or `/?ref=CODE`). The link pre-fills the discount at checkout; the code works when typed. Visits, orders, copies and revenue per partner (90 days). Switching a partner off stops the code.
+- **Automated emails** (superadmin switches on; both off by default):
+  - *Abandoned checkout* — reached payment, didn't pay, after N hours (default 2, window 48 h). Only to people with marketing consent (subscribed, or ticked "email me" on that checkout); one per order, at most one a week per person; not if they paid a later attempt.
+  - *Review request* — N days (default 10) after an order is marked **delivered**; lists the books not yet reviewed; not to anyone unsubscribed/bounced.
+  - Both go through SES with tracking and one-click unsubscribe; results under Campaigns ("Automation: …"). "How many would go out right now?" previews without sending.
+- **Google Merchant Center:** add `https://api.oakbridge.in/api/feeds/google-merchant.xml` as a scheduled (daily) feed. Price/sale price, stock, pre-orders and ISBN (GTIN) come live from the catalogue; links are tagged so sales show as "Google Shopping".
+
 ## 4a. Amazon SES Email Validation (mailbox checks)
 
 - On by default (Admin → Marketing → Settings → Rules) with a **monthly ₹ budget** (default ₹850 ≈ 1,000 checks). A dashboard banner appears at 80%.

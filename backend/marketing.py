@@ -1442,7 +1442,8 @@ async def track_click(send_id: str, idx: int, sig: str):
         return RedirectResponse(SITE, status_code=302)
     s = await db.mk_sends.find_one({"id": send_id}, {"_id": 0})
     camp = await db.mk_campaigns.find_one({"id": (s or {}).get("campaign_id")}, {"_id": 0, "links": 1, "id": 1, "kind": 1}) if s else None
-    links = (camp or {}).get("links") or []
+    # Automated emails (growth.py) carry their own links per recipient.
+    links = (s or {}).get("links") or (camp or {}).get("links") or []
     if not s or idx < 0 or idx >= len(links):
         return RedirectResponse(SITE, status_code=302)
     upd = {"$inc": {"click_count": 1}, "$push": {"clicks": {"$each": [{"i": idx, "at": _iso()}], "$slice": -50}}}
@@ -3451,6 +3452,7 @@ async def periodic() -> dict:
     dispatch("mk_learn", dedupe=hour)         # likewise daily
     dispatch("mk_disposable", dedupe=hour)    # weekly
     dispatch("mk_lapse", dedupe=hour)
+    dispatch("mk_auto", dedupe=hour)          # abandoned-checkout + review emails (growth.py), when switched on
     return {"ok": True, "started": started}
 
 

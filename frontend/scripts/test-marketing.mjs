@@ -226,6 +226,21 @@ check(/if await db\.mk_removed\.find_one\(\{"h": _erase_hash\(norm\)\}/.test(mk)
       "removed addresses are refused by sync/import and shown as 'removed' when a file is checked");
 check(/function CleanupPanel/.test(page) && /<CleanupPanel campaignId=\{id\} \/>/.test(page) && /<CleanupPanel onDone=\{load\} \/>/.test(page)
       && /function ExportButtons/.test(page), "clean-up and export on the campaign report and Contacts");
+{
+    const gr = code("backend/growth.py");
+    const app = code("frontend/src/App.js");
+    const attr = code("frontend/src/lib/attribution.js");
+    check(/\["growth", "Growth"\]/.test(page) && /function Growth\(/.test(page) && /data-testid="mk-growth-funnel"/.test(page), "Growth tab: funnel, partners, automations, Merchant feed");
+    check(/sendVisitBeacon\(API\)/.test(app) && /navigator\.webdriver/.test(attr) && /type: "text\/plain"/.test(attr), "visit beacon: once per session, skips automated browsers, no CORS preflight");
+    check(/if gc\.is_bot\(request\.headers\.get\("user-agent", ""\)\)/.test(gr) && /"day": day, "channel": channel/.test(gr), "visits: bots ignored, only day/channel/ref stored");
+    check(/"ref"\}/.test(code("backend/server.py")) || /"landed_at", "ref"\}/.test(code("backend/server.py")), "orders keep the partner ref");
+    check(/readAttribution\(\)\?\.ref/.test(code("frontend/src/pages/Checkout.jsx")), "checkout pre-fills the partner's discount from the link");
+    check(/need_consent=True/.test(gr) && /"skipped: no marketing consent"/.test(gr), "abandoned-checkout email only with marketing consent");
+    check(/@_jobs\.handler\("mk_auto"\)/.test(gr) && /dispatch\("mk_auto", dedupe=hour\)/.test(mk) && /import growth/.test(code("backend/worker.py")),
+          "automations run hourly on the worker (handler imported there — no 'no handler' skew)");
+    check(/@public_router\.get\("\/feeds\/google-merchant\.xml"\)/.test(gr), "Merchant Center feed endpoint");
+    check(/links = \(s or \{\}\)\.get\("links"\) or \(camp or \{\}\)\.get\("links"\)/.test(mk), "click tracking uses a send's own links (automations)");
+}
 check(/function ImageDrop/.test(page) && /onDrop=\{/.test(page) && /<ImageDrop src=\{b\.src\}/.test(page), "image block: drag & drop or click to upload");
 
 console.log();

@@ -152,6 +152,24 @@ export default function Checkout() {
         loadRazorpay();
     }, []);
 
+    // A partner's share link (?ref=CODE, kept by lib/attribution) pre-fills
+    // their discount once — the buyer doesn't have to remember the code. If
+    // the code isn't valid (switched off, minimum order) nothing is applied
+    // and nothing is shown; the order is still credited to the partner.
+    const [refTried, setRefTried] = useState(false);
+    useEffect(() => {
+        if (refTried || coupon || !subtotal) return;
+        const ref = readAttribution()?.ref;
+        setRefTried(true);
+        if (!ref) return;
+        validateCoupon(ref, subtotal).then((res) => {
+            if (res.valid) {
+                setCoupon({ code: res.code, discount: res.discount, kind: res.kind, value: res.value });
+                setCouponMsg({ type: "success", text: `${res.message} (from your link)` });
+            }
+        }).catch(() => {});
+    }, [refTried, coupon, subtotal, setCoupon]);
+
     const onSubmit = async (e) => {
         e.preventDefault();
         if (items.length === 0) {

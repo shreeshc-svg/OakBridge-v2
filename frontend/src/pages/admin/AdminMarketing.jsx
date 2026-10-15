@@ -4,7 +4,7 @@ import { ArrowDown, ArrowUp, Mail, MessageCircle, Pencil, Plus, Search, Trash2, 
 import {
     mkDashboard, mkHealth, mkSettings, mkSaveSettings, mkVerify, mkImport, mkImportEstimate, mkImports, mkImportApprove, mkImportReject, mkReverify, mkSync, mkContacts, mkPatchContact,
     mkDeleteContact, mkLists, mkCreateList, mkCampaigns, mkNewCampaign, mkCampaign, mkSaveCampaign, mkDuplicate,
-    mkAudience, mkPreview, mkTemplates, mkNewTemplate, mkSaveTemplate, mkDeleteTemplate, mkUseTemplate, mkTemplatePreview, mkUploadEmailImage, mkExportCampaign, mkExportContacts, mkCleanup, mkTestSend, mkSend, mkCampaignAction, mkReport, mkDismissAlert, mkSuppressionSync,
+    mkAudience, mkPreview, mkTemplates, mkNewTemplate, mkSaveTemplate, mkDeleteTemplate, mkUseTemplate, mkTemplatePreview, mkUploadEmailImage, mkExportCampaign, mkExportContacts, mkCleanup, mkGrowthFunnel, mkPartners, mkNewPartner, mkSavePartner, mkAutomations, mkSaveAutomations, mkAutomationsPreview, MERCHANT_FEED_URL, mkTestSend, mkSend, mkCampaignAction, mkReport, mkDismissAlert, mkSuppressionSync,
     mkBulkContacts, mkBulkDeleteLists, mkBulkDeleteCampaigns, mkRenameCampaign, mkLearn, mkDisposableRefresh, mkSystemHealth, nlOverview, nlSave, nlDraftNow, nlApprove, nlSkip, fetchBooks, fetchCategories, mediaUrl, formatApiError,
 } from "../../lib/api";
 import { useAuth } from "../../context/AuthContext";
@@ -23,7 +23,7 @@ import { LineChart, BarChart, Funnel, Donut, Kpi, pct, inr } from "../../compone
  *   Verify      paste or upload addresses -> free verification report -> import
  *   Settings    sender, footer, double opt-in, auto-pause, SES/SNS health
  */
-const TABS = [["dash", "Dashboard"], ["campaigns", "Campaigns"], ["templates", "Templates"], ["newsletter", "Newsletter"], ["contacts", "Contacts"], ["lists", "Lists & segments"], ["verify", "Verify & import"], ["settings", "Settings"]];
+const TABS = [["dash", "Dashboard"], ["growth", "Growth"], ["campaigns", "Campaigns"], ["templates", "Templates"], ["newsletter", "Newsletter"], ["contacts", "Contacts"], ["lists", "Lists & segments"], ["verify", "Verify & import"], ["settings", "Settings"]];
 const STATUS_COLORS = { verified: "#15803D", valid: "#38bdf8", risky: "#F59E0B", invalid: "#CC0033", suppressed: "#6B7280", unknown: "#D1D5DB" };
 const SELECTABLE = [["verified", "Verified", "proven: confirmed account or delivered before"],
     ["valid", "Valid", "mailbox checked"], ["risky", "Risky", "follows the risk rules in Settings"]];
@@ -86,6 +86,7 @@ export default function AdminMarketing() {
                 {tab === "campaigns" && (openCampaign
                     ? <CampaignView id={openCampaign} onBack={() => setOpenCampaign(null)} onOpen={setOpenCampaign} />
                     : <CampaignList onOpen={setOpenCampaign} onTemplates={() => setTab("templates")} />)}
+                {tab === "growth" && <Growth onOpen={(id) => { setTab("campaigns"); setOpenCampaign(id); }} />}
                 {tab === "templates" && <Templates onOpen={(id) => { setTab("campaigns"); setOpenCampaign(id); }} />}
                 {tab === "contacts" && <Contacts />}
                 {tab === "lists" && <Lists />}
@@ -548,6 +549,138 @@ function CampaignEditor({ c, setC, reload }) {
                         className="w-full h-[760px] bg-white border border-[#E5E7EB]" data-testid="mk-preview" />
                 </div>
             )}
+        </div>
+    );
+}
+
+/* ----------------------------------------------------------------- growth --- */
+const pctTxt = (v) => (v == null ? "—" : `${(v * 100).toFixed(v < 0.01 ? 2 : 1)}%`);
+
+function Growth({ onOpen }) {
+    const { user } = useAuth();
+    const su = isSuperadmin(user?.role);
+    const [days, setDays] = useState(30);
+    const [f, setF] = useState(null);
+    const [partners, setPartners] = useState(null);
+    const [kinds, setKinds] = useState({});
+    const [auto, setAuto] = useState(null);
+    const [preview, setPreview] = useState(null);
+    const [np, setNp] = useState({ name: "", kind: "author", code: "", discount_percent: 10, email: "" });
+    const loadFunnel = useCallback(() => { mkGrowthFunnel(days).then(setF).catch((e) => toast.error(formatApiError(e))); }, [days]);
+    const loadPartners = useCallback(() => { mkPartners().then((r) => { setPartners(r.partners || []); setKinds(r.kinds || {}); }).catch(() => setPartners([])); }, []);
+    const loadAuto = useCallback(() => { mkAutomations().then(setAuto).catch(() => {}); }, []);
+    useEffect(loadFunnel, [loadFunnel]);
+    useEffect(() => { loadPartners(); loadAuto(); }, [loadPartners, loadAuto]);
+    const copy = async (t) => { try { await navigator.clipboard.writeText(t); toast.success("Copied."); } catch { toast.message(t); } };
+    const addPartner = async () => {
+        if (!np.name.trim() || !np.code.trim()) return toast.error("Name and code are needed.");
+        if (!window.confirm(`Create partner “${np.name}” with code ${np.code.toUpperCase()} (${np.discount_percent}% off for their readers)?`)) return;
+        try { const p = await mkNewPartner(np); toast.success("Partner created — copy their link below."); copy(p.link); setNp({ ...np, name: "", code: "", email: "" }); loadPartners(); }
+        catch (e) { toast.error(formatApiError(e)); }
+    };
+    const togglePartner = async (p) => {
+        if (!window.confirm(`${p.active ? "Switch off" : "Switch on"} ${p.name}? ${p.active ? "Their discount code stops working." : ""}`)) return;
+        try { await mkSavePartner(p.id, { active: !p.active }); loadPartners(); } catch (e) { toast.error(formatApiError(e)); }
+    };
+    const saveAuto = async (key, patch) => {
+        const next = { ...auto.config[key], ...patch };
+        if (patch.enabled !== undefined && !window.confirm(`${patch.enabled ? "Switch on" : "Switch off"} the ${key === "abandoned" ? "abandoned-checkout" : "review-request"} email?`)) return;
+        try { const r = await mkSaveAutomations({ [key]: next }); setAuto({ ...auto, config: r.config }); toast.success("Saved."); } catch (e) { toast.error(formatApiError(e)); }
+    };
+    const runPreview = async () => { try { setPreview(await mkAutomationsPreview()); } catch (e) { toast.error(formatApiError(e)); } };
+    const inp = "border border-[#E5E7EB] px-2 py-1.5 text-sm";
+    return (
+        <div className="space-y-6" data-testid="mk-growth">
+            <Panel title="Where buyers come from" right={
+                <select className={inp} value={days} onChange={(e) => setDays(Number(e.target.value))}>
+                    {[7, 30, 90, 365].map((d) => <option key={d} value={d}>Last {d} days</option>)}
+                </select>}>
+                {!f ? <p className="text-sm text-[#4B5563]">Loading…</p> : (
+                    <>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+                            <Kpi label="Visits" value={f.total.visits.toLocaleString("en-IN")} />
+                            <Kpi label="Checkouts started" value={f.total.checkouts} />
+                            <Kpi label="Paid orders" value={f.total.paid} />
+                            <Kpi label="Revenue" value={inr(f.total.revenue)} sub={`${pctTxt(f.total.visit_to_paid)} of visits buy`} />
+                        </div>
+                        <div className="overflow-x-auto"><table className="w-full text-sm" data-testid="mk-growth-funnel">
+                            <thead><tr className="text-left text-[#4B5563]"><th className="py-1">Channel</th><th className="text-right">Visits</th><th className="text-right">Checkouts</th><th className="text-right">Paid</th><th className="text-right">Revenue</th><th className="text-right">Visit → paid</th><th className="text-right">Checkout → paid</th></tr></thead>
+                            <tbody>{f.rows.filter((r) => r.visits || r.checkouts).map((r) => (
+                                <tr key={r.channel} className="border-t border-[#E5E7EB]"><td className="py-1">{r.channel}</td><td className="text-right">{r.visits}</td><td className="text-right">{r.checkouts}</td>
+                                    <td className="text-right font-medium">{r.paid}</td><td className="text-right">{inr(r.revenue)}</td><td className="text-right">{pctTxt(r.visit_to_paid)}</td><td className="text-right">{pctTxt(r.checkout_to_paid)}</td></tr>
+                            ))}</tbody>
+                        </table></div>
+                        <p className="text-xs text-[#6B7280] mt-2">Visits are counted once per browser session without cookies (bots excluded); counting started when this was deployed. Orders use the link the buyer first arrived from. A partner code wins over everything else.</p>
+                    </>
+                )}
+            </Panel>
+
+            <Panel title="Partner links (authors, educators, coaching, dealers)">
+                <div className="grid sm:grid-cols-6 gap-2 text-sm" data-testid="mk-partner-new">
+                    <input className={`${inp} sm:col-span-2`} placeholder="Name (e.g. Justice K Kannan)" value={np.name} onChange={(e) => setNp({ ...np, name: e.target.value })} />
+                    <select className={inp} value={np.kind} onChange={(e) => setNp({ ...np, kind: e.target.value })}>
+                        {Object.entries(kinds).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                    </select>
+                    <input className={inp} placeholder="Code e.g. KANNAN10" value={np.code} onChange={(e) => setNp({ ...np, code: e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, "") })} />
+                    <label className="flex items-center gap-1"><input className={`${inp} w-16`} type="number" min="0" max="50" value={np.discount_percent} onChange={(e) => setNp({ ...np, discount_percent: Number(e.target.value) })} />% off</label>
+                    <button type="button" className={`${btn} bg-[#002B5C] text-white`} onClick={addPartner} data-testid="mk-partner-add">Create</button>
+                </div>
+                <p className="text-xs text-[#6B7280] mt-1">Each partner gets a link (their readers' discount is applied automatically at checkout) and a code they can tell people. Every sale through either is credited to them.</p>
+                {!partners ? null : !partners.length ? <p className="text-sm text-[#6B7280] mt-3">No partners yet.</p> : (
+                    <div className="overflow-x-auto mt-3"><table className="w-full text-sm" data-testid="mk-partners">
+                        <thead><tr className="text-left text-[#4B5563]"><th className="py-1">Partner</th><th>Code</th><th>Link</th><th className="text-right">Visits</th><th className="text-right">Orders</th><th className="text-right">Copies</th><th className="text-right">Revenue</th><th></th></tr></thead>
+                        <tbody>{partners.map((p) => (
+                            <tr key={p.id} className={`border-t border-[#E5E7EB] ${p.active ? "" : "opacity-50"}`}>
+                                <td className="py-1">{p.name}<div className="text-xs text-[#6B7280]">{kinds[p.kind] || p.kind} · {p.discount_percent}% off</div></td>
+                                <td className="font-mono">{p.code}</td>
+                                <td><button type="button" className="underline text-xs" onClick={() => copy(p.link)}>Copy link</button></td>
+                                <td className="text-right">{p.visits}</td><td className="text-right font-medium">{p.orders}</td><td className="text-right">{p.copies}</td><td className="text-right">{inr(p.revenue)}</td>
+                                <td className="text-right"><button type="button" className="text-xs underline" onClick={() => togglePartner(p)}>{p.active ? "Switch off" : "Switch on"}</button></td>
+                            </tr>
+                        ))}</tbody>
+                    </table><p className="text-xs text-[#6B7280] mt-1">Last 90 days.</p></div>
+                )}
+            </Panel>
+
+            <Panel title="Automated emails">
+                {!auto ? <p className="text-sm text-[#4B5563]">Loading…</p> : (
+                    <div className="space-y-4 text-sm">
+                        {[["abandoned", "Abandoned checkout", "Reached payment but didn't pay. One reminder per order with their books and a “Complete my order” button — only to people who agreed to marketing emails, at most once a week."],
+                            ["review", "Review request", "After an order is marked delivered: one email asking for a review of the books they haven't reviewed yet. Not to anyone who unsubscribed or bounced."]].map(([k, title, desc]) => (
+                            <div key={k} className="border border-[#E5E7EB] p-3" data-testid={`mk-auto-${k}`}>
+                                <div className="flex flex-wrap items-center gap-3">
+                                    <b className="text-[#002B5C]">{title}</b>
+                                    <span className={`text-[10px] font-mono uppercase border px-1.5 py-0.5 ${auto.config[k].enabled ? "border-[#15803D] text-[#15803D]" : "text-[#6B7280]"}`}>{auto.config[k].enabled ? "On" : "Off"}</span>
+                                    <span className="text-xs text-[#6B7280]">{auto.stats?.[k]?.sent || 0} sent</span>
+                                    {auto.stats?.[k]?.sent > 0 && <button type="button" className="text-xs underline" onClick={() => onOpen(auto.stats[k].campaign_id)}>Report</button>}
+                                    {su && <button type="button" className={`${btn} border ml-auto`} onClick={() => saveAuto(k, { enabled: !auto.config[k].enabled })}>{auto.config[k].enabled ? "Switch off" : "Switch on"}</button>}
+                                </div>
+                                <p className="text-xs text-[#4B5563] mt-1">{desc}</p>
+                                {k === "abandoned"
+                                    ? <label className="text-xs mt-2 flex items-center gap-2">Send after <input type="number" min="1" max="24" className={`${inp} w-16`} disabled={!su} defaultValue={auto.config.abandoned.delay_hours} onBlur={(e) => su && Number(e.target.value) !== auto.config.abandoned.delay_hours && saveAuto("abandoned", { delay_hours: Number(e.target.value) })} /> hours</label>
+                                    : <label className="text-xs mt-2 flex items-center gap-2">Send <input type="number" min="3" max="30" className={`${inp} w-16`} disabled={!su} defaultValue={auto.config.review.days_after_delivery} onBlur={(e) => su && Number(e.target.value) !== auto.config.review.days_after_delivery && saveAuto("review", { days_after_delivery: Number(e.target.value) })} /> days after delivery</label>}
+                            </div>
+                        ))}
+                        <button type="button" className="underline text-xs" onClick={runPreview} data-testid="mk-auto-preview">How many would go out right now?</button>
+                        {preview && <div className="text-xs bg-[#F5F7FA] p-2">Abandoned checkout: {preview.abandoned.sent} · Review request: {preview.review.sent}
+                            {Object.entries({ ...preview.abandoned.skipped, ...preview.review.skipped }).map(([k, n]) => ` · skipped ${n}: ${k}`).join("")}</div>}
+                        {!su && <p className="text-xs text-[#6B7280]">Only a superadmin can switch these on or off.</p>}
+                    </div>
+                )}
+            </Panel>
+
+            <Panel title="Google Merchant Center (free listings)">
+                <div className="text-sm space-y-2" data-testid="mk-merchant">
+                    <p>Your books in Google Shopping, Images and Search with cover, price and stock — free. Set up once:</p>
+                    <ol className="list-decimal pl-5 space-y-1">
+                        <li>merchants.google.com → create the account for <b>oakbridge.in</b> (verify the site; shipping: free delivery).</li>
+                        <li>Products → Add products → <b>Scheduled fetch</b>, daily, with this URL:</li>
+                    </ol>
+                    <div className="flex gap-2 items-center"><code className="text-xs bg-[#F5F7FA] px-2 py-1 break-all">{MERCHANT_FEED_URL}</code>
+                        <button type="button" className="underline text-xs" onClick={() => copy(MERCHANT_FEED_URL)}>Copy</button></div>
+                    <p className="text-xs text-[#6B7280]">Updated live from the catalogue (price, sale price, stock, pre-orders). Sales from it show as “Google Shopping” above.</p>
+                </div>
+            </Panel>
         </div>
     );
 }
