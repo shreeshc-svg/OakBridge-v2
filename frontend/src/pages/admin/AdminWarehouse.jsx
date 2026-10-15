@@ -5,7 +5,7 @@ import { Search, X } from "lucide-react";
 import {
     adminWhOverview, adminWhDocs, adminWhDoc, adminWhUndoDoc, adminWhTestCase, adminWhAccuracy,
     adminWhReplay, adminWhMode, adminWhMovements, adminWhUndoMove, adminWhReview, adminWhCreateDoc, adminWhEditDoc,
-    adminWhEditLines, adminWhDeleteDoc, adminWhRestoreDoc, whBooks, whDocFile, formatApiError,
+    adminWhEditLines, adminWhDeleteDoc, adminWhRestoreDoc, adminWhResetFromSheet, syncInventoryFromSheet, whBooks, whDocFile, formatApiError,
 } from "../../lib/api";
 import { useAuth } from "../../context/AuthContext";
 import { isSuperadmin } from "../../lib/rbac";
@@ -86,6 +86,76 @@ export default function AdminWarehouse() {
     );
 }
 
+/* Trial re-baseline (superadmin): the stock sheet is the warehouse's own
+   count, so the warehouse system's numbers are reset to it — sync the sheet,
+   preview every change, confirm. Each change is saved as a correction
+   (warehouse.py adm_reset_from_sheet). */
+function ResetFromSheet({ onDone }) {
+    const [busy, setBusy] = useState("");
+    const [prev, setPrev] = useState(null);
+    const sync = async () => {
+        setBusy("sync");
+        try {
+            const r = await syncInventoryFromSheet();
+            toast.success(`Sheet synced — ${r.updated ?? 0} book(s) updated on the website.${r.invalid_rows ? ` ${r.invalid_rows} row(s) unreadable.` : ""}`);
+            setPrev(null);
+        } catch (e) { toast.error(formatApiError(e)); } finally { setBusy(""); }
+    };
+    const preview = async () => {
+        setBusy("preview");
+        try { setPrev(await adminWhResetFromSheet({ dry_run: true })); } catch (e) { toast.error(formatApiError(e)); } finally { setBusy(""); }
+    };
+    const apply = async () => {
+        if (!prev?.count) return;
+        const net = prev.changes.reduce((n, c) => n + c.diff, 0);
+        if (!window.confirm(`Reset the warehouse count of ${prev.count} book(s) to the stock sheet?\n\nNet change: ${net > 0 ? "+" : ""}${net} copies.\nEach change is saved as a correction with your name — the history stays complete.\n\nDo this only when the sheet is up to date and nothing is half-packed.`)) return;
+        setBusy("apply");
+        try {
+            const r = await adminWhResetFromSheet({ dry_run: false, expected: prev.count });
+            toast.success(`Reset ${r.reset} book(s) to the sheet.`);
+            setPrev(null); onDone();
+        } catch (e) { toast.error(formatApiError(e)); } finally { setBusy(""); }
+    };
+    return (
+        <div className="border border-[#002B5C] bg-white p-5 space-y-3" data-testid="wh-reset-from-sheet">
+            <h2 className="font-serif text-2xl text-[#002B5C]">Reset warehouse counts from the stock sheet</h2>
+            <p className="text-sm text-[#4B5563]">
+                The Google Sheet is the warehouse's own count. Use this once (or after a full count) so the warehouse system starts from it:
+                update the sheet → sync → preview → reset. Copies owed to waiting paid orders (pre-orders) stay deducted.
+            </p>
+            <div className="flex flex-wrap gap-2">
+                <button type="button" className="border border-[#002B5C] text-[#002B5C] px-4 py-2 text-sm" disabled={!!busy} onClick={sync} data-testid="wh-reset-sync">
+                    {busy === "sync" ? "Syncing…" : "1. Sync the sheet now"}</button>
+                <button type="button" className="border border-[#002B5C] text-[#002B5C] px-4 py-2 text-sm" disabled={!!busy} onClick={preview} data-testid="wh-reset-preview">
+                    {busy === "preview" ? "Comparing…" : "2. Preview changes"}</button>
+                {prev && prev.count > 0 && (
+                    <button type="button" className="bg-[#CC0033] text-white px-4 py-2 text-sm" disabled={!!busy} onClick={apply} data-testid="wh-reset-apply">
+                        {busy === "apply" ? "Resetting…" : `3. Reset ${prev.count} book(s)`}</button>
+                )}
+            </div>
+            {prev && (prev.count === 0
+                ? <p className="text-sm text-[#15803D]">The warehouse already matches the sheet for all {prev.books} books.</p>
+                : (
+                    <table className="w-full text-sm" data-testid="wh-reset-table">
+                        <thead><tr className="text-left text-[#4B5563]"><th className="py-1">Book</th><th className="text-right">Warehouse now</th><th className="text-right">Sheet</th><th className="text-right">Owed to orders</th><th className="text-right">Will be</th><th className="text-right">Change</th></tr></thead>
+                        <tbody>
+                            {prev.changes.slice(0, 300).map((c) => (
+                                <tr key={c.id} className="border-t border-[#E5E7EB]">
+                                    <td className="py-1 pr-2">{c.title}<div className="font-mono text-xs text-[#4B5563]">{c.isbn}</div></td>
+                                    <td className="text-right font-mono">{c.warehouse}</td>
+                                    <td className="text-right font-mono">{c.sheet}</td>
+                                    <td className="text-right font-mono">{c.owed || ""}</td>
+                                    <td className="text-right font-mono">{c.target}</td>
+                                    <td className={`text-right font-mono ${c.diff > 0 ? "text-[#15803D]" : "text-[#CC0033]"}`}>{c.diff > 0 ? `+${c.diff}` : c.diff}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                ))}
+        </div>
+    );
+}
+
 function TrialTab({ canSwitch }) {
     const [ov, setOv] = useState(null);
     const load = useCallback(() => { adminWhOverview().then(setOv).catch(() => setOv({ error: true })); }, []);
@@ -127,6 +197,8 @@ function TrialTab({ canSwitch }) {
                     </div>
                 ) : <p className="mt-3 text-xs text-[#4B5563]">Only a superadmin can start, go live or stop.</p>}
             </div>
+
+            {ov.mode === "trial" && canSwitch && <ResetFromSheet onDone={load} />}
 
             {ov.mode !== "off" && (ov.below_zero || []).length > 0 && (
                 <div className={`border-2 bg-white p-5 ${ov.below_zero_unexplained ? "border-[#CC0033]" : "border-[#F59E0B]"}`} data-testid="wh-below-zero">

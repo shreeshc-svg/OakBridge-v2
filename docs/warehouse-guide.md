@@ -106,6 +106,14 @@ Who can approve: anyone with **Orders** and **Warehouse** access (e.g. the Fulfi
 - Bill/invoice details: the party is taken from the Consignee (or Buyer) block, skipping transport companies and street lines; once a GSTIN has a confirmed name, that name is used. **What the system read** (bank numbers masked) is shown on each document so misreads can be fixed.
 - **Accuracy** shows how often the automatic reading was right, by document type and by printer, with the corrections people had to make and the problems they reported. **Run test cases** re-reads the marked documents to check an improvement does not break anything.
 
+## Reset counts from the stock sheet (trial, superadmin)
+The Google Sheet is the warehouse's own count. To start the warehouse system from it (Admin → Warehouse → Trial & comparison):
+1. Update the sheet; make sure nothing is half-packed.
+2. **Sync the sheet now** — the website takes the sheet's numbers.
+3. **Preview changes** — every book whose warehouse count will change (copies owed to paid pre-orders stay deducted).
+4. **Reset N books** — confirm. Each change is saved as a correction with your name and the time.
+Afterwards "Warehouse vs website" should show only books with orders waiting for copies. From then on, record every stock change on the warehouse screen.
+
 ## Going live
 When the comparison shows the two counts agree (or every difference is explained), a superadmin clicks **Go live**:
 - website stock is replaced by the warehouse counts (books only — hampers and packs keep their own website stock);

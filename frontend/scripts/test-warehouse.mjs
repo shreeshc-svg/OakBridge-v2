@@ -102,6 +102,10 @@ check(/"kind": "website_order" if o else \("author_copy" if author else "skip"\)
 check(/whOpenOrders\(\)/.test(screen) && /data-testid="wh-parcel-order"/.test(screen) && /data-testid="wh-parcel-kind"/.test(screen)
       && /\["dealer_order", "Phone \/ dealer order"\]/.test(screen) && /\["free_copy", "Free copy"\]/.test(screen),
       "courier: pick the website order, or choose Phone/dealer order, Author copy, Free copy or Not sending");
+check(/@wh_admin_router\.post\("\/reset-from-sheet"\)\s*\nasync def adm_reset_from_sheet\(body: ResetBody, user: dict = Depends\(require_superadmin\)\)/.test(wh)
+      && /if state\["mode"\] != "trial":/.test(wh) && /touch_stock=False, note=f"Reset from the stock sheet/.test(wh),
+      "reset from sheet: superadmin, trial only, saved as corrections, website stock untouched");
+check(/data-testid="wh-reset-from-sheet"/.test(admin) && /expected: prev\.count/.test(admin), "reset panel: sync → preview → confirm the previewed count");
 check(/Confirm this courier sheet\?/.test(screen), "courier: OK/Cancel summary (packed / free copies / not sending) before confirming");
 const webBranch = (courierBranch.match(/elif p\.kind == "website_order"([\s\S]*)/) || [])[1] || "";
 check(webBranch.includes("warehouse_doc_id") && !webBranch.includes("_apply("), "courier: website order is linked, never deducted again");

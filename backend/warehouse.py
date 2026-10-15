@@ -1509,6 +1509,58 @@ async def adm_replay(user: dict = Depends(require_admin)):
     return {"cases": out}
 
 
+class ResetBody(BaseModel):
+    dry_run: bool = True
+    expected: Optional[int] = None   # number of books the superadmin confirmed
+
+
+@wh_admin_router.post("/reset-from-sheet")
+async def adm_reset_from_sheet(body: ResetBody, user: dict = Depends(require_superadmin)):
+    """Trial re-baseline: make every book's warehouse count equal the stock
+    sheet (the team's own warehouse count), as it stands on the website after
+    the last sheet sync.
+
+    WHY: the trial's counts were copied from the website on day one and have
+    drifted wherever stock moved in the sheet but not on the warehouse screen
+    (a printer delivery typed only into the sheet, say). The sheet is the
+    warehouse's count, so it is the right number to start again from.
+
+    Target per book = website stock − copies owed to waiting paid orders
+    (pre-orders / backorders take their copies off the warehouse count when
+    paid; the sheet does not know about them). Each change is a correction
+    movement with this reason, so the ledger still adds up and the history
+    shows exactly what was reset, when and by whom. Hampers and packs are
+    not counted by the warehouse and are left alone. Trial only: once live,
+    the warehouse count IS the stock and the sheet is retired."""
+    state = await get_state()
+    if state["mode"] != "trial":
+        raise HTTPException(status_code=409, detail="Only during the trial — once live, the warehouse count is the stock.")
+    owed = await order_stock.owed_by_book(db)
+    books = await db.books.find(
+        {"product_type": {"$nin": list(NOT_COUNTED)}},
+        {"_id": 0, "id": 1, "title": 1, "isbn": 1, "stock": 1, "wh_stock": 1, "coming_soon": 1}).to_list(5000)
+    changes = []
+    for b in books:
+        target = int(b.get("stock") or 0) - int(owed.get(b["id"], 0))
+        cur = int(b.get("wh_stock") or 0)
+        if target != cur:
+            changes.append({"id": b["id"], "title": b.get("title", ""), "isbn": b.get("isbn", ""),
+                            "warehouse": cur, "sheet": int(b.get("stock") or 0), "owed": int(owed.get(b["id"], 0)),
+                            "target": target, "diff": target - cur})
+    changes.sort(key=lambda c: -abs(c["diff"]))
+    if body.dry_run:
+        return {"books": len(books), "changes": changes, "count": len(changes)}
+    if body.expected is not None and body.expected != len(changes):
+        raise HTTPException(status_code=409, detail=f"The numbers changed ({len(changes)} books now differ) — preview again.")
+    stamp = _now().strftime("%d %b %Y %H:%M")
+    for c in changes:
+        await _apply(c["id"], c["diff"], "correction_in" if c["diff"] > 0 else "correction_out", actor=user,
+                     touch_stock=False, note=f"Reset from the stock sheet ({stamp}): {c['warehouse']} → {c['target']}")
+    await audit_log(db, "WAREHOUSE_RESET_FROM_SHEET", email=user.get("email", ""), role=user.get("role", ""),
+                    meta={"books": len(changes), "net": sum(c["diff"] for c in changes)})
+    return {"ok": True, "reset": len(changes)}
+
+
 class ModeBody(BaseModel):
     mode: str  # trial | live | off
 

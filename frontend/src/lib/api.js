@@ -176,6 +176,8 @@ export const adminWhAccuracy = (days = 30) =>
     api.get("/admin/warehouse/accuracy", { params: { days } }).then((r) => r.data);
 export const adminWhReplay = () => api.post("/admin/warehouse/replay", null, { timeout: 300000 }).then((r) => r.data);
 export const adminWhMode = (mode) => api.post("/admin/warehouse/mode", { mode }).then((r) => r.data);
+// Trial re-baseline: warehouse counts := the stock sheet (as synced to the website).
+export const adminWhResetFromSheet = (body) => api.post("/admin/warehouse/reset-from-sheet", body, { timeout: 300000 }).then((r) => r.data);
 
 // My account
 export const fetchMyOrders = () => api.get("/my/orders").then((r) => r.data);

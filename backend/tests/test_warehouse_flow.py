@@ -253,7 +253,40 @@ async def main():
     check(len(db.stock_movements.docs) == n, "hampers are never recorded")
 
 
+
+
+async def reset_tests():
+    print("-- reset warehouse counts from the stock sheet (trial) --")
+    await db.integrations.update_one({"key": wh.STATE_KEY}, {"$set": {"mode": "trial"}})
+    await db.books.insert_one({"id": "z1", "title": "Sheet Book", "isbn": "9780000000901", "stock": 10, "wh_stock": 3})
+    await db.books.insert_one({"id": "z2", "title": "New since trial", "isbn": "9780000000902", "stock": 4})
+    prev = await wh.adm_reset_from_sheet(wh.ResetBody(dry_run=True, expected=None), SUPER)
+    z = {c["id"]: c for c in prev["changes"]}
+    check(z["z1"]["target"] == 10 and z["z1"]["diff"] == 7, "preview: warehouse 3 → sheet 10 (+7)")
+    check(z["z2"]["target"] == 4, "a book added after the trial started gets its count too")
+    check(all(c["id"] not in ("h", "p") for c in prev["changes"]), "hampers and packs are left alone")
+    try:
+        await wh.adm_reset_from_sheet(wh.ResetBody(dry_run=False, expected=prev["count"] + 1), SUPER)
+        check(False, "a stale preview should be refused")
+    except HTTPException as e:
+        check(e.status_code == 409, "a stale preview is refused (numbers changed)")
+    r = await wh.adm_reset_from_sheet(wh.ResetBody(dry_run=False, expected=prev["count"]), SUPER)
+    check(r["reset"] == prev["count"] and book("z1")["wh_stock"] == 10 and book("z2")["wh_stock"] == 4, "counts now equal the sheet")
+    mv = [m for m in db.stock_movements.docs if m["book_id"] == "z1" and m["reason"] == "correction_in"]
+    check(mv and mv[-1]["qty"] == 7 and "Reset from the stock sheet" in mv[-1]["note"] and not mv[-1]["touched_stock"],
+          "saved as a correction with the reason; website stock untouched")
+    again = await wh.adm_reset_from_sheet(wh.ResetBody(dry_run=True, expected=None), SUPER)
+    check(not any(c["id"] in ("z1", "z2") for c in again["changes"]), "running it again changes nothing for them")
+    await db.integrations.update_one({"key": wh.STATE_KEY}, {"$set": {"mode": "live"}})
+    try:
+        await wh.adm_reset_from_sheet(wh.ResetBody(dry_run=True, expected=None), SUPER)
+        check(False, "reset should be refused once live")
+    except HTTPException as e:
+        check(e.status_code == 409, "refused once live (the warehouse IS the stock then)")
+
+
 asyncio.run(main())
+asyncio.run(reset_tests())
 print()
 if failed:
     print(f"{failed} assertion(s) failed")
