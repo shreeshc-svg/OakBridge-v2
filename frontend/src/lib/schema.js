@@ -106,8 +106,79 @@ export const itemListLd = (books, { name, path, max = 24 } = {}) => ({
     })),
 });
 
+/* ----------------------------------------------------------- book pages --- */
+
+/** 1 -> "1st", 2 -> "2nd", 11 -> "11th", 23 -> "23rd". */
+export const ordinal = (n) => {
+    const v = Math.abs(Number(n)) % 100;
+    const suf = v >= 11 && v <= 13 ? "th" : ({ 1: "st", 2: "nd", 3: "rd" }[v % 10] || "th");
+    return `${n}${suf}`;
+};
+
+/**
+ * "6" -> "6th edition". The catalogue stores the edition as a bare number, and
+ * the search snippet used to read "A P Bhardwaj · 6 edition." Anything that is
+ * already words ("Second", "2nd ed.", "Revised edition") is left as typed.
+ */
+export const editionLabel = (edition) => {
+    const e = String(edition ?? "").trim();
+    if (!e) return "";
+    if (/^\d+$/.test(e)) return `${ordinal(e)} edition`;
+    return /\bed(ition|n)?\b\.?/i.test(e) ? e : `${e} edition`;
+};
+
+/**
+ * The page title for a book: its full name, then "by <author>".
+ *
+ * Search Console shows the queries that grow are author + book ("ap bhardwaj
+ * english book"), and the title tag carried only the book. The book's own name
+ * still comes first and is never cut (see Seo.pageTitle); the author is added
+ * after it. A long author list ("A, B & C") becomes "A et al." so the title
+ * stays readable. Hampers have no author; a title that already names its
+ * author is left alone.
+ */
+export const bookSeoTitle = (book) => {
+    const title = String(book?.title || "").trim();
+    const author = String(book?.author || "").replace(/\s+/g, " ").trim();
+    if (!title || !author || book?.product_type === "hamper") return title;
+    if (title.toLowerCase().includes(author.toLowerCase())) return title;
+    const first = author.split(/\s*(?:,|&|\band\b)\s*/i)[0].trim();
+    const who = author.length <= 40 ? author : `${first} et al.`;
+    return `${title} by ${who}`;
+};
+
+/** schema.org bookFormat from the stored binding; undefined = do not claim one. */
+export const bookFormatUrl = (binding) => {
+    const b = String(binding || "").toLowerCase();
+    if (/hard/.test(b)) return "https://schema.org/Hardcover";
+    if (/paper|soft/.test(b)) return "https://schema.org/Paperback";
+    if (/e-?book|digital|pdf/.test(b)) return "https://schema.org/EBook";
+    return undefined;
+};
+
+/**
+ * aggregateRating from REAL reviews only: review_count and rating_avg are
+ * computed by the server from purchase-verified reviews (extensions.
+ * refresh_review_stats) and shown on the same page. `book.rating` — the 4.5
+ * every title was created with — is never read here. No reviews, no claim.
+ */
+export const ratingLd = (book) => {
+    const n = Number(book?.review_count || 0);
+    const avg = Number(book?.rating_avg);
+    if (!(n >= 1) || !(avg >= 1 && avg <= 5)) return {};
+    return {
+        aggregateRating: {
+            "@type": "AggregateRating",
+            ratingValue: Number(avg.toFixed(1)),
+            reviewCount: n,
+            bestRating: 5,
+            worstRating: 1,
+        },
+    };
+};
+
 /*
- * DELIBERATELY ABSENT: aggregateRating.
+ * ABSENT AS A DEFAULT: aggregateRating.
  *
  * `rating` defaults to 4.5 on the Book model, so most titles carry a number
  * nobody gave them. Marking that up would be publishing review counts and
@@ -115,6 +186,8 @@ export const itemListLd = (books, { name, path, max = 24 } = {}) => ({
  * spam policies, and a manual action risks the rankings of the whole domain,
  * not just the pages carrying it.
  *
- * If real reviews are ever collected AND shown on the page AND the 4.5 default
- * is removed, this becomes a legitimate and valuable addition. Not before.
+ * Since 15 Oct 2026 the condition is met for books that HAVE reviews: they are
+ * purchase-verified, shown on the page, counted by the server, and the 4.5
+ * default is no longer displayed or read (ratingLd above). Books without a
+ * review still claim nothing.
  */

@@ -19,7 +19,7 @@ import { useAuth } from "../context/AuthContext";
 import { toast } from "sonner";
 import VerifyNotice from "../components/VerifyNotice";
 import { ebookEdition } from "../lib/ebook";
-import { metaDescription } from "../lib/schema";
+import { metaDescription, bookSeoTitle, editionLabel, bookFormatUrl, ratingLd } from "../lib/schema";
 import { preorderState, useCountdown, formatLaunchDate } from "../lib/preorder";
 
 // Trust badges under the price. Admin-managed via Settings key `pdp_badges`;
@@ -355,7 +355,8 @@ export default function BookDetail() {
      * about the book. Author and edition go first: they are what somebody
      * scanning ten blue links is actually checking.
      */
-    const seoLead = [book.author, book.edition ? `${book.edition} edition` : ""]
+    // "A P Bhardwaj · 6th edition · 766 pages." — "6 edition" read like a typo.
+    const seoLead = [book.author, editionLabel(book.edition), Number(book.pages) > 0 ? `${book.pages} pages` : ""]
         .filter(Boolean)
         .join(" · ");
     const seoDesc = metaDescription(
@@ -395,7 +396,13 @@ export default function BookDetail() {
         isbn: book.isbn,
         numberOfPages: book.pages,
         inLanguage: book.language,
-        bookFormat: "https://schema.org/Hardcover",
+        // From the stored binding. It said Hardcover for every title, and most
+        // of the catalogue is paperback. Unknown binding: no claim.
+        ...(bookFormatUrl(book.binding) ? { bookFormat: bookFormatUrl(book.binding) } : {}),
+        ...(book.publication_year ? { datePublished: String(book.publication_year) } : {}),
+        ...(editionLabel(book.edition) ? { bookEdition: editionLabel(book.edition) } : {}),
+        // Only real, purchase-verified reviews (see lib/schema.ratingLd).
+        ...ratingLd(book),
         publisher: { "@type": "Organization", name: book.publisher },
         image: coverAbs,
         description: book.description,
@@ -451,7 +458,7 @@ export default function BookDetail() {
         <div data-testid="book-detail-page">
             <Breadcrumbs items={[{ label: "Bookstore", to: "/books" }, { label: book.title }]} />
             <Seo
-                title={book.title}
+                title={bookSeoTitle(book)}
                 description={seoDesc}
                 path={`/books/${book.id}`}
                 image={coverAbs}
@@ -526,8 +533,26 @@ export default function BookDetail() {
                             {book.subtitle}
                         </p>
                     )}
-                    <p className="mt-4 text-[#4B5563]">
-                        by <span className="text-[#002B5C] font-medium">{book.author}</span>
+                    {/* The byline links to each author's page: those pages are what
+                        rank for author searches, and the only other link to them
+                        sat inside a tab crawlers do not open. */}
+                    <p className="mt-4 text-[#4B5563]" data-testid="book-byline">
+                        by{" "}
+                        {bookAuthors.length > 0 ? (
+                            bookAuthors.map((a, i) => (
+                                <React.Fragment key={a.id}>
+                                    {i > 0 && (i === bookAuthors.length - 1 ? " & " : ", ")}
+                                    <Link
+                                        to={`/authors/${a.id}`}
+                                        className="text-[#002B5C] font-medium hover:text-[#CC0033] underline-offset-4 hover:underline"
+                                    >
+                                        {a.name}
+                                    </Link>
+                                </React.Fragment>
+                            ))
+                        ) : (
+                            <span className="text-[#002B5C] font-medium">{book.author}</span>
+                        )}
                     </p>
 
                     {/* Stated next to the title, not left to the Specifications
@@ -589,19 +614,28 @@ export default function BookDetail() {
                         </div>
                     )}
 
-                    <div className="mt-6 flex items-center gap-4">
-                        <div className="flex items-center gap-1 text-[#F59E0B]">
-                            {Array.from({ length: 5 }).map((_, i) => (
-                                <Star
-                                    key={`star-${i}`}
-                                    size={14}
-                                    strokeWidth={1.5}
-                                    fill={i < Math.round(book.rating) ? "#F59E0B" : "none"}
-                                />
-                            ))}
-                        </div>
+                    {/* Stars only from real reviews (review_count / rating_avg,
+                        counted by the server). Every book used to show 4.5 —
+                        the default it was created with — next to "No reviews
+                        yet": a score no reader gave. */}
+                    <div className="mt-6 flex items-center gap-4" data-testid="book-rating-row">
+                        {Number(book.review_count) > 0 && Number(book.rating_avg) > 0 && (
+                            <div className="flex items-center gap-1 text-[#F59E0B]" data-testid="book-rating">
+                                {Array.from({ length: 5 }).map((_, i) => (
+                                    <Star
+                                        key={`star-${i}`}
+                                        size={14}
+                                        strokeWidth={1.5}
+                                        fill={i < Math.round(book.rating_avg) ? "#F59E0B" : "none"}
+                                    />
+                                ))}
+                            </div>
+                        )}
                         <span className="text-xs text-[#4B5563] font-mono">
-                            {book.rating.toFixed(1)} · ISBN {book.isbn}
+                            {Number(book.review_count) > 0 && Number(book.rating_avg) > 0
+                                ? `${Number(book.rating_avg).toFixed(1)} (${book.review_count} review${Number(book.review_count) === 1 ? "" : "s"}) · `
+                                : ""}
+                            ISBN {book.isbn}
                         </span>
                     </div>
 

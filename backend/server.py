@@ -137,6 +137,10 @@ class Book(BaseModel):
     # it, and every page would still receive a book without it.
     star_title: bool = False
     rating: float = 4.5
+    # Real review figures (extensions.refresh_review_stats). `rating` above is
+    # the creation default and is no longer shown or marked up anywhere.
+    review_count: int = 0
+    rating_avg: Optional[float] = None
     stock: int = 100
     has_ebook: bool = False
     # Link to this title on the Oakbridge eReader (ebooks.oakbridge.in), which
@@ -711,6 +715,13 @@ async def startup_event():
     await seed_coupons()
     await ensure_indexes()
     await ensure_feature_indexes()
+    try:
+        # Real review figures for every reviewed book (stars are shown only
+        # from these — extensions.refresh_review_stats).
+        from extensions import refresh_review_stats
+        await refresh_review_stats()
+    except Exception:  # noqa: BLE001
+        logging.getLogger(__name__).exception("review stats backfill failed")
     init_storage()
     # Marketing: carry on with any campaign a deploy interrupted mid-send.
     import asyncio as _asyncio

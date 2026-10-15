@@ -26,8 +26,8 @@ const src = read('src/lib/schema.js')
   .replace(/^import .*$/gm, 'const SITE = "https://www.oakbridge.in";')
   .replace(/^export /gm, '');
 const m = await import('data:text/javascript;base64,' + Buffer.from(
-  src + '\nexport { metaDescription, breadcrumbLd, personLd, itemListLd };').toString('base64'));
-const { metaDescription, breadcrumbLd, personLd, itemListLd } = m;
+  src + '\nexport { metaDescription, breadcrumbLd, personLd, itemListLd, ordinal, editionLabel, bookSeoTitle, bookFormatUrl, ratingLd };').toString('base64'));
+const { metaDescription, breadcrumbLd, personLd, itemListLd, ordinal, editionLabel, bookSeoTitle, bookFormatUrl, ratingLd } = m;
 
 let fail = 0;
 const eq = (n, got, want) => {
@@ -121,10 +121,33 @@ console.log('\n-- no invented biography --');
 eq('the generic author paragraph is gone', /A distinguished Oakbridge author/.test(strip(pdp)), false);
 eq('the bio shown is the author record\'s own', /\{a\.bio\}/.test(pdp), true);
 
+console.log('\n-- book page titles, descriptions, markup (15 Oct 2026) --');
+eq('title adds the author', bookSeoTitle({ title: 'Compulsory English for IAS (Mains) Examination 6/e', author: 'A P Bhardwaj' }),
+   'Compulsory English for IAS (Mains) Examination 6/e by A P Bhardwaj');
+eq('a long author list becomes "et al."', bookSeoTitle({ title: 'T', author: 'Pramod Rao, Ritvik Lukose & Balanand Menon Kumar' }), 'T by Pramod Rao et al.');
+eq('a title that already names the author is left alone', bookSeoTitle({ title: 'A P Bhardwaj on English', author: 'A P Bhardwaj' }), 'A P Bhardwaj on English');
+eq('hampers get no "by"', bookSeoTitle({ title: 'Festive Hamper', author: 'Various', product_type: 'hamper' }), 'Festive Hamper');
+eq('ordinals', [1, 2, 3, 4, 11, 12, 13, 21, 22, 23, 101].map(ordinal), ['1st', '2nd', '3rd', '4th', '11th', '12th', '13th', '21st', '22nd', '23rd', '101st']);
+eq('"6" -> "6th edition" (was "6 edition")', editionLabel('6'), '6th edition');
+eq('worded editions are kept', [editionLabel('2nd ed.'), editionLabel('Revised edition'), editionLabel('Second'), editionLabel(null)],
+   ['2nd ed.', 'Revised edition', 'Second edition', '']);
+eq('bookFormat follows the binding (was Hardcover for everything)',
+   [bookFormatUrl('Paperback'), bookFormatUrl('Hardback'), bookFormatUrl('eBook'), bookFormatUrl('')],
+   ['https://schema.org/Paperback', 'https://schema.org/Hardcover', 'https://schema.org/EBook', undefined]);
+const pdpSrc = strip(read('src/pages/BookDetail.jsx'));
+eq('the PDP uses them', /title=\{bookSeoTitle\(book\)\}/.test(pdpSrc) && /bookFormatUrl\(book\.binding\)/.test(pdpSrc)
+   && /editionLabel\(book\.edition\)/.test(pdpSrc) && !/schema\.org\/Hardcover"/.test(pdpSrc), true);
+eq('the byline links to the author pages', /data-testid="book-byline"[\s\S]{0,400}to=\{`\/authors\/\$\{a\.id\}`\}/.test(pdpSrc), true);
+
 console.log('\n-- nothing fabricated --');
 const all = strip(read('src/lib/schema.js')) + strip(read('src/pages/BookDetail.jsx'));
-eq('no aggregateRating anywhere', /aggregateRating/.test(all), false);
-eq('no reviewCount anywhere', /reviewCount/.test(all), false);
+// Ratings: only from real reviews. The 4.5 creation default (`book.rating`)
+// is never shown or marked up.
+eq('no rating without reviews', [ratingLd({ rating: 4.5 }), ratingLd({ review_count: 0, rating_avg: 4 }), ratingLd({ review_count: 3 })], [{}, {}, {}]);
+eq('real reviews -> aggregateRating', ratingLd({ rating: 4.5, review_count: 2, rating_avg: 3.5 }).aggregateRating,
+   { '@type': 'AggregateRating', ratingValue: 3.5, reviewCount: 2, bestRating: 5, worstRating: 1 });
+eq('the 4.5 default is never read on the page or in markup', /book\.rating\b(?!_)/.test(all) || /\.rating\b(?!_avg)/.test(strip(read('src/lib/schema.js')).replace(/ratingLd|ratingValue/g, '')), false);
+eq('aggregateRating is built in one place only', (all.match(/aggregateRating:/g) || []).length, 1);
 eq('the Book schema still omits offers (prices go stale in prerendered HTML)',
    /"@type": "Book"/.test(read('src/pages/BookDetail.jsx')) && !/\boffers\s*:/.test(read('src/pages/BookDetail.jsx')), true);
 

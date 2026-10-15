@@ -1034,6 +1034,33 @@ async def author_books(author_id: str):
 
 
 
+async def refresh_review_stats(book_id: Optional[str] = None) -> int:
+    """Write each book's REAL review figures: review_count and rating_avg.
+
+    The page and its Google markup show stars only from these. `rating` on the
+    book is the 4.5 every title was created with, and showing it beside "No
+    reviews yet" was a score nobody gave. Reviews are purchase-verified
+    (create_review). With book_id, refreshes that one book (also to 0 when its
+    last review is gone); without, every reviewed book (startup backfill).
+    """
+    match = {"book_id": book_id} if book_id else {}
+    n = 0
+    seen = set()
+    async for g in db.reviews.aggregate([
+        {"$match": match},
+        {"$group": {"_id": "$book_id", "n": {"$sum": 1}, "avg": {"$avg": "$rating"}}},
+    ]):
+        if not g.get("_id"):
+            continue
+        seen.add(g["_id"])
+        await db.books.update_one({"id": g["_id"]}, {"$set": {
+            "review_count": int(g["n"]), "rating_avg": round(float(g["avg"] or 0), 1)}})
+        n += 1
+    if book_id and book_id not in seen:
+        await db.books.update_one({"id": book_id}, {"$set": {"review_count": 0, "rating_avg": None}})
+    return n
+
+
 @extras_router.get("/books/{book_id}/reviews", response_model=List[Review])
 async def list_reviews(book_id: str):
     reviews = await db.reviews.find({"book_id": book_id}, {"_id": 0}).sort([("created_at", -1)]).to_list(200)
@@ -1067,6 +1094,10 @@ async def create_review(book_id: str, payload: ReviewCreate, user: dict = Depend
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.reviews.insert_one({**doc})
+    try:
+        await refresh_review_stats(book_id)
+    except Exception:  # noqa: BLE001 — the review is saved; the count catches up at next start
+        logging.getLogger(__name__).exception("review stats refresh failed for %s", book_id)
     try:
         from emailer import send_review_submitted
         await send_review_submitted(user.get("email"), user.get("name", ""), book.get("title", "your book"), payload.rating)

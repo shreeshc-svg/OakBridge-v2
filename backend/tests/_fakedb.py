@@ -237,11 +237,27 @@ class Coll:
             if "$match" in st:
                 docs = [d for d in docs if _match(d, st["$match"])]
             if "$group" in st:
-                key = st["$group"]["_id"].lstrip("$")
-                g = {}
+                spec = st["$group"]
+                key = spec["_id"].lstrip("$")
+                groups = {}
                 for d in docs:
-                    g[d.get(key)] = g.get(d.get(key), 0) + 1
-                docs = [{"_id": k, "n": v} for k, v in g.items()]
+                    groups.setdefault(d.get(key), []).append(d)
+                out = []
+                for k, members in groups.items():
+                    row = {"_id": k}
+                    for name, acc in spec.items():
+                        if name == "_id":
+                            continue
+                        op, arg = next(iter(acc.items())) if isinstance(acc, dict) else ("$sum", 1)
+                        if op == "$sum":
+                            row[name] = sum((m.get(arg.lstrip("$")) or 0) if isinstance(arg, str) else arg for m in members)
+                        elif op == "$avg":
+                            vals = [m.get(arg.lstrip("$")) for m in members if m.get(arg.lstrip("$")) is not None]
+                            row[name] = sum(vals) / len(vals) if vals else None
+                    if len(spec) == 1:
+                        row["n"] = len(members)   # old shape: {_id, n}
+                    out.append(row)
+                docs = out
         return Cursor(docs)
 
 
