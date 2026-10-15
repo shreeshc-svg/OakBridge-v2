@@ -27,6 +27,7 @@ import {
     CollectionEditor,
 } from "../../components/admin/ContentEditors";
 import MediaListEditor from "../../components/admin/MediaListEditor";
+import StoresEditor from "../../components/admin/StoresEditor";
 
 // Tab bar targets — label shown, title must match the PageGroup title exactly.
 const PAGE_TABS = [
@@ -250,6 +251,24 @@ export default function AdminPages() {
                             { key: "alt", label: "Alt text (finished banners only: what the banner says)" },
                         ]}
                     />
+
+                    <div className="mt-6">
+                        <StoresEditor />
+                        <div className="mt-3 space-y-3">
+                            <TextSlotRow
+                                label="“Available on” strip heading"
+                                value={site.home_stores_title}
+                                defaultValue="Also available on"
+                                onSave={(v) => saveSite("home_stores_title", v)}
+                            />
+                            <TextSlotRow
+                                label="Strip scroll speed — pixels per second (default 30; it only scrolls when the logos don't fit)"
+                                value={site.home_stores_speed}
+                                defaultValue="30"
+                                onSave={(v) => saveSite("home_stores_speed", v)}
+                            />
+                        </div>
+                    </div>
 
                     <div className="overline !text-[10px] mt-6 mb-2">Main hero</div>
                     <SlotRow label="Hero image" value={site.home_hero} onSave={(v) => saveSite("home_hero", v)} />

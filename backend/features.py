@@ -2801,6 +2801,16 @@ SITE_CONTENT_DEFAULTS = {
 }
 
 COLLECTION_DEFAULTS = {
+    # "Available on" strip (homepage section "stores") and the per-book store
+    # buttons. The strip shows only stores with a logo uploaded, so these ship
+    # hidden until an admin adds the official artwork (Admin → Pages → Stores).
+    # `id` is the key used in each book's store_links.
+    "home_stores": [
+        {"id": "amazon", "name": "Amazon", "logo": "", "alt": "Amazon", "enabled": True},
+        {"id": "flipkart", "name": "Flipkart", "logo": "", "alt": "Flipkart", "enabled": True},
+        {"id": "kindle", "name": "Kindle", "logo": "", "alt": "Amazon Kindle", "enabled": True},
+        {"id": "oakbridge-ereader", "name": "Oakbridge eReader", "logo": "", "alt": "Oakbridge eReader", "enabled": True},
+    ],
     # Careers — admin-managed open roles. Empty `location`/`type` are fine.
     "careers_jobs": [
         {"id": "editor-law", "title": "Commissioning Editor — Law", "location": "Gurugram", "type": "Full-time", "department": "Editorial", "description": "Own the acquisition and development of law and tax titles, working with leading practitioner-authors from proposal to publication.", "enabled": True},
@@ -2955,6 +2965,74 @@ async def set_collection(key: str, payload: CollectionSet):
         {"key": key}, {"$set": {"key": key, "items": payload.items}}, upsert=True
     )
     return {"ok": True, "count": len(payload.items)}
+
+
+def _store_link_rows(data: bytes, filename: str) -> list:
+    """Any CSV / .xlsx with an ISBN column -> list of {header: value} rows."""
+    name = (filename or "").lower()
+    if name.endswith(".xlsx"):
+        uploads_guard.require_not_zip_bomb(data, "File")
+        try:
+            wb = load_workbook(io.BytesIO(data), data_only=True, read_only=True)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=400, detail=f"Could not read Excel file: {e}")
+        it = wb.worksheets[0].iter_rows(values_only=True)
+        header = [str(h).strip() if h is not None else "" for h in next(it, [])]
+        return [{header[i]: ("" if v is None else str(v).strip()) for i, v in enumerate(r) if i < len(header)} for r in it if r]
+    if name.endswith(".csv"):
+        return list(csv.DictReader(io.StringIO(data.decode("utf-8-sig", errors="replace"))))
+    raise HTTPException(status_code=400, detail="Upload a .csv or .xlsx file")
+
+
+@admin_router.post("/books/store-links/import")
+async def admin_import_store_links(file: UploadFile = File(...), dry_run: bool = True):
+    """Fill each book's store links from a sheet: an ISBN column plus one
+    column per store (header = the store's name or id, e.g. "Amazon",
+    "Flipkart", "Kindle"). Empty cells leave a link unchanged; only https
+    links are accepted. dry_run=True reports what would change."""
+    from extensions import clean_store_links
+    data = await uploads_guard.read_limited(file, 5 * 1024 * 1024, "File")
+    rows = _store_link_rows(data, file.filename or "")
+    if not rows:
+        raise HTTPException(status_code=400, detail="The file has no rows")
+    stores = (await get_collection("home_stores"))["items"]
+    by_header = {}
+    for st in stores:
+        for key in {str(st.get("id") or "").lower(), str(st.get("name") or "").lower()}:
+            if key:
+                by_header[key] = st["id"]
+    cols = list(rows[0].keys())
+    isbn_col = next((c for c in cols if str(c).strip().lower() in ("isbn", "isbn13", "isbn-13", "isbn_13")), None)
+    if not isbn_col:
+        raise HTTPException(status_code=400, detail=f"No ISBN column found (columns: {', '.join(map(str, cols[:12]))})")
+    store_cols = {c: by_header[str(c).strip().lower()] for c in cols if str(c).strip().lower() in by_header}
+    if not store_cols:
+        raise HTTPException(status_code=400, detail=f"No store columns found. Use headers like: {', '.join(s['name'] for s in stores)}")
+    norm = lambda v: re.sub(r"[^0-9Xx]", "", str(v or "")).upper()  # noqa: E731
+    books = {norm(b.get("isbn")): b async for b in db.books.find({}, {"_id": 0, "id": 1, "isbn": 1, "title": 1, "store_links": 1})}
+    updated, links_set, unknown, rejected = 0, 0, [], 0
+    for r in rows:
+        isbn = norm(r.get(isbn_col))
+        if not isbn:
+            continue
+        b = books.get(isbn)
+        if not b:
+            unknown.append(isbn)
+            continue
+        incoming = {sid: str(r.get(col) or "").strip() for col, sid in store_cols.items() if str(r.get(col) or "").strip()}
+        clean = clean_store_links(incoming)
+        rejected += len(incoming) - len(clean)
+        if not clean:
+            continue
+        merged = {**(b.get("store_links") or {}), **clean}
+        if merged != (b.get("store_links") or {}):
+            updated += 1
+            links_set += len(clean)
+            if not dry_run:
+                await db.books.update_one({"id": b["id"]}, {"$set": {"store_links": merged}})
+    return {"dry_run": dry_run, "books_updated": updated, "links_set": links_set, "rejected_links": rejected,
+            "unknown_isbns": unknown[:50], "unknown_count": len(unknown),
+            "store_columns": {c: sid for c, sid in store_cols.items()}}
 
 
 @admin_router.post("/merge-titles")

@@ -12,7 +12,7 @@ import { Minus, Plus, ShoppingBag, ArrowLeft, Star, ChevronLeft, ChevronRight, B
 import BookCard from "../components/BookCard";
 import ReviewsSection from "../components/ReviewsSection";
 import { fetchBook, fetchBooks, formatINR, notifyBackInStock, fetchSettings, mediaUrl,
-    fetchBookPreview, fetchBookAuthors, fetchPackItems,
+    fetchBookPreview, fetchBookAuthors, fetchPackItems, fetchCollection,
 } from "../lib/api";
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
@@ -102,6 +102,12 @@ export default function BookDetail() {
     // matches. Kept in its own request so a failure here cannot affect the
     // product itself, for the same reason the related-books call is separate.
     const [bookAuthors, setBookAuthors] = useBootState(`${k}:authors`, []);
+    // Stores this title is also sold on (Admin → Pages → Stores; links per book
+    // in Admin → Books). Read once — the list is the same for every book.
+    const [stores, setStores] = useBootState("pdp:stores", []);
+    useEffect(() => {
+        fetchCollection("home_stores").then((d) => setStores((d?.items || []).filter((x) => x && x.enabled !== false))).catch(() => {});
+    }, [setStores]);
 
     useEffect(() => {
         const quiet = warm.current;
@@ -936,6 +942,38 @@ export default function BookDetail() {
                     )}
 
                     <VerifyNotice className="mt-6 max-w-md" />
+
+                    {/* "Also available on": only stores where THIS book has a
+                        link (Admin → Books → Store links). Opens the store in a
+                        new tab; logo when uploaded, else the store's name. */}
+                    {(() => {
+                        const links = book.store_links || {};
+                        const here = stores.filter((st) => links[st.id]);
+                        if (!here.length) return null;
+                        return (
+                            <div className="mt-6" data-testid="book-store-links">
+                                <div className="text-xs text-[#4B5563] mb-2">Also available on</div>
+                                <div className="flex flex-wrap gap-2">
+                                    {here.map((st) => (
+                                        <a
+                                            key={st.id}
+                                            href={links[st.id]}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            data-testid={`book-store-${st.id}`}
+                                            className="inline-flex items-center gap-2 border border-[#E5E7EB] bg-white px-3 py-2 text-sm text-[#002B5C] hover:border-[#002B5C]"
+                                            aria-label={`Buy on ${st.name} (opens in a new tab)`}
+                                        >
+                                            {st.logo
+                                                ? <img src={mediaUrl(st.logo)} alt="" className="h-5 w-auto max-w-[90px] object-contain" loading="lazy" />
+                                                : <span>{st.name}</span>}
+                                            <ExternalLink size={13} strokeWidth={1.5} aria-hidden="true" />
+                                        </a>
+                                    ))}
+                                </div>
+                            </div>
+                        );
+                    })()}
 
 
                     {/*

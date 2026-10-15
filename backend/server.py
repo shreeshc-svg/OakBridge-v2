@@ -141,6 +141,9 @@ class Book(BaseModel):
     # the creation default and is no longer shown or marked up anywhere.
     review_count: int = 0
     rating_avg: Optional[float] = None
+    # Where else the book is sold ({store_id: https url}); see the "Also
+    # available on" buttons on the book page. Declared or response_model drops it.
+    store_links: dict = Field(default_factory=dict)
     stock: int = 100
     has_ebook: bool = False
     # Link to this title on the Oakbridge eReader (ebooks.oakbridge.in), which

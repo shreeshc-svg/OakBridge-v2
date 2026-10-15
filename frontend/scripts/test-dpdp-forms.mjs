@@ -80,7 +80,8 @@ check(/<PolicyUpdateNotice \/>/.test(code("frontend/src/components/Layout.jsx"))
 console.log("-- uploads and headers --");
 check(/require_safe_pdf\(data, "eBook", allow_encrypted=True\)/.test(feat) && /require_safe_archive\(data, "File", office=ext != "zip"\)/.test(feat)
       && /require_safe_ole\(data, "File"\)/.test(feat), "eBooks and public downloads: nothing that can run");
-check((feat.match(/require_not_zip_bomb\(/g) || []).length === 2 && /require_not_zip_bomb\(data, "File"\)/.test(code("backend/marketing.py")),
+// features.py: book import, eBook price list, book store-links import.
+check((feat.match(/require_not_zip_bomb\(/g) || []).length === 3 && /require_not_zip_bomb\(data, "File"\)/.test(code("backend/marketing.py")),
       "every spreadsheet import is checked for zip bombs");
 check(/refuse_if_infected, path, "CV"/.test(feat) && /refuse_if_infected, book\["ebook_path"\]/.test(feat), "virus-scan tag honoured on CV and eBook downloads");
 check(/app\.add_middleware\(SecurityHeadersMiddleware\)/.test(srv) && /docs_url="\/docs" if _API_DOCS else None/.test(srv),

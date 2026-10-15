@@ -5,6 +5,7 @@ import HamperBanner from "../components/HamperBanner";
 import { Link } from "react-router-dom";
 import { ArrowUpRight, BookOpen, GraduationCap, Building2, Calendar, Cpu, Briefcase, Users, ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
 import BestsellerCarousel from "../components/BestsellerCarousel";
+import StoreStrip from "../components/StoreStrip";
 import BookRail from "../components/BookRail";
 import {
     fetchBooks,
@@ -215,6 +216,7 @@ export default function Home() {
     const [site, setSite] = useBootState("home:site", {});
     const [settings, setSettings] = useBootState("home:settings", null);
     const [testimonials, setTestimonials] = useBootState("home:testimonials", []);
+    const [stores, setStores] = useBootState("home:stores", []);
     const [heroSlides, setHeroSlides] = useBootState("home:heroSlides", []);
     /*
      * Which business descriptions are expanded, on mobile only.
@@ -233,6 +235,7 @@ export default function Home() {
         fetchBestsellers(12).then(setBestsellers).catch(() => {});
         fetchSettings().then(setSettings).catch(() => {});
         fetchCollection("home_testimonials").then((d) => setTestimonials((d?.items || []).filter((t) => t && t.enabled !== false && t.quote))).catch(() => {});
+        fetchCollection("home_stores").then((d) => setStores((d?.items || []).filter((x) => x && x.enabled !== false && x.logo))).catch(() => {});
         // A slide with no image would render an empty coloured frame at the very
         // top of the site, so an unfinished row is dropped rather than reserved.
         //
@@ -251,7 +254,7 @@ export default function Home() {
                 setBootPool([]);
             })
             .catch(() => {});
-    }, [setSite, setSettings, setTestimonials, setHeroSlides]);
+    }, [setSite, setSettings, setTestimonials, setStores, setHeroSlides]);
 
     // "What leaders are reading" shows ONLY the books the admin has explicitly
     // selected (home_bestsellers), in the admin's order — never the whole catalogue.
@@ -829,6 +832,11 @@ export default function Home() {
             )}
 
             {/* ============== TESTIMONIALS (carousel) ============== */}
+            {!hidden.has("home.stores") && stores.length > 0 && (
+                <div style={{ order: homeOrd("stores") }}>
+                    <StoreStrip stores={stores} title={site.home_stores_title || "Also available on"} speed={Number(site.home_stores_speed) || 30} />
+                </div>
+            )}
             {!hidden.has("home.testimonials") && testimonials.length > 0 && (
                 <div style={{ order: homeOrd("testimonials") }}>
                     <TestimonialsCarousel

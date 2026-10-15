@@ -12,6 +12,7 @@ export const SECTION_REGISTRY = [
         // page led with Our Businesses. test-section-order.mjs now asserts it.
         items: [
             { key: "home.hero_carousel", label: "Hero banner carousel" },
+            { key: "home.stores", label: "Available on — store logos" },
             { key: "home.businesses", label: "Our Businesses" },
             { key: "home.gifting_banner", label: "Gift Hamper Banner" },
             { key: "home.imprints", label: "Imprints (Five Imprints)" },
@@ -82,6 +83,7 @@ export const SECTION_REGISTRY = [
  */
 export const HOME_DEFAULT_ORDER = [
     "hero_carousel",
+    "stores",
     "businesses",
     "gifting_banner",
     "imprints",

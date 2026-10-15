@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { fetchSettings, mediaUrl,
+import { fetchSettings, mediaUrl, fetchCollection,
     adminUploadBookPreview,
     adminRemoveBookPreview,
 } from "../../lib/api";
@@ -57,6 +57,7 @@ const BLANK = {
     coming_soon_label: "",
     ebook_url: "",
     ebook_price: "",
+    store_links: {},
     stock: 100,
     variants: [],
     is_volume_set: false,
@@ -748,6 +749,16 @@ function BookForm({ initial, categories, onClose, onSaved }) {
     useEffect(() => {
         fetchSettings().then(setVsettings).catch(() => {});
     }, []);
+    // Stores come from Admin → Pages → "Available on" stores; one link box each.
+    // The Oakbridge eReader has its own field (ebook_url) and is left out here.
+    const [stores, setStores] = useState([]);
+    useEffect(() => {
+        fetchCollection("home_stores")
+            .then((d) => setStores((d?.items || []).filter((x) => x && x.id && x.id !== "oakbridge-ereader")))
+            .catch(() => {});
+    }, []);
+    const setStoreLink = (id, url) =>
+        setForm((f) => ({ ...f, store_links: { ...(f.store_links || {}), [id]: url } }));
     const bindingOpts = vsettings?.binding_options || ["Hardcover", "Softcover"];
     const sizeOpts = vsettings?.size_options || ["Demi", "Royal", "Crown"];
     const updateVariant = (i, key, val) =>
@@ -824,6 +835,13 @@ function BookForm({ initial, categories, onClose, onSaved }) {
                     Number(form.publication_year) || new Date().getFullYear(),
                 // Pre-orders are saved with no stock (the field is locked to 0).
                 stock: form.coming_soon ? 0 : Number(form.stock),
+                // Only filled boxes are sent. The server keeps https links only
+                // (extensions.clean_store_links); an emptied box removes that link.
+                store_links: Object.fromEntries(
+                    Object.entries(form.store_links || {})
+                        .map(([k, v]) => [k, String(v || "").trim()])
+                        .filter(([, v]) => v),
+                ),
                 variants: (form.variants || []).map((v) => ({
                     binding: v.binding || "",
                     size: v.size || "",
@@ -1127,6 +1145,38 @@ function BookForm({ initial, categories, onClose, onSaved }) {
                             importer.
                         </p>
                     </div>
+
+                    {/* "Also available on" buttons on this book's page — one
+                        box per store set up in Admin → Pages. Kept beside the
+                        eReader link because both are "buy it elsewhere". */}
+                    {stores.length > 0 && (
+                        <div className="col-span-2" data-testid="book-form-store-links">
+                            <div className="text-sm text-[#4B5563]">Also available on — store links</div>
+                            <div className="mt-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                {stores.map((st) => {
+                                    const v = (form.store_links || {})[st.id] || "";
+                                    const bad = v.trim() && !/^https:\/\/\S+$/i.test(v.trim());
+                                    return (
+                                        <label key={st.id} className="block text-xs text-[#4B5563]">
+                                            {st.name}
+                                            <input
+                                                value={v}
+                                                onChange={(e) => setStoreLink(st.id, e.target.value)}
+                                                placeholder="https://… — blank if not sold there"
+                                                data-testid={`book-form-store-${st.id}`}
+                                                className={`mt-1 w-full border bg-white px-3 py-2 text-sm outline-none focus:border-[#002B5C] ${bad ? "border-[#CC0033]" : "border-[#E5E7EB]"}`}
+                                            />
+                                            {bad && <span className="text-[11px] text-[#CC0033]">Must start with https:// — it won't be saved otherwise.</span>}
+                                        </label>
+                                    );
+                                })}
+                            </div>
+                            <p className="text-[11px] text-[#4B5563] mt-1">
+                                Each filled link shows as a button on this book's page. Set many books at once from a
+                                sheet in Admin → Pages → Homepage → “Available on” stores.
+                            </p>
+                        </div>
+                    )}
 
                     <div className="col-span-2">
                         <label className="block text-sm text-[#4B5563]">

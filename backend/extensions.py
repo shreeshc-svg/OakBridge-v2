@@ -164,6 +164,9 @@ class BookAdminCreate(BaseModel):
     new_release: bool = False
     star_title: bool = False
     ebook_url: Optional[str] = None
+    # {store_id: https url} — where this book is sold elsewhere (Amazon,
+    # Flipkart, Kindle…); store ids come from the "home_stores" collection.
+    store_links: Optional[dict] = None
     ebook_price: Optional[float] = None  # ex-GST; grossed up for display
     coming_soon: Optional[bool] = None
     launch_at: Optional[str] = None        # ISO datetime; when it publishes
@@ -202,6 +205,9 @@ class BookAdminUpdate(BaseModel):
     new_release: Optional[bool] = None
     star_title: Optional[bool] = None
     ebook_url: Optional[str] = None
+    # {store_id: https url} — where this book is sold elsewhere (Amazon,
+    # Flipkart, Kindle…); store ids come from the "home_stores" collection.
+    store_links: Optional[dict] = None
     ebook_price: Optional[float] = None  # ex-GST; grossed up for display
     coming_soon: Optional[bool] = None
     launch_at: Optional[str] = None        # ISO datetime; when it publishes
@@ -1593,9 +1599,25 @@ def _finalise_volume_set(doc: dict) -> None:
     volume_sets.apply(doc)
 
 
+def clean_store_links(raw) -> dict:
+    """Only https links, under known-looking store ids; empty values dropped.
+    These are shown as buttons on the book page, so nothing but a plain web
+    link may get through (no javascript:, no relative paths)."""
+    out = {}
+    for k, v in (raw or {}).items() if isinstance(raw, dict) else []:
+        key = re.sub(r"[^a-z0-9-]", "", str(k).lower())[:30]
+        url = str(v or "").strip()
+        if len(key) >= 2 and url.lower().startswith("https://") and len(url) <= 500 and " " not in url:
+            out[key] = url
+        if len(out) >= 12:
+            break
+    return out
+
+
 @admin_router.post("/books")
 async def admin_create_book(payload: BookAdminCreate):
     doc = {"id": str(uuid.uuid4()), **payload.model_dump()}
+    doc["store_links"] = clean_store_links(doc.get("store_links"))
     if doc.get("coming_soon"):
         doc["stock"] = 0  # a pre-order has no copies yet (see admin_update_book)
     _finalise_volume_set(doc)
@@ -1631,6 +1653,8 @@ async def _notify_back_in_stock(book: dict) -> None:
 @admin_router.patch("/books/{book_id}")
 async def admin_update_book(book_id: str, payload: BookAdminUpdate):
     updates = {k: v for k, v in payload.model_dump().items() if v is not None}
+    if "store_links" in updates:
+        updates["store_links"] = clean_store_links(updates["store_links"])
     if not updates:
         raise HTTPException(status_code=400, detail="No updates provided")
     prev = await db.books.find_one(

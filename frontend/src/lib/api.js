@@ -270,6 +270,13 @@ export const resolveCollection = (d, defaults = []) =>
     d && d.configured ? (Array.isArray(d.items) ? d.items : []) : (d && Array.isArray(d.items) && d.items.length ? d.items : defaults);
 export const adminSaveCollection = (key, items) =>
     api.put(`/admin/collections/${key}`, { items }).then((r) => r.data);
+/** Per-book store links (Amazon/Flipkart/Kindle…) from a CSV/XLSX: an ISBN
+ *  column plus one column per store (store id or name). dryRun previews only. */
+export const adminImportStoreLinks = (file, dryRun = true) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return api.post(`/admin/books/store-links/import?dry_run=${dryRun ? "true" : "false"}`, fd).then((r) => r.data);
+};
 export const fetchSettings = () => api.get("/settings").then((r) => r.data);
 export const adminSetSetting = (key, value) =>
     api.put("/admin/settings", { key, value }).then((r) => r.data);
