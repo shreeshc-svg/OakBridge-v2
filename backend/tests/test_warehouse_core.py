@@ -185,6 +185,33 @@ check(w.match_order(parcels[0], orders) is None, "no order -> free copy")
 twins = [{"id": "a", "full_name": "Vikas Rao", "pincode": "221005"}, {"id": "b", "full_name": "Vikas Rao", "pincode": "221005"}]
 check(w.match_order(parcels[2], twins) is None, "two equally likely orders -> not guessed")
 
+print("-- courier sheet: 13 Oct 2026 layout (website orders only) --")
+# Same shape as the real sheet; names/phones invented. The middle parcel's book
+# line ends "(ISBN - …)" — it used to be dropped, losing the whole parcel.
+OCT = ("Courtroom Wit & Wisdom -2\nConstruction Law Explained - PB (Constructive Counsel Series) \u2013 3\n"
+       "Sample Services\n9/15, Sample Street,\nFort, Mumbai 400001\nM 9000000011\nFrom\nOakbridge Publishing Pvt. Ltd.\n"
+       "934, 9th Floor, Tower B3, Spaze Itech Park, Sector 49, Gurgaon 122018\n"
+       "The Law Relating to The Industrial Relations Code \u2013 5 (ISBN - 9789395764575)\n"
+       "Sample Books\n16, Ground Floor,\nUllal, Bengaluru -560056\nM +919000000012\nFrom\nOakbridge Publishing Pvt. Ltd.\n"
+       "OAK-261013-AB12C3\nUnfiltered and Unapologetic - 1 Website order\nMr. Sample Person\nDarya Ganj \u2013 110002\n"
+       "M 9000000013\nFrom\nOakbridge Publishing Pvt. Ltd.\n")
+ps = w.parse_courier_text(OCT)
+check(len(ps) == 3, f"all three parcels read ({len(ps)})")
+check(ps[1]["lines"] == [{"title": "The Law Relating to The Industrial Relations Code", "qty": 5,
+                          "raw": "The Law Relating to The Industrial Relations Code \u2013 5 (ISBN - 9789395764575)",
+                          "isbn": "9789395764575"}], "a book line ending '(ISBN - …)' is read, with its ISBN")
+check(ps[2]["order_number"] == "OAK-261013-AB12C3" and ps[2]["web_tag"], "an order number written above a parcel belongs to it")
+check(ps[2]["lines"][0]["title"] == "Unfiltered and Unapologetic" and ps[2]["lines"][0]["qty"] == 1,
+      "'Website order' after the quantity no longer breaks the line")
+check(ps[0]["order_number"] == "" and ps[2]["name"] == "Mr. Sample Person", "the order number is not mistaken for a name")
+open_orders = [{"id": "x", "order_number": "OAK-261013-AB12C3", "full_name": "Someone", "phone": "9999999999", "pincode": "999999"},
+               {"id": "y", "order_number": "OAK-261013-ZZZZZZ", "full_name": "Sample Person", "phone": "9000000013", "pincode": "110002"}]
+check(w.match_order(ps[2], open_orders)["id"] == "x", "a written order number decides it, over phone and pin code")
+check(w.match_order({**ps[2], "order_number": "OAK-261001-000000"}, open_orders) is None,
+      "a written number that is not open (shipped/unpaid/typo) is never replaced by a guess")
+check(w._is_book_line("Darya Ganj \u2013 110002") is None and w._is_book_line("OAK-261013-AB12C3") is None,
+      "addresses and bare order numbers are not books")
+
 print("-- learned aliases --")
 check(w.match_line({"title": "LA LR Second"}, SHELF, {w.fold("LA LR Second"): "la2"})["method"] == "alias",
       "a title resolved once by hand is matched by alias next time")

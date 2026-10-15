@@ -27,14 +27,16 @@ Open **oakbridge.in/warehouse** on your phone and sign in. You see five big butt
    - **✖ Cancelled** → don't ship. Put the books back on the shelf and tap **Unpacked**.
 
 ### 3. 🚚 Courier sheet (parcels out)
-The courier sheet lists several parcels — website orders and free copies.
+The courier sheet lists today's parcels — website orders, and free copies / samples.
 1. Tap **Courier sheet** → **Choose PDF or photo** (or take a photo of the printed sheet).
-2. Each parcel shows as a card: who it goes to, and the books inside.
-   - **Website order (paid)** — chosen automatically when the parcel matches a paid order (same phone, or same name + pin code). Stock is **not** taken off again: it was already taken off when the customer paid.
-   - **Free copy** — anything that does not match an order. These copies **are** taken off stock.
-   - **Skip** — the parcel is not going today.
-3. Check each book and number of copies; fix the book from the list if it is wrong. A title you fix once is remembered next time.
-4. Tap **Done**.
+2. Each parcel shows as a card with three choices:
+   - **Website order** — linked automatically (order number written on the label, or same phone, or same name + pin code), or pick it from the list. Stock is **not** taken off again: it was taken off when the customer paid. The card lists what the order contains — check it against the parcel.
+   - **Free copy** — copies to teachers, academies, authors: these **are** taken off stock (as samples).
+   - **Not sending** — nothing changes. A parcel that matches no website order **starts here** — choose Website order or Free copy yourself.
+3. Check each book and number of copies; fix the book from the list if it is wrong.
+4. Tap **Done** — a summary asks you to confirm (how many orders packed, free copies removed, parcels not sending).
+
+**For the office writing the sheet:** putting the order number (e.g. `OAK-261013-AB12C3`) on its own line above the parcel's books, or after a book line, links it exactly. Book lines may end with `(ISBN - 978…)`.
 
 **A website order on your courier sheet was cancelled?** A red card asks *Is the parcel still here?*
 - **Still here — unpack** → take the books out and put them back on the shelf. They go back into stock.

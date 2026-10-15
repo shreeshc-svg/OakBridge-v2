@@ -418,12 +418,22 @@ async def _open_web_orders() -> list:
     return orders
 
 
+def _order_items(o: dict) -> list:
+    return [{"book_id": it.get("book_id"), "title": (it.get("title") or "")[:120], "qty": int(it.get("quantity") or 0)}
+            for it in o.get("items") or []]
+
+
 async def _suggest_parcels(parcels: list) -> list:
     """Courier parcels -> book suggestions per line + website-order match.
 
-    A parcel that matches a paid website order is suggested as "website_order":
-    its copies left the website's stock when the customer paid, so syncing it
-    must not take them off again. Anything else is suggested as a free copy.
+    A courier sheet mixes website orders with free copies / samples. A parcel
+    that matches a paid, unshipped website order is suggested as
+    "website_order": its copies left stock when the customer paid, so syncing
+    it never takes them off again — it only marks the order packed. A parcel
+    that matches no order is suggested as "skip" (nothing changes) and the
+    person chooses: pick the order, or "free copy" (deducted as a sample). It
+    used to default to "free copy", which deducted stock a second time
+    whenever a website order failed to match.
     """
     books, aliases, orders = await _catalogue(), await _aliases(), await _open_web_orders()
     out, n = [], 1
@@ -435,14 +445,35 @@ async def _suggest_parcels(parcels: list) -> list:
             "no": p["no"], "name": p.get("name", ""), "org": p.get("org", ""),
             "phone": p.get("phone", ""), "pincode": p.get("pincode", ""),
             "address": p.get("address", [])[:8], "lines": lines,
-            "kind": "website_order" if o else "free_copy",
+            "kind": "website_order" if o else "skip",
             "order_id": (o or {}).get("id", ""), "order_number": (o or {}).get("order_number", ""),
+            "order_items": _order_items(o) if o else [],
+            # What the label itself said, so the phone can explain a miss:
+            # "OAK-… written on the sheet is not an open order".
+            "written_order": p.get("order_number", ""), "web_tag": bool(p.get("web_tag")),
+            "needs_order": not o,
         })
     return out
 
 
+
+
 # ------------------------------------------------------------ staff API ---
 wh_router = APIRouter(prefix="/api/warehouse", tags=["warehouse"])
+
+
+@wh_router.get("/open-orders")
+async def wh_open_orders(_: dict = Depends(require_warehouse)):
+    """Paid website orders not yet shipped or packed — what a courier parcel
+    can be linked to when the automatic match found nothing. Only what the
+    person packing needs: number, name, town and the books."""
+    out = []
+    for o in sorted(await _open_web_orders(), key=lambda x: x.get("order_number") or ""):
+        out.append({"id": o["id"], "order_number": o.get("order_number", ""),
+                    "name": o.get("delivery_name") or o.get("full_name") or "",
+                    "pincode": o.get("delivery_pincode") or o.get("pincode") or "",
+                    "items": _order_items(o)})
+    return {"orders": out}
 
 
 @wh_router.get("/state")
@@ -691,6 +722,8 @@ async def wh_confirm(doc_id: str, body: ConfirmBody, user: dict = Depends(requir
         for p in body.parcels:
             if p.kind not in ("website_order", "free_copy", "skip"):
                 raise HTTPException(status_code=400, detail="Unknown parcel type")
+            if p.kind == "website_order" and not p.order_id:
+                raise HTTPException(status_code=400, detail=f"Parcel {p.no}: choose which website order it is.")
         body.lines = [ln for p in body.parcels for ln in p.lines]
         # Only free copies move stock: a website order's copies already left
         # when the customer paid (payments.py), and a skipped parcel is none.

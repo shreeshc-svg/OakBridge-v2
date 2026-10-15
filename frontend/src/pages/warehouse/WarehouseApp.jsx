@@ -13,7 +13,7 @@ const warnBelowZero = (list) => {
 const isSimilarDoc = (e) => e?.response?.status === 409 && e?.response?.data?.detail?.code === "similar_doc";
 import { ArrowLeft, Camera, FileText, PackagePlus, PackageMinus, Search, ScanBarcode, Truck } from "lucide-react";
 import {
-    whState, whLookup, whBooks, whUploadDoc, whConfirmDoc, whReport, whMove, whDocFile, whInbox, whAck, whReopen, whCancelledParcel, whGetDoc,
+    whState, whLookup, whBooks, whUploadDoc, whConfirmDoc, whReport, whMove, whDocFile, whInbox, whAck, whReopen, whCancelledParcel, whGetDoc, whOpenOrders,
     formatApiError,
 } from "../../lib/api";
 import { useAuth } from "../../context/AuthContext";
@@ -537,28 +537,38 @@ function DocFlow({ direction, practice, onDone, initialDoc = null }) {
 
 /* ------------------------------------------------------- courier sheet --- */
 /**
- * One courier run: a sheet of address labels, several parcels, each with its
- * own books. A sheet mixes PAID WEBSITE ORDERS (their copies already left the
- * website stock at payment, so they must not be deducted again) with FREE
- * COPIES to teachers and academies (deducted here). The system suggests which
- * is which by matching phone / pin code / name to unshipped website orders;
- * he can switch any parcel with one tap.
+ * One courier run: a sheet of address labels that mixes WEBSITE ORDERS with
+ * other parcels (free copies to teachers, samples, author copies).
+ *   - Website order: copies already left stock when the customer paid, so it
+ *     is only marked packed — never deducted again. Linked automatically (an
+ *     OAK-… number on the label, else phone / pin code / name), or picked.
+ *   - Free copy: deducted here, as a sample.
+ *   - Not sending: nothing changes.
+ * A parcel that matches no order starts as "Not sending" (it used to start as
+ * "Free copy", which deducted a website order a second time whenever the
+ * match failed); he chooses Website order or Free copy deliberately.
  */
-const PARCEL_KINDS = [
-    ["free_copy", "Free copy — remove from stock"],
-    ["website_order", "Website order — already removed"],
-    ["skip", "Not sending"],
-];
 
 function CourierFlow({ practice, onDone, initialDoc = null }) {
     const [busy, setBusy] = useState(false);
     const [doc, setDoc] = useState(initialDoc);
     const [parcels, setParcels] = useState(initialDoc?.parcels || []);
     const [books, setBooks] = useState([]);
+    const [openOrders, setOpenOrders] = useState([]);
     const cam = useRef(null);
     const fileIn = useRef(null);
 
     useEffect(() => { whBooks().then(setBooks).catch(() => {}); }, []);
+    useEffect(() => { whOpenOrders().then((r) => setOpenOrders(r.orders || [])).catch(() => {}); }, []);
+    const orderById = useMemo(() => Object.fromEntries(openOrders.map((o) => [o.id, o])), [openOrders]);
+    const pickOrder = (pi, id) => {
+        const o = orderById[id];
+        setParcels((ps) => ps.map((p, k) => (k !== pi ? p : o
+            ? { ...p, kind: "website_order", order_id: o.id, order_number: o.order_number, order_items: o.items, needs_order: false }
+            : { ...p, kind: "skip", order_id: "", order_number: "", order_items: [] })));
+    };
+    const setKind = (pi, kind) => setParcels((ps) => ps.map((p, k) => (k !== pi ? p
+        : kind === "website_order" ? p : { ...p, kind, order_id: "", order_number: "", order_items: [] })));
     const byId = useMemo(() => Object.fromEntries(books.map((b) => [b.id, b])), [books]);
 
     const start = async (file) => {
@@ -587,13 +597,19 @@ function CourierFlow({ practice, onDone, initialDoc = null }) {
     };
     const addParcel = () => setParcels((ps) => [...ps, {
         no: (ps.reduce((m, p) => Math.max(m, p.no), 0) || 0) + 1, name: "", org: "", pincode: "",
-        kind: "free_copy", order_id: "", order_number: "", lines: [],
+        kind: "skip", order_id: "", order_number: "", order_items: [], needs_order: true, lines: [],
     }]);
 
+    const linked = parcels.filter((p) => p.kind === "website_order" && p.order_id).length;
+    const unlinked = parcels.filter((p) => p.kind === "skip").length;
     const freeCopies = parcels.filter((p) => p.kind === "free_copy")
-        .reduce((s, p) => s + p.lines.filter((l) => l.include && l.book_id).reduce((a, l) => a + Number(l.qty || 0), 0), 0);
+        .reduce((n, p) => n + p.lines.filter((l) => l.include && l.book_id).reduce((a, l) => a + Number(l.qty || 0), 0), 0);
 
     const confirm = async () => {
+        if (!practice && !window.confirm(
+            `Confirm this courier sheet?\n\n• ${linked} website order(s): marked packed — NOT deducted again (taken off at payment).\n` +
+            `• ${freeCopies} free cop${freeCopies === 1 ? "y" : "ies"}: removed from stock.\n` +
+            `• ${unlinked} parcel(s) not sending: no change.`)) return;
         setBusy(true);
         try {
             const res = await whConfirmDoc(doc.id, {
@@ -602,7 +618,7 @@ function CourierFlow({ practice, onDone, initialDoc = null }) {
                     lines: p.lines.map((l) => ({ line_no: l.line_no, book_id: l.book_id, qty: Number(l.qty) || 0, include: !!l.include })),
                 })),
             });
-            toast.success(res.practice ? "Practice saved — stock not changed." : `Done. ${freeCopies} free copies removed from stock.`);
+            toast.success(res.practice ? "Practice saved — stock not changed." : `Done. ${linked} website order(s) packed; ${freeCopies} free copies removed from stock.`);
             warnBelowZero(res.below_zero);
             onDone();
         } catch (e) {
@@ -655,16 +671,46 @@ function CourierFlow({ practice, onDone, initialDoc = null }) {
                             className="w-full text-lg font-semibold text-[#002B5C] border-b px-1 py-1" />
                         <div className="text-sm text-[#4B5563] mt-1">{[p.org, p.pincode].filter(Boolean).join(" · ")}</div>
                     </div>
-                    <div className="flex flex-col gap-2">
-                        {PARCEL_KINDS.map(([v, label]) => (
-                            <button key={v} type="button" onClick={() => setParcel(pi, { kind: v })}
-                                disabled={v === "website_order" && !p.order_id}
-                                className={`text-left px-3 py-2 text-sm border-2 disabled:opacity-40 ${p.kind === v ? "border-[#002B5C] bg-[#002B5C] text-white" : "border-[#E5E7EB] bg-white"}`}>
-                                {v === "website_order" && p.order_number ? `Website order ${p.order_number} — already removed` : label}
-                            </button>
-                        ))}
-                        {!p.order_id && (
-                            <div className="text-xs text-[#4B5563]">No paid website order found for this address. If it IS a website order, choose “Not sending” and tell your manager.</div>
+                    <div className="flex flex-col gap-2" data-testid="wh-parcel-order">
+                        <div className="grid grid-cols-3 gap-1" data-testid="wh-parcel-kind">
+                            {[["website_order", "Website order"], ["free_copy", "Free copy"], ["skip", "Not sending"]].map(([v, label]) => (
+                                <button key={v} type="button" onClick={() => setKind(pi, v)}
+                                    className={`px-2 py-2 text-sm border-2 ${p.kind === v ? "border-[#002B5C] bg-[#002B5C] text-white" : "border-[#E5E7EB] bg-white"}`}>{label}</button>
+                            ))}
+                        </div>
+                        {p.kind === "free_copy" ? (
+                            <div className="text-xs text-[#7C3AED]" data-testid="wh-parcel-free">
+                                Free copy / sample: these books are removed from stock. If this is a paid website order, choose “Website order” instead.
+                            </div>
+                        ) : (
+                        <>
+                        <label className="text-xs text-[#4B5563]">Website order
+                            <select value={p.kind === "website_order" ? p.order_id || "" : ""} onChange={(e) => pickOrder(pi, e.target.value)}
+                                className={`mt-1 w-full border-2 px-2 py-2 text-base bg-white ${p.kind === "website_order" ? "border-[#15803D]" : "border-[#F59E0B]"}`}>
+                                <option value="">— Not linked: not sending / not a website order —</option>
+                                {p.order_id && !orderById[p.order_id] && <option value={p.order_id}>{p.order_number}</option>}
+                                {openOrders.map((o) => (
+                                    <option key={o.id} value={o.id}>{o.order_number} · {o.name}{o.pincode ? ` · ${o.pincode}` : ""}</option>
+                                ))}
+                            </select>
+                        </label>
+                        {p.kind === "website_order" ? (
+                            <div className="text-xs text-[#15803D]" data-testid="wh-parcel-linked">
+                                ✓ Stock was already removed when the customer paid — nothing is deducted again.
+                                {(p.order_items || []).length > 0 && (
+                                    <span className="block text-[#4B5563] mt-1">
+                                        This order has: {p.order_items.map((it) => `${it.title} ×${it.qty}`).join(", ")}
+                                    </span>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="text-xs text-[#B4750F]" data-testid="wh-parcel-unlinked">
+                                {p.written_order
+                                    ? `The sheet says ${p.written_order}, but that order is not paid-and-waiting (already shipped, unpaid or a typo). Pick the right order or leave it unlinked.`
+                                    : "No paid website order matched this address. Pick it from the list, choose Free copy, or leave it as Not sending."}
+                            </div>
+                        )}
+                        </>
                         )}
                     </div>
                     {p.lines.map((l, li) => {
@@ -701,7 +747,7 @@ function CourierFlow({ practice, onDone, initialDoc = null }) {
             <div className="fixed bottom-0 left-0 right-0 bg-white border-t p-3">
                 <button type="button" disabled={busy} onClick={confirm} data-testid="wh-courier-confirm"
                     className={`w-full ${BTN} text-lg text-white ${practice ? "bg-[#B4750F]" : "bg-[#15803D]"}`}>
-                    {busy ? "Saving…" : practice ? "Save practice (no stock change)" : `Done — remove ${freeCopies} free copies from stock`}
+                    {busy ? "Saving…" : practice ? "Save practice (no stock change)" : `Done — ${linked} website order(s) packed`}
                 </button>
             </div>
         </div>

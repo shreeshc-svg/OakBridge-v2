@@ -455,33 +455,79 @@ PHONE_LINE_RE = re.compile(r"\b(?:mob(?:ile)?|tel|ph(?:one)?|m)\b\.?\s*[:\-]?\s*
 PIN_RE = re.compile(r"\b(\d{6})\b")
 
 
+# Website order number as the site issues it (server.py): OAK-yymmdd-XXXXXX.
+# The office may write it on a label — anywhere in the parcel — to link the
+# parcel to that exact order instead of guessing from phone / pin code.
+ORDER_NO_RE = re.compile(r"\bOAK-\d{6}-[A-Z0-9]{6}\b", re.I)
+# "(ISBN - 9789395764575)" after the quantity, as on the 13 Oct 2026 sheet.
+# The line used to be dropped whole, losing that parcel (Pandith Books, 5 copies).
+ISBN_TAIL_RE = re.compile(r"\(?\s*ISBN\s*[:\-\u2013]?\s*([0-9Xx\- ]{10,17})\s*\)?\s*$", re.I)
+# Words the office may add to say "this is a website order" — never part of a title.
+WEB_WORDS_RE = re.compile(r"\[?\s*\b(?:website|web)\s*order\b\s*\]?|\[\s*web\s*\]", re.I)
+
+
 def _is_book_line(ln: str) -> Optional[dict]:
-    m = COURIER_BOOK_RE.match(ln.strip())
+    raw = ln.strip()
+    line = ORDER_NO_RE.sub("", raw)
+    line = WEB_WORDS_RE.sub("", line).strip(" ,;:|")
+    isbn = ""
+    t = ISBN_TAIL_RE.search(line)
+    if t:
+        cand = norm_isbn(t.group(1))
+        if len(cand) in (10, 13):
+            isbn = cand
+            line = line[:t.start()].strip(" ,;:|")
+    m = COURIER_BOOK_RE.match(line)
     if not m:
         return None
     title, qty = m.group("title").strip(" ,-"), int(m.group("qty"))
     # "Varanasi- 221010" and "New Delhi - 110068" end in a number too; a pin
     # code is six digits and a city is not a book.
-    if not (0 < qty <= 500) or len(tokens(title)) == 0 or re.search(r"\d{5,}", ln):
+    if not (0 < qty <= 500) or len(tokens(title)) == 0 or re.search(r"\d{5,}", line):
         return None
-    return {"title": title, "qty": qty, "raw": ln.strip()}
+    out = {"title": title, "qty": qty, "raw": raw}
+    if isbn:
+        out["isbn"] = isbn
+    return out
 
 
 def parse_courier_text(text: str) -> list:
     """Courier label sheet -> parcels [{no, lines, name, org, phone, pincode, address}]."""
     parcels, cur, state = [], None, "books"
+    pending_order = ""          # an order number written above a parcel's books
+    pending_web = False         # "Website order" written above a parcel's books
     for raw in (text or "").splitlines():
         ln = raw.strip()
         if not ln:
             continue
+        on = ORDER_NO_RE.search(ln)
         book = _is_book_line(ln)
         if book:
             if cur is None or state != "books":
-                cur = {"lines": [], "address": [], "name": "", "org": "", "phone": "", "pincode": ""}
+                cur = {"lines": [], "address": [], "name": "", "org": "", "phone": "", "pincode": "",
+                       "order_number": pending_order, "web_tag": bool(pending_order) or pending_web}
                 parcels.append(cur)
                 state = "books"
+                pending_order, pending_web = "", False
+            if on:
+                cur["order_number"] = on.group(0).upper()
+            if on or WEB_WORDS_RE.search(ln):
+                cur["web_tag"] = True
             cur["lines"].append(book)
             continue
+        if on or WEB_WORDS_RE.fullmatch(ln.strip(" ,;:|")):
+            num = on.group(0).upper() if on else ""
+            # In a parcel's books or address it is that parcel's; after the
+            # "From" block (or before the first parcel) it heads the next one.
+            if cur is not None and state in ("books", "address"):
+                cur["order_number"] = num or cur["order_number"]
+                cur["web_tag"] = True
+            else:
+                pending_order, pending_web = num, True
+            rest = WEB_WORDS_RE.sub("", ORDER_NO_RE.sub("", ln)).strip(" ,;:|-")
+            if not rest:
+                continue
+            ln = rest
         if cur is None:
             continue
         if re.match(r"^from\b", ln, re.I):
@@ -516,6 +562,11 @@ def match_order(parcel: dict, orders: list) -> Optional[dict]:
     orders fit equally) returns None: a parcel wrongly treated as a website
     order would leave its copies on the shelf in the count.
     """
+    # An order number written on the label decides it outright — or, if that
+    # order is not open (unpaid, already shipped, a typo), nothing is guessed.
+    written = (parcel.get("order_number") or "").upper()
+    if written:
+        return next((o for o in orders if (o.get("order_number") or "").upper() == written), None)
     phone = (parcel.get("phone") or "")[-10:]
     pin = parcel.get("pincode") or ""
     name_toks = set(tokens(parcel.get("name") or "")) - {"mr", "ms", "mrs", "dr"}

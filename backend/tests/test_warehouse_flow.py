@@ -205,6 +205,36 @@ async def main():
     r = await wh.wh_confirm("d2", body(confirm_similar=True), PACKER)
     check(r["ok"] and book("a")["wh_stock"] == before - 2, "'yes, a second carton' counts it")
 
+    print("-- courier sheet: website orders never deducted twice; free copies deducted once --")
+    await db.warehouse_docs.insert_one({
+        "id": "cs1", "direction": "courier", "practice": False, "status": "draft", "source": "manual",
+        "created_at": "2026-10-13T05:00:00+00:00", "read_lines": [], "sha256": "cs1", "parcels": [],
+        "doc_number": "", "party_name": "", "party_gstin": "", "party_kind": ""})
+    await db.orders.insert_one({"id": "w1", "order_number": "OAK-261013-AAAAAA", "payment_status": "paid", "status": "confirmed"})
+    P = wh.ConfirmParcel
+
+    def cbody(kind, order_id=None):
+        return wh.ConfirmBody(lines=[], parcels=[P(no=1, kind=kind, order_id=order_id,
+                              lines=[L(line_no=None, book_id="a", qty=2, include=True, invoiced=None)])],
+                              doc_number=None, party_name=None, party_kind=None, allow_duplicate=False,
+                              confirm_similar=False, note=None)
+    before = book("a")["wh_stock"], book("a")["stock"]
+    try:
+        await wh.wh_confirm("cs1", cbody("website_order", None), PACKER)
+        check(False, "a website order with no order picked should be refused")
+    except HTTPException as e:
+        check(e.status_code == 400, "a website order with no order picked is refused")
+    r = await wh.wh_confirm("cs1", cbody("website_order", "w1"), PACKER)
+    check(r["ok"] and (book("a")["wh_stock"], book("a")["stock"]) == before, "a linked website order deducts nothing again")
+    check(next(o for o in db.orders.docs if o["id"] == "w1").get("warehouse_doc_id") == "cs1", "…and the order is marked packed")
+    await db.warehouse_docs.insert_one({
+        "id": "cs2", "direction": "courier", "practice": False, "status": "draft", "source": "manual",
+        "created_at": "2026-10-13T05:00:00+00:00", "read_lines": [], "sha256": "cs2", "parcels": [],
+        "doc_number": "", "party_name": "", "party_gstin": "", "party_kind": ""})
+    wh_before = book("a")["wh_stock"]
+    r = await wh.wh_confirm("cs2", cbody("free_copy"), PACKER)
+    check(r["ok"] and book("a")["wh_stock"] == wh_before - 2, "a free copy on the same kind of sheet is deducted once, as a sample")
+
     print("-- record_fill never records twice --")
     n = len(db.stock_movements.docs)
     await wh.record_fill({"order_number": "T1"}, "a", 3)       # T1 already has a website_order movement for a

@@ -96,12 +96,17 @@ check(/Enter by hand instead/.test(screen) && /Add a book/.test(screen), "manual
 // only free copies may move stock — double-deducting would undersell.
 const courierBranch = (wh.match(/if not doc\["practice"\] and courier:([\s\S]*?)\n    elif not doc\["practice"\]:/) || [])[1] || "";
 check(/p\.kind == "free_copy"[\s\S]*?_apply\(ln\.book_id, -ln\.qty, "sample"/.test(courierBranch), "courier: free copy -> 'sample' movement out");
+check(/"kind": "website_order" if o else "skip"/.test(wh) && /"needs_order": not o/.test(wh), "courier: an unmatched parcel starts as 'not sending', never as a deduction");
+check(/whOpenOrders\(\)/.test(screen) && /data-testid="wh-parcel-order"/.test(screen) && /data-testid="wh-parcel-kind"/.test(screen)
+      && /\["free_copy", "Free copy"\]/.test(screen), "courier: pick the website order from a list, or choose Free copy / Not sending");
+check(/Confirm this courier sheet\?/.test(screen), "courier: OK/Cancel summary (packed / free copies / not sending) before confirming");
 const webBranch = (courierBranch.match(/elif p\.kind == "website_order"([\s\S]*)/) || [])[1] || "";
 check(webBranch.includes("warehouse_doc_id") && !webBranch.includes("_apply("), "courier: website order is linked, never deducted again");
 check(/"payment_status": "paid"/.test(webBranch), "courier: only a paid order can be linked");
 check(/"payment_status": "paid"[\s\S]{0,200}"warehouse_doc_id": \{"\$in": \[None, ""\]\}/.test(wh), "courier: an order already packed is not offered again");
 check(/data-testid="wh-go-courier"/.test(screen) && /screen === "courier" && \(\s*<CourierFlow/.test(screen), "courier button on the phone home screen");
-check(/disabled=\{v === "website_order" && !p\.order_id\}/.test(screen), "courier: website-order choice needs a matched order");
+check(/if p\.kind == "website_order" and not p\.order_id:\s*raise HTTPException/.test(wh) && /kind: "website_order", order_id: o\.id/.test(screen),
+      "courier: a website-order parcel always names its order (server refuses one without)");
 
 // Carton approval (order-management team -> warehouse).
 const reviewFn = (wh.match(/async def adm_review\([\s\S]*?\n(?=\n\S)/) || [""])[0];
