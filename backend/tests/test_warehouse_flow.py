@@ -234,6 +234,16 @@ async def main():
     wh_before = book("a")["wh_stock"]
     r = await wh.wh_confirm("cs2", cbody("free_copy"), PACKER)
     check(r["ok"] and book("a")["wh_stock"] == wh_before - 2, "a free copy on the same kind of sheet is deducted once, as a sample")
+    for n, (kind, reason) in enumerate((("dealer_order", "sale_offline"), ("author_copy", "author_copy")), start=3):
+        await db.warehouse_docs.insert_one({
+            "id": f"cs{n}", "direction": "courier", "practice": False, "status": "draft", "source": "manual",
+            "created_at": "2026-10-13T05:00:00+00:00", "read_lines": [], "sha256": f"cs{n}", "parcels": [],
+            "doc_number": "", "party_name": "", "party_gstin": "", "party_kind": ""})
+        before_n = book("a")["wh_stock"]
+        await wh.wh_confirm(f"cs{n}", cbody(kind), PACKER)
+        mv = [m for m in db.stock_movements.docs if m.get("doc_id") == f"cs{n}"]
+        check(book("a")["wh_stock"] == before_n - 2 and mv and mv[0]["reason"] == reason,
+              f"{kind}: deducted once and recorded as '{reason}' (DTDC phone/dealer orders are sales, not samples)")
 
     print("-- record_fill never records twice --")
     n = len(db.stock_movements.docs)

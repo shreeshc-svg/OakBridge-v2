@@ -75,6 +75,10 @@ TAKEN_STATUSES = LIVE_STATUSES + ["sent_back"]
 TEXTRACT_REGION = os.environ.get("TEXTRACT_REGION") or os.environ.get("S3_REGION") or "us-east-1"
 
 NOT_COUNTED = ("hamper", "pack")
+# Courier-sheet parcel types -> the movement reason they deduct as (website
+# orders deduct nothing: their copies came off when the customer paid).
+COURIER_DEDUCT = {"dealer_order": "sale_offline", "author_copy": "author_copy", "free_copy": "sample"}
+COURIER_KINDS = set(COURIER_DEDUCT) | {"website_order", "skip"}
 IN_REASONS = {"printer", "return", "correction_in", "opening"}
 OUT_REASONS = {"damaged", "sample", "author_copy", "sale_offline", "correction_out"}
 
@@ -436,16 +440,22 @@ async def _suggest_parcels(parcels: list) -> list:
     whenever a website order failed to match.
     """
     books, aliases, orders = await _catalogue(), await _aliases(), await _open_web_orders()
+    authors = [a["name"] async for a in db.authors.find({}, {"_id": 0, "name": 1})]
     out, n = [], 1
     for p in parcels:
         lines = await _suggest(p["lines"], books, start=n, aliases=aliases)
         n += len(lines)
         o = core.match_order(p, orders)
+        author = None if o else (core.match_party_author(p.get("name", ""), authors)
+                                 or core.match_party_author(p.get("org", ""), authors))
         out.append({
             "no": p["no"], "name": p.get("name", ""), "org": p.get("org", ""),
             "phone": p.get("phone", ""), "pincode": p.get("pincode", ""),
             "address": p.get("address", [])[:8], "lines": lines,
-            "kind": "website_order" if o else "skip",
+            # No match is never guessed into a deduction: a website order
+            # whose match failed would be counted twice. He picks the type.
+            "kind": "website_order" if o else ("author_copy" if author else "skip"),
+            "author": author or "",
             "order_id": (o or {}).get("id", ""), "order_number": (o or {}).get("order_number", ""),
             "order_items": _order_items(o) if o else [],
             # What the label itself said, so the phone can explain a miss:
@@ -635,7 +645,7 @@ class ConfirmLine(BaseModel):
 
 class ConfirmParcel(BaseModel):
     no: int
-    kind: str                       # website_order | free_copy | skip
+    kind: str                       # website_order | dealer_order | author_copy | free_copy | skip
     order_id: Optional[str] = None
     lines: list[ConfirmLine] = []
 
@@ -720,14 +730,14 @@ async def wh_confirm(doc_id: str, body: ConfirmBody, user: dict = Depends(requir
         if body.parcels is None:
             raise HTTPException(status_code=400, detail="Send the parcels.")
         for p in body.parcels:
-            if p.kind not in ("website_order", "free_copy", "skip"):
+            if p.kind not in COURIER_KINDS:
                 raise HTTPException(status_code=400, detail="Unknown parcel type")
             if p.kind == "website_order" and not p.order_id:
                 raise HTTPException(status_code=400, detail=f"Parcel {p.no}: choose which website order it is.")
         body.lines = [ln for p in body.parcels for ln in p.lines]
         # Only free copies move stock: a website order's copies already left
         # when the customer paid (payments.py), and a skipped parcel is none.
-        kept = [ln for p in body.parcels if p.kind == "free_copy"
+        kept = [ln for p in body.parcels if p.kind in COURIER_DEDUCT
                 for ln in p.lines if ln.include and ln.book_id and ln.qty > 0]
     else:
         kept = [ln for ln in body.lines if ln.include and ln.book_id and ln.qty > 0]
@@ -772,10 +782,14 @@ async def wh_confirm(doc_id: str, body: ConfirmBody, user: dict = Depends(requir
         for p in body.parcels:
             rp = read_parcels.get(p.no, {})
             who = ", ".join(x for x in (rp.get("name"), rp.get("org")) if x) or f"Parcel {p.no}"
-            if p.kind == "free_copy":
+            if p.kind in COURIER_DEDUCT:
+                # Phone / dealer / university / coaching orders sent by DTDC
+                # are SALES (no Tally invoice goes with a courier parcel), not
+                # free samples — recorded as such so sales and sample reports
+                # are right. Author copies and free copies keep their own reason.
                 for ln in p.lines:
                     if ln.include and ln.book_id and ln.qty > 0:
-                        await _apply(ln.book_id, -ln.qty, "sample", actor=user, doc_id=doc_id,
+                        await _apply(ln.book_id, -ln.qty, COURIER_DEDUCT[p.kind], actor=user, doc_id=doc_id,
                                      party=who, note="Courier sheet")
             elif p.kind == "website_order" and p.order_id:
                 await db.orders.update_one(

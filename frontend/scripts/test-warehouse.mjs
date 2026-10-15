@@ -95,10 +95,13 @@ check(/Enter by hand instead/.test(screen) && /Add a book/.test(screen), "manual
 // Courier sheet: website-order parcels were already deducted at payment, so
 // only free copies may move stock — double-deducting would undersell.
 const courierBranch = (wh.match(/if not doc\["practice"\] and courier:([\s\S]*?)\n    elif not doc\["practice"\]:/) || [])[1] || "";
-check(/p\.kind == "free_copy"[\s\S]*?_apply\(ln\.book_id, -ln\.qty, "sample"/.test(courierBranch), "courier: free copy -> 'sample' movement out");
-check(/"kind": "website_order" if o else "skip"/.test(wh) && /"needs_order": not o/.test(wh), "courier: an unmatched parcel starts as 'not sending', never as a deduction");
+check(/COURIER_DEDUCT = \{"dealer_order": "sale_offline", "author_copy": "author_copy", "free_copy": "sample"\}/.test(wh)
+      && /_apply\(ln\.book_id, -ln\.qty, COURIER_DEDUCT\[p\.kind\]/.test(courierBranch),
+      "courier: phone/dealer order -> sale, author copy -> author copy, free copy -> sample");
+check(/"kind": "website_order" if o else \("author_copy" if author else "skip"\)/.test(wh) && /"needs_order": not o/.test(wh), "courier: an unmatched parcel starts as 'not sending' (or author copy when addressed to our author) — never guessed into a sale");
 check(/whOpenOrders\(\)/.test(screen) && /data-testid="wh-parcel-order"/.test(screen) && /data-testid="wh-parcel-kind"/.test(screen)
-      && /\["free_copy", "Free copy"\]/.test(screen), "courier: pick the website order from a list, or choose Free copy / Not sending");
+      && /\["dealer_order", "Phone \/ dealer order"\]/.test(screen) && /\["free_copy", "Free copy"\]/.test(screen),
+      "courier: pick the website order, or choose Phone/dealer order, Author copy, Free copy or Not sending");
 check(/Confirm this courier sheet\?/.test(screen), "courier: OK/Cancel summary (packed / free copies / not sending) before confirming");
 const webBranch = (courierBranch.match(/elif p\.kind == "website_order"([\s\S]*)/) || [])[1] || "";
 check(webBranch.includes("warehouse_doc_id") && !webBranch.includes("_apply("), "courier: website order is linked, never deducted again");

@@ -537,11 +537,15 @@ function DocFlow({ direction, practice, onDone, initialDoc = null }) {
 
 /* ------------------------------------------------------- courier sheet --- */
 /**
- * One courier run: a sheet of address labels that mixes WEBSITE ORDERS with
- * other parcels (free copies to teachers, samples, author copies).
+ * One DTDC courier run: a sheet of address labels that mixes WEBSITE ORDERS
+ * with phone / dealer / university / coaching orders (no Tally invoice goes
+ * with a courier parcel), author copies and free copies.
  *   - Website order: copies already left stock when the customer paid, so it
  *     is only marked packed — never deducted again. Linked automatically (an
  *     OAK-… number on the label, else phone / pin code / name), or picked.
+ *   - Phone / dealer order: deducted here, as an offline SALE.
+ *   - Author copy: deducted as an author copy (suggested when the label is
+ *     addressed to one of our authors).
  *   - Free copy: deducted here, as a sample.
  *   - Not sending: nothing changes.
  * A parcel that matches no order starts as "Not sending" (it used to start as
@@ -602,12 +606,17 @@ function CourierFlow({ practice, onDone, initialDoc = null }) {
 
     const linked = parcels.filter((p) => p.kind === "website_order" && p.order_id).length;
     const unlinked = parcels.filter((p) => p.kind === "skip").length;
-    const freeCopies = parcels.filter((p) => p.kind === "free_copy")
+    const copiesOf = (kind) => parcels.filter((p) => p.kind === kind)
         .reduce((n, p) => n + p.lines.filter((l) => l.include && l.book_id).reduce((a, l) => a + Number(l.qty || 0), 0), 0);
+    const dealerCopies = copiesOf("dealer_order");
+    const authorCopies = copiesOf("author_copy");
+    const freeCopies = copiesOf("free_copy");
 
     const confirm = async () => {
         if (!practice && !window.confirm(
             `Confirm this courier sheet?\n\n• ${linked} website order(s): marked packed — NOT deducted again (taken off at payment).\n` +
+            `• ${dealerCopies} cop${dealerCopies === 1 ? "y" : "ies"} in phone / dealer orders: removed from stock as sales.\n` +
+            `• ${authorCopies} author cop${authorCopies === 1 ? "y" : "ies"}: removed from stock.\n` +
             `• ${freeCopies} free cop${freeCopies === 1 ? "y" : "ies"}: removed from stock.\n` +
             `• ${unlinked} parcel(s) not sending: no change.`)) return;
         setBusy(true);
@@ -618,7 +627,7 @@ function CourierFlow({ practice, onDone, initialDoc = null }) {
                     lines: p.lines.map((l) => ({ line_no: l.line_no, book_id: l.book_id, qty: Number(l.qty) || 0, include: !!l.include })),
                 })),
             });
-            toast.success(res.practice ? "Practice saved — stock not changed." : `Done. ${linked} website order(s) packed; ${freeCopies} free copies removed from stock.`);
+            toast.success(res.practice ? "Practice saved — stock not changed." : `Done. ${linked} website order(s) packed; ${dealerCopies + authorCopies + freeCopies} copies removed from stock (${dealerCopies} sold, ${authorCopies} author, ${freeCopies} free).`);
             warnBelowZero(res.below_zero);
             onDone();
         } catch (e) {
@@ -672,15 +681,19 @@ function CourierFlow({ practice, onDone, initialDoc = null }) {
                         <div className="text-sm text-[#4B5563] mt-1">{[p.org, p.pincode].filter(Boolean).join(" · ")}</div>
                     </div>
                     <div className="flex flex-col gap-2" data-testid="wh-parcel-order">
-                        <div className="grid grid-cols-3 gap-1" data-testid="wh-parcel-kind">
-                            {[["website_order", "Website order"], ["free_copy", "Free copy"], ["skip", "Not sending"]].map(([v, label]) => (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-1" data-testid="wh-parcel-kind">
+                            {[["website_order", "Website order"], ["dealer_order", "Phone / dealer order"], ["author_copy", "Author copy"],
+                                ["free_copy", "Free copy"], ["skip", "Not sending"]].map(([v, label]) => (
                                 <button key={v} type="button" onClick={() => setKind(pi, v)}
                                     className={`px-2 py-2 text-sm border-2 ${p.kind === v ? "border-[#002B5C] bg-[#002B5C] text-white" : "border-[#E5E7EB] bg-white"}`}>{label}</button>
                             ))}
                         </div>
-                        {p.kind === "free_copy" ? (
+                        {["dealer_order", "author_copy", "free_copy"].includes(p.kind) ? (
                             <div className="text-xs text-[#7C3AED]" data-testid="wh-parcel-free">
-                                Free copy / sample: these books are removed from stock. If this is a paid website order, choose “Website order” instead.
+                                {p.kind === "dealer_order" ? "Phone / dealer / university / coaching order sent by DTDC: these books are removed from stock as a sale."
+                                    : p.kind === "author_copy" ? `Author copy${p.author ? ` (${p.author})` : ""}: these books are removed from stock.`
+                                    : "Free copy / sample: these books are removed from stock."}
+                                {" "}If this is a paid website order, choose “Website order” instead.
                             </div>
                         ) : (
                         <>
@@ -707,7 +720,7 @@ function CourierFlow({ practice, onDone, initialDoc = null }) {
                             <div className="text-xs text-[#B4750F]" data-testid="wh-parcel-unlinked">
                                 {p.written_order
                                     ? `The sheet says ${p.written_order}, but that order is not paid-and-waiting (already shipped, unpaid or a typo). Pick the right order or leave it unlinked.`
-                                    : "No paid website order matched this address. Pick it from the list, choose Free copy, or leave it as Not sending."}
+                                    : "No paid website order matched this address. Pick it from the list, or choose Phone / dealer order, Author copy or Free copy."}
                             </div>
                         )}
                         </>

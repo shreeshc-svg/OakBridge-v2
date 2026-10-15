@@ -395,7 +395,8 @@ function DocsTab({ status = null, onChange = () => {}, canDelete = false }) {
                                     const read = (open.parcels || []).find((x) => x.no === p.no) || {};
                                     return (
                                         <li key={p.no}>
-                                            {p.no}. {read.name || "—"}{read.org ? `, ${read.org}` : ""} — {p.kind === "website_order" ? `website order ${read.order_number || ""} (not deducted)` : p.kind === "free_copy" ? "free copy (deducted)" : "not sent"}
+                                            {p.no}. {read.name || "—"}{read.org ? `, ${read.org}` : ""} — {p.kind === "website_order" ? `website order ${read.order_number || ""} (not deducted)`
+                                                : ({ dealer_order: "phone / dealer order (deducted as a sale)", author_copy: "author copy (deducted)", free_copy: "free copy (deducted)" }[p.kind] || "not sent")}
                                             {read.kind && read.kind !== p.kind ? " · changed by hand" : ""}
                                         </li>
                                     );

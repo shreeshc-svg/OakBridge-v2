@@ -26,13 +26,18 @@ Open **oakbridge.in/warehouse** on your phone and sign in. You see five big butt
    - **↩️ Sent back** → read the note, tap **Pack again**, fix the carton, tap **Packed** again.
    - **✖ Cancelled** → don't ship. Put the books back on the shelf and tap **Unpacked**.
 
+**One invoice, several boxes?** Open the invoice **once** and scan every book, whatever box it goes into — the count is per invoice, not per box. Opening the same invoice again is refused as "already done".
+**Same buyer ordering the same books again?** That is a new Tally invoice with its own number — it goes through normally. If the photo's number can't be read, type it in the **Invoice no.** box; otherwise the phone asks once "Is this really a second carton?" — OK counts it.
+
 ### 3. 🚚 Courier sheet (parcels out)
-The courier sheet lists today's parcels — website orders, and free copies / samples.
+The courier sheet lists today's DTDC parcels — website orders, phone / dealer orders, author copies and free copies. (Orders going by our own transport have a Tally invoice and are packed as **Carton out** instead.)
 1. Tap **Courier sheet** → **Choose PDF or photo** (or take a photo of the printed sheet).
 2. Each parcel shows as a card with three choices:
    - **Website order** — linked automatically (order number written on the label, or same phone, or same name + pin code), or pick it from the list. Stock is **not** taken off again: it was taken off when the customer paid. The card lists what the order contains — check it against the parcel.
-   - **Free copy** — copies to teachers, academies, authors: these **are** taken off stock (as samples).
-   - **Not sending** — nothing changes. A parcel that matches no website order **starts here** — choose Website order or Free copy yourself.
+   - **Phone / dealer order** — a dealer, university or coaching centre that ordered by phone and gets it by DTDC (no Tally invoice goes with these): taken off stock **as a sale**.
+   - **Author copy** — suggested when the label is addressed to one of our authors: taken off stock as an author copy.
+   - **Free copy** — copies to teachers, academies: taken off stock as samples.
+   - **Not sending** — nothing changes. A parcel that matches no website order **starts here** — choose its type yourself.
 3. Check each book and number of copies; fix the book from the list if it is wrong.
 4. Tap **Done** — a summary asks you to confirm (how many orders packed, free copies removed, parcels not sending).
 
