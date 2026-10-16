@@ -344,7 +344,7 @@ export default function Home() {
                 /* hx-top: the hero is the first thing on the page, so it slides up
                    under the header, which turns transparent over it (index.css). */
                 <section style={{ order: heroCarouselOrd }} data-testid="home-hero-carousel" className={heroCarouselOrd === -3 ? "hx-top" : undefined}>
-                    <HeroFullscreen slides={heroSlides} testId="home-hero-carousel-frame" priority />
+                    <HeroFullscreen slides={heroSlides} testId="home-hero-carousel-frame" priority look={site.hero_style} />
                 </section>
             )}
 

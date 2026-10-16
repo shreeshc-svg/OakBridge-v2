@@ -28,6 +28,7 @@ import {
 } from "../../components/admin/ContentEditors";
 import MediaListEditor from "../../components/admin/MediaListEditor";
 import StoresEditor from "../../components/admin/StoresEditor";
+import HeroStyleEditor from "../../components/admin/HeroStyleEditor";
 
 // Tab bar targets — label shown, title must match the PageGroup title exactly.
 const PAGE_TABS = [
@@ -182,6 +183,7 @@ export default function AdminPages() {
                     </div>
 
                     <div className="overline !text-[10px] mt-6 mb-2">Hero banners (full screen)</div>
+                    <HeroStyleEditor value={site.hero_style} />
                     <MediaListEditor
                         collectionKey="home_hero_slides"
                         addLabel="Add highlight"

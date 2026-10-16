@@ -503,8 +503,9 @@ a {
 .hx-w{display:inline-block; opacity:0; transform:translateY(.45em); filter:blur(6px)}
 .hx-slide.is-on .hx-w{animation:hx-wordin .9s cubic-bezier(.2,.8,.2,1) forwards; animation-delay:calc(.25s + var(--i) * .07s)}
 @keyframes hx-wordin{to{opacity:1; transform:none; filter:none}}
-.hx-h1 em{font-style:normal; color:transparent; -webkit-background-clip:text; background-clip:text;
-  background-image:linear-gradient(100deg, var(--accent), #fff 55%, #F59E0B); background-size:200% 100%; animation:hx-shine 6s linear infinite}
+/* Highlighted words: one solid colour (Admin → Hero style). The moving
+   gradient that used to run through them was removed in Oct 2026. */
+.hx-h1 em{font-style:normal; color:var(--hx-em, var(--accent))}
 @keyframes hx-shine{to{background-position:-200% 0}}
 .hx-sub{margin-top:clamp(12px,2vh,26px); max-width:46ch; color:rgba(255,255,255,.86);
   font-size:clamp(15px, min(1.15vw, 2.2vh), 22px); line-height:1.55}
@@ -517,12 +518,15 @@ a {
 .hx-count b{display:block; font:600 clamp(20px,1.9vw,38px)/1 ui-monospace, Consolas, monospace; font-variant-numeric:tabular-nums}
 .hx-count span{font-size:10px; letter-spacing:.2em; text-transform:uppercase; color:#a9bbdc}
 .hx-ctas{display:flex; flex-wrap:wrap; gap:12px; margin-top:clamp(18px,3.4vh,40px)}
-.hx-btn{position:relative; display:inline-flex; align-items:center; gap:8px; overflow:hidden; border-radius:999px; font-weight:600;
+.hx-btn{position:relative; display:inline-flex; align-items:center; gap:8px; overflow:hidden; border-radius:var(--cta-r, 999px); font-weight:600;
   padding:clamp(12px,1.6vh,18px) clamp(20px,1.9vw,34px); font-size:clamp(14px,.95vw,18px); letter-spacing:.03em; transition:transform .2s, background-color .2s}
 .hx-btn:hover{transform:translateY(-2px)}
 .hx-btn:focus-visible,.hx-bookbtn:focus-visible,.hx-progress button:focus-visible,.hx-counter button:focus-visible,.hx-art-link:focus-visible{outline:2px solid #F59E0B; outline-offset:3px}
-.hx-btn-primary{background:#CC0033; color:#fff; box-shadow:0 10px 40px -8px rgba(204,0,51,.8), inset 0 0 0 1px rgba(255,255,255,.2)}
-.hx-btn-primary:hover{background:#b0002c}
+/* Button colours and shape come from Admin → Hero style (--cta-*). */
+.hx-btn-primary{background:var(--cta-bg, #CC0033); color:var(--cta-fg, #fff);
+  box-shadow:0 10px 40px -8px color-mix(in srgb, var(--cta-bg, #CC0033) 80%, transparent), inset 0 0 0 1px rgba(255,255,255,.2)}
+.hx-btn-primary:hover{filter:brightness(.9)}
+.hx-noshine .hx-btn-primary::after{display:none}
 .hx-btn-primary::after{content:""; position:absolute; inset:0; background:linear-gradient(110deg, transparent 30%, rgba(255,255,255,.35) 50%, transparent 70%);
   transform:translateX(-120%); animation:hx-sweep 3.2s 1.2s infinite}
 @keyframes hx-sweep{60%,100%{transform:translateX(120%)}}
@@ -703,19 +707,82 @@ a {
 .hx-top .hx-content{padding-top:81px}
 .hx-top .hx-hero::after{content:""; position:absolute; left:0; right:0; top:0; height:180px; z-index:4; pointer-events:none;
   background:linear-gradient(rgba(4,12,28,.6), rgba(4,12,28,0))}
+/* Ivory hero: the header keeps its own navy type, so no dark fade behind it. */
+.hx-top .hx-hero.hx-light:not(.is-art)::after{display:none}
 .hdr{transition:background-color .35s ease, border-color .35s ease, backdrop-filter .35s ease, box-shadow .35s ease}
 body:has(.hx-top) .hdr:not(.is-solid):not(:hover):not(:focus-within){
   background-color:transparent; border-color:transparent; -webkit-backdrop-filter:none; backdrop-filter:none}
-body:has(.hx-top) .hdr:not(.is-solid):not(:hover):not(:focus-within) > div:first-child > nav > a,
-body:has(.hx-top) .hdr:not(.is-solid):not(:hover):not(:focus-within) > div:first-child > nav > div > a,
-body:has(.hx-top) .hdr:not(.is-solid):not(:hover):not(:focus-within) > div:first-child > div:last-child > a,
-body:has(.hx-top) .hdr:not(.is-solid):not(:hover):not(:focus-within) > div:first-child > div:last-child > button,
-body:has(.hx-top) .hdr:not(.is-solid):not(:hover):not(:focus-within) > div:first-child > div:last-child > div > button{
+body:has(.hx-top .hx-hero:is(:not(.hx-light), .is-art)) .hdr:not(.is-solid):not(:hover):not(:focus-within) > div:first-child > nav > a,
+body:has(.hx-top .hx-hero:is(:not(.hx-light), .is-art)) .hdr:not(.is-solid):not(:hover):not(:focus-within) > div:first-child > nav > div > a,
+body:has(.hx-top .hx-hero:is(:not(.hx-light), .is-art)) .hdr:not(.is-solid):not(:hover):not(:focus-within) > div:first-child > div:last-child > a,
+body:has(.hx-top .hx-hero:is(:not(.hx-light), .is-art)) .hdr:not(.is-solid):not(:hover):not(:focus-within) > div:first-child > div:last-child > button,
+body:has(.hx-top .hx-hero:is(:not(.hx-light), .is-art)) .hdr:not(.is-solid):not(:hover):not(:focus-within) > div:first-child > div:last-child > div > button{
   color:rgba(255,255,255,.92)}
-body:has(.hx-top) .hdr:not(.is-solid):not(:hover):not(:focus-within) [data-testid="search-box"] > form{
+body:has(.hx-top .hx-hero:is(:not(.hx-light), .is-art)) .hdr:not(.is-solid):not(:hover):not(:focus-within) [data-testid="search-box"] > form{
   background:rgba(255,255,255,.08); border-color:rgba(255,255,255,.28)}
-body:has(.hx-top) .hdr:not(.is-solid):not(:hover):not(:focus-within) [data-testid="search-box"] > form :is(svg, input){color:#fff}
-body:has(.hx-top) .hdr:not(.is-solid):not(:hover):not(:focus-within) [data-testid="search-box"] > form input::placeholder{color:rgba(255,255,255,.65)}
+body:has(.hx-top .hx-hero:is(:not(.hx-light), .is-art)) .hdr:not(.is-solid):not(:hover):not(:focus-within) [data-testid="search-box"] > form :is(svg, input){color:#fff}
+body:has(.hx-top .hx-hero:is(:not(.hx-light), .is-art)) .hdr:not(.is-solid):not(:hover):not(:focus-within) [data-testid="search-box"] > form input::placeholder{color:rgba(255,255,255,.65)}
+
+/* ==== LIGHT (IVORY) HERO — .hx-light, Admin → Hero style → theme ==========
+   Same layout as the dark hero; only colours change, plus the red "stage"
+   behind the book. Everything is scoped :not(.is-art): a finished-artwork
+   banner is its own picture and keeps the dark treatment around it. */
+.hx-hero.hx-light{background:var(--hx-bg, #FBF8F1); color:#0b1f3a}
+.hx-hero.hx-light .hx-aurora,.hx-hero.hx-light .hx-grid,.hx-hero.hx-light .hx-particles{display:none}
+.hx-hero.hx-light.is-art{background:#06142b; color:#fff}
+/* A cover-glow backdrop is a dark blur of the cover — not on ivory. */
+.hx-hero.hx-light .hx-bg-cover{display:none}
+.hx-hero.hx-light .hx-scrim{background:
+  linear-gradient(90deg, var(--hx-bg) 0%, color-mix(in srgb, var(--hx-bg) 85%, transparent) 38%, color-mix(in srgb, var(--hx-bg) 20%, transparent) 70%, transparent 100%)}
+.hx-hero.hx-light .hx-h1{color:#002B5C}
+.hx-hero.hx-light .hx-sub{color:#4B5563}
+.hx-hero.hx-light .hx-eyebrow{border-color:rgba(0,43,92,.18); background:rgba(255,255,255,.65); color:#002B5C}
+.hx-hero.hx-light .hx-chips span{background:#fff; border-color:rgba(0,43,92,.14); color:#002B5C}
+.hx-hero.hx-light .hx-count div{background:#fff; border-color:rgba(0,43,92,.14); color:#002B5C}
+.hx-hero.hx-light .hx-count span{color:#6B7280}
+.hx-hero.hx-light .hx-btn-ghost{border:1px solid var(--cta2, #002B5C); background:transparent; color:var(--cta2, #002B5C); -webkit-backdrop-filter:none; backdrop-filter:none}
+.hx-hero.hx-light .hx-btn-ghost:hover{background:var(--cta2, #002B5C); color:var(--hx-bg, #FBF8F1)}
+.hx-hero.hx-light .hx-date-glass{border-color:rgba(0,43,92,.15); background:linear-gradient(145deg, #fff, color-mix(in srgb, var(--st-b) 12%, #fff))}
+.hx-hero.hx-light .hx-date-text{color:#002B5C}
+.hx-hero.hx-light .hx-render-img{filter:drop-shadow(0 30px 40px rgba(60,0,15,.45))}
+.hx-hero.hx-light .hx-book-front{box-shadow:inset 6px 0 10px rgba(0,0,0,.35), 0 40px 80px -20px rgba(60,0,15,.6)}
+
+/* The red stage behind the book: .hx-glow becomes a solid disc in the three
+   Admin colours (--st-a highlight, --st-b base, --st-c edge), with a soft
+   red shadow; the ring around it takes the base colour. */
+.hx-hero.hx-light .hx-glow{width:calc(var(--w) * 1.75); filter:none; opacity:1; overflow:hidden; isolation:isolate;
+  background:radial-gradient(circle at 35% 30%, var(--st-a) 0%, var(--st-b) 45%, var(--st-c) 100%);
+  box-shadow:0 50px 100px -35px color-mix(in srgb, var(--st-b) 70%, transparent)}
+.hx-hero.hx-light .hx-ring{border-color:color-mix(in srgb, var(--st-b) 30%, transparent)}
+.hx-hero.hx-light .hx-ring::before{background:var(--st-b); box-shadow:0 0 14px var(--st-b)}
+/* Stage animations (Admin: breathe | swirl | shimmer | none; speed = --st-dur) */
+.hx-hero.hx-light.hx-stage-breathe .hx-glow{animation:hx-stage-breathe var(--st-dur, 8s) ease-in-out infinite}
+@keyframes hx-stage-breathe{50%{transform:scale(1.06); box-shadow:0 60px 120px -30px color-mix(in srgb, var(--st-b) 85%, transparent)}}
+.hx-hero.hx-light.hx-stage-swirl .hx-glow::before{content:""; position:absolute; inset:-25%; border-radius:50%; z-index:-1; opacity:.75;
+  background:conic-gradient(from 0deg, var(--st-a), var(--st-b), var(--st-c), var(--st-b), var(--st-a)); filter:blur(28px);
+  animation:hx-spin var(--st-dur, 8s) linear infinite}
+.hx-hero.hx-light.hx-stage-shimmer .hx-glow::after{content:""; position:absolute; inset:0; border-radius:50%;
+  background:linear-gradient(115deg, transparent 35%, rgba(255,255,255,.28) 50%, transparent 65%); transform:translateX(-100%);
+  animation:hx-stage-sheen var(--st-dur, 8s) ease-in-out infinite}
+@keyframes hx-stage-sheen{0%,30%{transform:translateX(-100%)}70%,100%{transform:translateX(100%)}}
+
+/* Dock on ivory: navy dots, counter and book button. */
+.hx-hero.hx-light:not(.is-art) .hx-progress button{background:rgba(0,43,92,.2)}
+.hx-hero.hx-light:not(.is-art) .hx-progress button:hover{background:rgba(0,43,92,.4)}
+.hx-hero.hx-light:not(.is-art) .hx-progress button.is-done{background:rgba(0,43,92,.55)}
+.hx-hero.hx-light:not(.is-art) .hx-progress button.is-on{background:rgba(0,43,92,.12)}
+.hx-hero.hx-light:not(.is-art) .hx-progress button i{background:linear-gradient(90deg, var(--cta-bg, #CC0033), #F59E0B)}
+.hx-hero.hx-light:not(.is-art) .hx-counter{color:rgba(0,43,92,.7)}
+.hx-hero.hx-light:not(.is-art) .hx-counter b{color:#002B5C}
+.hx-hero.hx-light:not(.is-art) .hx-counter button{color:#002B5C; background:#fff; border-color:rgba(0,43,92,.22); -webkit-backdrop-filter:none; backdrop-filter:none}
+.hx-hero.hx-light:not(.is-art) .hx-bookbtn{color:#002B5C}
+.hx-hero.hx-light:not(.is-art) .hx-orb{background:radial-gradient(circle at 30% 30%, #fff, #f3ede0); border-color:rgba(0,43,92,.18);
+  box-shadow:0 0 30px -6px color-mix(in srgb, var(--cta-bg, #CC0033) 60%, transparent)}
+.hx-hero.hx-light:not(.is-art) .hx-orb svg{stroke:#002B5C}
+.hx-hero.hx-light:not(.is-art) .hx-orb::before,.hx-hero.hx-light:not(.is-art) .hx-orb::after{border-color:var(--cta-bg, #CC0033)}
+@media (max-width:1023px), (orientation:portrait) and (max-width:1366px){
+  .hx-hero.hx-light .hx-scrim{background:linear-gradient(0deg, var(--hx-bg) 0%, color-mix(in srgb, var(--hx-bg) 85%, transparent) 50%, color-mix(in srgb, var(--hx-bg) 35%, transparent) 80%, color-mix(in srgb, var(--hx-bg) 50%, transparent) 100%)}
+}
 
 @media (prefers-reduced-motion: reduce){
   .hx-hero *,.hx-hero *::before,.hx-hero *::after{animation:none !important; transition:none !important}

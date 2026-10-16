@@ -62,6 +62,46 @@ export function parseIst(v, endOfDay = false) {
     return new Date(s).getTime();
 }
 
+/* Hero look, set in Admin → Pages → Homepage → "Hero style" (site content key
+   `hero_style`, one object) so colours, the red book backdrop, its animation
+   and the button styling change without a deployment. Every field is checked
+   here — a typo in Admin falls back to the default, it never breaks the hero.
+   Light (ivory) is the default since Oct 2026; "dark" keeps the original
+   navy hero with its particles, aurora and grid. */
+export const HERO_STYLE_DEFAULTS = {
+    theme: "light",
+    bg: "#FBF8F1", // ivory
+    em: "#CC0033", // the *highlighted* words of a headline (solid — no moving gradient)
+    stage_a: "#E8466A", // book backdrop: highlight -> base -> edge ("Oakbridge Crimson")
+    stage_b: "#CC0033",
+    stage_c: "#7A0020",
+    stage_anim: "breathe", // breathe | swirl | shimmer | none
+    stage_speed: 8, // seconds per cycle
+    cta_bg: "#CC0033",
+    cta_fg: "#FFFFFF",
+    cta2: "#002B5C", // outline button
+    cta_shape: "pill", // pill | rounded | square
+    cta_shine: true, // light sweep across the main button
+};
+export const STAGE_ANIMS = ["breathe", "swirl", "shimmer", "none"];
+export const CTA_SHAPES = { pill: "999px", rounded: "10px", square: "0px" };
+export function heroStyle(raw) {
+    const r = raw && typeof raw === "object" ? raw : {};
+    const d = HERO_STYLE_DEFAULTS;
+    const hex = (k) => (HEX.test(String(r[k] || "")) ? r[k] : d[k]);
+    const speed = Number(r.stage_speed);
+    return {
+        theme: r.theme === "dark" ? "dark" : "light",
+        bg: hex("bg"), em: hex("em"),
+        stage_a: hex("stage_a"), stage_b: hex("stage_b"), stage_c: hex("stage_c"),
+        stage_anim: STAGE_ANIMS.includes(r.stage_anim) ? r.stage_anim : d.stage_anim,
+        stage_speed: Number.isFinite(speed) ? Math.min(30, Math.max(3, speed)) : d.stage_speed,
+        cta_bg: hex("cta_bg"), cta_fg: hex("cta_fg"), cta2: hex("cta2"),
+        cta_shape: CTA_SHAPES[r.cta_shape] ? r.cta_shape : d.cta_shape,
+        cta_shine: r.cta_shine === undefined ? d.cta_shine : r.cta_shine !== false && r.cta_shine !== "off",
+    };
+}
+
 // Admins paste full https://www.oakbridge.in/... links; those are our own
 // pages and must navigate in place, not open a new tab like an external site.
 export const localise = (link) => {
@@ -454,11 +494,13 @@ function BookButton({ onClick }) {
 /* Light particle network. Effect-only (never in the prerender), capped by
    area, stopped while the hero is off-screen or the tab is hidden, and not
    started at all for reduced motion or Data Saver. */
-function useParticles(heroRef, canvasRef) {
+function useParticles(heroRef, canvasRef, enabled = true) {
     useEffect(() => {
         const hero = heroRef.current;
         const cv = canvasRef.current;
-        if (!hero || !cv || typeof window === "undefined") return undefined;
+        // The light (ivory) hero has no particles: pale dots on ivory are
+        // invisible, so it would be animation frames spent on nothing.
+        if (!enabled || !hero || !cv || typeof window === "undefined") return undefined;
         const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
         const saveData = navigator.connection?.saveData;
         if (reduce || saveData || isPrerender()) return undefined;
@@ -521,10 +563,12 @@ function useParticles(heroRef, canvasRef) {
             io.disconnect();
             document.removeEventListener("visibilitychange", onVis);
         };
-    }, [heroRef, canvasRef]);
+    }, [heroRef, canvasRef, enabled]);
 }
 
-export default function HeroFullscreen({ slides = [], priority = false, testId = "home-hero-fullscreen" }) {
+export default function HeroFullscreen({ slides = [], priority = false, testId = "home-hero-fullscreen", look }) {
+    const st = heroStyle(look);
+    const light = st.theme === "light";
     const n = slides.length;
     const [i, setI] = useState(0);
     const [paused, setPaused] = useState(false);
@@ -542,7 +586,7 @@ export default function HeroFullscreen({ slides = [], priority = false, testId =
     const touch = useRef(null);
     const idx = n ? i % n : 0;
 
-    useParticles(heroRef, canvasRef);
+    useParticles(heroRef, canvasRef, !light);
 
     const go = useCallback((k) => {
         if (!n) return;
@@ -614,7 +658,12 @@ export default function HeroFullscreen({ slides = [], priority = false, testId =
         <section
             ref={heroRef}
             data-testid={testId}
-            className={`hx-hero ${paused ? "is-paused" : ""} ${n && !String(slides[idx]?.title || "").trim() ? "is-art" : ""}`}
+            className={`hx-hero ${light ? "hx-light" : ""} hx-stage-${st.stage_anim} ${st.cta_shine ? "" : "hx-noshine"} ${paused ? "is-paused" : ""} ${n && !String(slides[idx]?.title || "").trim() ? "is-art" : ""}`}
+            style={{
+                "--hx-bg": st.bg, "--hx-em": st.em,
+                "--st-a": st.stage_a, "--st-b": st.stage_b, "--st-c": st.stage_c, "--st-dur": `${st.stage_speed}s`,
+                "--cta-bg": st.cta_bg, "--cta-fg": st.cta_fg, "--cta2": st.cta2, "--cta-r": CTA_SHAPES[st.cta_shape],
+            }}
             aria-roledescription="carousel"
             aria-label="Latest from Oakbridge"
             // Resuming restarts the bar with the timer, so the two never disagree.
