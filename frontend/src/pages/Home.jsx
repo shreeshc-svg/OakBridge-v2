@@ -461,7 +461,10 @@ export default function Home() {
                             <div className="absolute top-6 right-6 z-[2] bg-[#CC0033] text-white font-mono uppercase tracking-widest text-[10px] px-3 py-1.5">
                                 Spring 2026 catalogue
                             </div>
-                            <div className="absolute bottom-8 left-8 right-8 z-[2] text-[#FFFFFF]">
+                            {/* Quote + CTA at the TOP of the photo (Oct 2026): read first,
+                                beside the headline, with the lit shelf below it.
+                                top-20 clears the "Spring 2026 catalogue" badge. */}
+                            <div className="absolute top-20 left-8 right-8 z-[2] text-[#FFFFFF]">
                                 <div className="overline !text-white/60">
                                     Featured Publication
                                 </div>
