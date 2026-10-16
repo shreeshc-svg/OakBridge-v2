@@ -1744,6 +1744,13 @@ async def contact_submit(payload: ContactMessage, request: Request):
                     {"$set": {"proposal_sent_at": datetime.now(timezone.utc).isoformat(),
                               "proposal_sent_by": "auto"}},
                 )
+        else:
+            # Every other subject: a short, signed "we've got your message"
+            # (Oct 2026 — customer service with a personal touch; this reverses
+            # the 2026-09-28 no-auto-reply rule). Switchable without a deploy in
+            # Admin → Email Manager → "We've received your message".
+            from emailer import send_contact_ack
+            await send_contact_ack(doc)
     except Exception:  # noqa: BLE001
         logger.exception("contact email failed for %s", doc.get("email"))
     return ContactResponse(
@@ -2004,6 +2011,8 @@ app.include_router(newsletter_router)
 from growth import public_router as growth_public_router, admin_router as growth_admin_router  # noqa: E402
 app.include_router(growth_public_router)
 app.include_router(growth_admin_router)
+from email_manager_api import admin_router as email_manager_admin_router  # noqa: E402
+app.include_router(email_manager_admin_router)
 
 # The production domains, Vercel preview and local dev are always allowed; any
 # extra origins in the CORS_ORIGINS env var (comma-separated) are merged in. This

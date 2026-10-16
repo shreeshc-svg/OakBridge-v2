@@ -2701,7 +2701,7 @@ def _is_last_day_of_month(dt: datetime) -> bool:
 
 
 async def process_cart_reminders(force: bool = False) -> dict:
-    """Send abandoned-cart FOMO reminders at 12h, 1 week, and end of month."""
+    """Send cart reminders at 12h, 1 week, and end of month (calm copy — emailer._CART_COPY)."""
     now = datetime.now(timezone.utc)
     result = {"scanned": 0, "sent": 0, "by_stage": {"12h": 0, "1w": 0, "eom": 0}}
     carts = await db.carts.find({"items.0": {"$exists": True}}).to_list(5000)
@@ -2733,6 +2733,14 @@ async def process_cart_reminders(force: bool = False) -> dict:
             continue
         u = await db.users.find_one({"id": c["user_id"]}, {"_id": 0, "email": 1, "name": 1})
         if not u or not u.get("email"):
+            continue
+        # One reminder, not two: someone who reached checkout and didn't pay in
+        # the last 3 days is the Growth "abandoned checkout" email's job (and the
+        # payment-link email's). Mailing them a cart reminder too reads as being
+        # chased. Not marked as sent, so it still goes once that window passes.
+        recent = (now - timedelta(days=3)).isoformat()
+        if not force and await db.orders.find_one(
+                {"user_id": c["user_id"], "payment_status": {"$ne": "paid"}, "created_at": {"$gte": recent}}, {"_id": 1}):
             continue
         try:
             await send_cart_reminder(u["email"], u.get("name", ""), c.get("items", []), stage)

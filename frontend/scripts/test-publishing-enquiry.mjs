@@ -27,7 +27,11 @@ check(size > 10000, `the form ships with the backend (${size} bytes)`);
 check(/await send_publishing_enquiry_reply\(doc\["email"\]\)/.test(feat), "every manuscript submission gets it");
 check(!/await send_submission_ack\(doc\)/.test(feat), "instead of, not as well as, the old ack");
 check(/== "manuscript submission":\s*\n\s*if await send_publishing_enquiry_reply/.test(server), "contact form: only the Manuscript Submission subject gets it");
-check(!/await send_contact_ack\(/.test(server), "every other contact subject gets NO automatic email");
+// Reversed in Oct 2026 (customer service with a personal touch): every OTHER
+// subject now gets the short signed "we've received your message" — never the
+// proposal form — and it can be switched off in Admin → Email Manager.
+check(/else:\s*\n(?:\s*#.*\n)*\s*from emailer import send_contact_ack\s*\n\s*await send_contact_ack\(doc\)/.test(server),
+      "every other contact subject gets the signed acknowledgement (not the proposal form)");
 check(!/Any competing titles|Draft Table of Contents|Target market \/ audience/.test(mailRaw),
       "the three items already covered by the form are not repeated in the email");
 if (failed) { console.log(`${failed} failed`); process.exit(1); }

@@ -59,6 +59,7 @@ const AdminInventory = lazy(() => import("@/pages/admin/AdminInventory"));
 const AdminWarehouse = lazy(() => import("@/pages/admin/AdminWarehouse"));
 const AdminWhatsApp = lazy(() => import("@/pages/admin/AdminWhatsApp"));
 const AdminMarketing = lazy(() => import("@/pages/admin/AdminMarketing"));
+const AdminEmails = lazy(() => import("@/pages/admin/AdminEmails"));
 const WarehouseApp = lazy(() => import("@/pages/warehouse/WarehouseApp"));
 const AdminSubmissions = lazy(() => import("@/pages/admin/AdminSubmissions"));
 const AdminSpam = lazy(() => import("@/pages/admin/AdminSpam"));
@@ -269,6 +270,7 @@ function App() {
                                 <Route path="inventory" element={lazyPage(AdminInventory)} />
                                 <Route path="warehouse" element={lazyPage(AdminWarehouse)} />
                                 <Route path="whatsapp" element={lazyPage(AdminWhatsApp)} />
+                                <Route path="marketing/emails" element={lazyPage(AdminEmails)} />
                                 <Route path="marketing" element={lazyPage(AdminMarketing)} />
                                 <Route path="submissions" element={lazyPage(AdminSubmissions)} />
                                 <Route path="spam" element={lazyPage(AdminSpam)} />

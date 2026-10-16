@@ -736,3 +736,10 @@ export const mkSend = (id, confirmCount, scheduleAt) =>
     api.post(`/admin/marketing/campaigns/${id}/send`, { confirm_count: confirmCount, schedule_at: scheduleAt || null }).then((r) => r.data);
 export const mkCampaignAction = (id, action) => api.post(`/admin/marketing/campaigns/${id}/${action}`).then((r) => r.data);
 export const mkReport = (id) => api.get(`/admin/marketing/campaigns/${id}/report`).then((r) => r.data);
+
+// ====== Admin → Email Manager (backend/email_manager_api.py) ======
+export const adminEmailManager = () => api.get("/admin/marketing/emails").then((r) => r.data);
+export const adminSaveEmailManager = (config) => api.put("/admin/marketing/emails", { config }).then((r) => r.data);
+export const adminPreviewEmail = (kind, config) => api.post("/admin/marketing/emails/preview", { kind, config }).then((r) => r.data);
+export const adminTestEmail = (kind, config) => api.post("/admin/marketing/emails/test", { kind, config }).then((r) => r.data);
+export const adminEmailLog = (kind) => api.get("/admin/marketing/emails/log", { params: kind ? { kind } : {} }).then((r) => r.data);

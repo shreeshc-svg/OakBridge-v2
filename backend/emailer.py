@@ -65,8 +65,17 @@ async def send_email(
     reply_to: Optional[str] = None,
     attachments: Optional[list] = None,
     headers: Optional[dict] = None,
+    kind: Optional[str] = None,
+    ctx: Optional[dict] = None,
 ) -> bool:
     """Send a transactional email. Returns True on success, False on failure. Never raises.
+
+    `kind` names a CUSTOMER email (email_manager.KINDS). With it, the email goes
+    through Admin → Email Manager first: it may be switched off there, its
+    subject overridden, the signed personal note added, our links utm-tagged
+    and Reply-To pointed at the inbox a person reads. Internal alerts pass no
+    kind and are untouched. Any failure in that layer falls back to sending the
+    plain email — a settings problem must never cost a customer their receipt.
 
     `to` may be one address, a comma-separated string, or a list — every
     recipient receives the same message.
@@ -74,6 +83,27 @@ async def send_email(
     `attachments` is a list of (filename, bytes) tuples; each is base64-encoded
     for Resend.
     """
+    em = None
+    if kind:
+        try:
+            import email_manager as em
+            cfg = await em.get_config()
+            if not em.enabled(kind, cfg):
+                await em.log_send(kind, to, subject, "skipped")
+                return False
+            subject = em.subject_for(kind, subject, ctx or {}, cfg)
+            html = em.personalise(html, kind, ctx or {}, cfg)
+            if not reply_to and cfg.get("reply_to"):
+                reply_to = cfg["reply_to"]
+        except Exception:  # noqa: BLE001
+            logger.exception("Email Manager layer failed for kind=%s — sending the plain email", kind)
+    ok = await _deliver(to, subject, html, reply_to, attachments, headers)
+    if em is not None:
+        await em.log_send(kind, to, subject, "sent" if ok else "failed")
+    return ok
+
+
+async def _deliver(to, subject: str, html: str, reply_to, attachments, headers) -> bool:
     if not RESEND_API_KEY:
         logger.warning("Skipping email — RESEND_API_KEY not set (to=%s, subject=%r)", to, subject)
         return False
@@ -230,7 +260,7 @@ def render_order_receipt_html(order: dict) -> str:
       <!-- Greeting -->
       <tr><td style="padding:40px 36px 24px;">
         <h1 style="margin:0;font-family:Georgia,serif;font-weight:normal;font-size:28px;line-height:1.2;color:{BRAND_NAVY};">
-          Thank you, {order.get('full_name', 'reader')}.
+          Thank you, {_html.escape((order.get('full_name') or 'reader').split(' ')[0])}.
         </h1>
         <p style="margin:16px 0 0;font-size:15px;line-height:1.6;color:{BRAND_GREY};">
           Your payment has been received and your order is confirmed.
@@ -280,7 +310,7 @@ def render_order_receipt_html(order: dict) -> str:
       <tr><td style="padding:32px 36px 0;">
         <div style="font-family:monospace;text-transform:uppercase;letter-spacing:1.5px;font-size:10px;color:{BRAND_GREY};">Shipping to</div>
         <div style="margin-top:8px;font-size:14px;line-height:1.6;color:{BRAND_NAVY};">
-          <strong>{order.get('full_name','')}</strong><br>
+          <strong>{_html.escape(str(order.get('full_name') or ''))}</strong><br>
           {address}
         </div>
       </td></tr>
@@ -313,7 +343,8 @@ async def send_order_receipt(order: dict, invoice_pdf: Optional[bytes] = None) -
         inv = order.get("invoice_no") or order.get("order_number", "invoice")
         fname = f"Invoice-{str(inv).replace('/', '-')}.pdf"
         attachments = [(fname, invoice_pdf)]
-    return await send_email(to=to, subject=subject, html=html, attachments=attachments)
+    import email_manager as em
+    return await send_email(to=to, subject=subject, html=html, attachments=attachments, kind="receipt", ctx=em.order_ctx(order))
 
 
 # ====== Waitlist welcome ======
@@ -381,7 +412,7 @@ async def send_waitlist_welcome(email: str, source: str) -> bool:
         program = {"label": "the Oakbridge mailing list", "lede": "You'll hear from us when there's news worth your time."}
     html = render_waitlist_welcome_html(program, email)
     subject = f"Welcome to {program['label']} — you're on the list"
-    return await send_email(to=email, subject=subject, html=html)
+    return await send_email(to=email, subject=subject, html=html, kind="waitlist_welcome", ctx={})
 
 
 # ====== Admin internal alerts ======
@@ -762,6 +793,7 @@ def render_back_in_stock_html(book: dict) -> str:
       <tr><td style="padding:28px 36px 40px;">
         <a href="{book_url}" style="display:inline-block;background-color:{BRAND_NAVY};color:#FFFFFF;text-decoration:none;font-size:14px;font-weight:600;padding:14px 28px;">View & buy now</a>
       </td></tr>
+      <!--OB:PERSONAL-->
     </table>
     <div style="max-width:600px;margin-top:16px;font-family:monospace;font-size:11px;color:{BRAND_GREY};">
       You're receiving this because you asked to be notified when this title returned to stock.
@@ -776,12 +808,12 @@ async def send_back_in_stock(to: str, book: dict) -> bool:
     """Notify a waiting customer that an out-of-stock title is available again."""
     subject = f"Back in stock — {book.get('title','your title')}"
     html = render_back_in_stock_html(book)
-    return await send_email(to=to, subject=subject, html=html)
+    return await send_email(to=to, subject=subject, html=html, kind="back_in_stock", ctx={"books": book.get("title") or ""})
 
 
 def render_stock_signup_html(book: dict) -> str:
-    title = book.get("title", "this title")
-    author = book.get("author", "")
+    title = _html.escape(str(book.get("title") or "this title"))
+    author = _html.escape(str(book.get("author") or ""))
     book_url = f"{SITE_URL}/books/{book.get('id','')}" if SITE_URL else "#"
     return f"""\
 <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"></head>
@@ -803,6 +835,7 @@ def render_stock_signup_html(book: dict) -> str:
       <tr><td style="padding:22px 36px 40px;">
         <a href="{book_url}" style="display:inline-block;background-color:{BRAND_NAVY};color:#FFFFFF;text-decoration:none;font-size:14px;font-weight:600;padding:14px 28px;">View the title</a>
       </td></tr>
+      <!--OB:PERSONAL-->
     </table>
     <div style="max-width:560px;margin-top:16px;font-family:monospace;font-size:11px;color:{BRAND_GREY};">
       You're receiving this because you asked to be notified when this title returns to stock.
@@ -817,13 +850,13 @@ async def send_stock_signup(to: str, book: dict) -> bool:
     """Confirm that a customer has been added to a title's back-in-stock waitlist."""
     subject = f"You're on the list — {book.get('title','your title')}"
     html = render_stock_signup_html(book)
-    return await send_email(to=to, subject=subject, html=html)
+    return await send_email(to=to, subject=subject, html=html, kind="stock_signup", ctx={"books": book.get("title") or ""})
 
 
 # ====== Signup email verification (OTP) ======
 
 def render_verification_otp_html(name: str, code: str) -> str:
-    who = (name or "there").split(" ")[0]
+    who = _html.escape((name or "there").split(" ")[0])
     return f"""\
 <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"></head>
 <body style="margin:0;padding:0;background-color:#F5F7FA;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:{BRAND_NAVY};">
@@ -851,7 +884,7 @@ def render_verification_otp_html(name: str, code: str) -> str:
 
 async def send_verification_otp(to: str, name: str, code: str) -> bool:
     """Email a 6-digit signup verification code."""
-    return await send_email(to=to, subject="Your Oakbridge verification code", html=render_verification_otp_html(name, code))
+    return await send_email(to=to, subject="Your Oakbridge verification code", html=render_verification_otp_html(name, code), kind="otp", ctx={})
 
 
 # ====== Order payment failed ======
@@ -867,7 +900,7 @@ _FAILURE_REASONS = [
 
 
 def render_order_failed_html(order: dict, reason: str = "") -> str:
-    who = (order.get("full_name") or "there").split(" ")[0]
+    who = _html.escape((order.get("full_name") or "there").split(" ")[0])
     order_no = order.get("order_number", "")
     retry_url = f"{SITE_URL}/cart" if SITE_URL else "#"
     reason_block = (
@@ -925,20 +958,24 @@ async def send_order_failed(order: dict, reason: str = "") -> bool:
     if not to:
         return False
     subject = f"Your Oakbridge order couldn't be completed - {order.get('order_number','')}"
-    return await send_email(to=to, subject=subject, html=render_order_failed_html(order, reason or ""))
+    import email_manager as em
+    return await send_email(to=to, subject=subject, html=render_order_failed_html(order, reason or ""), kind="payment_failed", ctx=em.order_ctx(order))
 
 
 # ====== Abandoned-cart reminders ======
 
+# Professional, not pushy (Oct 2026): no invented scarcity or "last chance".
+# A publisher's reader comes back because we were helpful, not because we
+# chased them; the personal note under the button offers that help.
 _CART_COPY = {
-    "12h": ("Your next chapter awaits", "The book below is still waiting in your cart. Popular titles move fast and prices can change without notice \u2014 claim it before someone else does."),
-    "1w": ("Don\u2019t let this one slip away", "It\u2019s been a week, and sought-after titles like this don\u2019t stay on the shelf for long. Complete your order now \u2014 before it sells out and you miss the chapter."),
-    "eom": ("Last call \u2014 before it\u2019s gone", "Final reminder: your book is still in your cart, but stock is limited and the month is closing out. Secure it now, or risk missing out for good."),
+    "12h": ("Your books are saved", "We've kept the books below in your cart, exactly as you left them. When you're ready, it takes a minute to finish \u2014 and if something held you back, we're here to help."),
+    "1w": ("Still thinking it over", "Your selection is still in your cart. If you were waiting on a detail \u2014 delivery time, the right edition, a bulk quantity \u2014 reply to this email and we'll answer it."),
+    "eom": ("A gentle reminder", "Your cart still holds the books below. This is the last reminder we'll send about it \u2014 your cart stays saved whenever you come back."),
 }
 
 
 def render_cart_reminder_html(name: str, items: list, stage: str) -> str:
-    who = (name or "there").split(" ")[0]
+    who = _html.escape((name or "there").split(" ")[0])
     heading, sub = _CART_COPY.get(stage, _CART_COPY["12h"])
     rows = []
     for it in (items or [])[:6]:
@@ -983,6 +1020,7 @@ def render_cart_reminder_html(name: str, items: list, stage: str) -> str:
       <tr><td style="padding:28px 36px 40px;">
         <a href="{cta}" style="display:inline-block;background-color:{BRAND_NAVY};color:#FFFFFF;text-decoration:none;font-size:14px;font-weight:600;padding:14px 30px;">Complete your order</a>
       </td></tr>
+      <!--OB:PERSONAL-->
     </table>
   </td></tr>
 </table>
@@ -992,11 +1030,14 @@ def render_cart_reminder_html(name: str, items: list, stage: str) -> str:
 
 async def send_cart_reminder(to: str, name: str, items: list, stage: str) -> bool:
     subjects = {
-        "12h": "Your cart is waiting \u2014 don\u2019t miss out",
-        "1w": "Going fast \u2014 still in your cart",
-        "eom": "Last call \u2014 before it\u2019s gone for good",
+        "12h": "Your books are saved in your cart",
+        "1w": "Still deciding? We can help",
+        "eom": "Your Oakbridge cart \u2014 a gentle reminder",
     }
-    return await send_email(to=to, subject=subjects.get(stage, subjects["12h"]), html=render_cart_reminder_html(name, items, stage))
+    import email_manager as em
+    ctx = {"first_name": em.first_name(name), "books": em.books_phrase(items)}
+    return await send_email(to=to, subject=subjects.get(stage, subjects["12h"]), html=render_cart_reminder_html(name, items, stage),
+                            kind="cart_reminder", ctx=ctx)
 
 
 # ====== Contact / enquiry form ======
@@ -1082,8 +1123,14 @@ async def send_contact_admin_alert(msg: dict) -> bool:
 
 
 def render_contact_ack_html(msg: dict) -> str:
-    who = (msg.get("name") or "there").split(" ")[0]
-    body = (msg.get("message") or "").replace("<", "&lt;").replace(">", "&gt;").replace("\n", "<br>")
+    """The visitor's own message is deliberately NOT echoed back.
+
+    The contact form takes any email address, so an acknowledgement that
+    repeats the message would let anyone use our domain to deliver text of
+    their choosing to a stranger's inbox (a known contact-form relay abuse).
+    The name is cut to one short word for the same reason.
+    """
+    who = _html.escape((msg.get("name") or "there").split(" ")[0][:40])
     return f"""\
 <!DOCTYPE html><html><head><meta charset="utf-8"></head>
 <body style="margin:0;padding:0;background-color:#F5F7FA;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:{BRAND_NAVY};">
@@ -1101,14 +1148,9 @@ def render_contact_ack_html(msg: dict) -> str:
           member of our team will get back to you shortly.
         </p>
       </td></tr>
-      <tr><td style="padding:16px 36px 8px;">
-        <div style="font-family:monospace;text-transform:uppercase;letter-spacing:1.5px;font-size:10px;color:{BRAND_GREY};">Your message</div>
-        <div style="margin-top:8px;padding:14px 16px;background:#F5F7FA;border:1px solid #E5E7EB;font-size:14px;line-height:1.6;color:{BRAND_NAVY};">{body}</div>
-      </td></tr>
       <tr><td style="padding:24px 36px 36px;">
         <div style="border-top:1px solid #E5E7EB;padding-top:20px;font-size:12px;line-height:1.6;color:{BRAND_GREY};">
-          This is an automated confirmation — no need to reply. For anything urgent, write to
-          <a href="mailto:info@oakbridge.in" style="color:{BRAND_NAVY};">info@oakbridge.in</a>.
+          To add anything to your message, simply reply to this email.
         </div>
       </td></tr>
     </table>
@@ -1123,16 +1165,19 @@ async def send_contact_ack(msg: dict) -> bool:
     to = msg.get("email")
     if not to:
         return False
+    import email_manager as em
     return await send_email(
         to=to,
         subject="We've received your message — Oakbridge Publishing",
         html=render_contact_ack_html(msg),
+        kind="contact_ack",
+        ctx={"first_name": em.first_name(msg.get("name"))},
     )
 
 
 # ====== Unpaid order: the link that reopens it ======
 
-async def send_payment_link(order: dict, url: str) -> bool:
+def render_payment_link_html(order: dict, url: str) -> str:
     """Ask a customer to finish an order they started but did not pay for.
 
     Written to be ignorable. No countdown, no invented scarcity, no "last
@@ -1145,9 +1190,6 @@ async def send_payment_link(order: dict, url: str) -> bool:
     It is also honest about stock: nothing is reserved by an unpaid order, and
     promising otherwise would be a promise the warehouse never agreed to.
     """
-    to = order.get("email")
-    if not to:
-        return False
     esc = lambda v: _html.escape(str(v or ""))
     who = esc((order.get("full_name") or "there").split(" ")[0])
     rows = "".join(
@@ -1159,10 +1201,7 @@ async def send_payment_link(order: dict, url: str) -> bool:
         for it in (order.get("items") or [])
     )
     total = f"{float(order.get('total') or 0):,.0f}"
-    return await send_email(
-        to=to,
-        subject=f"Your Oakbridge order is waiting \u2014 {order.get('order_number','')}",
-        html=f"""\
+    return f"""\
 <!DOCTYPE html><html><head><meta charset="utf-8"></head>
 <body style="margin:0;padding:0;background-color:#F5F7FA;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:{BRAND_NAVY};">
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#F5F7FA;padding:40px 16px;">
@@ -1198,7 +1237,21 @@ async def send_payment_link(order: dict, url: str) -> bool:
   </td></tr>
 </table>
 </body></html>
-""",
+"""
+
+
+async def send_payment_link(order: dict, url: str) -> bool:
+    """Email the reopened order's payment link (render_payment_link_html)."""
+    to = order.get("email")
+    if not to:
+        return False
+    import email_manager as em
+    return await send_email(
+        to=to,
+        subject=f"Your Oakbridge order is waiting \u2014 {order.get('order_number','')}",
+        html=render_payment_link_html(order, url),
+        kind="payment_link",
+        ctx=em.order_ctx(order),
     )
 
 
@@ -1224,7 +1277,7 @@ def tracking_url(courier: str, tracking_id: str) -> str:
     return tpl.format(id=tid) if tpl and tid else ""
 
 
-async def send_order_dispatched(order: dict, note: str = "") -> bool:
+def render_order_dispatched_html(order: dict, note: str = "") -> str:
     """Tell the customer the courier has collected their order.
 
     Separate from the generic status email because this one carries the single
@@ -1232,11 +1285,15 @@ async def send_order_dispatched(order: dict, note: str = "") -> bool:
     in a paragraph is how support tickets get created. It leads with the number,
     at a size you can read on a phone and select with a long press.
     """
-    to = order.get("email")
-    if not to:
-        return False
     esc = lambda v: _html.escape(str(v or ""))
     who = esc((order.get("full_name") or "there").split(" ")[0])
+    # A gift order says whose door it is going to — the buyer's real question.
+    _ship = shipping_address(order)
+    headline = (
+        f"Hi {who}, your gift to {esc(_ship['name'].split(' ')[0])} is on its way."
+        if _ship.get("is_gift") and _ship.get("name")
+        else f"Hi {who}, your order is on its way."
+    )
     courier = str(order.get("courier") or "").strip()
     tid = str(order.get("tracking_id") or "").strip()
     url = tracking_url(courier, tid)
@@ -1255,10 +1312,7 @@ async def send_order_dispatched(order: dict, note: str = "") -> bool:
         if str(note or "").strip() else ""
     )
 
-    return await send_email(
-        to=to,
-        subject=f"Your Oakbridge order has been dispatched \u2014 {order.get('order_number','')}",
-        html=f"""\
+    return f"""\
 <!DOCTYPE html><html><head><meta charset="utf-8"></head>
 <body style="margin:0;padding:0;background-color:#F5F7FA;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:{BRAND_NAVY};">
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#F5F7FA;padding:40px 16px;">
@@ -1269,7 +1323,7 @@ async def send_order_dispatched(order: dict, note: str = "") -> bool:
         <div style="font-family:monospace;text-transform:uppercase;letter-spacing:2px;font-size:11px;margin-top:6px;color:rgba(255,255,255,0.6);">Order {num} &middot; Dispatched</div>
       </td></tr>
       <tr><td style="padding:34px 36px 0;">
-        <h1 style="margin:0;font-family:Georgia,serif;font-weight:normal;font-size:23px;">Hi {who}, your order is on its way.</h1>
+        <h1 style="margin:0;font-family:Georgia,serif;font-weight:normal;font-size:23px;">{headline}</h1>
         <p style="margin:14px 0 0;font-size:15px;line-height:1.6;color:{BRAND_GREY};">
           {esc(courier) or "The courier"} has collected your order from us.
         </p>
@@ -1293,7 +1347,21 @@ async def send_order_dispatched(order: dict, note: str = "") -> bool:
   </td></tr>
 </table>
 </body></html>
-""",
+"""
+
+
+async def send_order_dispatched(order: dict, note: str = "") -> bool:
+    """Email the dispatch notice (render_order_dispatched_html)."""
+    to = order.get("email")
+    if not to:
+        return False
+    import email_manager as em
+    return await send_email(
+        to=to,
+        subject=f"Your Oakbridge order has been dispatched \u2014 {order.get('order_number','')}",
+        html=render_order_dispatched_html(order, note),
+        kind="dispatched",
+        ctx=em.order_ctx(order),
     )
 
 
@@ -1419,8 +1487,7 @@ def render_submission_ack_html(sub: dict) -> str:
       </td></tr>
       <tr><td style="padding:24px 36px 36px;">
         <div style="border-top:1px solid #E5E7EB;padding-top:20px;font-size:12px;line-height:1.6;color:{BRAND_GREY};">
-          This is an automated confirmation — no need to reply. If you need to add to your
-          submission, write to <a href="mailto:info@oakbridge.in" style="color:{BRAND_NAVY};">info@oakbridge.in</a>.
+          To add to your submission or correct anything, simply reply to this email.
         </div>
       </td></tr>
     </table>
@@ -1435,6 +1502,8 @@ async def send_submission_ack(sub: dict) -> bool:
     to = sub.get("email")
     if not to:
         return False
+    # Not sent anywhere today: submissions get the proposal-form reply instead
+    # (features.py). Kept for an admin "resend" if one is ever wanted.
     return await send_email(
         to=to,
         subject="We've received your manuscript — Oakbridge Publishing",
@@ -1528,13 +1597,15 @@ async def send_publishing_enquiry_reply(to: str) -> bool:
         html=render_publishing_enquiry_html(),
         reply_to=os.environ.get("EDITORIAL_REPLY_TO") or "info@oakbridge.in",
         attachments=attachments,
+        kind="publishing_enquiry",
+        ctx={},
     )
 
 
 # ====== Account welcome (on signup) ======
 
 def render_account_welcome_html(name: str) -> str:
-    who = (name or "there").split(" ")[0]
+    who = _html.escape((name or "there").split(" ")[0])
     site = os.environ.get("SITE_URL", "https://oakbridge.in").rstrip("/")
     return f"""\
 <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"></head>
@@ -1573,7 +1644,9 @@ async def send_account_welcome(to: str, name: str) -> bool:
     """Welcome email sent right after signup. Best-effort."""
     if not to:
         return False
-    return await send_email(to=to, subject="Welcome to Oakbridge Publishing", html=render_account_welcome_html(name))
+    import email_manager as em
+    return await send_email(to=to, subject="Welcome to Oakbridge Publishing", html=render_account_welcome_html(name),
+                            kind="welcome", ctx={"first_name": em.first_name(name)})
 
 
 # ====== Order status update (admin changes order status) ======
@@ -1582,7 +1655,7 @@ _STATUS_COPY = {
     "confirmed": ("Order confirmed", "Your order is confirmed and will be prepared for dispatch shortly."),
     "processing": ("Your order is being prepared", "We're packing your books — they'll be on their way soon."),
     "shipped": ("Your order has shipped", "Your books are on their way. You'll receive them shortly."),
-    "delivered": ("Delivered", "Your order has been delivered. We hope you enjoy your reading."),
+    "delivered": ("Your books have arrived", "your order has been delivered. Thank you for reading with Oakbridge \u2014 we hope these become well-used books on your shelf."),
     "cancelled": ("Order cancelled", "Your order has been cancelled. If this wasn't expected, please contact us and we'll help."),
 }
 
@@ -1593,7 +1666,7 @@ def render_order_status_update_html(order: dict, note: str = "") -> str:
     The note is the point of this email for a dispatch team. "Your books are on
     their way" without a tracking number is a sentence, not information.
     """
-    who = (order.get("full_name") or "reader").split(" ")[0]
+    who = _html.escape((order.get("full_name") or "reader").split(" ")[0])
     status = (order.get("status") or "").lower()
     headline, message = _STATUS_COPY.get(status, ("Order update", f"Your order status is now: {status or 'updated'}."))
     num = order.get("order_number", "")
@@ -1636,13 +1709,23 @@ async def send_order_status_update(order: dict, note: str = "") -> bool:
     num = order.get("order_number", "")
     status = (order.get("status") or "updated").lower()
     subject = f"Your Oakbridge order {num} — {status}"
-    return await send_email(to=to, subject=subject, html=render_order_status_update_html(order, note))
+    import email_manager as em
+    ctx = em.order_ctx(order)
+    kind = "status_update"
+    if status == "delivered":
+        # Its own Email Manager entry: a thank-you, a review ask in the note, and
+        # three in-stock titles from the same subjects — the email most likely
+        # to bring a reader back.
+        kind = "delivered"
+        subject = f"Your Oakbridge order {num} has arrived"
+        ctx["extra_html"] = await em.recommendations_html(order)
+    return await send_email(to=to, subject=subject, html=render_order_status_update_html(order, note), kind=kind, ctx=ctx)
 
 
 # ====== Password reset ======
 
 def render_password_reset_html(name: str, reset_url: str) -> str:
-    who = (name or "there").split(" ")[0]
+    who = _html.escape((name or "there").split(" ")[0])
     return f"""\
 <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"></head>
 <body style="margin:0;padding:0;background-color:#F5F7FA;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:{BRAND_NAVY};">
@@ -1674,13 +1757,14 @@ async def send_password_reset(to: str, name: str, reset_url: str) -> bool:
     """Email a password-reset link. Best-effort."""
     if not to:
         return False
-    return await send_email(to=to, subject="Reset your Oakbridge password", html=render_password_reset_html(name, reset_url))
+    return await send_email(to=to, subject="Reset your Oakbridge password", html=render_password_reset_html(name, reset_url),
+                            kind="password_reset", ctx={})
 
 
 # ====== Review submitted (thank-you to reviewer) ======
 
 def render_review_submitted_html(name: str, book_title: str, rating: int) -> str:
-    who = (name or "there").split(" ")[0]
+    who = _html.escape((name or "there").split(" ")[0])
     stars = "★" * int(rating or 0) + "☆" * (5 - int(rating or 0))
     return f"""\
 <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"></head>
@@ -1712,13 +1796,15 @@ async def send_review_submitted(to: str, name: str, book_title: str, rating: int
     """Thank-you email when a customer submits a review. Best-effort."""
     if not to:
         return False
-    return await send_email(to=to, subject="Thanks for your review", html=render_review_submitted_html(name, book_title, rating))
+    import email_manager as em
+    return await send_email(to=to, subject="Thanks for your review", html=render_review_submitted_html(name, book_title, rating),
+                            kind="review_thanks", ctx={"first_name": em.first_name(name), "books": book_title or ""})
 
 
 # ====== Order cancelled (with reason) ======
 
 def render_order_cancelled_html(order: dict, reason: str = "") -> str:
-    who = (order.get("full_name") or "reader").split(" ")[0]
+    who = _html.escape((order.get("full_name") or "reader").split(" ")[0])
     num = order.get("order_number", "")
     reason_line = (
         f"<p style=\"margin:14px 0 0;font-size:14px;line-height:1.6;color:{BRAND_GREY};\">Reason: <strong style=\"color:{BRAND_NAVY};\">{_html.escape(str(reason)).replace(chr(10), '<br>')}</strong></p>"
@@ -1756,7 +1842,9 @@ async def send_order_cancelled(order: dict, reason: str = "") -> bool:
     if not to:
         return False
     num = order.get("order_number", "")
-    return await send_email(to=to, subject=f"Your Oakbridge order {num} was cancelled", html=render_order_cancelled_html(order, reason))
+    import email_manager as em
+    return await send_email(to=to, subject=f"Your Oakbridge order {num} was cancelled", html=render_order_cancelled_html(order, reason),
+                            kind="cancelled", ctx=em.order_ctx(order))
 
 
 # ============================================================================
@@ -2004,4 +2092,6 @@ async def send_purchase_nudge(to: str, name: str, books: list,
         subject=_NUDGE_SUBJECT,
         html=render_purchase_nudge_html(name, books, coupon, unsub),
         headers=_unsub_headers(to),
+        kind="purchase_nudge",
+        ctx={"first_name": (name or "").split(" ")[0][:40] if name and name != "there" else ""},
     )
