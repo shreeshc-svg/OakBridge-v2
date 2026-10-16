@@ -458,20 +458,27 @@ export default function Home() {
                         {/* Reading-lamp torch over the photo (components/HeroTorch.jsx).
                             Badge, quote and CTA ride on top of the dark layer. */}
                         <HeroTorch to="/books">
-                            <div className="absolute top-6 right-6 z-[2] bg-[#CC0033] text-white font-mono uppercase tracking-widest text-[10px] px-3 py-1.5">
-                                Spring 2026 catalogue
-                            </div>
+                            {/* Admin → Pages → Main hero. Blank = the default
+                                wording; a single "-" hides that line. */}
+                            {(site.home_hero_badge || "").trim() !== "-" && (
+                                <div className="absolute top-6 right-6 z-[2] bg-[#CC0033] text-white font-mono uppercase tracking-widest text-[10px] px-3 py-1.5">
+                                    {site.home_hero_badge || "Spring 2026 catalogue"}
+                                </div>
+                            )}
                             {/* Quote + CTA at the TOP of the photo (Oct 2026): read first,
                                 beside the headline, with the lit shelf below it.
                                 top-20 clears the "Spring 2026 catalogue" badge. */}
                             <div className="absolute top-20 left-8 right-8 z-[2] text-[#FFFFFF]">
-                                <div className="overline !text-white/60">
-                                    Featured Publication
-                                </div>
-                                <div className="font-serif text-xl sm:text-2xl mt-2 leading-tight">
-                                    "A publisher's job is to ask the question the
-                                    classroom has not yet thought of."
-                                </div>
+                                {(site.home_hero_quote_label || "").trim() !== "-" && (
+                                    <div className="overline !text-white/60">
+                                        {site.home_hero_quote_label || "Featured Publication"}
+                                    </div>
+                                )}
+                                {(site.home_hero_quote || "").trim() !== "-" && (
+                                    <div className="font-serif text-xl sm:text-2xl mt-2 leading-tight">
+                                        {site.home_hero_quote || "\"A publisher's job is to ask the question the classroom has not yet thought of.\""}
+                                    </div>
+                                )}
                                 <Link
                                     to="/books"
                                     onClick={() => track("hero_bookstore_click", { via: "torch", where: "cta" })}

@@ -281,7 +281,12 @@ export default function AdminPages() {
                     <div className="overline !text-[10px] mt-6 mb-2">Main hero</div>
                     <SlotRow label="Hero image" value={site.home_hero} onSave={(v) => saveSite("home_hero", v)} />
                     <div className="mt-3">
-                        <TextSlotRow label="Torch button on the hero photo (links to the Bookstore)" value={site.home_hero_torch_cta} defaultValue="Find your next read" onSave={(v) => saveSite("home_hero_torch_cta", v)} />
+                        <div className="space-y-3">
+                            <TextSlotRow label="Badge on the hero photo (top right) — type - to hide" value={site.home_hero_badge} defaultValue="Spring 2026 catalogue" onSave={(v) => saveSite("home_hero_badge", v)} />
+                            <TextSlotRow label="Label above the quote — type - to hide" value={site.home_hero_quote_label} defaultValue="Featured Publication" onSave={(v) => saveSite("home_hero_quote_label", v)} />
+                            <TextSlotRow label="Quote on the hero photo — type - to hide" value={site.home_hero_quote} defaultValue={'"A publisher\'s job is to ask the question the classroom has not yet thought of."'} onSave={(v) => saveSite("home_hero_quote", v)} multiline />
+                            <TextSlotRow label="Torch button on the hero photo (links to the Bookstore)" value={site.home_hero_torch_cta} defaultValue="Find your next read" onSave={(v) => saveSite("home_hero_torch_cta", v)} />
+                        </div>
                     </div>
                     <div className="overline !text-[10px] mt-6 mb-2">Hero text</div>
                     <div className="space-y-3">
