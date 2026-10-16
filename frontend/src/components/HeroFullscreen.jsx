@@ -666,9 +666,11 @@ export default function HeroFullscreen({ slides = [], priority = false, testId =
             }}
             aria-roledescription="carousel"
             aria-label="Latest from Oakbridge"
-            // Resuming restarts the bar with the timer, so the two never disagree.
-            onMouseEnter={() => setPaused(true)}
-            onMouseLeave={() => { setPaused(false); setCycle((c) => c + 1); }}
+            // No pause on mouse hover (removed Oct 2026 — the mouse rests on the
+            // hero most of the time, so it rarely advanced). Keyboard focus
+            // still pauses: someone tabbing to "Order now" must not have the
+            // slide change under them. Resuming restarts the bar with the
+            // timer, so the two never disagree.
             onFocus={() => setPaused(true)}
             onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) { setPaused(false); setCycle((c) => c + 1); } }}
             onTouchStart={(e) => { touch.current = e.touches[0].clientX; }}
