@@ -524,7 +524,7 @@ a {
 .hx-btn:focus-visible,.hx-bookbtn:focus-visible,.hx-progress button:focus-visible,.hx-counter button:focus-visible,.hx-art-link:focus-visible{outline:2px solid #F59E0B; outline-offset:3px}
 /* Button colours and shape come from Admin → Hero style (--cta-*). */
 .hx-btn-primary{background:var(--cta-bg, #CC0033); color:var(--cta-fg, #fff);
-  box-shadow:0 10px 40px -8px color-mix(in srgb, var(--cta-bg, #CC0033) 80%, transparent), inset 0 0 0 1px rgba(255,255,255,.2)}
+  box-shadow:var(--cta-glow, 0 10px 40px -8px rgba(204,0,51,.8)), inset 0 0 0 1px rgba(255,255,255,.2)}
 .hx-btn-primary:hover{filter:brightness(.9)}
 .hx-noshine .hx-btn-primary::after{display:none}
 .hx-btn-primary::after{content:""; position:absolute; inset:0; background:linear-gradient(110deg, transparent 30%, rgba(255,255,255,.35) 50%, transparent 70%);
@@ -752,12 +752,12 @@ body:has(.hx-top .hx-hero:is(:not(.hx-light), .is-art)) .hdr:not(.is-solid):not(
    red shadow; the ring around it takes the base colour. */
 .hx-hero.hx-light .hx-glow{width:calc(var(--w) * 1.75); filter:none; opacity:1; overflow:hidden; isolation:isolate;
   background:radial-gradient(circle at 35% 30%, var(--st-a) 0%, var(--st-b) 45%, var(--st-c) 100%);
-  box-shadow:0 50px 100px -35px color-mix(in srgb, var(--st-b) 70%, transparent)}
+  box-shadow:var(--st-glow, 0 50px 100px -35px rgba(204,0,51,.7))}
 .hx-hero.hx-light .hx-ring{border-color:color-mix(in srgb, var(--st-b) 30%, transparent)}
 .hx-hero.hx-light .hx-ring::before{background:var(--st-b); box-shadow:0 0 14px var(--st-b)}
 /* Stage animations (Admin: breathe | swirl | shimmer | none; speed = --st-dur) */
 .hx-hero.hx-light.hx-stage-breathe .hx-glow{animation:hx-stage-breathe var(--st-dur, 8s) ease-in-out infinite}
-@keyframes hx-stage-breathe{50%{transform:scale(1.06); box-shadow:0 60px 120px -30px color-mix(in srgb, var(--st-b) 85%, transparent)}}
+@keyframes hx-stage-breathe{50%{transform:scale(1.06)}}  /* the glow (Admin-set) grows with it */
 .hx-hero.hx-light.hx-stage-swirl .hx-glow::before{content:""; position:absolute; inset:-25%; border-radius:50%; z-index:-1; opacity:.75;
   background:conic-gradient(from 0deg, var(--st-a), var(--st-b), var(--st-c), var(--st-b), var(--st-a)); filter:blur(28px);
   animation:hx-spin var(--st-dur, 8s) linear infinite}

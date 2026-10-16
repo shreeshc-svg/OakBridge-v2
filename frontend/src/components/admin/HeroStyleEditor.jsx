@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { adminSetSiteContent } from "../../lib/api";
-import { HERO_STYLE_DEFAULTS, STAGE_ANIMS, CTA_SHAPES, heroStyle } from "../HeroFullscreen";
+import { HERO_STYLE_DEFAULTS, STAGE_ANIMS, CTA_SHAPES, heroStyle, heroStyleVars } from "../HeroFullscreen";
 
 /**
  * Admin → Pages → Homepage → "Hero style": the look of the full-screen hero
@@ -55,6 +55,34 @@ function Color({ label, value, onChange }) {
     );
 }
 
+/* One glow: on/off, colour (blank = follow the button/backdrop), blur radius,
+   strength. `set("", v)` toggles; `set("_size", v)` etc. for the rest. */
+function Glow({ title, on, color, fallback, size, strength, maxSize, set }) {
+    return (
+        <div className="border border-[#E5E7EB] bg-white p-3 mb-2">
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <input type="checkbox" checked={on} onChange={(e) => set("", e.target.checked)} /> {title}
+            </label>
+            {on && (
+                <div className="mt-2 flex flex-wrap items-center gap-4">
+                    <Color label={color ? "Glow colour" : "Glow colour (follows)"} value={color || fallback} onChange={(v) => set("_color", v)} />
+                    {color && (
+                        <button type="button" onClick={() => set("_color", "")} className="text-[11px] underline text-[#4B5563]">Follow the main colour</button>
+                    )}
+                    <label className="flex items-center gap-2 text-xs text-[#4B5563]">
+                        Size {size}px
+                        <input type="range" min="0" max={maxSize} step="2" value={size} onChange={(e) => set("_size", Number(e.target.value))} />
+                    </label>
+                    <label className="flex items-center gap-2 text-xs text-[#4B5563]">
+                        Strength {strength}%
+                        <input type="range" min="0" max="100" step="5" value={strength} onChange={(e) => set("_strength", Number(e.target.value))} />
+                    </label>
+                </div>
+            )}
+        </div>
+    );
+}
+
 export default function HeroStyleEditor({ value }) {
     const [st, setSt] = useState(() => heroStyle(value));
     const [saving, setSaving] = useState(false);
@@ -73,11 +101,7 @@ export default function HeroStyleEditor({ value }) {
         }
     };
 
-    const vars = {
-        "--hx-bg": st.bg, "--st-a": st.stage_a, "--st-b": st.stage_b, "--st-c": st.stage_c, "--st-dur": `${st.stage_speed}s`,
-        "--cta-bg": st.cta_bg, "--cta-fg": st.cta_fg, "--cta2": st.cta2, "--cta-r": CTA_SHAPES[st.cta_shape],
-        "--w": "70px",
-    };
+    const vars = { ...heroStyleVars(st), "--w": "70px" };
 
     return (
         <div className="border border-[#E5E7EB] bg-[#F5F7FA] p-4 mb-4" data-testid="hero-style-editor">
@@ -159,6 +183,21 @@ export default function HeroStyleEditor({ value }) {
                                 <input type="range" min="3" max="30" step="1" value={st.stage_speed} onChange={(e) => set("stage_speed", Number(e.target.value))} />
                             </label>
                         )}
+                    </div>
+
+                    {/* Glows */}
+                    <div>
+                        <div className="overline !text-[10px] mb-2">Glows (the soft coloured shadows)</div>
+                        <Glow
+                            title="Under the main button"
+                            on={st.cta_glow} color={st.cta_glow_color} fallback={st.cta_bg} size={st.cta_glow_size} strength={st.cta_glow_strength} maxSize={120}
+                            set={(k, v) => set(`cta_glow${k}`, v)}
+                        />
+                        <Glow
+                            title="Under the book backdrop"
+                            on={st.stage_glow} color={st.stage_glow_color} fallback={st.stage_b} size={st.stage_glow_size} strength={st.stage_glow_strength} maxSize={200}
+                            set={(k, v) => set(`stage_glow${k}`, v)}
+                        />
                     </div>
 
                     {/* Buttons */}

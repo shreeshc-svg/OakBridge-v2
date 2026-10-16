@@ -82,6 +82,16 @@ export const HERO_STYLE_DEFAULTS = {
     cta2: "#002B5C", // outline button
     cta_shape: "pill", // pill | rounded | square
     cta_shine: true, // light sweep across the main button
+    // Coloured glows (Admin → Hero style → Glows): on/off, colour ("" = follow
+    // the button / backdrop colour), size = blur radius in px, strength = %.
+    cta_glow: true,
+    cta_glow_color: "",
+    cta_glow_size: 40,
+    cta_glow_strength: 80,
+    stage_glow: true,
+    stage_glow_color: "",
+    stage_glow_size: 100,
+    stage_glow_strength: 70,
 };
 export const STAGE_ANIMS = ["breathe", "swirl", "shimmer", "none"];
 export const CTA_SHAPES = { pill: "999px", rounded: "10px", square: "0px" };
@@ -89,6 +99,12 @@ export function heroStyle(raw) {
     const r = raw && typeof raw === "object" ? raw : {};
     const d = HERO_STYLE_DEFAULTS;
     const hex = (k) => (HEX.test(String(r[k] || "")) ? r[k] : d[k]);
+    const optHex = (k) => (HEX.test(String(r[k] || "")) ? r[k] : "");
+    const num = (k, lo, hi) => {
+        const v = Number(r[k]);
+        return Number.isFinite(v) && r[k] !== "" && r[k] != null ? Math.min(hi, Math.max(lo, Math.round(v))) : d[k];
+    };
+    const flag = (k) => (r[k] === undefined ? d[k] : r[k] !== false && r[k] !== "off");
     const speed = Number(r.stage_speed);
     return {
         theme: r.theme === "dark" ? "dark" : "light",
@@ -98,7 +114,36 @@ export function heroStyle(raw) {
         stage_speed: Number.isFinite(speed) ? Math.min(30, Math.max(3, speed)) : d.stage_speed,
         cta_bg: hex("cta_bg"), cta_fg: hex("cta_fg"), cta2: hex("cta2"),
         cta_shape: CTA_SHAPES[r.cta_shape] ? r.cta_shape : d.cta_shape,
-        cta_shine: r.cta_shine === undefined ? d.cta_shine : r.cta_shine !== false && r.cta_shine !== "off",
+        cta_shine: flag("cta_shine"),
+        cta_glow: flag("cta_glow"),
+        cta_glow_color: optHex("cta_glow_color"),
+        cta_glow_size: num("cta_glow_size", 0, 120),
+        cta_glow_strength: num("cta_glow_strength", 0, 100),
+        stage_glow: flag("stage_glow"),
+        stage_glow_color: optHex("stage_glow_color"),
+        stage_glow_size: num("stage_glow_size", 0, 200),
+        stage_glow_strength: num("stage_glow_strength", 0, 100),
+    };
+}
+
+const rgba = (hex, pct) => {
+    const n = parseInt(hex.slice(1), 16);
+    return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${(pct / 100).toFixed(2)})`;
+};
+/* The CSS variables a style turns into — shared by the live hero and the
+   Admin preview so the two can never drift apart. */
+export function heroStyleVars(st) {
+    const ctaGlow = st.cta_glow && st.cta_glow_size > 0 && st.cta_glow_strength > 0
+        ? `0 10px ${st.cta_glow_size}px -8px ${rgba(st.cta_glow_color || st.cta_bg, st.cta_glow_strength)}`
+        : "0 0 0 0 transparent";
+    const stageGlow = st.stage_glow && st.stage_glow_size > 0 && st.stage_glow_strength > 0
+        ? `0 ${Math.round(st.stage_glow_size / 2)}px ${st.stage_glow_size}px -${Math.round(st.stage_glow_size * 0.35)}px ${rgba(st.stage_glow_color || st.stage_b, st.stage_glow_strength)}`
+        : "0 0 0 0 transparent";
+    return {
+        "--hx-bg": st.bg, "--hx-em": st.em,
+        "--st-a": st.stage_a, "--st-b": st.stage_b, "--st-c": st.stage_c, "--st-dur": `${st.stage_speed}s`,
+        "--cta-bg": st.cta_bg, "--cta-fg": st.cta_fg, "--cta2": st.cta2, "--cta-r": CTA_SHAPES[st.cta_shape],
+        "--cta-glow": ctaGlow, "--st-glow": stageGlow,
     };
 }
 
@@ -659,11 +704,7 @@ export default function HeroFullscreen({ slides = [], priority = false, testId =
             ref={heroRef}
             data-testid={testId}
             className={`hx-hero ${light ? "hx-light" : ""} hx-stage-${st.stage_anim} ${st.cta_shine ? "" : "hx-noshine"} ${paused ? "is-paused" : ""} ${n && !String(slides[idx]?.title || "").trim() ? "is-art" : ""}`}
-            style={{
-                "--hx-bg": st.bg, "--hx-em": st.em,
-                "--st-a": st.stage_a, "--st-b": st.stage_b, "--st-c": st.stage_c, "--st-dur": `${st.stage_speed}s`,
-                "--cta-bg": st.cta_bg, "--cta-fg": st.cta_fg, "--cta2": st.cta2, "--cta-r": CTA_SHAPES[st.cta_shape],
-            }}
+            style={heroStyleVars(st)}
             aria-roledescription="carousel"
             aria-label="Latest from Oakbridge"
             // No pause on mouse hover (removed Oct 2026 — the mouse rests on the
