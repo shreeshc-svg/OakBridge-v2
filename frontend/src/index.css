@@ -740,11 +740,9 @@ body:has(.hx-top) .hdr:not(.is-solid):not(:hover):not(:focus-within) [data-testi
   -webkit-mask-image:linear-gradient(to top, #000 0%, transparent 85%); mask-image:linear-gradient(to top, #000 0%, transparent 85%);
   animation:hx-gridmove 6s linear infinite}
 .st-title{font-family:"Public Sans", ui-sans-serif, system-ui, sans-serif; font-weight:700; letter-spacing:-.02em; line-height:1.1;
-  font-size:clamp(28px, 3.4vw, 48px); color:transparent; -webkit-background-clip:text; background-clip:text;
+  font-size:clamp(24px, 2.2vw, 30px);  /* = the eBook banner heading */ color:transparent; -webkit-background-clip:text; background-clip:text;
   background-image:linear-gradient(100deg, #fff 0%, #fff 40%, #7dd3fc 50%, #fff 60%, #fff 100%); background-size:200% 100%;
   animation:hx-shine 7s linear infinite}
-.st-rule{width:72px; height:3px; margin:16px auto 0; border-radius:3px;
-  background:linear-gradient(90deg, #CC0033, #F59E0B, #38bdf8); background-size:200% 100%; animation:hx-shine 4s linear infinite}
 /* Badge: a comet of light orbits the border (a spinning conic gradient behind
    an inner fill), and the shield's tick draws in once the strip is in view. */
 .st-badge{position:relative; isolation:isolate; overflow:hidden; display:inline-flex; align-items:center; gap:9px;

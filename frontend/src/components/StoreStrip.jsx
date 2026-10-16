@@ -77,20 +77,23 @@ export default function StoreStrip({ stores = [], title = "", subtitle = "", spe
             ref={sectionRef}
             data-testid="store-strip"
             aria-label={title || "Also available on"}
-            className={`st-strip px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-14 md:py-20 ${inView ? "is-in" : ""}`}
+            className={`st-strip px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 py-10 md:py-12 ${inView ? "is-in" : ""}`}
             style={{ "--accent": "#38bdf8" }}
         >
             {/* Same moving backdrop as the hero (aurora + perspective grid),
                 so the strip reads as part of the same dark opening band. */}
             <div className="st-aurora" aria-hidden="true" />
             <div className="st-grid" aria-hidden="true" />
-            <div className="st-inner">
-                <div className="text-center st-reveal" style={{ "--d": "0s" }}>
+            {/* One row on desktop — text left, logos right — at the eBook
+                banner's height (same py-10 md:py-12). Stacks on phones. */}
+            <div className="st-inner flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 lg:gap-10">
+                <div className="flex-none text-center lg:text-left">
+                <div className="st-reveal" style={{ "--d": "0s" }}>
                     {/* A light runs round the pill's border and the tick
                         draws itself — deliberately not the hero's pulsing-dot
                         pill, so the two sections don't repeat each other. */}
                     <span className="st-badge">
-                        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
                             <path d="M12 2.5l7.5 3v6c0 4.6-3.2 8.4-7.5 10-4.3-1.6-7.5-5.4-7.5-10v-6z" fill="none" stroke="#38bdf8" strokeWidth="1.6" strokeLinejoin="round" />
                             <path className="st-tick" d="M8.2 12.3l2.6 2.6 5-5.2" fill="none" stroke="#F59E0B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                         </svg>
@@ -98,15 +101,17 @@ export default function StoreStrip({ stores = [], title = "", subtitle = "", spe
                     </span>
                 </div>
                 {title && (
-                    <h2 className="st-title st-reveal mt-5 text-center" style={{ "--d": ".1s" }}>{title}</h2>
+                    <h2 className="st-title st-reveal mt-3" style={{ "--d": ".1s" }}>{title}</h2>
                 )}
-                <div className="st-rule st-reveal" style={{ "--d": ".2s" }} aria-hidden="true" />
                 {subtitle && (
-                    <p className="st-reveal text-center text-sm md:text-base text-white/75 mt-4" style={{ "--d": ".25s" }}>{subtitle}</p>
+                    <p className="st-reveal text-sm text-white/75 mt-2" style={{ "--d": ".2s" }}>{subtitle}</p>
                 )}
+                </div>
+                {/* flex-1 min-w-0: the logo area takes the rest of the row and
+                    may shrink, so the marquee measures the space it really has. */}
                 <div
                     ref={wrapRef}
-                    className={`relative overflow-hidden mt-10 md:mt-12 py-3 ${scroll ? "st-fade" : ""}`}
+                    className={`relative overflow-hidden flex-1 min-w-0 py-2 ${scroll ? "st-fade" : ""}`}
                     onMouseEnter={() => setPaused(true)}
                     onMouseLeave={() => setPaused(false)}
                     onTouchStart={() => setPaused(true)}
@@ -115,15 +120,15 @@ export default function StoreStrip({ stores = [], title = "", subtitle = "", spe
                     <style>{`@keyframes oakStores{from{transform:translateX(0)}to{transform:translateX(-50%)}}`}</style>
                     <ul
                         ref={trackRef}
-                        className={`flex items-center ${scroll ? "w-max" : "flex-wrap justify-center gap-y-5 md:gap-y-6"}`}
+                        className={`flex items-center ${scroll ? "w-max" : "flex-wrap justify-center lg:justify-end gap-y-4"}`}
                         style={scroll ? { animation: `oakStores ${dur}s linear infinite`, animationPlayState: paused ? "paused" : "running" } : undefined}
                     >
                         {loop.map((s, i) => (
                             <li
                                 key={`${s.id || s.name}-${i}`}
                                 aria-hidden={i >= items.length ? "true" : undefined}
-                                className="flex-none px-2.5 md:px-4 st-reveal"
-                                style={{ "--d": `${0.35 + (i % items.length) * 0.12}s` }}
+                                className="flex-none px-2 md:px-2.5 st-reveal"
+                                style={{ "--d": `${0.3 + (i % items.length) * 0.12}s` }}
                             >
                                 {/* li = entrance, st-float = idle bob (staggered so
                                     the tiles never move in lockstep), st-tile =
@@ -133,13 +138,13 @@ export default function StoreStrip({ stores = [], title = "", subtitle = "", spe
                                     legible on the dark band; mix-blend-multiply
                                     melts a logo uploaded on plain white into it. */}
                                 <div className="st-float" style={{ "--f": `${(i % items.length) * -1.3}s` }}>
-                                    <div className="st-tile w-36 h-20 sm:w-44 sm:h-24 md:w-56 md:h-28 flex items-center justify-center px-5 md:px-7">
+                                    <div className="st-tile w-36 h-16 md:w-44 md:h-20 flex items-center justify-center px-4 md:px-5">
                                         <img
                                             src={mediaUrl(s.logo)}
                                             alt={i >= items.length ? "" : (s.alt || s.name || "")}
                                             loading="lazy"
                                             decoding="async"
-                                            className="relative z-[1] max-h-10 sm:max-h-12 md:max-h-14 max-w-full w-auto object-contain mix-blend-multiply"
+                                            className="relative z-[1] max-h-9 md:max-h-11 max-w-full w-auto object-contain mix-blend-multiply"
                                         />
                                     </div>
                                 </div>
