@@ -286,6 +286,11 @@ export default function AdminPages() {
                             <TextSlotRow label="Label above the quote — type - to hide" value={site.home_hero_quote_label} defaultValue="Featured Publication" onSave={(v) => saveSite("home_hero_quote_label", v)} />
                             <TextSlotRow label="Quote on the hero photo — type - to hide" value={site.home_hero_quote} defaultValue={'"A publisher\'s job is to ask the question the classroom has not yet thought of."'} onSave={(v) => saveSite("home_hero_quote", v)} multiline />
                             <TextSlotRow label="Torch button on the hero photo (links to the Bookstore)" value={site.home_hero_torch_cta} defaultValue="Find your next read" onSave={(v) => saveSite("home_hero_torch_cta", v)} />
+                            <div className="overline !text-[10px] mt-4">Bottom of the hero photo (desktop) — type - to hide a line</div>
+                            <TextSlotRow label="Bottom label" value={site.home_hero_bottom_label} defaultValue="New this season" onSave={(v) => saveSite("home_hero_bottom_label", v)} />
+                            <TextSlotRow label="Bottom text" value={site.home_hero_bottom_text} defaultValue="Fresh titles in Law, Tax and English — straight from the press." onSave={(v) => saveSite("home_hero_bottom_text", v)} multiline />
+                            <TextSlotRow label="Bottom button" value={site.home_hero_bottom_cta} defaultValue="See new releases" onSave={(v) => saveSite("home_hero_bottom_cta", v)} />
+                            <TextSlotRow label="Bottom button link — a page on this site, e.g. /books?category=law" value={site.home_hero_bottom_link} defaultValue="/books?new_release=true" onSave={(v) => saveSite("home_hero_bottom_link", v)} />
                         </div>
                     </div>
                     <div className="overline !text-[10px] mt-6 mb-2">Hero text</div>

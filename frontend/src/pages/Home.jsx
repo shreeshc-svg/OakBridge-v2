@@ -488,6 +488,42 @@ export default function Home() {
                                     {site.home_hero_torch_cta || "Find your next read"} <span aria-hidden="true">→</span>
                                 </Link>
                             </div>
+                            {/* Second text block at the BOTTOM of the photo, same
+                                style as the top one (Admin → Pages → Main hero,
+                                "bottom" rows; "-" hides a line). Desktop only
+                                (lg, where the photo is 720px tall): on phones and
+                                tablets the photo is 260–420px and two blocks
+                                would overlap. The link must be one of our own
+                                pages ("/…"); anything else falls back to new
+                                releases, so a typo can't send shoppers off-site. */}
+                            {(() => {
+                                const show = (v) => (v || "").trim() !== "-";
+                                const label = site.home_hero_bottom_label || "New this season";
+                                const text = site.home_hero_bottom_text || "Fresh titles in Law, Tax and English — straight from the press.";
+                                const cta = site.home_hero_bottom_cta || "See new releases";
+                                const raw = (site.home_hero_bottom_link || "").trim();
+                                // No "//" or "/\\" start: browsers read both as another site.
+                                const to = /^\/(?![/\\])[^\s\\]*$/.test(raw) ? raw : "/books?new_release=true";
+                                if (![site.home_hero_bottom_label, site.home_hero_bottom_text, site.home_hero_bottom_cta].some(show)) return null;
+                                return (
+                                    <div className="hidden lg:block absolute bottom-8 left-8 right-8 z-[2] text-[#FFFFFF]" data-testid="hero-torch-bottom">
+                                        {show(site.home_hero_bottom_label) && <div className="overline !text-white/60">{label}</div>}
+                                        {show(site.home_hero_bottom_text) && (
+                                            <div className="font-serif text-xl sm:text-2xl mt-2 leading-tight">{text}</div>
+                                        )}
+                                        {show(site.home_hero_bottom_cta) && (
+                                            <Link
+                                                to={to}
+                                                onClick={() => track("hero_bookstore_click", { via: "torch", where: "bottom_cta" })}
+                                                data-testid="hero-torch-cta-bottom"
+                                                className="ht-cta mt-4 sm:mt-6"
+                                            >
+                                                {cta} <span aria-hidden="true">→</span>
+                                            </Link>
+                                        )}
+                                    </div>
+                                );
+                            })()}
                         </HeroTorch>
                     </div>
                 </div>
