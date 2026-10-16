@@ -278,6 +278,9 @@ export default function AdminPages() {
 
                     <div className="overline !text-[10px] mt-6 mb-2">Main hero</div>
                     <SlotRow label="Hero image" value={site.home_hero} onSave={(v) => saveSite("home_hero", v)} />
+                    <div className="mt-3">
+                        <TextSlotRow label="Torch button on the hero photo (links to the Bookstore)" value={site.home_hero_torch_cta} defaultValue="Find your next read" onSave={(v) => saveSite("home_hero_torch_cta", v)} />
+                    </div>
                     <div className="overline !text-[10px] mt-6 mb-2">Hero text</div>
                     <div className="space-y-3">
                         <TextSlotRow label="Overline (Est. 2017 · …)" value={site.home_hero_overline} defaultValue={CONTENT_DEFAULTS.home_hero_overline} onSave={(v) => saveSite("home_hero_overline", v)} />

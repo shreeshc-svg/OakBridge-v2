@@ -6,6 +6,8 @@ import { Link } from "react-router-dom";
 import { ArrowUpRight, BookOpen, GraduationCap, Building2, Calendar, Cpu, Briefcase, Users, ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
 import BestsellerCarousel from "../components/BestsellerCarousel";
 import StoreStrip from "../components/StoreStrip";
+import HeroTorch from "../components/HeroTorch";
+import { track } from "../lib/analytics";
 import BookRail from "../components/BookRail";
 import {
     fetchBooks,
@@ -453,18 +455,30 @@ export default function Home() {
                             className="absolute inset-0 w-full h-full object-cover"
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-[#002B5C]/95 via-[#002B5C]/30 to-transparent" />
-                        <div className="absolute top-6 right-6 bg-[#CC0033] text-white font-mono uppercase tracking-widest text-[10px] px-3 py-1.5">
-                            Spring 2026 catalogue
-                        </div>
-                        <div className="absolute bottom-8 left-8 right-8 text-[#FFFFFF]">
-                            <div className="overline !text-white/60">
-                                Featured Publication
+                        {/* Reading-lamp torch over the photo (components/HeroTorch.jsx).
+                            Badge, quote and CTA ride on top of the dark layer. */}
+                        <HeroTorch to="/books">
+                            <div className="absolute top-6 right-6 z-[2] bg-[#CC0033] text-white font-mono uppercase tracking-widest text-[10px] px-3 py-1.5">
+                                Spring 2026 catalogue
                             </div>
-                            <div className="font-serif text-2xl mt-2 leading-tight">
-                                "A publisher's job is to ask the question the
-                                classroom has not yet thought of."
+                            <div className="absolute bottom-8 left-8 right-8 z-[2] text-[#FFFFFF]">
+                                <div className="overline !text-white/60">
+                                    Featured Publication
+                                </div>
+                                <div className="font-serif text-xl sm:text-2xl mt-2 leading-tight">
+                                    "A publisher's job is to ask the question the
+                                    classroom has not yet thought of."
+                                </div>
+                                <Link
+                                    to="/books"
+                                    onClick={() => track("hero_bookstore_click", { via: "torch", where: "cta" })}
+                                    data-testid="hero-torch-cta"
+                                    className="ht-cta mt-4 sm:mt-6"
+                                >
+                                    {site.home_hero_torch_cta || "Find your next read"} <span aria-hidden="true">→</span>
+                                </Link>
                             </div>
-                        </div>
+                        </HeroTorch>
                     </div>
                 </div>
             </section>
