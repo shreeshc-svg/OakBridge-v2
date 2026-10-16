@@ -108,10 +108,14 @@ export default function StoreStrip({ stores = [], title = "", subtitle = "", spe
                 )}
                 </div>
                 {/* flex-1 min-w-0: the logo area takes the rest of the row and
-                    may shrink, so the marquee measures the space it really has. */}
+                    may shrink, so the marquee measures the space it really has.
+                    overflow-hidden (needed for the sideways marquee) also clips
+                    vertically, so the tiles' bob + hover lift + shadow need room:
+                    py-7 gives 28px above and below, -my-5 takes most of it back
+                    so the strip is no taller than before. */}
                 <div
                     ref={wrapRef}
-                    className={`relative overflow-hidden flex-1 min-w-0 py-2 ${scroll ? "st-fade" : ""}`}
+                    className={`relative overflow-hidden flex-1 min-w-0 py-7 -my-5 ${scroll ? "st-fade" : ""}`}
                     onMouseEnter={() => setPaused(true)}
                     onMouseLeave={() => setPaused(false)}
                     onTouchStart={() => setPaused(true)}
