@@ -469,12 +469,6 @@ export default function Home() {
                 </div>
             </section>
 
-            {/* E-book platform band. No `order` style, so it ties with the hero at 0
-                and DOM order keeps it directly beneath — visible immediately without
-                displacing the admin-managed section ordering below. Hidden until an
-                `ebook_url` is set in admin. */}
-            <EbookCta variant="banner" site={site} />
-
             {/* ============== BUSINESS VERTICALS (prominent, directly after hero) ============== */}
             {!hidden.has("home.businesses") && (
             <section
@@ -621,6 +615,16 @@ export default function Home() {
                 </div>
             </section>
             )}
+
+            {/* E-book platform band — directly below Our Businesses (Oct 2026;
+                it used to sit right under the hero). It takes the businesses
+                section's `order` and comes after it in the DOM, so the tie keeps
+                it beneath wherever the admin drags Our Businesses, and it stays
+                in that slot when Our Businesses is hidden. Hidden until an
+                `ebook_url` is set in admin. */}
+            <div style={{ order: homeOrd("businesses") }}>
+                <EbookCta variant="banner" site={site} />
+            </div>
 
             {/* ============== CATEGORIES BENTO (Imprints) ============== */}
             {!hidden.has("home.imprints") && (
