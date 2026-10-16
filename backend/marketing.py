@@ -1399,6 +1399,23 @@ async def refresh_campaign_stats(cid: str) -> dict:
         agg[fld.replace("_at", "")] = await db.mk_sends.count_documents({"campaign_id": cid, fld: {"$exists": True}})
     agg["bounced"] = counts.get("bounced", 0)
     agg["complained"] = counts.get("complained", 0)
+    # The gap between "sent" and "delivered + bounced". A soft (Transient /
+    # Undetermined) bounce keeps status "sent" — it is not a hard bounce — and
+    # never gets delivered_at, so it used to vanish from every card: e.g. 186
+    # sent, 181 delivered, 0.00% bounced, 5 unexplained. Counted separately so
+    # the report adds up: delivered + bounced + soft_bounced + no_report = sent.
+    # An open or click proves the mail arrived even when SES's Delivery
+    # event never reached us, so it counts as delivered (and is never left
+    # in "no report").
+    unproven = {"delivered_at": {"$exists": False}, "opened_at": {"$exists": False}}
+    agg["delivered"] = await db.mk_sends.count_documents(
+        {"campaign_id": cid, "$or": [{"delivered_at": {"$exists": True}}, {"opened_at": {"$exists": True}}]})
+    agg["soft_bounced"] = await db.mk_sends.count_documents(
+        {"campaign_id": cid, "status": "sent", "bounce_type": {"$exists": True}, **unproven})
+    # Sent, but SES has reported nothing back yet (normal for a few minutes;
+    # after a day it means a missed Delivery event, not a failed send).
+    agg["no_report"] = await db.mk_sends.count_documents(
+        {"campaign_id": cid, "status": "sent", "bounce_type": {"$exists": False}, **unproven})
     if camp["channel"] == "whatsapp":
         wa = {}
         async for r in db.wa_messages.aggregate([{"$match": {"campaign_id": cid}}, {"$group": {"_id": "$status", "n": {"$sum": 1},
@@ -3262,7 +3279,11 @@ async def adm_report(cid: str):
                 h = s[f][:13]
                 timeline.setdefault(h, {"opened": 0, "clicked": 0})
                 timeline[h][f[:-3]] += 1
-    problems = await db.mk_sends.find({"campaign_id": cid, "status": {"$in": ["bounced", "complained", "failed", "blocked"]}},
+    # Soft bounces too (status stays "sent"), so every non-delivered address
+    # can be seen, not just the hard ones.
+    problems = await db.mk_sends.find({"campaign_id": cid, "$or": [
+                                          {"status": {"$in": ["bounced", "complained", "failed", "blocked"]}},
+                                          {"status": "sent", "bounce_type": {"$exists": True}, "delivered_at": {"$exists": False}}]},
                                       {"_id": 0, "to": 1, "status": 1, "bounce_type": 1, "error": 1}).limit(200).to_list(200)
     skipped = [{"reason": r["_id"] or "skipped", "n": r["n"]} async for r in db.mk_sends.aggregate([
         {"$match": {"campaign_id": cid, "status": "skipped"}}, {"$group": {"_id": "$error", "n": {"$sum": 1}}}, {"$sort": {"n": -1}}])]
@@ -3277,6 +3298,7 @@ async def adm_report(cid: str):
                       "click": core.rate(stats.get("clicked", 0), stats.get("delivered", 0) or stats.get("sent", 0)),
                       "ctor": core.rate(stats.get("clicked", 0), stats.get("opened", 0)),
                       "bounce": core.rate(stats.get("bounced", 0), stats.get("sent", 0)),
+                      "soft_bounce": core.rate(stats.get("soft_bounced", 0), stats.get("sent", 0)),
                       "unsubscribe": core.rate(stats.get("unsubscribed", 0), stats.get("delivered", 0) or stats.get("sent", 0))}}
 
 
