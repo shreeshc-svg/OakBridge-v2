@@ -29,6 +29,17 @@ const TABS = [["dash", "Dashboard"], ["growth", "Growth"], ["campaigns", "Campai
 const STATUS_COLORS = { verified: "#15803D", valid: "#38bdf8", risky: "#F59E0B", invalid: "#CC0033", suppressed: "#6B7280", unknown: "#D1D5DB" };
 const SELECTABLE = [["verified", "Verified", "proven: confirmed account or delivered before"],
     ["valid", "Valid", "mailbox checked"], ["risky", "Risky", "follows the risk rules in Settings"]];
+// What a campaign to a static list would do, by the current risky-address
+// rules (backend adm_lists): confirmed + risky sent + risky sent last; skipped.
+const listReach = (l) => {
+    const r = l.risky && typeof l.risky === "object" ? l.risky : { send: 0, tail: 0, skip: 0 };
+    const parts = [`${l.confirmed ?? l.sendable ?? 0} confirmed`];
+    if (r.send) parts.push(`${r.send} unconfirmed sent`);
+    if (r.tail) parts.push(`${r.tail} unconfirmed sent last`);
+    const head = `${l.sendable ?? 0} would be emailed (${parts.join(" + ")})`;
+    return r.skip ? `${head} · ${r.skip} skipped by your risky-address rules` : head;
+};
+
 const RISK_LABEL = { role: "role address (info@, admin@)", catch_all: "domain accepts any address (catch-all)", unconfirmed: "mailbox unconfirmed" };
 const ACTION_LABEL = { send: "sent", tail: "sent last — stops itself if it bounces", skip: "skipped" };
 const CAMP_TONE = { preparing: "border-[#7c3aed] text-[#7c3aed]", draft: "border-[#9CA3AF] text-[#4B5563]", scheduled: "border-[#38bdf8] text-[#0369a1]", sending: "border-[#F59E0B] text-[#B4750F]",
@@ -1402,7 +1413,7 @@ function Lists() {
                             <li key={l.id} className="py-2 flex items-center gap-3">
                                 {canDelete(user) && <input type="checkbox" aria-label={`Select ${l.name}`} checked={sel.sel.has(l.id)} onChange={() => sel.toggle(l.id)} />}
                                 <div className="flex-1"><b>{l.name}</b> <span className="text-xs text-[#6B7280]">{l.kind}</span>
-                                    <div className="text-xs text-[#4B5563]">{l.count ?? 0} contacts{l.kind === "static" ? ` · ${l.sendable ?? 0} confirmed${l.risky ? ` · ${l.risky} unconfirmed (sent only if your risky-address rule in Settings allows)` : ""}` : ""}{l.rules?.length ? ` · ${l.rules.map((r) => r.type).join(" + ")}` : ""}</div></div>
+                                    <div className="text-xs text-[#4B5563]">{l.count ?? 0} contacts{l.kind === "static" ? ` · ${listReach(l)}` : ""}{l.rules?.length ? ` · ${l.rules.map((r) => r.type).join(" + ")}` : ""}</div></div>
                                 {l.kind === "static" && <button type="button" className="text-xs underline" onClick={() => reverify(l.id)}>Re-verify</button>}
                                 {canDelete(user) && <button type="button" aria-label="Delete list" onClick={() => delLists([l.id])}><Trash2 size={14} className="text-[#CC0033]" /></button>}
                             </li>
@@ -1970,7 +1981,7 @@ function Settings() {
                     <label className="flex items-center gap-2"><input type="checkbox" checked={!!s.double_opt_in} disabled={!su} onChange={(e) => setS({ ...s, double_opt_in: e.target.checked })} />Double opt-in for website sign-ups (they confirm by email first)</label>
                     <label className="flex items-start gap-2"><input type="checkbox" className="mt-1" checked={!!s.include_role_addresses} disabled={!su} onChange={(e) => setS({ ...s, include_role_addresses: e.target.checked })} data-testid="mk-role-valid" />
                         <span>Treat role addresses (info@, contact@, admin@…) as <b>valid</b> <span className="text-xs text-[#6B7280]">— right when schools, colleges and firms buy from you. Contacts are re-rated as soon as you save.</span></span></label>
-                    {F("max_bounce", "Auto-pause when bounces exceed (0.02 = 2%)", { type: "number", step: "0.005" })}
+                    {F("max_bounce", "Auto-pause when bounces exceed (0.02 = 2%; max 0.04 — AWS reviews your account at 5%)", { type: "number", step: "0.005", max: "0.04" })}
                     <div className="border-t border-[#E5E7EB] pt-2 space-y-2">
                         <label className="flex items-center gap-2"><input type="checkbox" checked={!!s.ses_validation} disabled={!su} onChange={(e) => setS({ ...s, ses_validation: e.target.checked })} data-testid="mk-ses-validation" />
                             Check every new address with Amazon SES Email Validation before mailing it (≈ $0.01 per address)</label>
@@ -1990,7 +2001,7 @@ function Settings() {
                                 </select>
                             </label>
                         ))}
-                        {F("tail_max_bounce", "“Send last” stops itself above this bounce rate (0.03 = 3%)", { type: "number", step: "0.005" })}
+                        {F("tail_max_bounce", "“Send last” stops itself above this bounce rate (0.03 = 3%; max 0.04)", { type: "number", step: "0.005", max: "0.04" })}
                         <div className="text-sm font-medium text-[#002B5C] pt-1">Confidence score (0–100)</div>
                         <div className="grid grid-cols-2 gap-2">
                             {F("score_valid", "Valid from", { type: "number", min: "50", max: "90" })}

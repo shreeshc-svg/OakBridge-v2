@@ -114,6 +114,8 @@ RECONFIRM_BLOCKS = [
     {"type": "button", "label": "Yes, keep me subscribed", "url": "https://www.oakbridge.in/"},
 ]
 SES_CHECK_TTL_DAYS = 180  # a mailbox verdict is reused for 6 months, never paid for twice
+MAX_BOUNCE_CEILING = 0.04  # our stops must trip before AWS's 5% account review (values saved above it are capped when used)
+NO_VERDICT_RETRY_DAYS = 30  # SES answered without a verdict: ask again after this, not on every pass
 GIF = (b"GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xff\xff\xff!\xf9\x04\x01\x00\x00\x00\x00,"
        b"\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;")
 
@@ -488,11 +490,21 @@ async def _ses_cached(norms: list) -> dict:
     fresh = (_now() - timedelta(days=SES_CHECK_TTL_DAYS)).isoformat()
     out = {}
     async for d in db.mk_ses_checks.find({"email_norm": {"$in": norms}, "at": {"$gte": fresh}}, {"_id": 0}):
+        if d.get("no_verdict"):
+            continue  # asked, but SES gave no verdict: not "checked" (see _recent_no_verdict)
         # Re-derive from the stored SES levels so a rule fix (e.g. "mailbox
         # does not exist" -> invalid) applies to verdicts already paid for.
         d["status"] = core.ses_status(d.get("overall", ""), d.get("mailbox", "")) or d.get("status")
         out[d["email_norm"]] = d
     return out
+
+
+async def _recent_no_verdict(norms: list) -> set:
+    """Addresses SES answered WITHOUT a verdict in the last
+    NO_VERDICT_RETRY_DAYS: already paid for, so not asked (or billed) again yet."""
+    retry = (_now() - timedelta(days=NO_VERDICT_RETRY_DAYS)).isoformat()
+    return {d["email_norm"] async for d in db.mk_ses_checks.find(
+        {"email_norm": {"$in": norms}, "no_verdict": True, "at": {"$gte": retry}}, {"_id": 0, "email_norm": 1})}
 
 
 async def ses_check(emails: list, *, refresh: bool = False) -> dict:
@@ -513,7 +525,8 @@ async def ses_check(emails: list, *, refresh: bool = False) -> dict:
     if not st.get("ses_validation") or not ses_validation_supported():
         return out
     cap = _cap(st)
-    todo = [(n, e) for n, e in norms.items() if n not in out]
+    skip = set() if refresh else await _recent_no_verdict(list(norms))
+    todo = [(n, e) for n, e in norms.items() if n not in out and n not in skip]
     sem = asyncio.Semaphore(4)   # gentle on the API; throttling is retried below
     stop = {"why": ""}
     client = _ses() if todo else None  # boto3 clients are thread-safe; one per batch
@@ -547,7 +560,15 @@ async def ses_check(emails: list, *, refresh: bool = False) -> dict:
                 return
             status, reasons = core.ses_verdict(resp)
             if not status:
-                return  # billed but no verdict: leave unchecked rather than guess
+                # Billed but no verdict. Remember that we asked (status
+                # "unknown") so the same address is not paid for again on every
+                # re-verify / campaign / sweep — until Oct 2026 nothing was
+                # stored and each pass re-billed it. Retried after
+                # NO_VERDICT_RETRY_DAYS; never mailed meanwhile (unknown = not sent).
+                doc = {"email_norm": n, "status": "unknown", "no_verdict": True, "reasons": ["SES gave no verdict"],
+                       "at": _iso(), **core.ses_details(resp)}
+                await db.mk_ses_checks.update_one({"email_norm": n}, {"$set": doc}, upsert=True)
+                return
             doc = {"email_norm": n, "status": status, "reasons": reasons, "at": _iso(), **core.ses_details(resp)}
             await db.mk_ses_checks.update_one({"email_norm": n}, {"$set": doc}, upsert=True)
             out[n] = doc
@@ -1381,7 +1402,7 @@ async def _run_campaign(cid: str) -> None:
                 tail_base = {"campaign_id": cid, "tail": True}
                 t_sent = await db.mk_sends.count_documents({**tail_base, "status": {"$in": ["sent", "bounced", "complained"]}})
                 t_bounced = await db.mk_sends.count_documents({**tail_base, "status": "bounced"})
-                if core.tail_should_stop(t_sent, t_bounced, max_rate=float(st.get("tail_max_bounce") or 0.03)):
+                if core.tail_should_stop(t_sent, t_bounced, max_rate=min(float(st.get("tail_max_bounce") or 0.03), MAX_BOUNCE_CEILING)):
                     r = await db.mk_sends.update_many({**tail_base, "status": "queued"},
                                                       {"$set": {"status": "skipped", "error": "catch-all tail stopped: too many bounces"}})
                     if r.modified_count:
@@ -1389,7 +1410,7 @@ async def _run_campaign(cid: str) -> None:
                 since = camp.get("recovered_at")
                 s_ = await _window_stats(cid, since) if since else (camp.get("stats") or {})
                 why = core.should_pause(s_.get("sent", 0), s_.get("bounced", 0), s_.get("complained", 0),
-                                        max_bounce=float(st.get("max_bounce") or 0.02))
+                                        max_bounce=min(float(st.get("max_bounce") or 0.02), MAX_BOUNCE_CEILING))
                 if why and not since:
                     await _recover(cid, why)   # first spike: clean the queue and carry on
                 elif why:
@@ -1866,8 +1887,12 @@ async def adm_put_settings(body: SettingsBody, user: dict = Depends(require_supe
     for k in ("from_email", "reply_to"):
         if upd.get(k) and not core.check_syntax(upd[k])["ok"]:
             raise HTTPException(status_code=400, detail=f"{k.replace('_', ' ')} is not a valid email address")
-    if "max_bounce" in upd and not (0.005 <= upd["max_bounce"] <= 0.05):
-        raise HTTPException(status_code=400, detail="Auto-pause must be between 0.5% and 5% bounces")
+    # AWS places an SES account under review at a 5% bounce rate and may
+    # pause it at 10%. Our own stops must trip BEFORE that, so 4% is the
+    # ceiling — a setting of 5% only paused a campaign once AWS was already
+    # reviewing the account (and the receipts share that account).
+    if "max_bounce" in upd and not (0.005 <= upd["max_bounce"] <= MAX_BOUNCE_CEILING):
+        raise HTTPException(status_code=400, detail="Auto-pause must be between 0.5% and 4% bounces (AWS reviews the account at 5%)")
     if "ses_budget_inr" in upd and not (0 <= upd["ses_budget_inr"] <= 100000):
         raise HTTPException(status_code=400, detail="Monthly mailbox-check budget must be between ₹0 and ₹1,00,000")
     if "usd_inr" in upd and not (50 <= upd["usd_inr"] <= 200):
@@ -1883,8 +1908,8 @@ async def adm_put_settings(body: SettingsBody, user: dict = Depends(require_supe
             raise HTTPException(status_code=400, detail="Inactive / retire counts must be 0–100 (0 = off)")
     if upd.get("inactive_after") and upd.get("sunset_after") and upd["sunset_after"] < upd["inactive_after"]:
         raise HTTPException(status_code=400, detail="'Stop mailing after' must be at least 'Mark inactive after'")
-    if "tail_max_bounce" in upd and not (0.005 <= upd["tail_max_bounce"] <= 0.1):
-        raise HTTPException(status_code=400, detail="Tail bounce limit must be between 0.5% and 10%")
+    if "tail_max_bounce" in upd and not (0.005 <= upd["tail_max_bounce"] <= MAX_BOUNCE_CEILING):
+        raise HTTPException(status_code=400, detail="'Send last' bounce limit must be between 0.5% and 4% (AWS reviews the account at 5%)")
     if "risk_policy" in upd:
         pol = upd["risk_policy"] or {}
         if any(k not in core.RISK_KINDS or v not in ("send", "tail", "skip") for k, v in pol.items()):
@@ -2749,20 +2774,28 @@ class ListBody(BaseModel):
 @admin_router.get("/lists")
 async def adm_lists():
     lists = await db.mk_lists.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    pol = _policy(await get_settings(), {})
     for lst in lists:
         if lst.get("kind") == "segment":
             flt = await audience_filter({"channel": "email", "audience": {"rules": lst.get("rules") or []}})
             lst["count"] = await db.mk_contacts.count_documents(flt)
         else:
             lst["count"] = await db.mk_contacts.count_documents({"lists": lst["id"]})
-            lst["sendable"] = await db.mk_contacts.count_documents({"lists": lst["id"], "email_consent.status": "subscribed",
-                                                                    "suppressed": {"$in": [None, ""]}, "email_status": {"$in": ["verified", "valid"]}})
-            # The rest of the subscribed, unsuppressed contacts are "risky"
-            # (mostly Gmail/Yahoo/Rediff, whose mailboxes AWS cannot confirm).
-            # Shown so "2 can be emailed" is not read as "475 are bad": whether
-            # they go depends on the risky-address rule in Settings.
-            lst["risky"] = await db.mk_contacts.count_documents({"lists": lst["id"], "email_consent.status": "subscribed",
-                                                                 "suppressed": {"$in": [None, ""]}, "email_status": "risky"})
+            # What a campaign to this list would actually do, by the CURRENT
+            # risky-address rules in Settings — not only verified/valid (which
+            # read "2 can be emailed" while the rules were sending 475).
+            confirmed, by_action = 0, {"send": 0, "tail": 0, "skip": 0}
+            async for r in db.mk_contacts.aggregate([
+                    {"$match": {"lists": lst["id"], "email_consent.status": "subscribed", "suppressed": {"$in": [None, ""]}}},
+                    {"$group": {"_id": {"s": "$email_status", "k": "$risk_kind"}, "n": {"$sum": 1}}}]):
+                stt, kind = (r["_id"] or {}).get("s"), (r["_id"] or {}).get("k") or "unconfirmed"
+                if stt in ("verified", "valid"):
+                    confirmed += r["n"]
+                elif stt == "risky":
+                    by_action[pol.get(kind, "skip")] += r["n"]
+            lst["sendable"] = confirmed + by_action["send"] + by_action["tail"]
+            lst["confirmed"] = confirmed
+            lst["risky"] = by_action
     return lists
 
 
