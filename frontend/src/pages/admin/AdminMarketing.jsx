@@ -11,6 +11,7 @@ import { useAuth } from "../../context/AuthContext";
 import { isSuperadmin, canDelete } from "../../lib/rbac";
 import { LineChart, BarChart, Funnel, Donut, Kpi, pct, inr } from "../../components/marketing/Charts";
 import { StepsTable, GrowthInsights, OfficeNetwork } from "../../components/marketing/GrowthInsights";
+import { GROWTH_PERIODS, growthPeriod, growthPeriodLabel } from "../../lib/dateRange";
 
 /**
  * Admin → Marketing (backend/marketing.py).
@@ -560,14 +561,19 @@ const pctTxt = (v) => (v == null ? "—" : `${(v * 100).toFixed(v < 0.01 ? 2 : 1
 function Growth({ onOpen }) {
     const { user } = useAuth();
     const su = isSuperadmin(user?.role);
-    const [days, setDays] = useState(30);
+    // Period: a preset (Today … Last year) or a custom from/to — lib/dateRange.
+    const [pkey, setPkey] = useState("30d");
+    const [cFrom, setCFrom] = useState("");
+    const [cTo, setCTo] = useState("");
+    const period = growthPeriod(pkey, { from: cFrom, to: cTo });
+    const pk = period ? `${period.start}_${period.end}` : "";
     const [f, setF] = useState(null);
     const [partners, setPartners] = useState(null);
     const [kinds, setKinds] = useState({});
     const [auto, setAuto] = useState(null);
     const [preview, setPreview] = useState(null);
     const [np, setNp] = useState({ name: "", kind: "author", code: "", discount_percent: 10, email: "" });
-    const loadFunnel = useCallback(() => { mkGrowthFunnel(days).then(setF).catch((e) => toast.error(formatApiError(e))); }, [days]);
+    const loadFunnel = useCallback(() => { if (period) mkGrowthFunnel(period).then(setF).catch((e) => toast.error(formatApiError(e))); }, [pk]); // eslint-disable-line react-hooks/exhaustive-deps
     const loadPartners = useCallback(() => { mkPartners().then((r) => { setPartners(r.partners || []); setKinds(r.kinds || {}); }).catch(() => setPartners([])); }, []);
     const loadAuto = useCallback(() => { mkAutomations().then(setAuto).catch(() => {}); }, []);
     useEffect(loadFunnel, [loadFunnel]);
@@ -593,9 +599,18 @@ function Growth({ onOpen }) {
     return (
         <div className="space-y-6" data-testid="mk-growth">
             <Panel title="Where buyers come from" right={
-                <select className={inp} value={days} onChange={(e) => setDays(Number(e.target.value))}>
-                    {[7, 30, 90, 365].map((d) => <option key={d} value={d}>Last {d} days</option>)}
-                </select>}>
+                <div className="flex flex-wrap items-center gap-2 justify-end">
+                    <select className={inp} value={pkey} onChange={(e) => setPkey(e.target.value)} data-testid="mk-growth-period" aria-label="Period">
+                        {GROWTH_PERIODS.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
+                    </select>
+                    {pkey === "custom" && (
+                        <>
+                            <input type="date" className={inp} value={cFrom} onChange={(e) => setCFrom(e.target.value)} aria-label="From" />
+                            <span className="text-xs text-[#6B7280]">to</span>
+                            <input type="date" className={inp} value={cTo} onChange={(e) => setCTo(e.target.value)} aria-label="To" />
+                        </>
+                    )}
+                </div>}>
                 {!f ? <p className="text-sm text-[#4B5563]">Loading…</p> : (
                     <>
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
@@ -612,12 +627,15 @@ function Growth({ onOpen }) {
                             ))}</tbody>
                         </table></div>
                         <p className="text-xs text-[#6B7280] mt-2">
-                            {f.clamped && <><b className="text-[#002B5C]">Showing {f.since} onwards</b> — visits have only been counted since then, so the period is shortened to match and the rates compare like with like. </>}
+                            <b className="text-[#002B5C]">{growthPeriodLabel({ start: f.since, end: f.until || f.since })}.</b>{" "}
+                            {f.empty
+                                ? <>Visits were not being counted yet in this period (counting began later), so there is nothing to compare. </>
+                                : f.clamped && <>Visits have only been counted since {growthPeriodLabel({ start: f.since, end: f.since })}, so the period starts there and the rates compare like with like. </>}
                             Visits are counted once per browser session without cookies; bots, staff browsers and the office network are excluded, and so are staff accounts' own orders.
                             Orders use the link the buyer first arrived from (remembered for 30 days when they allowed analytics cookies). A partner code wins over everything else.
                         </p>
                         <StepsTable f={f} />
-                        <GrowthInsights days={days} />
+                        <GrowthInsights period={period} />
                         <OfficeNetwork />
                     </>
                 )}

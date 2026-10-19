@@ -26,9 +26,12 @@ function daysBetween(days) {
 }
 
 /** Multi-series line chart over the last `days` days. */
-export function LineChart({ series = {}, keys = [], days = 30, height = 220, labels = {} }) {
+export function LineChart({ series = {}, keys = [], days = 30, height = 220, labels = {}, dates = null }) {
     const [hover, setHover] = useState(null);
-    const xs = useMemo(() => daysBetween(days), [days]);
+    // `dates` (YYYY-MM-DD, oldest first) draws a fixed period such as last
+    // month; without it, the last `days` days up to today.
+    const dkey = dates ? dates.join(",") : "";
+    const xs = useMemo(() => (dates && dates.length ? dates : daysBetween(days)), [days, dkey]); // eslint-disable-line react-hooks/exhaustive-deps
     const max = Math.max(1, ...xs.flatMap((d) => keys.map((k) => series[d]?.[k] || 0)));
     const W = 600;
     const H = 200;

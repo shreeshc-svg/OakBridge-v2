@@ -712,8 +712,10 @@ export const mkExportContacts = (params = {}, format = "xlsx") =>
         .then((r) => downloadBlob(r, `contacts.${format}`));
 export const mkCleanup = (body) => api.post("/admin/marketing/contacts/cleanup", body, { timeout: 300000 }).then((r) => r.data);
 // Growth (growth.py): channels funnel, partner links, automations, Merchant feed.
-export const mkGrowthFunnel = (days = 30) => api.get("/admin/marketing/growth/funnel", { params: { days } }).then((r) => r.data);
-export const mkGrowthInsights = (days = 30) => api.get("/admin/marketing/growth/insights", { params: { days } }).then((r) => r.data);
+// `p`: a number of days, or { start, end } as YYYY-MM-DD (This month, Last month, Custom…).
+const growthParams = (p) => (typeof p === "number" ? { days: p } : p || { days: 30 });
+export const mkGrowthFunnel = (p = 30) => api.get("/admin/marketing/growth/funnel", { params: growthParams(p) }).then((r) => r.data);
+export const mkGrowthInsights = (p = 30) => api.get("/admin/marketing/growth/insights", { params: growthParams(p) }).then((r) => r.data);
 export const mkGrowthSettings = () => api.get("/admin/marketing/growth/settings").then((r) => r.data);
 export const mkSaveGrowthSettings = (office_ips) => api.put("/admin/marketing/growth/settings", { office_ips }).then((r) => r.data);
 export const mkMyIp = () => api.get("/admin/marketing/growth/my-ip").then((r) => r.data);

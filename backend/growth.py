@@ -139,7 +139,7 @@ async def track_visit(request: Request):
     if not b:
         return Response(status_code=204)
     d, attr, channel, ua = b
-    day = _now().strftime("%Y-%m-%d")
+    day = _ist_day()
     key = {"day": day, "channel": channel, "ref": gc.norm_code(attr.get("ref")) if channel == "Partner" else "", "v": VISIT_V}
     await db.visit_stats.update_one(key, {"$inc": {"n": 1}, "$setOnInsert": key}, upsert=True)
     dims = [("device", gc.device_of(ua)), ("landing", gc.landing_key(str(d.get("path") or "/")))]
@@ -179,7 +179,7 @@ async def untrack_visit(body: UnvisitBody, request: Request, user: dict = Depend
         when = when.replace(tzinfo=timezone.utc)
     if not (_now() - timedelta(days=2) <= when <= _now() + timedelta(minutes=5)):
         return {"ok": True, "undone": 0}
-    day = when.astimezone(timezone.utc).strftime("%Y-%m-%d")
+    day = _ist_day(when)
     ua = request.headers.get("user-agent", "")
     attr = {k: str(getattr(body, k) or "")[:120] for k in ("utm_source", "utm_medium", "utm_campaign", "ref", "referrer")}
     attr["in_app"] = gc.in_app(ua)
@@ -212,22 +212,62 @@ async def track_step(request: Request):
     step = str(d.get("step") or "")
     if step not in gc.STEPS:
         return Response(status_code=204)
-    key = {"day": _now().strftime("%Y-%m-%d"), "channel": channel, "step": step}
+    key = {"day": _ist_day(), "channel": channel, "step": step}
     await db.step_stats.update_one(key, {"$inc": {"n": 1}, "$setOnInsert": key}, upsert=True)
     return Response(status_code=204)
 
 
 # --------------------------------------------------------------- funnel ---
-async def _window(days: int) -> tuple:
-    """(start_day, start_iso, clamped). Visits only exist from the day counting
-    began, so the window starts no earlier than that — otherwise 30 days of
-    orders are divided by 4 days of visits and every rate is inflated (the
-    live funnel showed Search at 9.7% this way, Oct 2026)."""
-    days = max(1, min(int(days), 365))
-    want = (_now() - timedelta(days=days)).strftime("%Y-%m-%d")
+IST = timezone(timedelta(hours=5, minutes=30))
+
+
+def _ist_day(dt: Optional[datetime] = None) -> str:
+    """The calendar day in India. Tallies are kept per IST day so "this month"
+    and "yesterday" mean what the team means — a UTC day would put the first
+    5½ hours of every Indian day into the day before."""
+    return (dt or _now()).astimezone(IST).strftime("%Y-%m-%d")
+
+
+def _day(s: Optional[str]) -> Optional[datetime]:
+    try:
+        return datetime.strptime(str(s or ""), "%Y-%m-%d").replace(tzinfo=IST)
+    except ValueError:
+        return None
+
+
+async def _window(days: int = 30, start: Optional[str] = None, end: Optional[str] = None) -> dict:
+    """The period to report, as IST calendar days (inclusive) and the matching
+    UTC instants for orders. Either `start`/`end` (YYYY-MM-DD, from the
+    This month / Last month / Custom pickers) or the last `days` days.
+
+    Visits only exist from the day counting began, so the period starts no
+    earlier than that — otherwise 30 days of orders are divided by 4 days of
+    visits and every rate is inflated (the live funnel showed Search at 9.7%
+    this way, Oct 2026). A period entirely before that is reported as empty
+    rather than silently moved."""
+    today = _day(_ist_day())
+    a, b = _day(start), _day(end)
+    if a is None:
+        days = max(1, min(int(days or 30), 365))
+        a, b = today - timedelta(days=days - 1), today
+    else:
+        b = b or today
+        if a > b:
+            a, b = b, a
+        b = min(b, today)
+        a = max(a, b - timedelta(days=400))
+    want = a.strftime("%Y-%m-%d")
     first = await db.visit_stats.find_one({"v": VISIT_V}, {"_id": 0, "day": 1}, sort=[("day", 1)])
-    start = max(want, first["day"]) if first and first.get("day") else want
-    return start, f"{start}T00:00:00", start != want
+    first_day = first.get("day") if first else None
+    start_day = max(want, first_day) if first_day else want
+    end_day = b.strftime("%Y-%m-%d")
+    lo = _day(start_day)
+    return {
+        "start_day": start_day, "end_day": end_day,
+        "from_iso": lo.astimezone(timezone.utc).isoformat(),
+        "to_iso": (b + timedelta(days=1)).astimezone(timezone.utc).isoformat(),   # exclusive
+        "clamped": start_day != want, "empty": start_day > end_day, "requested": want,
+    }
 
 
 async def _staff() -> tuple:
@@ -242,40 +282,54 @@ async def _staff() -> tuple:
     return ids, emails
 
 
-async def _funnel_orders(start_iso: str) -> list:
+async def _funnel_orders(w: dict) -> list:
+    if w["empty"]:
+        return []
     codes = await _partner_codes()
     ids, emails = await _staff()
     out = []
-    async for o in db.orders.find({"created_at": {"$gte": start_iso}},
+    async for o in db.orders.find({"created_at": {"$gte": w["from_iso"], "$lt": w["to_iso"]}},
                                   {"_id": 0, "attribution": 1, "coupon_code": 1, "payment_status": 1, "total": 1,
                                    "user_id": 1, "email": 1, "created_at": 1}):
         if o.get("user_id") in ids or str(o.get("email") or "").lower() in emails:
             continue
         out.append({"channel": gc.channel_of(o.get("attribution"), o.get("coupon_code") or "", codes),
                     "paid": o.get("payment_status") == "paid", "total": o.get("total"),
-                    "day": str(o.get("created_at") or "")[:10]})
+                    "day": _order_day(o.get("created_at"))})
     return out
 
 
+def _order_day(created_at) -> str:
+    try:
+        return _ist_day(datetime.fromisoformat(str(created_at).replace("Z", "+00:00")))
+    except ValueError:
+        return str(created_at or "")[:10]
+
+
+def _days_q(w: dict) -> dict:
+    return {"$gte": w["start_day"], "$lte": w["end_day"]}
+
+
 @admin_router.get("/funnel")
-async def adm_funnel(days: int = 30):
+async def adm_funnel(days: int = 30, start: Optional[str] = None, end: Optional[str] = None):
     """Visits → viewed a book → cart → checkout → payment → paid, per channel."""
-    start_day, start_iso, clamped = await _window(days)
+    w = await _window(days, start, end)
     visits: dict = {}
-    async for v in db.visit_stats.find({"day": {"$gte": start_day}, "v": VISIT_V}, {"_id": 0, "channel": 1, "n": 1}):
+    async for v in db.visit_stats.find({"day": _days_q(w), "v": VISIT_V}, {"_id": 0, "channel": 1, "n": 1}):
         visits[v["channel"]] = visits.get(v["channel"], 0) + int(v.get("n") or 0)
     steps: dict = {}
-    async for x in db.step_stats.find({"day": {"$gte": start_day}}, {"_id": 0, "channel": 1, "step": 1, "n": 1}):
+    async for x in db.step_stats.find({"day": _days_q(w)}, {"_id": 0, "channel": 1, "step": 1, "n": 1}):
         steps.setdefault(x["channel"], {}).setdefault(x["step"], 0)
         steps[x["channel"]][x["step"]] += int(x.get("n") or 0)
-    orders = await _funnel_orders(start_iso)
+    orders = await _funnel_orders(w)
     rows = gc.funnel_rows(visits, orders)
     for r in rows:
         r["steps"] = {k: steps.get(r["channel"], {}).get(k, 0) for k in gc.STEPS}
     tot = {k: sum(r[k] for r in rows) for k in ("visits", "checkouts", "paid", "revenue")}
     tot["visit_to_paid"] = round(tot["paid"] / tot["visits"], 4) if tot["visits"] else None
     tot["steps"] = {k: sum(r["steps"][k] for r in rows) for k in gc.STEPS}
-    return {"days": days, "since": start_day, "clamped": clamped, "rows": rows, "total": tot,
+    return {"days": days, "since": w["start_day"], "until": w["end_day"], "clamped": w["clamped"], "empty": w["empty"],
+            "requested": w["requested"], "rows": rows, "total": tot,
             "step_labels": gc.STEP_LABELS, "steps_since": await _first_day(db.step_stats)}
 
 
@@ -285,22 +339,31 @@ async def _first_day(coll) -> Optional[str]:
 
 
 @admin_router.get("/insights")
-async def adm_insights(days: int = 30):
+async def adm_insights(days: int = 30, start: Optional[str] = None, end: Optional[str] = None):
     """Top landing pages and referring sites, device split, and a daily
     visits / paid-orders trend — same window as the funnel."""
-    start_day, start_iso, clamped = await _window(days)
+    w = await _window(days, start, end)
     dims: dict = {"landing": {}, "referrer": {}, "device": {}}
-    async for x in db.visit_dims.find({"day": {"$gte": start_day}}, {"_id": 0, "dim": 1, "key": 1, "n": 1}):
+    async for x in db.visit_dims.find({"day": _days_q(w)}, {"_id": 0, "dim": 1, "key": 1, "n": 1}):
         if x.get("dim") in dims:
             dims[x["dim"]][x["key"]] = dims[x["dim"]].get(x["key"], 0) + int(x.get("n") or 0)
     top = lambda d, n: [{"key": k, "n": v} for k, v in sorted(d.items(), key=lambda kv: -kv[1])[:n]]  # noqa: E731
     daily: dict = {}
-    async for v in db.visit_stats.find({"day": {"$gte": start_day}, "v": VISIT_V}, {"_id": 0, "day": 1, "n": 1}):
+    async for v in db.visit_stats.find({"day": _days_q(w), "v": VISIT_V}, {"_id": 0, "day": 1, "n": 1}):
         daily.setdefault(v["day"], {"visits": 0, "paid": 0})["visits"] += int(v.get("n") or 0)
-    for o in await _funnel_orders(start_iso):
+    for o in await _funnel_orders(w):
         if o["paid"] and o["day"]:
             daily.setdefault(o["day"], {"visits": 0, "paid": 0})["paid"] += 1
-    return {"since": start_day, "clamped": clamped, "landing": top(dims["landing"], 12), "referrer": top(dims["referrer"], 12),
+    # Every day of the period, oldest first, so the chart's x-axis is the
+    # chosen period (e.g. last month) and not "the N days up to today".
+    dates = []
+    if not w["empty"]:
+        d = _day(w["start_day"])
+        while d.strftime("%Y-%m-%d") <= w["end_day"]:
+            dates.append(d.strftime("%Y-%m-%d"))
+            d += timedelta(days=1)
+    return {"since": w["start_day"], "until": w["end_day"], "clamped": w["clamped"], "empty": w["empty"], "dates": dates,
+            "landing": top(dims["landing"], 12), "referrer": top(dims["referrer"], 12),
             "device": dims["device"], "daily": daily, "dims_since": await _first_day(db.visit_dims)}
 
 

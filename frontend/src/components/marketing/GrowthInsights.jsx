@@ -71,20 +71,21 @@ function TopList({ title, items, empty }) {
     );
 }
 
-export function GrowthInsights({ days }) {
+export function GrowthInsights({ period }) {
     const [d, setD] = useState(null);
+    const key = period ? `${period.start}_${period.end}` : "";
     useEffect(() => {
-        mkGrowthInsights(days).then(setD).catch(() => setD(null));
-    }, [days]);
-    if (!d) return null;
-    const span = Math.max(1, Math.round((Date.now() - new Date(`${d.since}T00:00:00Z`).getTime()) / 86400000) + 1);
+        if (!period) return;
+        mkGrowthInsights(period).then(setD).catch(() => setD(null));
+    }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!d || d.empty) return null;
     const dev = Object.entries(d.device || {}).sort((a, b) => b[1] - a[1]);
     const devTotal = dev.reduce((n, [, v]) => n + v, 0);
     return (
         <div className="mt-6 space-y-4" data-testid="mk-growth-insights">
             <div>
                 <div className="text-sm font-medium text-[#002B5C]">Visits and paid orders per day</div>
-                <LineChart series={d.daily || {}} keys={["visits", "paid"]} days={Math.min(span, days)} labels={{ visits: "Visits", paid: "Paid orders" }} height={180} />
+                <LineChart series={d.daily || {}} keys={["visits", "paid"]} dates={d.dates} labels={{ visits: "Visits", paid: "Paid orders" }} height={180} />
             </div>
             {!d.dims_since ? (
                 <p className="text-xs text-[#6B7280]">Landing pages, referring sites and devices start counting from this release.</p>

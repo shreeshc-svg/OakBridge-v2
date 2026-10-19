@@ -115,3 +115,62 @@ export function rangeLabel(key, range) {
     if (a === b) return a;
     return `${a} – ${b}`;
 }
+
+
+/* ---------------- Marketing → Growth periods (calendar days) ----------------
+ * Growth counts are kept per Indian calendar day, so its periods are plain
+ * YYYY-MM-DD dates (inclusive), built in the admin's own timezone like the
+ * dashboard ranges above. The server caps a period at today and starts it no
+ * earlier than the day visit counting began.
+ */
+export const GROWTH_PERIODS = [
+    { key: "today", label: "Today" },
+    { key: "yesterday", label: "Yesterday" },
+    { key: "7d", label: "Last 7 days" },
+    { key: "30d", label: "Last 30 days" },
+    { key: "this_month", label: "This month" },
+    { key: "last_month", label: "Last month" },
+    { key: "90d", label: "Last 90 days" },
+    { key: "this_year", label: "This year" },
+    { key: "last_year", label: "Last year" },
+    { key: "custom", label: "Custom range…" },
+];
+
+const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+/** `{ start, end }` as YYYY-MM-DD (inclusive), or null for an unfinished custom range. */
+export function growthPeriod(key, opts = {}) {
+    const now = opts.now ? new Date(opts.now) : new Date();
+    const y = now.getFullYear();
+    const m = now.getMonth();
+    const d = now.getDate();
+    const back = (n) => ({ start: ymd(new Date(y, m, d - (n - 1))), end: ymd(now) });
+    switch (key) {
+        case "today": return { start: ymd(now), end: ymd(now) };
+        case "yesterday": { const t = ymd(new Date(y, m, d - 1)); return { start: t, end: t }; }
+        case "7d": return back(7);
+        case "30d": return back(30);
+        case "90d": return back(90);
+        case "this_month": return { start: ymd(new Date(y, m, 1)), end: ymd(now) };
+        // Day 0 of this month = last day of the previous one; January rolls back a year.
+        case "last_month": return { start: ymd(new Date(y, m - 1, 1)), end: ymd(new Date(y, m, 0)) };
+        case "this_year": return { start: ymd(new Date(y, 0, 1)), end: ymd(now) };
+        case "last_year": return { start: ymd(new Date(y - 1, 0, 1)), end: ymd(new Date(y - 1, 11, 31)) };
+        case "custom": {
+            const ok = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ""));
+            if (!ok(opts.from) || !ok(opts.to)) return null;
+            return opts.from <= opts.to ? { start: opts.from, end: opts.to } : { start: opts.to, end: opts.from };
+        }
+        default: return back(30);
+    }
+}
+
+/** "1 Oct – 19 Oct 2026" style label for a growth period. */
+export function growthPeriodLabel(p) {
+    if (!p) return "";
+    const f = (s) => { const [Y, M, D] = s.split("-").map(Number); return { Y, t: `${D} ${MONTHS[M - 1]}` }; };
+    const a = f(p.start);
+    const b = f(p.end);
+    if (p.start === p.end) return `${a.t} ${a.Y}`;
+    return a.Y === b.Y ? `${a.t} – ${b.t} ${b.Y}` : `${a.t} ${a.Y} – ${b.t} ${b.Y}`;
+}

@@ -210,7 +210,8 @@ async def main():
     # Counting started today: the window must start today too, or older
     # orders get divided by today's visits (the live 9.7% "Search" rate).
     f = await growth.adm_funnel(30)
-    check(f["clamped"] and f["since"] == datetime.now(timezone.utc).strftime("%Y-%m-%d"), "window starts when visit counting began")
+    IST = timezone(timedelta(hours=5, minutes=30))
+    check(f["clamped"] and f["since"] == datetime.now(IST).strftime("%Y-%m-%d"), "window starts when visit counting began (IST day)")
     # As if counting had run for longer than the window: no clamp.
     # An OLD-rules tally (no v) must not move the window or be counted…
     await db.visit_stats.insert_one({"day": (datetime.now(timezone.utc) - timedelta(days=20)).strftime("%Y-%m-%d"), "channel": "Social", "ref": "", "n": 50})
@@ -222,6 +223,22 @@ async def main():
     prow = next(r for r in f["rows"] if r["channel"] == "Partner")
     check(not f["clamped"] and prow["visits"] == 1 and prow["paid"] == 2, "funnel: partner visits and paid orders line up")
     check(set(prow["steps"]) == {"view_item", "add_to_cart", "checkout", "payment"}, "funnel rows carry the shopping steps")
+
+    print("-- calendar periods --")
+    today = datetime.now(IST)
+    first_this = today.replace(day=1).strftime("%Y-%m-%d")
+    lm_end = (today.replace(day=1) - timedelta(days=1))
+    lm_start = lm_end.replace(day=1).strftime("%Y-%m-%d")
+    fm = await growth.adm_funnel(start=first_this, end=today.strftime("%Y-%m-%d"))
+    check(fm["until"] == today.strftime("%Y-%m-%d") and fm["since"] >= first_this, "This month: 1st → today")
+    lm = await growth.adm_funnel(start=lm_start, end=lm_end.strftime("%Y-%m-%d"))
+    check(lm["until"] == lm_end.strftime("%Y-%m-%d") and not lm["empty"], "Last month: whole previous month (counting ran that long)")
+    fut = await growth.adm_funnel(start="2099-01-01", end="2099-01-31")
+    check(fut["until"] <= today.strftime("%Y-%m-%d"), "a future period is capped at today")
+    sw = await growth.adm_funnel(start=today.strftime("%Y-%m-%d"), end=lm_start)
+    check(sw["since"] <= sw["until"], "a backwards range is swapped, not empty")
+    ins = await growth.adm_insights(start=lm_start, end=lm_end.strftime("%Y-%m-%d"))
+    check(ins["dates"][0] == lm_start and ins["dates"][-1] == lm_end.strftime("%Y-%m-%d"), "chart axis = the chosen period's days")
 
     print("-- steps, dims, office network, staff orders --")
     await growth.track_step(Req("Mozilla/5.0 (iPhone) Instagram 300.0", b'{"step":"add_to_cart"}'))
