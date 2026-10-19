@@ -30,7 +30,7 @@ def check(cond, label):
 
 
 src = open(os.path.join(os.path.dirname(HERE), "marketing.py"), encoding="utf-8").read()
-want = {"mark_contact_proven", "heal_proven", "handle_ses_event", "_ses_cached", "_recent_no_verdict"}
+want = {"mark_contact_proven", "heal_proven", "handle_ses_event", "_ses_cached", "_recent_no_verdict", "learn_providers", "_unverifiable"}
 fns = [n for n in ast.parse(src).body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name in want]
 assert {f.name for f in fns} == want
 db = DB()
@@ -76,6 +76,33 @@ async def main():
     check("ok@gmail.com" in cached and "nv@gmail.com" not in cached, "a no-verdict answer is not treated as a verdict")
     check(recent == {"nv@gmail.com"}, "…but is not paid for again for 30 days (an older one is retried)")
     check(consts["MAX_BOUNCE_CEILING"] <= 0.045, "our bounce stops trip before AWS's 5% review")
+    print("-- learning from bounces (the Oct 2026 GC campaign) --")
+    sends = ([("yahoo.co.in", "bounced")] * 19 + [("yahoo.co.in", "sent")] * 81
+             + [("gmail.com", "bounced")] * 2 + [("gmail.com", "sent")] * 200
+             + [("rediffmail.com", "bounced")] * 10 + [("rediffmail.com", "sent")] * 80
+             + [("tiny.in", "bounced")] * 3)
+    for i, (dom, st_) in enumerate(sends):
+        await db.mk_sends.insert_one({"id": f"x{i}", "to": f"u{i}@{dom}", "status": st_, "band": "risky", "sent_at": "2026-10-19T09:00:00+00:00"})
+    await db.mk_sends.insert_one({"id": "pv", "to": "boss@yahoo.co.in", "status": "bounced", "band": "verified", "sent_at": "2026-10-19T09:00:00+00:00"})
+    for i in range(25):
+        await db.mk_ses_checks.insert_one({"email_norm": f"y{i}@yahoo.com", "overall": "MEDIUM", "mailbox": "MEDIUM", "at": "2026-10-18T00:00:00+00:00"})
+        await db.mk_ses_checks.insert_one({"email_norm": f"g{i}@gmail.com", "overall": "HIGH", "mailbox": "HIGH", "at": "2026-10-18T00:00:00+00:00"})
+    res = await ns["learn_providers"]()
+    bad = {b["domain"] for b in res["bad_providers"]}
+    check(bad == {"yahoo.co.in", "rediffmail.com"}, f"learned bad providers: yahoo.co.in 19%, rediffmail 11% — not gmail 1%, not a 3-send domain ({bad})")
+    check(res["ses_unverifiable"] == ["yahoo.com"], "learned: SES can't confirm yahoo.com mailboxes; gmail it can")
+    check(await ns["_unverifiable"]({"yahoo.com", "gmail.com"}) == {"yahoo.com"}, "paid checks skipped only where they buy nothing")
+    d = await db.mk_domains.find_one({"domain": "yahoo.co.in"})
+    check(d["unproven_sent"] == 100 and d["unproven_bounced"] == 19, "a bounce on a VERIFIED address doesn't count against the provider")
+    print("-- dead mailboxes reported as transient --")
+    await db.mk_contacts.insert_one({"id": "gq", "email_norm": "gourav.sharma@gmail.com", "email_status": "risky", "suppressed": ""})
+    await db.mk_sends.insert_one({"id": "sq", "message_id": "mq", "contact_id": "gq", "campaign_id": "k"})
+    await ns["handle_ses_event"]({"eventType": "Bounce", "mail": {"messageId": "mq"}, "bounce": {"bounceType": "Transient", "bouncedRecipients": [
+        {"emailAddress": "gourav.sharma@gmail.com", "diagnosticCode": "smtp; 552-5.2.2 The recipient's inbox is out of storage space and inactive. OverQuotaPerm"}]}})
+    check(any(q.get("email_norm") == core.normalise_email("gourav.sharma@gmail.com") and w == "bounced" for q, w in suppressed), "Gmail 'inactive / OverQuotaPerm' is suppressed at once")
+    sq = await db.mk_sends.find_one({"id": "sq"})
+    check(sq["status"] == "bounced", "…and counts as a hard bounce")
+
     a, b = core.send_decision("risky", "unconfirmed", None, needs_ses=False, has_ses=True), core.send_decision("verified", "", None, needs_ses=False, has_ses=True)
     check(a[0] == "skip" and b[0] == "send", "so: unconfirmed risky is skipped by the default rule, verified is sent")
 

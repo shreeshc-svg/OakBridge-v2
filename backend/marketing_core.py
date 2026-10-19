@@ -261,6 +261,56 @@ def ses_details(resp: dict) -> dict:
 WEBMAIL = frozenset(COMMON_DOMAINS) | {"googlemail.com", "rediff.com"}
 RISK_KINDS = ("role", "catch_all", "unconfirmed")
 DEFAULT_RISK_POLICY = {"role": "send", "catch_all": "tail", "unconfirmed": "skip"}
+# Unconfirmed and catch-all addresses can no longer be mixed into the main send
+# ("send"): the most they get is the tail — small batches after everyone
+# confirmed, stopping itself on bounces. A live campaign in Oct 2026 sent 475
+# unconfirmed Yahoo/Rediff/old-company addresses with "send" and bounced ~10%,
+# AWS's pause line. Role addresses may still be sent.
+TAIL_ONLY_KINDS = frozenset({"catch_all", "unconfirmed"})
+# A provider (gmail.com, yahoo.co.in, a company domain…) whose UNPROVEN
+# addresses bounce this much, over at least this many sends, is learned as a
+# bad provider: its unproven addresses are skipped until proven another way.
+PROVIDER_MIN_SENDS = 20
+PROVIDER_MAX_BOUNCE = 0.08
+# SES can't confirm mailboxes at some providers (Yahoo, Rediff…): after this
+# many paid checks with almost no confirmed answer, stop paying for that provider.
+UNVERIFIABLE_MIN_CHECKS = 20
+UNVERIFIABLE_MAX_CONFIRMED = 0.05
+
+
+def clean_policy(pol: Optional[dict]) -> dict:
+    """The risky-address rules as they are APPLIED: defaults filled in, and
+    'send' lowered to 'tail' for the tail-only kinds (older saved settings)."""
+    out = dict(DEFAULT_RISK_POLICY)
+    for k, v in (pol or {}).items():
+        if k in RISK_KINDS and v in ("send", "tail", "skip"):
+            out[k] = v
+    for k in TAIL_ONLY_KINDS:
+        if out.get(k) == "send":
+            out[k] = "tail"
+    return out
+
+
+def bad_provider(sent: int, bounced: int) -> bool:
+    """Learned from our own sends to unproven addresses at one provider."""
+    return sent >= PROVIDER_MIN_SENDS and bounced / max(sent, 1) > PROVIDER_MAX_BOUNCE
+
+
+def ses_unverifiable(checks: int, confirmed: int) -> bool:
+    """SES keeps answering "can't confirm" for this provider: checks there buy nothing."""
+    return checks >= UNVERIFIABLE_MIN_CHECKS and confirmed / max(checks, 1) < UNVERIFIABLE_MAX_CONFIRMED
+
+
+# Bounces some providers label "Transient" but which mean the mailbox is dead:
+# Gmail's "inactive / out of storage" (OverQuotaPerm, 5.2.1 DisabledUser) and
+# Yahoo's "mailbox is disabled" (554.30). Retrying them three times is three
+# more bounces on our record.
+_DEAD_MAILBOX_RE = re.compile(r"OverQuotaPerm|DisabledUser|\binactive\b|mailbox is disabled|554\.30|"
+                              r"5\.2\.1|mailbox not found|does not exist|NoSuchUser|RecipientNotFound|user unknown", re.I)
+
+
+def dead_mailbox(diagnostic: str) -> bool:
+    return bool(_DEAD_MAILBOX_RE.search(diagnostic or ""))
 
 
 def risk_kind(*, role: bool, domain: str, ses_overall: str = "", mailbox: str = "") -> str:
@@ -300,7 +350,9 @@ def send_decision(status: str, kind: str, policy: Optional[dict], *, needs_ses: 
     if status == "valid":
         return "send", 1, ""
     if status == "risky":
-        act = (policy or {}).get(kind) or DEFAULT_RISK_POLICY.get(kind, "skip")
+        if kind == "bad_provider":
+            return "skip", 9, "risky (provider bounces too often for unconfirmed addresses) — skipped"
+        act = clean_policy(policy).get(kind) or DEFAULT_RISK_POLICY.get(kind, "skip")
         if act == "send":
             return "send", 2, ""
         if act == "tail":

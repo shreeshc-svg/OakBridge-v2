@@ -224,6 +224,18 @@ check([m.cleanup_kind(x) for x in [{"suppressed": "bounced"}, {"suppressed": "in
        {"email_status": "valid", "email_consent": {"status": "subscribed"}}]]
       == ["bounced", "blocked", "invalid", "complained", "unsubscribed", ""], "clean-up groups")
 
+print("-- risky rules after the Oct 2026 bounce spike --")
+check(m.clean_policy({"unconfirmed": "send", "catch_all": "send", "role": "send"}) == {"role": "send", "catch_all": "tail", "unconfirmed": "tail"},
+      "unconfirmed / catch-all can't be 'send' (lowered to send-last); role can")
+check(m.send_decision("risky", "unconfirmed", {"unconfirmed": "send"}, needs_ses=False, has_ses=True)[0] == "tail", "an old saved 'send' is applied as tail")
+check(m.send_decision("risky", "bad_provider", {"unconfirmed": "tail"}, needs_ses=False, has_ses=True)[0] == "skip", "a learned bad provider is always skipped")
+check(m.bad_provider(100, 19) and not m.bad_provider(212, 2) and not m.bad_provider(3, 3), "bad provider: rate AND enough sends")
+check(m.ses_unverifiable(25, 0) and not m.ses_unverifiable(25, 20) and not m.ses_unverifiable(5, 0), "SES-unverifiable provider")
+for diag in ["smtp; 552-5.2.2 inbox is out of storage space and inactive OverQuotaPerm", "554 30 This mailbox is disabled (554.30)",
+             "550-5.2.1 The email account that you tried to reach is inactive DisabledUser", "552 1 Requested mail action aborted, mailbox not found"]:
+    check(m.dead_mailbox(diag), f"dead mailbox: {diag[:40]}")
+check(not m.dead_mailbox("421 4.7.0 Try again later, closing connection") and not m.dead_mailbox("452 4.2.2 mailbox full"), "a temporary problem is not a dead mailbox")
+
 print()
 if failed:
     print(f"{failed} assertion(s) failed")

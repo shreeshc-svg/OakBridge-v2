@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ArrowDown, ArrowUp, Mail, MessageCircle, Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import {
-    mkDashboard, mkHealth, mkSettings, mkSaveSettings, mkVerify, mkImport, mkImportEstimate, mkImports, mkImportApprove, mkImportReject, mkReverify, mkSync, mkContacts, mkPatchContact,
+    mkDashboard, mkHealth, mkProviders, mkSettings, mkSaveSettings, mkVerify, mkImport, mkImportEstimate, mkImports, mkImportApprove, mkImportReject, mkReverify, mkSync, mkContacts, mkPatchContact,
     mkDeleteContact, mkLists, mkCreateList, mkCampaigns, mkNewCampaign, mkCampaign, mkSaveCampaign, mkDuplicate,
     mkAudience, mkPreview, mkTemplates, mkNewTemplate, mkSaveTemplate, mkDeleteTemplate, mkUseTemplate, mkTemplatePreview, mkUploadEmailImage, mkExportCampaign, mkExportContacts, mkCleanup, mkGrowthFunnel, mkPartners, mkNewPartner, mkSavePartner, mkAutomations, mkSaveAutomations, mkAutomationsPreview, MERCHANT_FEED_URL, mkTestSend, mkSend, mkCampaignAction, mkReport, mkDismissAlert, mkSuppressionSync,
     mkBulkContacts, mkBulkDeleteLists, mkBulkDeleteCampaigns, mkRenameCampaign, mkLearn, mkDisposableRefresh, mkSystemHealth, nlOverview, nlSave, nlDraftNow, nlApprove, nlSkip, fetchBooks, fetchCategories, mediaUrl, formatApiError,
@@ -218,6 +218,30 @@ function AccuracyPanel({ a, onLearned }) {
                     ) : <p className="text-xs text-[#6B7280] mt-2">Nothing learned yet — each signal needs about 30 sent emails before its weight moves. It runs daily on its own.</p>}
                 </div>
             </div>
+        </Panel>
+    );
+}
+
+/** Settings: what the checker has learned from real bounces (backend learn_providers). */
+function LearnedProviders() {
+    const [d, setD] = useState(null);
+    useEffect(() => { mkProviders().then(setD).catch(() => setD({ rows: [] })); }, []);
+    if (!d) return null;
+    return (
+        <Panel title="Learned from bounces">
+            <p className="text-xs text-[#6B7280] mb-2">
+                Updated before every campaign. <b>Skipped provider</b>: its unconfirmed addresses bounced above {Math.round((d.rules?.max_bounce || 0.08) * 100)}% over {d.rules?.min_sends || 20}+ sends, so they are skipped until proven (a delivered, opened or clicked email).{" "}
+                <b>No paid checks</b>: Amazon can't confirm mailboxes there, so we stop paying ₹0.88 per address. <b>Dead company domain</b>: several different people bounced.
+            </p>
+            {!d.rows?.length ? <p className="text-sm text-[#6B7280]">Nothing learned yet.</p> : (
+                <table className="w-full text-xs" data-testid="mk-learned"><thead><tr className="text-left text-[#4B5563]"><th className="py-1">Provider</th><th>Learned</th><th className="text-right">Unconfirmed sent</th><th className="text-right">Bounced</th><th className="text-right">SES checks (confirmed)</th></tr></thead>
+                    <tbody>{d.rows.map((r) => (
+                        <tr key={r.domain} className="border-t"><td className="py-1 font-mono">{r.domain}</td>
+                            <td>{[r.bad_provider && "skipped provider", r.ses_unverifiable && "no paid checks", r.bad && "dead company domain"].filter(Boolean).join(" · ")}</td>
+                            <td className="text-right">{r.unproven_sent ?? 0}</td><td className="text-right">{r.unproven_bounced ?? 0}</td>
+                            <td className="text-right">{r.ses_checks ?? 0} ({r.ses_confirmed ?? 0})</td></tr>
+                    ))}</tbody></table>
+            )}
         </Panel>
     );
 }
@@ -1187,6 +1211,16 @@ function CampaignReport({ id, status, reload }) {
                     ))}</tbody></table>
                 </Panel>
             )}
+            {(r.providers || []).length > 0 && (
+                <Panel title="Bounces by provider">
+                    <table className="w-full text-xs" data-testid="mk-providers"><thead><tr className="text-left text-[#4B5563]"><th className="py-1">Provider</th><th className="text-right">Sent</th><th className="text-right">Delivered</th><th className="text-right">Bounced</th><th className="text-right">Bounce rate</th></tr></thead>
+                        <tbody>{r.providers.map((p) => (
+                            <tr key={p.provider} className="border-t"><td className="py-1 font-mono">{p.provider}</td><td className="text-right">{p.sent}</td><td className="text-right">{p.delivered}</td>
+                                <td className="text-right">{p.bounced}</td><td className={`text-right ${(p.bounce_rate || 0) > 0.08 ? "text-[#CC0033] font-medium" : ""}`}>{pct(p.bounce_rate, 1)}</td></tr>
+                        ))}</tbody></table>
+                    <p className="text-xs text-[#6B7280] mt-2">Providers whose unconfirmed addresses bounce above 8% (20+ sends) are learned automatically and skipped next time — see Settings → Learned from bounces.</p>
+                </Panel>
+            )}
             {(r.skipped || []).length > 0 && (
                 <Panel title={`Not sent (${r.skipped.reduce((a, x) => a + x.n, 0)})`}>
                     <table className="w-full text-xs" data-testid="mk-skipped"><tbody>{r.skipped.map((x) => (
@@ -1951,7 +1985,7 @@ function Settings() {
             const body = { from_name: s.from_name, from_email: s.from_email, reply_to: s.reply_to, footer: s.footer, logo: s.logo,
                 double_opt_in: s.double_opt_in, include_role_addresses: s.include_role_addresses, max_bounce: Number(s.max_bounce),
                 ses_validation: !!s.ses_validation, ses_budget_inr: Math.max(0, Number(s.ses_budget_inr) || 0), usd_inr: Number(s.usd_inr) || 88,
-                risk_policy: s.risk_policy, tail_max_bounce: Number(s.tail_max_bounce),
+                risk_policy: Object.fromEntries(Object.entries(s.risk_policy || {}).map(([k, v]) => [k, k !== "role" && v === "send" ? "tail" : v])), tail_max_bounce: Number(s.tail_max_bounce),
                 score_valid: Math.round(Number(s.score_valid) || 65), score_invalid: Math.round(Number(s.score_invalid) || 35), auto_learn: !!s.auto_learn,
                 inactive_after: Math.max(0, Math.round(Number(s.inactive_after) || 0)), sunset_after: Math.max(0, Math.round(Number(s.sunset_after) || 0)),
                 wa_rate_marketing: Number(s.wa_rate_marketing), wa_rate_utility: Number(s.wa_rate_utility),
@@ -1995,9 +2029,13 @@ function Settings() {
                         {["role", "catch_all", "unconfirmed"].map((kk) => (
                             <label key={kk} className="flex items-center justify-between gap-2 text-sm">
                                 <span>{RISK_LABEL[kk]}</span>
-                                <select className="border border-[#E5E7EB] px-2 py-1" disabled={!su} value={(s.risk_policy || {})[kk] || "skip"}
+                                {/* Unconfirmed / catch-all can't be mixed into the main send any
+                                    more (backend core.TAIL_ONLY_KINDS) — at most "Send last". */}
+                                <select className="border border-[#E5E7EB] px-2 py-1" disabled={!su}
+                                    value={kk !== "role" && (s.risk_policy || {})[kk] === "send" ? "tail" : (s.risk_policy || {})[kk] || "skip"}
                                     onChange={(e) => setS({ ...s, risk_policy: { ...(s.risk_policy || {}), [kk]: e.target.value } })} data-testid={`mk-risk-${kk}`}>
-                                    <option value="send">Send</option><option value="tail">Send last (stops itself if it bounces)</option><option value="skip">Skip</option>
+                                    {kk === "role" && <option value="send">Send</option>}
+                                    <option value="tail">Send last (small batches, stops itself if it bounces)</option><option value="skip">Skip</option>
                                 </select>
                             </label>
                         ))}
@@ -2026,6 +2064,7 @@ function Settings() {
             <Panel title="System health">
                 <SystemHealth />
             </Panel>
+            <LearnedProviders />
             <Panel title="Amazon SES">
                 {!h ? <p className="text-sm">Checking…</p> : h.ok ? (
                     <ul className="text-sm space-y-1" data-testid="mk-ses-health">
@@ -2034,7 +2073,20 @@ function Settings() {
                         <li>Production access: <b className={h.production ? "text-[#15803D]" : "text-[#B4750F]"}>{h.production ? "yes" : "no — sandbox: only verified recipients"}</b></li>
                         <li>Quota: {h.sent_24h ?? 0} of {h.max_24h ?? "?"} in 24h · up to {h.max_rate ?? "?"}/second</li>
                         <li>Sender identity: {h.identity ? <><b>{h.identity.name}</b> — {h.identity.verified ? "verified" : "NOT verified"}, DKIM {h.identity.dkim || "?"}</> : <span className="text-[#CC0033]">not found in this region</span>}</li>
-                        <li>Last 30 days: bounce {pct(h.last30?.bounce_rate, 2)} · complaints {pct(h.last30?.complaint_rate, 2)}</li>
+                        <li>Last 30 days (our campaigns): bounce {pct(h.last30?.bounce_rate, 2)} · complaints {pct(h.last30?.complaint_rate, 2)}</li>
+                        <li data-testid="mk-aws-reputation">
+                            AWS account reputation:{" "}
+                            {h.enforcement && <b className={h.enforcement === "HEALTHY" ? "text-[#15803D]" : "text-[#CC0033]"}>{h.enforcement === "HEALTHY" ? "healthy" : h.enforcement}</b>}
+                            {h.aws_reputation?.error ? (
+                                <span className="text-xs text-[#6B7280]"> · bounce/complaint rates need the cloudwatch:GetMetricStatistics permission on the SES IAM user</span>
+                            ) : h.aws_reputation && (
+                                <>
+                                    {" "}· bounce <b className={(h.aws_reputation.bounce_rate || 0) >= 0.05 ? "text-[#CC0033]" : (h.aws_reputation.bounce_rate || 0) >= 0.02 ? "text-[#B4750F]" : "text-[#15803D]"}>{pct(h.aws_reputation.bounce_rate, 2)}</b>
+                                    {" "}· complaints <b className={(h.aws_reputation.complaint_rate || 0) >= 0.001 ? "text-[#CC0033]" : "text-[#15803D]"}>{pct(h.aws_reputation.complaint_rate, 3)}</b>
+                                    <span className="block text-xs text-[#6B7280]">AWS reviews the account at 5% bounces / 0.1% complaints and may pause it at 10% / 0.5%.</span>
+                                </>
+                            )}
+                        </li>
                     </ul>
                 ) : <p className="text-sm text-[#CC0033]">Could not reach SES: {h.error}</p>}
             </Panel>

@@ -326,6 +326,54 @@ async def _removed(norms: list) -> dict:
     return out
 
 
+async def learn_providers() -> dict:
+    """Teach the checker from what actually happened (last 180 days):
+
+    - bad_provider: a provider whose UNPROVEN addresses (anything not
+      "verified" when sent) bounced > PROVIDER_MAX_BOUNCE over at least
+      PROVIDER_MIN_SENDS sends. Its unproven addresses are then skipped.
+      Cleared again when a later window is clean.
+    - ses_unverifiable: a provider where SES almost never confirms a mailbox
+      (Yahoo, Rediff…). Paid checks there are skipped (see ses_check).
+
+    Pure tallies in Python — volumes are thousands of sends, not millions."""
+    since = (_now() - timedelta(days=180)).isoformat()
+    tally: dict = {}
+    async for x in db.mk_sends.find({"sent_at": {"$gte": since}, "band": {"$ne": "verified"},
+                                     "status": {"$in": ["sent", "bounced", "complained"]}},
+                                    {"_id": 0, "to": 1, "status": 1}):
+        dom = str(x.get("to") or "").lower().rsplit("@", 1)[-1]
+        if not dom or "@" not in str(x.get("to") or ""):
+            continue
+        t = tally.setdefault(dom, [0, 0])
+        t[0] += 1
+        t[1] += 1 if x.get("status") == "bounced" else 0
+    checks: dict = {}
+    async for c in db.mk_ses_checks.find({"at": {"$gte": since}}, {"_id": 0, "email_norm": 1, "mailbox": 1, "overall": 1}):
+        dom = str(c.get("email_norm") or "").rsplit("@", 1)[-1]
+        t = checks.setdefault(dom, [0, 0])
+        t[0] += 1
+        t[1] += 1 if (c.get("mailbox") == "HIGH" or c.get("overall") == "HIGH") else 0
+    flagged, unverif = [], []
+    for dom in set(tally) | set(checks):
+        sent, bounced = tally.get(dom, [0, 0])
+        n_chk, n_ok = checks.get(dom, [0, 0])
+        bp, uv = core.bad_provider(sent, bounced), core.ses_unverifiable(n_chk, n_ok)
+        await db.mk_domains.update_one({"domain": dom}, {"$set": {
+            "domain": dom, "unproven_sent": sent, "unproven_bounced": bounced, "bad_provider": bp,
+            "ses_checks": n_chk, "ses_confirmed": n_ok, "ses_unverifiable": uv, "learned_at": _iso()}}, upsert=True)
+        if bp:
+            flagged.append({"domain": dom, "sent": sent, "bounced": bounced})
+        if uv:
+            unverif.append(dom)
+    return {"bad_providers": sorted(flagged, key=lambda d: -d["bounced"]), "ses_unverifiable": sorted(unverif)}
+
+
+async def _unverifiable(domains: set) -> set:
+    return {d["domain"] async for d in db.mk_domains.find({"domain": {"$in": list(domains)}, "ses_unverifiable": True},
+                                                          {"_id": 0, "domain": 1})}
+
+
 async def mark_contact_proven(contact_id: str) -> None:
     """A campaign email was DELIVERED to, opened or clicked by this contact:
     the mailbox exists, so it is "verified" — sent first, never skipped as
@@ -526,6 +574,14 @@ async def ses_check(emails: list, *, refresh: bool = False) -> dict:
         return out
     cap = _cap(st)
     skip = set() if refresh else await _recent_no_verdict(list(norms))
+    # Providers where SES (learned) can't confirm mailboxes: don't pay; record
+    # the answer it would have given — unconfirmed — so the address is still
+    # decided by the risky rules instead of being "not checked".
+    nope = await _unverifiable({n.rsplit("@", 1)[-1] for n in norms if n not in out})
+    for n in list(norms):
+        if n not in out and n.rsplit("@", 1)[-1] in nope:
+            out[n] = {"email_norm": n, "status": "risky", "overall": "MEDIUM", "mailbox": "MEDIUM", "learned": True,
+                      "reasons": ["SES can't confirm mailboxes at this provider — not paid for"]}
     todo = [(n, e) for n, e in norms.items() if n not in out and n not in skip]
     sem = asyncio.Semaphore(4)   # gentle on the API; throttling is retried below
     stop = {"why": ""}
@@ -660,7 +716,7 @@ async def verify_emails(raw: list, *, autofix: bool = True, ses: str = "cache", 
         mx.update({d: v for d, v in (await domains_mx(slow)).items() if v is not None})
     dom_info = {d["domain"]: d async for d in db.mk_domains.find(
         {"domain": {"$in": list(domains)}}, {"_id": 0, "domain": 1, "bad": 1, "delivered_n": 1, "hard_bounced": 1,
-                                              "catch_all": 1, "catch_all_at": 1})}
+                                              "catch_all": 1, "catch_all_at": 1, "bad_provider": 1})}
     norms = [core.normalise_email(x["syntax"]["email"]) for x in rows]
     proven = await _proven([n for n in norms if n])
     supp, idle = {}, {}
@@ -752,8 +808,16 @@ async def verify_emails(raw: list, *, autofix: bool = True, ses: str = "cache", 
             r["reasons"].append(f"looks made-up: {core.looks_made_up(r['email'].split('@')[0])}")
         if r["role"] and role_ok:
             r["reasons"].append("role address — treated as normal (Settings)")
+        if di.get("bad_provider"):
+            # Learned from our own bounces (learn_providers): unconfirmed
+            # addresses at this provider bounce too often to mail.
+            status = "risky"
+            r.update(status=status)
+            r["reasons"].append(f"{dom}: unconfirmed addresses here bounced too often — skipped until proven")
         if status == "risky":
-            if r["role"] and not role_ok:
+            if di.get("bad_provider"):
+                r["risk_kind"] = "bad_provider"
+            elif r["role"] and not role_ok:
                 r["risk_kind"] = "role"
             elif sig["domain_bad"]:
                 r["risk_kind"] = "unconfirmed"
@@ -1145,8 +1209,7 @@ async def audience_filter(campaign: dict) -> dict:
 
 
 def _policy(st: dict, campaign: dict) -> dict:
-    pol = {**core.DEFAULT_RISK_POLICY, **{k: v for k, v in (st.get("risk_policy") or {}).items()
-                                          if k in core.RISK_KINDS and v in ("send", "tail", "skip")}}
+    pol = core.clean_policy(st.get("risk_policy"))
     if (campaign.get("audience") or {}).get("include_risky") and pol["unconfirmed"] == "skip":
         pol["unconfirmed"] = "tail"  # older campaigns that ticked "include risky"
     return pol
@@ -1154,6 +1217,7 @@ def _policy(st: dict, campaign: dict) -> dict:
 
 # -------------------------------------------------------------- sending ---
 WORKER_STALE = 120  # seconds without a heartbeat before another tick takes over
+TAIL_BATCH_PAUSE = 60  # seconds between tail batches of 25, so bounces land before the next (< WORKER_STALE)
 _running: set = set()
 
 
@@ -1175,6 +1239,7 @@ async def _prepare_campaign(cid: str) -> None:
     _preparing.add(cid)
     try:
         await heal_proven()
+        await learn_providers()
         c = await db.mk_campaigns.find_one({"id": cid}, {"_id": 0})
         if not c or c.get("status") != "preparing":
             return
@@ -1360,6 +1425,7 @@ async def _run_campaign(cid: str) -> None:
                 await db.mk_campaigns.update_one({"id": cid, "status": "sending"}, {"$set": {"status": "sent", "finished_at": _iso()}})
                 await refresh_campaign_stats(cid)
                 return
+            tail_batch = any(s.get("tail") for s in batch)
             for s in batch:
                 contact = await db.mk_contacts.find_one({"id": s["contact_id"]}, {"_id": 0}) or {}
                 cs = contact.get("email_consent", {}).get("status")
@@ -1395,6 +1461,12 @@ async def _run_campaign(cid: str) -> None:
                            "wa_message_id": (rec or {}).get("id", ""), "error": (rec or {}).get("error", "") if rec else "not sent (WhatsApp is off?)"}
                     await db.mk_sends.update_one({"id": s["id"]}, {"$set": upd})
                     await asyncio.sleep(0.25)
+            if tail_batch and camp["channel"] == "email":
+                # Unconfirmed addresses go in small batches with a pause, so
+                # their bounces (SES reports them seconds to minutes later) are
+                # counted before the next batch — the tail can stop in time.
+                await db.mk_campaigns.update_one({"id": cid}, {"$set": {"heartbeat": _iso()}})
+                await asyncio.sleep(TAIL_BATCH_PAUSE)
             await refresh_campaign_stats(cid)
             camp = await db.mk_campaigns.find_one({"id": cid}, {"_id": 0, "stats": 1, "channel": 1, "recovered_at": 1, "name": 1})
             if camp["channel"] == "email":
@@ -1685,7 +1757,10 @@ async def handle_ses_event(msg: dict) -> None:
             await db.mk_sends.update_one({"id": s["id"]}, {"$set": {"status": "blocked", "error": "SES validation: address unlikely to exist"}})
     elif kind == "Bounce":
         b = msg.get("bounce") or {}
-        permanent = b.get("bounceType") == "Permanent"
+        diag = " ".join(str(r.get("diagnosticCode") or "") for r in b.get("bouncedRecipients") or [])
+        # Gmail "inactive / out of storage" and similar arrive as Transient but
+        # mean a dead mailbox: treat as hard so it is never retried.
+        permanent = b.get("bounceType") == "Permanent" or core.dead_mailbox(diag)
         for r in b.get("bouncedRecipients") or []:
             norm = core.normalise_email(r.get("emailAddress"))
             if permanent:
@@ -1912,6 +1987,9 @@ async def adm_put_settings(body: SettingsBody, user: dict = Depends(require_supe
         raise HTTPException(status_code=400, detail="'Send last' bounce limit must be between 0.5% and 4% (AWS reviews the account at 5%)")
     if "risk_policy" in upd:
         pol = upd["risk_policy"] or {}
+        bad = [k for k, v in pol.items() if k in core.TAIL_ONLY_KINDS and v == "send"]
+        if bad:
+            raise HTTPException(status_code=400, detail="Unconfirmed and catch-all addresses can be 'Send last' or 'Skip', not mixed into the main send")
         if any(k not in core.RISK_KINDS or v not in ("send", "tail", "skip") for k, v in pol.items()):
             raise HTTPException(status_code=400, detail="Risk rules: each kind must be send, tail or skip")
         upd["risk_policy"] = {**core.DEFAULT_RISK_POLICY, **pol}
@@ -1926,6 +2004,21 @@ async def adm_put_settings(body: SettingsBody, user: dict = Depends(require_supe
 
 
 _HEALTH_MEMO = None
+
+
+@admin_router.get("/providers")
+async def adm_providers():
+    """What the checker has learned per provider (Settings): providers whose
+    unconfirmed addresses bounce too often, and ones SES can't confirm."""
+    learned = await learn_providers()
+    rows = await db.mk_domains.find({"$or": [{"bad_provider": True}, {"ses_unverifiable": True}, {"bad": True}]},
+                                    {"_id": 0, "domain": 1, "bad_provider": 1, "ses_unverifiable": 1, "bad": 1,
+                                     "unproven_sent": 1, "unproven_bounced": 1, "ses_checks": 1, "ses_confirmed": 1,
+                                     "hard_bounced": 1}).to_list(500)
+    for r in rows:
+        r["hard_bounced"] = len(r.get("hard_bounced") or [])
+    return {"rows": sorted(rows, key=lambda r: -(r.get("unproven_bounced") or 0)), "summary": learned,
+            "rules": {"min_sends": core.PROVIDER_MIN_SENDS, "max_bounce": core.PROVIDER_MAX_BOUNCE}}
 
 
 @admin_router.get("/health")
@@ -1950,6 +2043,24 @@ async def _ses_health():
                     "enforcement": a.get("EnforcementStatus")})
     except Exception as e:  # noqa: BLE001
         out.update({"ok": False, "error": str(e)[:300]})
+    # AWS's OWN reputation numbers (what its review / pause decisions use),
+    # from CloudWatch. Needs cloudwatch:GetMetricStatistics on the IAM user;
+    # without it the card says so instead of guessing.
+    try:
+        import boto3
+        cw = boto3.client("cloudwatch", region_name=SES_REGION)
+        end = datetime.now(timezone.utc)
+        rep_: dict = {}
+        for key, metric in (("bounce_rate", "Reputation.BounceRate"), ("complaint_rate", "Reputation.ComplaintRate")):
+            r = await asyncio.to_thread(lambda m=metric: cw.get_metric_statistics(
+                Namespace="AWS/SES", MetricName=m, StartTime=end - timedelta(hours=24), EndTime=end,
+                Period=3600, Statistics=["Maximum"]))
+            pts = sorted(r.get("Datapoints") or [], key=lambda d: d["Timestamp"])
+            rep_[key] = pts[-1]["Maximum"] if pts else None
+        out["aws_reputation"] = {**rep_, "review_at": {"bounce": 0.05, "complaint": 0.001},
+                                 "pause_at": {"bounce": 0.10, "complaint": 0.005}}
+    except Exception as e:  # noqa: BLE001
+        out["aws_reputation"] = {"error": str(e)[:200]}
     dom = st["from_email"].split("@")[-1]
     for ident in (st["from_email"], dom):
         try:
@@ -3350,12 +3461,23 @@ async def adm_report(cid: str):
                                           {"status": {"$in": ["bounced", "complained", "failed", "blocked"]}},
                                           {"status": "sent", "bounce_type": {"$exists": True}, "delivered_at": {"$exists": False}}]},
                                       {"_id": 0, "to": 1, "status": 1, "bounce_type": 1, "error": 1}).limit(200).to_list(200)
+    by_provider: dict = {}
+    async for x in db.mk_sends.find({"campaign_id": cid, "status": {"$in": ["sent", "bounced", "complained"]}},
+                                    {"_id": 0, "to": 1, "status": 1, "delivered_at": 1}):
+        dom = str(x.get("to") or "").lower().rsplit("@", 1)[-1] or "?"
+        p = by_provider.setdefault(dom, {"provider": dom, "sent": 0, "bounced": 0, "delivered": 0})
+        p["sent"] += 1
+        p["bounced"] += 1 if x.get("status") == "bounced" else 0
+        p["delivered"] += 1 if x.get("delivered_at") else 0
+    providers = sorted(by_provider.values(), key=lambda p: (-p["bounced"], -p["sent"]))[:20]
+    for p in providers:
+        p["bounce_rate"] = core.rate(p["bounced"], p["sent"])
     skipped = [{"reason": r["_id"] or "skipped", "n": r["n"]} async for r in db.mk_sends.aggregate([
         {"$match": {"campaign_id": cid, "status": "skipped"}}, {"$group": {"_id": "$error", "n": {"$sum": 1}}}, {"$sort": {"n": -1}}])]
     return {"campaign": {k: c.get(k) for k in ("id", "name", "channel", "subject", "status", "started_at", "finished_at", "paused_reason",
                                                "prepare", "prepare_error", "recovery", "tail_stopped_at", "note",
                                                "kind", "reconfirm_days", "lapsed_count", "lapsed_at")},
-            "skipped": skipped,
+            "skipped": skipped, "providers": providers,
             "stats": stats, "funnel": core.funnel(stats), "links": [{"url": u, "clicks": n} for u, n in zip(links, clicks)],
             "timeline": dict(sorted(timeline.items())), "problems": problems,
             "rates": {"delivery": core.rate(stats.get("delivered", 0), stats.get("sent", 0)),
