@@ -324,6 +324,27 @@ async def _removed(norms: list) -> dict:
     return out
 
 
+async def mark_contact_proven(contact_id: str) -> None:
+    """A campaign email was DELIVERED to, opened or clicked by this contact:
+    the mailbox exists, so it is "verified" — sent first, never skipped as
+    risky. Until Oct 2026 delivery/open/click set only `proven` and left
+    email_status at "risky", so people who had already received our mail were
+    skipped as "mailbox unconfirmed" in the next campaign. Never touches a
+    suppressed (unsubscribed / bounced / complained) contact."""
+    await db.mk_contacts.update_one({"id": contact_id, "suppressed": {"$in": [None, ""]}},
+                                    {"$set": {"proven": True, "email_status": "verified", "verified_at": _iso()}})
+
+
+async def heal_proven() -> int:
+    """One-off repair of contacts marked proven by the old code but still
+    "risky"/"valid"/"unknown". Idempotent and cheap (indexed fields, usually
+    0 rows); run before every audience count and campaign preparation."""
+    r = await db.mk_contacts.update_many(
+        {"proven": True, "email_status": {"$nin": ["verified", "invalid"]}, "suppressed": {"$in": [None, ""]}},
+        {"$set": {"email_status": "verified", "verified_at": _iso()}})
+    return getattr(r, "modified_count", 0) or 0
+
+
 async def note_delivered(norm: str, source: str) -> None:
     """A real email reached this mailbox: remember it (even before the person
     is a marketing contact), mark the contact verified, and count it towards
@@ -1132,6 +1153,7 @@ async def _prepare_campaign(cid: str) -> None:
     verdicts cost nothing, sends are unique per contact)."""
     _preparing.add(cid)
     try:
+        await heal_proven()
         c = await db.mk_campaigns.find_one({"id": cid}, {"_id": 0})
         if not c or c.get("status") != "preparing":
             return
@@ -1449,6 +1471,7 @@ async def track_open(send_id: str, sig: str):
                 upd["$set"] = {"opened_at": _iso()}
                 await db.mk_contacts.update_one({"id": s["contact_id"]}, {"$inc": {"stats.opened": 1},
                                                                           "$set": {"proven": True, "since_engaged": 0, "last_engaged_at": _iso()}})
+                await mark_contact_proven(s["contact_id"])
             await db.mk_sends.update_one({"id": send_id}, upd)
     return Response(content=GIF, media_type="image/gif", headers={"Cache-Control": "no-store, max-age=0"})
 
@@ -1469,6 +1492,7 @@ async def track_click(send_id: str, idx: int, sig: str):
         sets["clicked_at"] = _iso()
         await db.mk_contacts.update_one({"id": s["contact_id"]}, {"$inc": {"stats.clicked": 1},
                                                                   "$set": {"proven": True, "since_engaged": 0, "last_engaged_at": _iso()}})
+        await mark_contact_proven(s["contact_id"])
         if (camp or {}).get("kind") == "reconfirm":
             # A click (not an open — Apple Mail opens everything) on a
             # re-confirm email is a fresh, provable yes.
@@ -1625,6 +1649,7 @@ async def handle_ses_event(msg: dict) -> None:
             await db.mk_sends.update_one({"id": s["id"]}, {"$set": {"delivered_at": _iso()}})
             before = await db.mk_contacts.find_one_and_update({"id": s["contact_id"]}, {"$set": {"proven": True}},
                                                               projection={"_id": 0, "proven": 1, "email_norm": 1})
+            await mark_contact_proven(s["contact_id"])
             dom = ((before or {}).get("email_norm") or "").split("@")[-1]
             if before and not before.get("proven") and dom and dom not in core.WEBMAIL:
                 # One more distinct address at this company domain reached an
@@ -2914,6 +2939,7 @@ async def adm_dup_campaign(cid: str, user: dict = Depends(require_admin)):
 @admin_router.get("/campaigns/{cid}/audience")
 async def adm_audience(cid: str):
     """Who it would go to, by verification status — shown before sending."""
+    await heal_proven()
     c = await db.mk_campaigns.find_one({"id": cid}, {"_id": 0})
     if not c:
         raise HTTPException(status_code=404, detail="Campaign not found")
