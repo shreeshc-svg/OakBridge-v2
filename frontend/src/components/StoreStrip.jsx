@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { mediaUrl } from "../lib/api";
+import { isPrerender } from "../lib/runtime";
 
 /**
  * "Available on" confidence strip — the stores that also sell Oakbridge books
@@ -36,6 +37,7 @@ export default function StoreStrip({ stores = [], title = "", subtitle = "", spe
     const [inView, setInView] = useState(false);
     useEffect(() => {
         const el = sectionRef.current;
+        if (isPrerender()) return undefined; // same reason as above: no markup changes in the snapshot
         if (!el || typeof IntersectionObserver === "undefined") {
             setInView(true);
             return undefined;
@@ -51,6 +53,12 @@ export default function StoreStrip({ stores = [], title = "", subtitle = "", spe
     }, [items.length]);
 
     useEffect(() => {
+        // Never during the prerender: puppeteer captures the HTML AFTER effects
+        // run, so a marquee switched on here was baked in as 8 logos while the
+        // browser's first render has 4 — a hydration mismatch (#418) that made
+        // React throw the server HTML away on every homepage visit. Seen live
+        // 2026-10-19. The browser measures and switches it on after hydrating.
+        if (isPrerender()) return undefined;
         const measure = () => {
             const el = trackRef.current;
             const wrap = wrapRef.current;

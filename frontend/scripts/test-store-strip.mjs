@@ -44,6 +44,10 @@ const strip = code("components/StoreStrip.jsx");
 check(!/<a\b|href=/.test(strip), "strip is logos only (no links)");
 check(/s\.logo/.test(strip) && /alt=/.test(strip) && /aria-hidden/.test(strip), "only stores with a logo; alt text; duplicate copy hidden from screen readers");
 check(/prefers-reduced-motion/.test(strip), "still row under reduced motion");
+// Live bug 2026-10-19: the marquee's duplicate logos were baked into the
+// prerender (8 items) while the browser's first render had 4 -> #418.
+check((strip.match(/if \(isPrerender\(\)\) return undefined/g) || []).length >= 2,
+      "no markup-changing effect runs during the prerender (marquee + reveal)");
 const homeJsx = code("pages/Home.jsx");
 check(/hidden\.has\("home\.stores"\)/.test(homeJsx) && /homeOrd\("stores"\)/.test(homeJsx), "Home hides/orders it like other sections");
 const pdp = code("pages/BookDetail.jsx");
