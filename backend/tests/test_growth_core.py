@@ -42,6 +42,28 @@ for attr, coupon, want in cases:
     got = g.channel_of(attr, coupon, codes)
     check(got == want, f"{attr} {coupon or ''} -> {want} (got {got})")
 
+print("-- exact-domain rules (Oct 2026: substring matching misfiled these) --")
+for ref, want in [
+    ("https://mail.google.com/mail/u/0/", "Email"), ("android-app://com.google.android.gm/", "Email"),
+    ("https://outlook.live.com/", "Email"), ("https://chatgpt.com/", "AI assistants"),
+    ("https://www.perplexity.ai/search", "AI assistants"), ("https://gemini.google.com/app", "AI assistants"),
+    ("https://web.whatsapp.com/", "WhatsApp"), ("https://www.netflix.com/", "Referral sites"),
+    ("https://www.microsoft.com/", "Referral sites"), ("https://docs.google.com/doc", "Referral sites"),
+    ("https://www.google.co.in/", "Search (organic)"), ("android-app://com.google.android.googlequicksearchbox/", "Search (organic)"),
+    ("https://t.co/abc", "Social"), ("https://l.instagram.com/", "Social"), ("https://x.com/oak", "Social"),
+]:
+    got = g.channel_of({"referrer": ref})
+    check(got == want, f"{ref} -> {want} (got {got})")
+check(g.channel_of({"utm_source": "chatgpt.com"}) == "AI assistants", "ChatGPT's own utm_source -> AI assistants")
+check(g.channel_of({"in_app": "social"}) == "Social" and g.channel_of({}) == "Direct", "in-app browser with no referrer -> Social, not Direct")
+check(g.in_app("Mozilla/5.0 (iPhone) Instagram 312.0") == "social" and g.in_app("Mozilla/5.0 [FBAN/FBIOS;FBAV/450]") == "social"
+      and g.in_app("Mozilla/5.0 (iPhone) Safari/604.1") == "", "in-app detection")
+check(g.device_of("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0) Mobile/15E148") == "Mobile"
+      and g.device_of("Mozilla/5.0 (iPad; CPU OS 17_0)") == "Tablet" and g.device_of("Mozilla/5.0 (Windows NT 10.0) Chrome/120") == "Desktop", "device")
+check(g.landing_key("/books/abc/?x=1") == "/books/abc" and g.landing_key("") == "/", "landing page key")
+check(g.ip_in("10.1.2.3", ["10.1.2.0/24"]) and not g.ip_in("10.1.3.3", ["10.1.2.0/24"]) and not g.ip_in("junk", ["10.0.0.0/8"]), "office network match")
+check(g.clean_nets("1.2.3.4, 10.0.0.0/8 nonsense ;2001:db8::/32") == ["1.2.3.4/32", "10.0.0.0/8", "2001:db8::/32"], "office IPs cleaned")
+
 print("-- bots --")
 check(g.is_bot("Mozilla/5.0 ... HeadlessChrome/120") and g.is_bot("Googlebot/2.1") and g.is_bot(""), "crawlers, headless and empty UA are bots")
 check(not g.is_bot("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0) AppleWebKit/605.1.15 Safari/604.1"), "a phone browser is not")

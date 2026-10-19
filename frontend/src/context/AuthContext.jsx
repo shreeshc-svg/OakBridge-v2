@@ -6,8 +6,9 @@ import React, {
     useState,
     useCallback,
 } from "react";
-import { authLogin, authMe, authRegister } from "../lib/api";
+import { api, authLogin, authMe, authRegister } from "../lib/api";
 import { ADMIN_ROLES, isSuperadmin } from "../lib/rbac";
+import { markStaffBrowser } from "../lib/attribution";
 
 const AuthContext = createContext(null);
 const TOKEN_KEY = "oakbridge_token";
@@ -37,6 +38,15 @@ export function AuthProvider({ children }) {
     useEffect(() => {
         loadMe();
     }, [loadMe]);
+
+    // A staff account signed in here: this browser stops counting as a
+    // customer visit in Marketing → Growth (lib/attribution.js), and a visit
+    // this session already counted is taken back (signed-in, staff-only call).
+    useEffect(() => {
+        if (!user || !ADMIN_ROLES.includes(user.role)) return;
+        const counted = markStaffBrowser();
+        if (counted) api.post("/t/unvisit", counted).catch(() => {});
+    }, [user]);
 
     const login = useCallback(async (email, password) => {
         const data = await authLogin(email, password);

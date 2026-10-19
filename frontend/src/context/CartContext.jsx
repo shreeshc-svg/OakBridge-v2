@@ -10,6 +10,8 @@ import React, {
 import { useAuth } from "./AuthContext";
 import { saveCart, loadCart, fetchSettings, fetchSiteContent } from "../lib/api";
 import { track } from "../lib/analytics";
+import { trackStep } from "../lib/attribution";
+import { API } from "../lib/api";
 import { preorderState } from "../lib/preorder";
 import { useBootState } from "../lib/boot";
 
@@ -106,6 +108,7 @@ export function CartProvider({ children }) {
          */
         const preorder = preorderState(book).active;
         if (stock <= 0 && !preorder) return;
+        trackStep(API, "add_to_cart"); // Marketing → Growth funnel step (cookie-free, once per session)
         const cap = preorder ? PREORDER_MAX_QTY : stock;
         const k = keyOf(book.id, binding, size);
         setItems((prev) => {

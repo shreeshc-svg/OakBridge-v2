@@ -12,7 +12,8 @@ import {
     verifyPayment, verifyOtp, resendOtp, mediaUrl } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { track } from "../lib/analytics";
-import { readAttribution } from "../lib/attribution";
+import { readAttribution, trackStep } from "../lib/attribution";
+import { API } from "../lib/api";
 import { toast } from "sonner";
 import { loadRazorpay } from "../lib/razorpay";
 
@@ -150,6 +151,7 @@ export default function Checkout() {
     // Preload the Razorpay script as soon as the user opens the page (so the popup is instant when they click Pay)
     useEffect(() => {
         loadRazorpay();
+        trackStep(API, "checkout"); // Marketing → Growth funnel step (cookie-free)
     }, []);
 
     // A partner's share link (?ref=CODE, kept by lib/attribution) pre-fills
@@ -303,6 +305,7 @@ export default function Checkout() {
                 });
                 nav(`/payment-failed/${order.id}`);
             });
+            trackStep(API, "payment");
             checkout.open();
         } catch (err) {
             toast.error(formatApiError(err));

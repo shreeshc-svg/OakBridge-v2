@@ -26,11 +26,18 @@ _UPDATED = "24 July 2026"
 _UPDATED_DPDP = "12 October 2026"
 # The Privacy Notice alone was revised again on 13 Oct 2026 (job applications
 # added; consent records at sign-up, checkout, submissions and careers).
-_UPDATED_PRIVACY = "13 October 2026"
+_UPDATED_PRIVACY = "19 October 2026"
+# 19 Oct 2026: §2.10 now names the 30-day "where you first came from" memory and
+# the anonymous visit counts; the Cookie Policy lists the storage keys. Both are
+# governed by the COOKIE BANNER's analytics choice (or need no consent at all),
+# not by the account agreement — so the agreement version stays at 13 Oct and
+# nobody is asked to re-accept for a clarification.
+_AGREEMENT_VERSION = "13 October 2026"
+_UPDATED_COOKIE = "19 October 2026"
 # What a person agrees to is "the Privacy Notice as dated": stored with every
 # consent record (sign-up, checkout, careers, submissions), and an account
 # whose last agreement is older than this is asked once to read the update.
-POLICY_VERSION = _UPDATED_PRIVACY
+POLICY_VERSION = _AGREEMENT_VERSION
 
 TERMS = f"""\
 _Last updated: {_UPDATED_DPDP}_
@@ -240,10 +247,17 @@ data for that purpose); consent where we ask for it.
 own orders. *Purpose:* answer your question. *Basis:* consent (you choose to use it).
 
 **2.10 Analytics and session recording.** Only if you allow them in our cookie
-banner: pages viewed, titles browsed and where people get stuck (analytics), and,
-separately, a recording of how pages were used with everything you type and all
-personal details masked (session recording). *Basis:* consent. See our
-[Cookie Policy](/cookie-policy).
+banner: pages viewed, titles browsed and where people get stuck (analytics), the
+link or email you first came to us from, remembered in your browser for up to 30
+days so a later order can be credited to it (analytics), and, separately, a
+recording of how pages were used with everything you type and all personal details
+masked (session recording). *Basis:* consent. See our [Cookie Policy](/cookie-policy).
+
+Without your consent we still keep simple counts of visits and shopping steps (for
+example "a visit from a search engine, on a phone, that opened checkout"). These use
+no cookies, store nothing in your browser beyond the current tab, and record nothing
+that identifies you — not your IP address, not your account. *Basis:* legitimate
+use, to run and improve the Site.
 
 **2.11 Security logs.** IP address, device/browser details and actions taken, to
 keep the Site and your data safe and to investigate misuse. *Basis:* legitimate use
@@ -436,7 +450,7 @@ We ship to all regions across India.
 """
 
 COOKIE = f"""\
-_Last updated: {_UPDATED_DPDP}_
+_Last updated: {_UPDATED_COOKIE}_
 
 This Cookie Policy explains how {_SITE}, operated by **{_ENTITY}**, uses cookies and
 similar technologies (your browser's local and session storage, and tracking in our
@@ -454,6 +468,11 @@ are first-party only, and are not used for advertising or shared with anyone.
 - **oakbridge_attribution** (session storage) — the campaign tag of the link you
   arrived through (for example one of our emails), so we know which of our own
   campaigns led to an order. Discarded when you close the tab.
+- **oakbridge_visit_sent, oakbridge_step_…, oakbridge_counted** (session storage) —
+  make sure a visit and each shopping step are counted only once in our anonymous
+  visit totals. They hold no personal data and are discarded when you close the tab.
+- **oakbridge_staff** (local storage) — set only on a browser where an Oakbridge staff
+  account has signed in, so our own team is left out of the visit totals.
 
 The campaign tag holds no personal data. If you place an order during that visit, the
 tag is saved with the order so we can measure our own campaigns; it is not shared.
@@ -466,6 +485,12 @@ is one click, exactly like accepting.
 trouble while buying. If you agree, PostHog stores an identifier in a first-party
 cookie and in local storage (names beginning "ph_") so visits can be counted. If you do
 not agree, the analytics script is never downloaded at all.
+
+**Analytics — where you first came from.** If you agree to analytics, we also keep
+**oakbridge_attribution_30d** in your browser's local storage: the link or email you
+first arrived from (for example "our October newsletter" or "a Google search"), for up
+to 30 days, so an order you place later can be credited to it. It holds no personal
+data and is not shared. Turning analytics off deletes it straight away.
 
 **Session recording (PostHog).** Off unless you choose it, and only together with
 analytics. It records how a page was used — clicks, scrolling, the shape of the page —

@@ -73,7 +73,7 @@ _mod("fastapi", APIRouter=_Router, HTTPException=HTTPException, Depends=lambda *
 _mod("fastapi.responses", Response=Response)
 _mod("pydantic", BaseModel=BaseModel)
 db = DB()
-_mod("extensions", db=db, require_admin=None, require_superadmin=None)
+_mod("extensions", db=db, require_admin=None, require_superadmin=None, get_current_user=None)
 _mod("audit", audit_log=_anoop)
 _mod("emailer", media_url=lambda u: ("https://cdn" + u) if u and u.startswith("/") else u)
 
@@ -206,10 +206,62 @@ async def main():
     await growth.track_visit(Req("Mozilla/5.0 (Windows) Chrome", b"not json"))
     v = db.visit_stats.docs
     check(len(v) == 1 and v[0]["channel"] == "Partner" and v[0]["ref"] == "KANNAN10" and v[0]["n"] == 1, "one partner visit counted; bot and junk ignored")
-    check(set(v[0]) <= {"day", "channel", "ref", "n", "_id"}, "nothing about the person is stored")
+    check(set(v[0]) <= {"day", "channel", "ref", "n", "v", "_id"}, "nothing about the person is stored")
+    # Counting started today: the window must start today too, or older
+    # orders get divided by today's visits (the live 9.7% "Search" rate).
+    f = await growth.adm_funnel(30)
+    check(f["clamped"] and f["since"] == datetime.now(timezone.utc).strftime("%Y-%m-%d"), "window starts when visit counting began")
+    # As if counting had run for longer than the window: no clamp.
+    # An OLD-rules tally (no v) must not move the window or be counted…
+    await db.visit_stats.insert_one({"day": (datetime.now(timezone.utc) - timedelta(days=20)).strftime("%Y-%m-%d"), "channel": "Social", "ref": "", "n": 50})
+    f = await growth.adm_funnel(30)
+    check(f["clamped"] and next(r for r in f["rows"] if r["channel"] == "Social")["visits"] == 0, "pre-fix tallies ignored (no deletion needed)")
+    # …a v=2 tally from 60 days ago means counting has run longer than the window.
+    await db.visit_stats.insert_one({"day": (datetime.now(timezone.utc) - timedelta(days=60)).strftime("%Y-%m-%d"), "channel": "Direct", "ref": "", "n": 0, "v": 2})
     f = await growth.adm_funnel(30)
     prow = next(r for r in f["rows"] if r["channel"] == "Partner")
-    check(prow["visits"] == 1 and prow["paid"] == 2, "funnel: partner visits and paid orders line up")
+    check(not f["clamped"] and prow["visits"] == 1 and prow["paid"] == 2, "funnel: partner visits and paid orders line up")
+    check(set(prow["steps"]) == {"view_item", "add_to_cart", "checkout", "payment"}, "funnel rows carry the shopping steps")
+
+    print("-- steps, dims, office network, staff orders --")
+    await growth.track_step(Req("Mozilla/5.0 (iPhone) Instagram 300.0", b'{"step":"add_to_cart"}'))
+    await growth.track_step(Req("Mozilla/5.0 (iPhone) Safari", b'{"step":"delete_db"}'))
+    st = db.step_stats.docs
+    check(len(st) == 1 and st[0]["step"] == "add_to_cart" and st[0]["channel"] == "Social", "step counted; Instagram in-app browser = Social; unknown step ignored")
+    dims = {(d["dim"], d["key"]) for d in db.visit_dims.docs}
+    check(("device", "Mobile") in dims and ("referrer", "lnkd.in") in dims and ("landing", "/") in dims, "device, referrer host and landing page tallied")
+    await db.integrations.insert_one({"key": growth.SETTINGS_KEY, "office_ips": ["10.1.2.0/24"]})
+    growth._SETTINGS_CACHE.update(at=0.0, v=None)
+    class OfficeReq(Req):
+        def __init__(self, ua, body):
+            super().__init__(ua, body)
+            self.headers["x-forwarded-for"] = "10.1.2.33, 1.1.1.1"
+    n0 = sum(v["n"] for v in db.visit_stats.docs)
+    await growth.track_visit(OfficeReq("Mozilla/5.0 (Windows) Chrome", b'{"utm_source":"email"}'))
+    check(sum(v["n"] for v in db.visit_stats.docs) == n0, "office network not counted")
+    await db.users.insert_one({"id": "staff1", "email": "ops@oakbridge.in", "role": "superadmin"})
+    await db.orders.insert_one({"id": "t1", "user_id": "staff1", "email": "ops@oakbridge.in", "payment_status": "paid", "total": 999,
+                                "created_at": datetime.now(timezone.utc).isoformat(), "attribution": {"utm_source": "email"}})
+    f2 = await growth.adm_funnel(30)
+    check(f2["total"]["paid"] == f["total"]["paid"], "staff test order left out of the funnel")
+    ins = await growth.adm_insights(30)
+    check(ins["device"].get("Mobile", 0) >= 1 and any(r["key"] == "lnkd.in" for r in ins["referrer"]), "insights: devices and referrers")
+    # Staff signs in mid-session: their counted visit is taken back.
+    before = sum(v["n"] for v in db.visit_stats.docs if v.get("v") == 2)
+    class SReq(Req):
+        pass
+    r = await growth.untrack_visit(growth.UnvisitBody(at=datetime.now(timezone.utc).isoformat(), ref="KANNAN10", referrer="https://lnkd.in"),
+                                   SReq("Mozilla/5.0 (iPhone) Safari", b""), {"role": "superadmin"})
+    check(r["undone"] == 1 and sum(v["n"] for v in db.visit_stats.docs if v.get("v") == 2) == before - 1, "staff sign-in takes the session's visit back")
+    try:
+        await growth.untrack_visit(growth.UnvisitBody(at=datetime.now(timezone.utc).isoformat()), SReq("x", b""), {"role": "customer"})
+        check(False, "customers can't subtract visits")
+    except HTTPException as e:
+        check(e.status_code == 403, "customers can't subtract visits")
+    for _ in range(3):
+        await growth.untrack_visit(growth.UnvisitBody(at=datetime.now(timezone.utc).isoformat(), ref="KANNAN10", referrer="https://lnkd.in"),
+                                   SReq("Mozilla/5.0 (iPhone) Safari", b""), {"role": "superadmin"})
+    check(all(v["n"] >= 0 for v in db.visit_stats.docs), "never below zero")
 
 
 asyncio.run(main())

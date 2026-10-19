@@ -10,6 +10,7 @@ import {
 import { useAuth } from "../../context/AuthContext";
 import { isSuperadmin, canDelete } from "../../lib/rbac";
 import { LineChart, BarChart, Funnel, Donut, Kpi, pct, inr } from "../../components/marketing/Charts";
+import { StepsTable, GrowthInsights, OfficeNetwork } from "../../components/marketing/GrowthInsights";
 
 /**
  * Admin → Marketing (backend/marketing.py).
@@ -610,7 +611,14 @@ function Growth({ onOpen }) {
                                     <td className="text-right font-medium">{r.paid}</td><td className="text-right">{inr(r.revenue)}</td><td className="text-right">{pctTxt(r.visit_to_paid)}</td><td className="text-right">{pctTxt(r.checkout_to_paid)}</td></tr>
                             ))}</tbody>
                         </table></div>
-                        <p className="text-xs text-[#6B7280] mt-2">Visits are counted once per browser session without cookies (bots excluded); counting started when this was deployed. Orders use the link the buyer first arrived from. A partner code wins over everything else.</p>
+                        <p className="text-xs text-[#6B7280] mt-2">
+                            {f.clamped && <><b className="text-[#002B5C]">Showing {f.since} onwards</b> — visits have only been counted since then, so the period is shortened to match and the rates compare like with like. </>}
+                            Visits are counted once per browser session without cookies; bots, staff browsers and the office network are excluded, and so are staff accounts' own orders.
+                            Orders use the link the buyer first arrived from (remembered for 30 days when they allowed analytics cookies). A partner code wins over everything else.
+                        </p>
+                        <StepsTable f={f} />
+                        <GrowthInsights days={days} />
+                        <OfficeNetwork />
                     </>
                 )}
             </Panel>

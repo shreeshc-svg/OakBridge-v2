@@ -12,8 +12,9 @@ import { Minus, Plus, ShoppingBag, ArrowLeft, Star, ChevronLeft, ChevronRight, B
 import BookCard from "../components/BookCard";
 import ReviewsSection from "../components/ReviewsSection";
 import { fetchBook, fetchBooks, formatINR, notifyBackInStock, fetchSettings, mediaUrl,
-    fetchBookPreview, fetchBookAuthors, fetchPackItems, fetchCollection,
+    fetchBookPreview, fetchBookAuthors, fetchPackItems, fetchCollection, API,
 } from "../lib/api";
+import { trackStep } from "../lib/attribution";
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
 import { toast } from "sonner";
@@ -104,6 +105,10 @@ export default function BookDetail() {
     const [bookAuthors, setBookAuthors] = useBootState(`${k}:authors`, []);
     // Stores this title is also sold on (Admin → Pages → Stores; links per book
     // in Admin → Books). Read once — the list is the same for every book.
+    // Marketing → Growth funnel step "viewed a book" (cookie-free, once per session).
+    useEffect(() => {
+        if (book?.id) trackStep(API, "view_item");
+    }, [book?.id]);
     const [stores, setStores] = useBootState("pdp:stores", []);
     useEffect(() => {
         fetchCollection("home_stores").then((d) => setStores((d?.items || []).filter((x) => x && x.enabled !== false))).catch(() => {});

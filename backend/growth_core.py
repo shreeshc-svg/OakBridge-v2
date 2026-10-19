@@ -18,11 +18,46 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 from urllib.parse import urlparse
 
-CHANNELS = ["Partner", "Email", "WhatsApp", "Google Shopping", "Search (organic)", "Social", "Paid ads",
-            "Referral sites", "Direct"]
-_SEARCH = ("google.", "bing.", "duckduckgo.", "yahoo.", "yandex.", "ecosia.", "baidu.")
-_SOCIAL = ("facebook.", "instagram.", "linkedin.", "lnkd.in", "t.co", "twitter.", "x.com", "youtube.",
-           "youtu.be", "whatsapp.", "wa.me", "telegram.", "t.me", "reddit.", "quora.", "threads.")
+CHANNELS = ["Partner", "Email", "WhatsApp", "Google Shopping", "Search (organic)", "AI assistants", "Social",
+            "Paid ads", "Referral sites", "Direct"]
+
+# Referring sites, matched by EXACT domain (the host itself or a subdomain of
+# it) — never by substring. Substring matching was live until Oct 2026 and
+# misfiled real traffic: "t.co" matched chatgpt.com and microsoft.com,
+# "x.com" matched netflix.com, and "google." sent Gmail to Search.
+# "android-app://com.google.android.gm" is what Android apps send as referrer;
+# urlparse gives its package name as the host, so packages are listed too.
+_EMAIL_HOSTS = ("mail.google.com", "com.google.android.gm", "outlook.live.com", "outlook.office.com",
+                "outlook.office365.com", "com.microsoft.office.outlook", "mail.yahoo.com", "mail.zoho.com",
+                "mail.zoho.in", "mail.rediffmail.com", "mail.proton.me", "mail.aol.com")
+_WHATSAPP_HOSTS = ("whatsapp.com", "wa.me", "com.whatsapp", "com.whatsapp.w4b")
+_AI_HOSTS = ("chatgpt.com", "chat.openai.com", "openai.com", "perplexity.ai", "gemini.google.com", "bard.google.com",
+             "copilot.microsoft.com", "claude.ai", "you.com", "phind.com", "meta.ai", "chat.deepseek.com", "grok.com")
+_SEARCH_HOSTS = ("bing.com", "duckduckgo.com", "search.yahoo.com", "yahoo.com", "yandex.ru", "yandex.com",
+                 "ecosia.org", "baidu.com", "search.brave.com", "startpage.com", "com.google.android.googlequicksearchbox")
+# google.com / google.co.in / google.com.au … only — docs.google.com,
+# mail.google.com and gemini.google.com are not search (www. is stripped).
+_GOOGLE_SEARCH_RE = re.compile(r"^google\.(?:com|co\.[a-z]{2}|com\.[a-z]{2}|[a-z]{2})$")
+_SOCIAL_HOSTS = ("facebook.com", "fb.com", "fb.me", "instagram.com", "linkedin.com", "lnkd.in", "t.co", "twitter.com",
+                 "x.com", "youtube.com", "youtu.be", "telegram.org", "t.me", "reddit.com", "quora.com", "threads.net",
+                 "pinterest.com", "pin.it", "snapchat.com", "com.linkedin.android", "com.instagram.android",
+                 "com.facebook.katana", "com.twitter.android", "com.google.android.youtube")
+# utm_source values that name a source rather than a medium.
+_AI_SOURCES = ("chatgpt.com", "chatgpt", "openai", "perplexity", "perplexity.ai", "gemini", "copilot", "claude", "claude.ai")
+_SOCIAL_SOURCES = ("facebook", "instagram", "linkedin", "twitter", "x", "youtube", "telegram", "fb", "ig", "threads",
+                   "pinterest", "reddit", "quora")
+# In-app browsers drop the referrer, so a tap on a link inside Instagram
+# arrives looking "Direct". Their user agent still says which app it is.
+_INAPP_RE = re.compile(r"\b(Instagram|FBAN|FBAV|FB_IAB|LinkedInApp|Snapchat|Pinterest|Twitter|musical_ly|Line/)", re.I)
+
+
+def _host_in(host: str, domains) -> bool:
+    return any(host == d or host.endswith("." + d) for d in domains)
+
+
+def in_app(user_agent: str) -> str:
+    """'social' when the UA is a social app's in-app browser, else ''."""
+    return "social" if _INAPP_RE.search(user_agent or "") else ""
 _BOT_RE = re.compile(r"bot|crawl|spider|slurp|headless|lighthouse|puppeteer|prerender|preview|facebookexternalhit|"
                      r"whatsapp/|monitor|pingdom|uptime|curl|wget|python-requests|httpclient", re.I)
 PARTNER_KINDS = {"author": "Author", "educator": "Educator / teacher", "institution": "Coaching / university",
@@ -64,26 +99,101 @@ def channel_of(attr: Optional[dict], coupon_code: str = "", partner_codes: Optio
     camp = (a.get("utm_campaign") or "").lower()
     if src == "whatsapp" or med == "whatsapp":
         return "WhatsApp"
-    if med in ("email", "newsletter") or src == "email" or camp.startswith("mk-"):
+    if med in ("email", "newsletter") or src in ("email", "newsletter", "gmail") or camp.startswith("mk-"):
         return "Email"
     if src == "google" and med in ("shopping", "merchant", "free_listing"):
         return "Google Shopping"
     if med in ("cpc", "ppc", "paid", "paid_social", "display", "ads"):
         return "Paid ads"
-    if src in ("facebook", "instagram", "linkedin", "twitter", "x", "youtube", "telegram") or med == "social":
+    if src in _AI_SOURCES:
+        return "AI assistants"
+    if src in _SOCIAL_SOURCES or med == "social":
         return "Social"
     if src or med:
         return "Referral sites"
     host = referrer_host(a.get("referrer") or "")
     if host:
-        if host.endswith("oakbridge.in"):
+        if _host_in(host, ("oakbridge.in",)):
             return "Direct"
-        if any(s in host for s in _SEARCH):
+        if _host_in(host, _EMAIL_HOSTS):
+            return "Email"
+        if _host_in(host, _WHATSAPP_HOSTS):
+            return "WhatsApp"
+        if _host_in(host, _AI_HOSTS):
+            return "AI assistants"
+        if _GOOGLE_SEARCH_RE.match(host) or _host_in(host, _SEARCH_HOSTS):
             return "Search (organic)"
-        if any(s in host for s in _SOCIAL):
+        if _host_in(host, _SOCIAL_HOSTS):
             return "Social"
         return "Referral sites"
+    # No referrer and no tags — but an Instagram/Facebook/LinkedIn in-app
+    # browser still says so in its user agent (sent as "in_app").
+    if (a.get("in_app") or "") == "social":
+        return "Social"
     return "Direct"
+
+
+_TABLET_RE = re.compile(r"iPad|Tablet|PlayBook|Silk|(Android(?!.*Mobile))", re.I)
+_MOBILE_RE = re.compile(r"Mobi|iPhone|iPod|Android.*Mobile|Opera Mini|IEMobile", re.I)
+
+
+def device_of(user_agent: str) -> str:
+    ua = user_agent or ""
+    if _TABLET_RE.search(ua):
+        return "Tablet"
+    if _MOBILE_RE.search(ua):
+        return "Mobile"
+    return "Desktop"
+
+
+def landing_key(path: str) -> str:
+    """A landing page, tidy enough to group: no query string, no trailing
+    slash, capped. Book pages keep their id — which book brought people in is
+    the point."""
+    p = (path or "/").split("?")[0].split("#")[0].strip()[:80] or "/"
+    if not p.startswith("/"):
+        p = "/" + p
+    return p.rstrip("/") or "/"
+
+
+STEPS = ("view_item", "add_to_cart", "checkout", "payment")
+STEP_LABELS = {"visit": "Visited", "view_item": "Viewed a book", "add_to_cart": "Added to cart",
+               "checkout": "Opened checkout", "payment": "Opened payment", "paid": "Paid"}
+
+
+def ip_in(ip: str, nets: list) -> bool:
+    """Is this address one of the office networks? Addresses are compared,
+    never stored."""
+    import ipaddress
+    try:
+        a = ipaddress.ip_address((ip or "").strip())
+    except ValueError:
+        return False
+    for n in nets or []:
+        try:
+            if a in ipaddress.ip_network(str(n).strip(), strict=False):
+                return True
+        except ValueError:
+            continue
+    return False
+
+
+def clean_nets(raw) -> list:
+    """Admin-typed office IPs / CIDR ranges -> the valid ones, normalised, max 20."""
+    import ipaddress
+    out = []
+    items = raw if isinstance(raw, list) else re.split(r"[\s,;]+", str(raw or ""))
+    for x in items:
+        x = str(x).strip()
+        if not x:
+            continue
+        try:
+            out.append(str(ipaddress.ip_network(x, strict=False)))
+        except ValueError:
+            continue
+        if len(out) >= 20:
+            break
+    return out
 
 
 def funnel_rows(visits: dict, orders: list) -> list:

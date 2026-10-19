@@ -32,7 +32,7 @@ import jobs as _jobs
 import marketing as mk
 import marketing_core as core
 from audit import audit_log
-from extensions import db, require_admin, require_superadmin
+from extensions import db, get_current_user, require_admin, require_superadmin
 
 log = logging.getLogger(__name__)
 SITE = mk.SITE
@@ -63,47 +63,270 @@ async def _partner_codes() -> set:
 
 
 # -------------------------------------------------------------- visits ---
-@public_router.post("/t/visit")
-async def track_visit(request: Request):
-    """One count per browser session (sent by the site with sendBeacon as
-    text/plain, so no CORS preflight). Bots and our prerenderer are ignored."""
-    if gc.is_bot(request.headers.get("user-agent", "")):
-        return Response(status_code=204)
+SETTINGS_KEY = "growth_settings"
+# Visit tallies written by the Oct 2026 counting rules carry v=2. Earlier ones
+# (substring channel rules, staff and office included) stay in the database
+# but are never read for the funnel: the window simply starts at the first v=2
+# day, so no inaccurate count is ever mixed in and nothing has to be deleted.
+VISIT_V = 2
+_SETTINGS_CACHE: dict = {"at": 0.0, "v": None}
+
+
+async def growth_settings(fresh: bool = False) -> dict:
+    """Office networks to leave out of the counts (Admin → Marketing → Growth)."""
+    import time
+    if not fresh and _SETTINGS_CACHE["v"] is not None and time.monotonic() - _SETTINGS_CACHE["at"] < 60:
+        return _SETTINGS_CACHE["v"]
+    doc = await db.integrations.find_one({"key": SETTINGS_KEY}, {"_id": 0}) or {}
+    v = {"office_ips": gc.clean_nets(doc.get("office_ips") or [])}
+    _SETTINGS_CACHE.update(at=time.monotonic(), v=v)
+    return v
+
+
+_INDEXED = {"done": False}
+
+
+async def _ensure_indexes() -> None:
+    """Every beacon upserts on (day, …); without these each one scans the
+    whole tally collection, which grows by a few thousand rows a month."""
+    if _INDEXED["done"]:
+        return
+    try:
+        await db.visit_stats.create_index([("day", 1), ("channel", 1), ("ref", 1)])
+        await db.visit_dims.create_index([("day", 1), ("dim", 1), ("key", 1)])
+        await db.step_stats.create_index([("day", 1), ("channel", 1), ("step", 1)])
+    except Exception:  # noqa: BLE001 — counting must never fail on an index
+        log.exception("growth: index creation failed")
+    _INDEXED["done"] = True
+
+
+async def _beacon(request: Request) -> Optional[tuple]:
+    """Shared by every counter: (body, attribution, channel, user-agent), or
+    None when this request must not be counted — a bot, our prerenderer, or a
+    browser on the office network. The IP is compared, never stored."""
+    ua = request.headers.get("user-agent", "")
+    if gc.is_bot(ua):
+        return None
+    await _ensure_indexes()
+    from antispam import client_ip
+    if gc.ip_in(client_ip(request), (await growth_settings())["office_ips"]):
+        return None
     try:
         raw = (await request.body())[:2000]
         d = json.loads(raw or b"{}")
         if not isinstance(d, dict):
             raise ValueError
     except (ValueError, UnicodeDecodeError):
-        return Response(status_code=204)
+        return None
     attr = {k: str(d.get(k) or "")[:120] for k in ("utm_source", "utm_medium", "utm_campaign", "ref", "referrer")}
+    # In-app browsers (Instagram, Facebook, LinkedIn…) send no referrer; the
+    # server reads the app from the user agent rather than trusting the body.
+    attr["in_app"] = gc.in_app(ua)
     channel = gc.channel_of(attr, partner_codes=await _partner_codes())
+    return d, attr, channel, ua
+
+
+@public_router.post("/t/visit")
+async def track_visit(request: Request):
+    """One count per browser session (sent by the site with sendBeacon as
+    text/plain, so no CORS preflight). Bots, our prerenderer, signed-in staff
+    (the site never sends it for them) and the office network are ignored.
+
+    Besides the channel count it keeps three cookie-free tallies per day:
+    landing page, referring site (host only) and device type. Nothing that
+    identifies a person is stored."""
+    b = await _beacon(request)
+    if not b:
+        return Response(status_code=204)
+    d, attr, channel, ua = b
     day = _now().strftime("%Y-%m-%d")
-    key = {"day": day, "channel": channel, "ref": gc.norm_code(attr.get("ref")) if channel == "Partner" else ""}
+    key = {"day": day, "channel": channel, "ref": gc.norm_code(attr.get("ref")) if channel == "Partner" else "", "v": VISIT_V}
     await db.visit_stats.update_one(key, {"$inc": {"n": 1}, "$setOnInsert": key}, upsert=True)
+    dims = [("device", gc.device_of(ua)), ("landing", gc.landing_key(str(d.get("path") or "/")))]
+    host = gc.referrer_host(attr.get("referrer") or "")
+    if host and not host.endswith("oakbridge.in"):
+        dims.append(("referrer", host[:80]))
+    for dim, k in dims:
+        await db.visit_dims.update_one({"day": day, "dim": dim, "key": k}, {"$inc": {"n": 1}}, upsert=True)
+    return Response(status_code=204)
+
+
+class UnvisitBody(BaseModel):
+    at: str
+    utm_source: Optional[str] = ""
+    utm_medium: Optional[str] = ""
+    utm_campaign: Optional[str] = ""
+    ref: Optional[str] = ""
+    referrer: Optional[str] = ""
+    path: Optional[str] = "/"
+    steps: Optional[list] = None
+
+
+@public_router.post("/t/unvisit")
+async def untrack_visit(body: UnvisitBody, request: Request, user: dict = Depends(get_current_user)):
+    """Take back this session's visit (and any shopping steps) when the person
+    turns out to be staff — they signed in during a visit that was already
+    counted. Only a signed-in STAFF account can call it, so it cannot be used
+    to pull numbers down; and it only subtracts what is there (never below 0)."""
+    import rbac
+    if user.get("role") not in rbac.ADMIN_ROLES:
+        raise HTTPException(status_code=403, detail="Staff only")
+    try:
+        when = datetime.fromisoformat(body.at.replace("Z", "+00:00"))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Bad time")
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=timezone.utc)
+    if not (_now() - timedelta(days=2) <= when <= _now() + timedelta(minutes=5)):
+        return {"ok": True, "undone": 0}
+    day = when.astimezone(timezone.utc).strftime("%Y-%m-%d")
+    ua = request.headers.get("user-agent", "")
+    attr = {k: str(getattr(body, k) or "")[:120] for k in ("utm_source", "utm_medium", "utm_campaign", "ref", "referrer")}
+    attr["in_app"] = gc.in_app(ua)
+    channel = gc.channel_of(attr, partner_codes=await _partner_codes())
+    key = {"day": day, "channel": channel, "ref": gc.norm_code(attr.get("ref")) if channel == "Partner" else "", "v": VISIT_V}
+    undone = 0
+    r = await db.visit_stats.update_one({**key, "n": {"$gt": 0}}, {"$inc": {"n": -1}})
+    undone += getattr(r, "modified_count", 0) or 0
+    dims = [("device", gc.device_of(ua)), ("landing", gc.landing_key(body.path or "/"))]
+    host = gc.referrer_host(attr.get("referrer") or "")
+    if host and not host.endswith("oakbridge.in"):
+        dims.append(("referrer", host[:80]))
+    for dim, k in dims:
+        await db.visit_dims.update_one({"day": day, "dim": dim, "key": k, "n": {"$gt": 0}}, {"$inc": {"n": -1}})
+    for step in (body.steps or [])[:len(gc.STEPS)]:
+        if step in gc.STEPS:
+            await db.step_stats.update_one({"day": day, "channel": channel, "step": step, "n": {"$gt": 0}}, {"$inc": {"n": -1}})
+    return {"ok": True, "undone": undone}
+
+
+@public_router.post("/t/step")
+async def track_step(request: Request):
+    """One count per session per shopping step (viewed a book, added to cart,
+    opened checkout, opened payment), per channel — so the funnel shows WHERE
+    buyers drop out, still without cookies."""
+    b = await _beacon(request)
+    if not b:
+        return Response(status_code=204)
+    d, _attr, channel, _ua = b
+    step = str(d.get("step") or "")
+    if step not in gc.STEPS:
+        return Response(status_code=204)
+    key = {"day": _now().strftime("%Y-%m-%d"), "channel": channel, "step": step}
+    await db.step_stats.update_one(key, {"$inc": {"n": 1}, "$setOnInsert": key}, upsert=True)
     return Response(status_code=204)
 
 
 # --------------------------------------------------------------- funnel ---
+async def _window(days: int) -> tuple:
+    """(start_day, start_iso, clamped). Visits only exist from the day counting
+    began, so the window starts no earlier than that — otherwise 30 days of
+    orders are divided by 4 days of visits and every rate is inflated (the
+    live funnel showed Search at 9.7% this way, Oct 2026)."""
+    days = max(1, min(int(days), 365))
+    want = (_now() - timedelta(days=days)).strftime("%Y-%m-%d")
+    first = await db.visit_stats.find_one({"v": VISIT_V}, {"_id": 0, "day": 1}, sort=[("day", 1)])
+    start = max(want, first["day"]) if first and first.get("day") else want
+    return start, f"{start}T00:00:00", start != want
+
+
+async def _staff() -> tuple:
+    """Staff user ids and emails: their own orders (tests, demos) stay out of the funnel."""
+    import rbac
+    ids, emails = set(), set()
+    async for u in db.users.find({"role": {"$in": list(rbac.ADMIN_ROLES)}}, {"_id": 0, "id": 1, "email": 1}):
+        if u.get("id"):
+            ids.add(u["id"])
+        if u.get("email"):
+            emails.add(str(u["email"]).lower())
+    return ids, emails
+
+
+async def _funnel_orders(start_iso: str) -> list:
+    codes = await _partner_codes()
+    ids, emails = await _staff()
+    out = []
+    async for o in db.orders.find({"created_at": {"$gte": start_iso}},
+                                  {"_id": 0, "attribution": 1, "coupon_code": 1, "payment_status": 1, "total": 1,
+                                   "user_id": 1, "email": 1, "created_at": 1}):
+        if o.get("user_id") in ids or str(o.get("email") or "").lower() in emails:
+            continue
+        out.append({"channel": gc.channel_of(o.get("attribution"), o.get("coupon_code") or "", codes),
+                    "paid": o.get("payment_status") == "paid", "total": o.get("total"),
+                    "day": str(o.get("created_at") or "")[:10]})
+    return out
+
+
 @admin_router.get("/funnel")
 async def adm_funnel(days: int = 30):
-    """Visits → checkouts started → paid, per channel, for the last N days."""
-    days = max(1, min(int(days), 365))
-    since_day = (_now() - timedelta(days=days)).strftime("%Y-%m-%d")
-    since = (_now() - timedelta(days=days)).isoformat()
+    """Visits → viewed a book → cart → checkout → payment → paid, per channel."""
+    start_day, start_iso, clamped = await _window(days)
     visits: dict = {}
-    async for v in db.visit_stats.find({"day": {"$gte": since_day}}, {"_id": 0, "channel": 1, "n": 1}):
+    async for v in db.visit_stats.find({"day": {"$gte": start_day}, "v": VISIT_V}, {"_id": 0, "channel": 1, "n": 1}):
         visits[v["channel"]] = visits.get(v["channel"], 0) + int(v.get("n") or 0)
-    codes = await _partner_codes()
-    orders = []
-    async for o in db.orders.find({"created_at": {"$gte": since}},
-                                  {"_id": 0, "attribution": 1, "coupon_code": 1, "payment_status": 1, "total": 1}):
-        orders.append({"channel": gc.channel_of(o.get("attribution"), o.get("coupon_code") or "", codes),
-                       "paid": o.get("payment_status") == "paid", "total": o.get("total")})
+    steps: dict = {}
+    async for x in db.step_stats.find({"day": {"$gte": start_day}}, {"_id": 0, "channel": 1, "step": 1, "n": 1}):
+        steps.setdefault(x["channel"], {}).setdefault(x["step"], 0)
+        steps[x["channel"]][x["step"]] += int(x.get("n") or 0)
+    orders = await _funnel_orders(start_iso)
     rows = gc.funnel_rows(visits, orders)
+    for r in rows:
+        r["steps"] = {k: steps.get(r["channel"], {}).get(k, 0) for k in gc.STEPS}
     tot = {k: sum(r[k] for r in rows) for k in ("visits", "checkouts", "paid", "revenue")}
     tot["visit_to_paid"] = round(tot["paid"] / tot["visits"], 4) if tot["visits"] else None
-    return {"days": days, "rows": rows, "total": tot}
+    tot["steps"] = {k: sum(r["steps"][k] for r in rows) for k in gc.STEPS}
+    return {"days": days, "since": start_day, "clamped": clamped, "rows": rows, "total": tot,
+            "step_labels": gc.STEP_LABELS, "steps_since": await _first_day(db.step_stats)}
+
+
+async def _first_day(coll) -> Optional[str]:
+    d = await coll.find_one({}, {"_id": 0, "day": 1}, sort=[("day", 1)])
+    return d.get("day") if d else None
+
+
+@admin_router.get("/insights")
+async def adm_insights(days: int = 30):
+    """Top landing pages and referring sites, device split, and a daily
+    visits / paid-orders trend — same window as the funnel."""
+    start_day, start_iso, clamped = await _window(days)
+    dims: dict = {"landing": {}, "referrer": {}, "device": {}}
+    async for x in db.visit_dims.find({"day": {"$gte": start_day}}, {"_id": 0, "dim": 1, "key": 1, "n": 1}):
+        if x.get("dim") in dims:
+            dims[x["dim"]][x["key"]] = dims[x["dim"]].get(x["key"], 0) + int(x.get("n") or 0)
+    top = lambda d, n: [{"key": k, "n": v} for k, v in sorted(d.items(), key=lambda kv: -kv[1])[:n]]  # noqa: E731
+    daily: dict = {}
+    async for v in db.visit_stats.find({"day": {"$gte": start_day}, "v": VISIT_V}, {"_id": 0, "day": 1, "n": 1}):
+        daily.setdefault(v["day"], {"visits": 0, "paid": 0})["visits"] += int(v.get("n") or 0)
+    for o in await _funnel_orders(start_iso):
+        if o["paid"] and o["day"]:
+            daily.setdefault(o["day"], {"visits": 0, "paid": 0})["paid"] += 1
+    return {"since": start_day, "clamped": clamped, "landing": top(dims["landing"], 12), "referrer": top(dims["referrer"], 12),
+            "device": dims["device"], "daily": daily, "dims_since": await _first_day(db.visit_dims)}
+
+
+class GrowthSettingsBody(BaseModel):
+    office_ips: Optional[list] = None
+
+
+@admin_router.get("/settings")
+async def adm_growth_settings():
+    return await growth_settings(fresh=True)
+
+
+@admin_router.put("/settings")
+async def adm_save_growth_settings(body: GrowthSettingsBody, user: dict = Depends(require_admin)):
+    nets = gc.clean_nets(body.office_ips or [])
+    await db.integrations.update_one({"key": SETTINGS_KEY}, {"$set": {"key": SETTINGS_KEY, "office_ips": nets}}, upsert=True)
+    _SETTINGS_CACHE.update(at=0.0, v=None)
+    await audit_log(db, "GROWTH_SETTINGS_SAVED", email=user.get("email", ""), role=user.get("role", ""), meta={"office_ips": len(nets)})
+    return {"office_ips": nets}
+
+
+@admin_router.get("/my-ip")
+async def adm_my_ip(request: Request):
+    """The address this admin is browsing from, to add as the office network."""
+    from antispam import client_ip
+    return {"ip": client_ip(request)}
 
 
 # ------------------------------------------------------------- partners ---

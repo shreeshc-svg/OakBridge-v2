@@ -24,7 +24,74 @@
  * credit organic for work the campaign did.
  */
 
+import { allows } from "./consent";
+
 const KEY = "oakbridge_attribution";
+// 30-day memory of the first source — ONLY for visitors who accepted analytics
+// cookies (Oct 2026). Without it, someone who came from an email, left, and
+// bought the next day was credited to "Direct". Everyone else keeps the
+// session-only behaviour described above.
+const PERSIST_KEY = "oakbridge_attribution_30d";
+const PERSIST_MS = 30 * 86400000;
+// Set on any browser where a staff account has signed in: their own browsing
+// is not a customer visit. Not personal data — just "this is a staff device".
+const STAFF_KEY = "oakbridge_staff";
+
+function persisted() {
+    try {
+        if (!allows("analytics")) {
+            localStorage.removeItem(PERSIST_KEY); // consent withdrawn: forget it
+            return null;
+        }
+        const p = JSON.parse(localStorage.getItem(PERSIST_KEY) || "null");
+        if (!p || !p.value || !(Number(p.expires) > Date.now())) {
+            localStorage.removeItem(PERSIST_KEY);
+            return null;
+        }
+        return p.value;
+    } catch {
+        return null;
+    }
+}
+
+function persist(value) {
+    try {
+        if (allows("analytics") && !persisted()) {
+            localStorage.setItem(PERSIST_KEY, JSON.stringify({ value, expires: Date.now() + PERSIST_MS }));
+        }
+    } catch {
+        /* storage full / private mode: session-only, as before */
+    }
+}
+
+const COUNTED_KEY = "oakbridge_counted"; // what THIS session sent: { at, ...fields, path, steps: [] }
+
+/**
+ * Called by AuthContext when a staff account is signed in on this browser.
+ * Marks the browser so it is never counted again, and returns this session's
+ * already-sent visit (and steps) so the caller can take them back with the
+ * signed-in POST /t/unvisit — the "first visit from a staff browser" gap.
+ * Returns null when there is nothing to undo (or it was already undone).
+ */
+export function markStaffBrowser() {
+    try {
+        localStorage.setItem(STAFF_KEY, "1");
+        const c = JSON.parse(sessionStorage.getItem(COUNTED_KEY) || "null");
+        if (!c || c.undone) return null;
+        sessionStorage.setItem(COUNTED_KEY, JSON.stringify({ ...c, undone: true }));
+        return c;
+    } catch {
+        return null;
+    }
+}
+
+const isStaffBrowser = () => {
+    try {
+        return localStorage.getItem(STAFF_KEY) === "1";
+    } catch {
+        return false;
+    }
+};
 
 // "ref" = a partner's code from a share link (?ref=KANNAN10). Kept with the
 // order, credits the partner, and pre-fills their discount at checkout.
@@ -46,10 +113,20 @@ export function captureAttribution() {
         if (ref && !ref.startsWith(window.location.origin)) {
             found.referrer = ref.slice(0, 200);
         }
-        if (!Object.keys(found).length) return null;
         if (sessionStorage.getItem(KEY)) return readAttribution(); // first touch wins
-        const value = { ...found, landed_at: new Date().toISOString() };
+        if (!Object.keys(found).length) {
+            // A plain return visit (typed URL, bookmark): with consent, carry
+            // the source remembered from the first visit, as analytics tools do
+            // for "direct" sessions.
+            const back = persisted();
+            if (!back) return null;
+            const value = { ...back, returning: true };
+            sessionStorage.setItem(KEY, JSON.stringify(value));
+            return value;
+        }
+        const value = persisted() ? { ...persisted(), returning: true } : { ...found, landed_at: new Date().toISOString() };
         sessionStorage.setItem(KEY, JSON.stringify(value));
+        persist(value);
         return value;
     } catch {
         return null; // private mode, or a URL we cannot parse
@@ -75,27 +152,59 @@ export function readAttribution() {
  */
 export function sendVisitBeacon(apiBase) {
     try {
-        if (!apiBase || navigator.webdriver || sessionStorage.getItem("oakbridge_visit_sent")) return;
+        if (!apiBase || navigator.webdriver || isStaffBrowser() || sessionStorage.getItem("oakbridge_visit_sent")) return;
         sessionStorage.setItem("oakbridge_visit_sent", "1");
-        const params = new URLSearchParams(window.location.search);
-        const a = readAttribution() || {};
-        const body = {
-            utm_source: a.utm_source || params.get("utm_source") || "",
-            utm_medium: a.utm_medium || params.get("utm_medium") || "",
-            utm_campaign: a.utm_campaign || params.get("utm_campaign") || "",
-            ref: a.ref || (params.get("ref") || "").toUpperCase().replace(/[^A-Z0-9_-]/g, "").slice(0, 24),
-            referrer: (() => {
-                try { return document.referrer ? new URL(document.referrer).origin : ""; } catch { return ""; }
-            })(),
-            path: window.location.pathname.slice(0, 120),
-        };
-        const blob = new Blob([JSON.stringify(body)], { type: "text/plain" });
-        if (!(navigator.sendBeacon && navigator.sendBeacon(`${apiBase}/t/visit`, blob))) {
-            fetch(`${apiBase}/t/visit`, { method: "POST", body: JSON.stringify(body), keepalive: true,
-                headers: { "Content-Type": "text/plain" } }).catch(() => {});
-        }
+        const body = { ...beaconFields(), path: window.location.pathname.slice(0, 120) };
+        send(`${apiBase}/t/visit`, body);
+        sessionStorage.setItem(COUNTED_KEY, JSON.stringify({ ...body, at: new Date().toISOString(), steps: [] }));
     } catch {
         /* private mode / old browser: no count, nothing breaks */
+    }
+}
+
+/** Source fields every counter sends (the server works out the channel). */
+function beaconFields() {
+    const params = new URLSearchParams(window.location.search);
+    const a = readAttribution() || {};
+    // The remembered referrer first (a returning visitor's original source),
+    // then this page load's. Origin only — never the full URL.
+    const origin = (u) => {
+        try { return u ? new URL(u).origin : ""; } catch { return ""; }
+    };
+    return {
+        utm_source: a.utm_source || params.get("utm_source") || "",
+        utm_medium: a.utm_medium || params.get("utm_medium") || "",
+        utm_campaign: a.utm_campaign || params.get("utm_campaign") || "",
+        ref: a.ref || (params.get("ref") || "").toUpperCase().replace(/[^A-Z0-9_-]/g, "").slice(0, 24),
+        referrer: origin(a.referrer) || origin(document.referrer),
+    };
+}
+
+function send(url, body) {
+    const blob = new Blob([JSON.stringify(body)], { type: "text/plain" });
+    if (!(navigator.sendBeacon && navigator.sendBeacon(url, blob))) {
+        fetch(url, { method: "POST", body: JSON.stringify(body), keepalive: true,
+            headers: { "Content-Type": "text/plain" } }).catch(() => {});
+    }
+}
+
+/**
+ * One count per session per shopping step — "view_item" (a book page),
+ * "add_to_cart", "checkout" (checkout page), "payment" (Razorpay opened) — so
+ * Marketing → Growth shows where buyers drop out. Same rules as the visit
+ * count: no cookies, nothing personal, never for staff or automated browsers.
+ */
+export function trackStep(apiBase, step) {
+    try {
+        if (!apiBase || navigator.webdriver || isStaffBrowser()) return;
+        const flag = `oakbridge_step_${step}`;
+        if (sessionStorage.getItem(flag)) return;
+        sessionStorage.setItem(flag, "1");
+        send(`${apiBase}/t/step`, { ...beaconFields(), step });
+        const c = JSON.parse(sessionStorage.getItem(COUNTED_KEY) || "null");
+        if (c && !c.undone) sessionStorage.setItem(COUNTED_KEY, JSON.stringify({ ...c, steps: [...(c.steps || []), step] }));
+    } catch {
+        /* nothing breaks */
     }
 }
 

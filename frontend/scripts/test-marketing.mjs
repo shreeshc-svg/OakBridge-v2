@@ -232,7 +232,10 @@ check(/function CleanupPanel/.test(page) && /<CleanupPanel campaignId=\{id\} \/>
     const attr = code("frontend/src/lib/attribution.js");
     check(/\["growth", "Growth"\]/.test(page) && /function Growth\(/.test(page) && /data-testid="mk-growth-funnel"/.test(page), "Growth tab: funnel, partners, automations, Merchant feed");
     check(/sendVisitBeacon\(API\)/.test(app) && /navigator\.webdriver/.test(attr) && /type: "text\/plain"/.test(attr), "visit beacon: once per session, skips automated browsers, no CORS preflight");
-    check(/if gc\.is_bot\(request\.headers\.get\("user-agent", ""\)\)/.test(gr) && /"day": day, "channel": channel/.test(gr), "visits: bots ignored, only day/channel/ref stored");
+    // Oct 2026: the checks moved into a shared _beacon() (also used by /t/step),
+// which adds the office-network skip. Still: bots out, only aggregates stored.
+check(/if gc\.is_bot\(ua\):\s*\n\s*return None/.test(gr) && /gc\.ip_in\(client_ip\(request\)/.test(gr) && /"day": day, "channel": channel/.test(gr)
+      && !/insert_one\(\{[^}]*"ip"/.test(gr), "visits: bots and office network ignored, only day/channel/ref aggregates stored");
     check(/"ref"\}/.test(code("backend/server.py")) || /"landed_at", "ref"\}/.test(code("backend/server.py")), "orders keep the partner ref");
     check(/readAttribution\(\)\?\.ref/.test(code("frontend/src/pages/Checkout.jsx")), "checkout pre-fills the partner's discount from the link");
     check(/need_consent=True/.test(gr) && /"skipped: no marketing consent"/.test(gr), "abandoned-checkout email only with marketing consent");

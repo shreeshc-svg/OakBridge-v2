@@ -713,6 +713,10 @@ export const mkExportContacts = (params = {}, format = "xlsx") =>
 export const mkCleanup = (body) => api.post("/admin/marketing/contacts/cleanup", body, { timeout: 300000 }).then((r) => r.data);
 // Growth (growth.py): channels funnel, partner links, automations, Merchant feed.
 export const mkGrowthFunnel = (days = 30) => api.get("/admin/marketing/growth/funnel", { params: { days } }).then((r) => r.data);
+export const mkGrowthInsights = (days = 30) => api.get("/admin/marketing/growth/insights", { params: { days } }).then((r) => r.data);
+export const mkGrowthSettings = () => api.get("/admin/marketing/growth/settings").then((r) => r.data);
+export const mkSaveGrowthSettings = (office_ips) => api.put("/admin/marketing/growth/settings", { office_ips }).then((r) => r.data);
+export const mkMyIp = () => api.get("/admin/marketing/growth/my-ip").then((r) => r.data);
 export const mkPartners = (days = 90) => api.get("/admin/marketing/growth/partners", { params: { days } }).then((r) => r.data);
 export const mkNewPartner = (body) => api.post("/admin/marketing/growth/partners", body).then((r) => r.data);
 export const mkSavePartner = (id, body) => api.patch(`/admin/marketing/growth/partners/${id}`, body).then((r) => r.data);

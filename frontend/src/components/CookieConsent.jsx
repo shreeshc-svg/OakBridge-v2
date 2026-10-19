@@ -37,7 +37,7 @@ const ROWS = [
     {
         key: "analytics",
         label: "Analytics",
-        text: "Counts which pages and books are viewed, and where people give up during checkout. It tells us what to fix.",
+        text: "Counts which pages and books are viewed, and where people give up during checkout, and remembers for 30 days which of our links or emails you first came from. It tells us what to fix and what works.",
     },
     {
         key: "replay",
