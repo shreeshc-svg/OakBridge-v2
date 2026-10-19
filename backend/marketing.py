@@ -2757,6 +2757,12 @@ async def adm_lists():
             lst["count"] = await db.mk_contacts.count_documents({"lists": lst["id"]})
             lst["sendable"] = await db.mk_contacts.count_documents({"lists": lst["id"], "email_consent.status": "subscribed",
                                                                     "suppressed": {"$in": [None, ""]}, "email_status": {"$in": ["verified", "valid"]}})
+            # The rest of the subscribed, unsuppressed contacts are "risky"
+            # (mostly Gmail/Yahoo/Rediff, whose mailboxes AWS cannot confirm).
+            # Shown so "2 can be emailed" is not read as "475 are bad": whether
+            # they go depends on the risky-address rule in Settings.
+            lst["risky"] = await db.mk_contacts.count_documents({"lists": lst["id"], "email_consent.status": "subscribed",
+                                                                 "suppressed": {"$in": [None, ""]}, "email_status": "risky"})
     return lists
 
 

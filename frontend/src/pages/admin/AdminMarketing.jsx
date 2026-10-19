@@ -1402,7 +1402,7 @@ function Lists() {
                             <li key={l.id} className="py-2 flex items-center gap-3">
                                 {canDelete(user) && <input type="checkbox" aria-label={`Select ${l.name}`} checked={sel.sel.has(l.id)} onChange={() => sel.toggle(l.id)} />}
                                 <div className="flex-1"><b>{l.name}</b> <span className="text-xs text-[#6B7280]">{l.kind}</span>
-                                    <div className="text-xs text-[#4B5563]">{l.count ?? 0} contacts{l.kind === "static" ? ` · ${l.sendable ?? 0} can be emailed` : ""}{l.rules?.length ? ` · ${l.rules.map((r) => r.type).join(" + ")}` : ""}</div></div>
+                                    <div className="text-xs text-[#4B5563]">{l.count ?? 0} contacts{l.kind === "static" ? ` · ${l.sendable ?? 0} confirmed${l.risky ? ` · ${l.risky} unconfirmed (sent only if your risky-address rule in Settings allows)` : ""}` : ""}{l.rules?.length ? ` · ${l.rules.map((r) => r.type).join(" + ")}` : ""}</div></div>
                                 {l.kind === "static" && <button type="button" className="text-xs underline" onClick={() => reverify(l.id)}>Re-verify</button>}
                                 {canDelete(user) && <button type="button" aria-label="Delete list" onClick={() => delLists([l.id])}><Trash2 size={14} className="text-[#CC0033]" /></button>}
                             </li>
