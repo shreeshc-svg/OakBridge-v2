@@ -22,6 +22,7 @@ import {
 } from "../../lib/rbac";
 import ExportButton from "../../components/admin/ExportButton";
 import PurchaseNudgeDialog from "../../components/admin/PurchaseNudgeDialog";
+import EmailCustomersDialog from "../../components/admin/EmailCustomersDialog";
 
 const ASSIGNABLE = ["superadmin", "manager", "editor", "fulfilment", "warehouse", "customer"];
 const BLANK = {
@@ -76,6 +77,9 @@ export default function AdminUsers() {
     const { user: me } = useAuth();
     const canManage = isSuperadmin(me?.role);
     const [showNudge, setShowNudge] = useState(false);
+    // Ticked customers (ids) for "Email selected"; `emailing` = { ids } | { all: true }.
+    const [picked, setPicked] = useState(() => new Set());
+    const [emailing, setEmailing] = useState(null);
 
     // Deleting a customer leaves their ORDERS alone — an order carries its own
     // snapshot of name, address and what was bought, so the financial record
@@ -217,6 +221,24 @@ export default function AdminUsers() {
             </div>
 
             {showNudge && <PurchaseNudgeDialog onClose={() => setShowNudge(false)} />}
+            {emailing && (
+                <EmailCustomersDialog all={!!emailing.all} userIds={emailing.ids || []} onClose={() => setEmailing(null)} />
+            )}
+            {canManage && (
+                <div className="mt-4 flex flex-wrap items-center gap-3 text-sm" data-testid="admin-users-email-bar">
+                    <button type="button" disabled={!picked.size} onClick={() => setEmailing({ ids: [...picked] })}
+                        data-testid="admin-users-email-selected"
+                        className="inline-flex items-center gap-2 bg-[#002B5C] text-white px-4 py-2 disabled:opacity-40">
+                        <Mail size={15} strokeWidth={1.5} /> Email selected ({picked.size})
+                    </button>
+                    <button type="button" onClick={() => setEmailing({ all: true })} data-testid="admin-users-email-all"
+                        className="inline-flex items-center gap-2 border border-[#002B5C] text-[#002B5C] px-4 py-2 hover:bg-[#F5F7FA]">
+                        Email all customers
+                    </button>
+                    {picked.size > 0 && <button type="button" className="underline text-xs" onClick={() => setPicked(new Set())}>Clear selection</button>}
+                    <span className="text-xs text-[#6B7280]">Tick customers below. Emails go only to people who agreed to marketing.</span>
+                </div>
+            )}
 
             {created && (
                 <div
@@ -362,6 +384,22 @@ export default function AdminUsers() {
                 <table className="w-full text-sm">
                     <thead className="bg-[#F5F7FA] text-[10px] font-mono uppercase tracking-widest text-[#4B5563]">
                         <tr>
+                            {canManage && (
+                                <th className="px-3 py-3 w-8">
+                                    {(() => {
+                                        const ids = view.filter((u) => u.role === "customer").map((u) => u.id);
+                                        const all = ids.length > 0 && ids.every((id) => picked.has(id));
+                                        return (
+                                            <input type="checkbox" aria-label="Select all customers shown" checked={all} data-testid="admin-users-select-all"
+                                                onChange={() => setPicked((p) => {
+                                                    const n = new Set(p);
+                                                    ids.forEach((id) => (all ? n.delete(id) : n.add(id)));
+                                                    return n;
+                                                })} />
+                                        );
+                                    })()}
+                                </th>
+                            )}
                             <th className="text-left px-4 py-3">Name</th>
                             <th className="text-left px-4 py-3">Email</th>
                             <th className="text-left px-4 py-3">Role</th>
@@ -372,7 +410,7 @@ export default function AdminUsers() {
                     <tbody>
                         {loading && (
                             <tr>
-                                <td colSpan={5} className="px-4 py-10 text-center">
+                                <td colSpan={canManage ? 6 : 5} className="px-4 py-10 text-center">
                                     Loading…
                                 </td>
                             </tr>
@@ -383,6 +421,19 @@ export default function AdminUsers() {
                                 className="border-t border-[#E5E7EB]"
                                 data-testid={`admin-user-row-${u.id}`}
                             >
+                                {canManage && (
+                                    <td className="px-3 py-3">
+                                        {u.role === "customer" && (
+                                            <input type="checkbox" aria-label={`Select ${u.name || u.email}`} checked={picked.has(u.id)}
+                                                data-testid={`admin-user-pick-${u.id}`}
+                                                onChange={() => setPicked((p) => {
+                                                    const n = new Set(p);
+                                                    if (n.has(u.id)) n.delete(u.id); else n.add(u.id);
+                                                    return n;
+                                                })} />
+                                        )}
+                                    </td>
+                                )}
                                 <td className="px-4 py-3 font-serif text-[#002B5C]">{u.name}</td>
                                 <td className="px-4 py-3 text-[#4B5563]">{u.email}</td>
                                 <td className="px-4 py-3">
@@ -439,7 +490,7 @@ export default function AdminUsers() {
                             </tr>
                             {editing?.id === u.id && (
                                 <tr className="bg-[#F5F7FA] border-t border-[#E5E7EB]">
-                                    <td colSpan={5} className="px-4 py-5">
+                                    <td colSpan={canManage ? 6 : 5} className="px-4 py-5">
                                         <div className="overline !text-[10px] mb-3">
                                             {u.name} — tick the sections they can open
                                         </div>

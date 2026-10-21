@@ -652,6 +652,8 @@ export const mkConfirm = (c, t) => api.post("/m/confirm", { c, t }).then((r) => 
 export const mkDashboard = (days = 30) => api.get("/admin/marketing/dashboard", { params: { days } }).then((r) => r.data);
 export const mkHealth = () => api.get("/admin/marketing/health").then((r) => r.data);
 /** What the checker learned per provider (bad providers, SES-unverifiable). */
+/** Admin → Users: make a marketing list (and draft campaigns) from ticked people or all customers. */
+export const mkListFromUsers = (body) => api.post("/admin/marketing/lists/from-users", body).then((r) => r.data);
 export const mkProviders = () => api.get("/admin/marketing/providers").then((r) => r.data);
 export const mkSettings = () => api.get("/admin/marketing/settings").then((r) => r.data);
 export const mkSaveSettings = (body) => api.put("/admin/marketing/settings", body).then((r) => r.data);

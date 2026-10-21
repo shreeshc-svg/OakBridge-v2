@@ -808,14 +808,16 @@ async def verify_emails(raw: list, *, autofix: bool = True, ses: str = "cache", 
             r["reasons"].append(f"looks made-up: {core.looks_made_up(r['email'].split('@')[0])}")
         if r["role"] and role_ok:
             r["reasons"].append("role address — treated as normal (Settings)")
-        if di.get("bad_provider"):
+        bad_prov = bool(di.get("bad_provider")) and v.get("overall") != "HIGH"
+        if bad_prov:
             # Learned from our own bounces (learn_providers): unconfirmed
-            # addresses at this provider bounce too often to mail.
+            # addresses at this provider bounce too often to mail. An address
+            # SES itself confirmed (HIGH) is not "unconfirmed" and still goes.
             status = "risky"
             r.update(status=status)
             r["reasons"].append(f"{dom}: unconfirmed addresses here bounced too often — skipped until proven")
         if status == "risky":
-            if di.get("bad_provider"):
+            if bad_prov:
                 r["risk_kind"] = "bad_provider"
             elif r["role"] and not role_ok:
                 r["risk_kind"] = "role"
@@ -1104,8 +1106,88 @@ def _links(send_id: str):
     }
 
 
-def render_for(campaign: dict, contact: dict, send_id: str, st: dict) -> tuple[str, str]:
-    links = campaign.get("links") or []
+# ------------------------------------------------- "Picked for you" ---
+def _for_you_count(campaign: dict) -> int:
+    return max([int(b.get("count") or 3) for b in campaign.get("blocks") or [] if b.get("type") == "for_you"] or [0])
+
+
+async def release_pool(limit: int = 40) -> list:
+    """Latest releases a reader can actually buy today (in stock, or a live
+    pre-order), newest first, covers only — the candidates for "Picked for you"."""
+    docs = await db.books.find(
+        {"enabled": {"$ne": False}, "product_type": {"$nin": ["hamper"]},
+         "$or": [{"stock": {"$gt": 0}}, {"coming_soon": True}],
+         "cover_image": {"$nin": [None, ""]}},
+        {"_id": 0, "id": 1, "title": 1, "author": 1, "subject": 1, "category": 1, "price": 1, "cover_image": 1,
+         "release_rank": 1, "publication_year": 1, "new_release": 1}).sort(
+        [("new_release", -1), ("release_rank", 1), ("publication_year", -1)]).limit(limit).to_list(limit)
+    return docs
+
+
+async def reader_profile(email_norm: str) -> dict:
+    """What one person bought and showed interest in, from OUR records only:
+    paid orders, their cart, and "tell me when it's back" requests. No
+    browsing history is kept per person, so none is used."""
+    prof = {"bought": set(), "interest": set(), "authors": {}, "subjects": {}, "categories": {}}
+    if not email_norm:
+        return prof
+    u = await db.users.find_one({"$or": [{"email_normalised": email_norm}, {"email": email_norm}]}, {"_id": 0, "id": 1, "email": 1})
+    or_ = [{"email": {"$regex": f"^{re.escape(email_norm)}$", "$options": "i"}}]
+    if u and u.get("id"):
+        or_.append({"user_id": u["id"]})
+    ids = []
+    async for o in db.orders.find({"$or": or_, "payment_status": "paid"}, {"_id": 0, "items": 1}):
+        for it in o.get("items") or []:
+            if it.get("book_id"):
+                prof["bought"].add(it["book_id"])
+                ids.append(it["book_id"])
+    if u and u.get("id"):
+        cart = await db.carts.find_one({"user_id": u["id"]}, {"_id": 0, "items": 1}) or {}
+        prof["interest"] |= {it.get("book_id") for it in cart.get("items") or [] if it.get("book_id")}
+    async for n in db.stock_notifications.find({"email": {"$regex": f"^{re.escape(email_norm)}$", "$options": "i"}}, {"_id": 0, "book_id": 1}):
+        if n.get("book_id"):
+            prof["interest"].add(n["book_id"])
+    look = list(set(ids) | prof["interest"])
+    if look:
+        async for b in db.books.find({"id": {"$in": look}}, {"_id": 0, "author": 1, "subject": 1, "category": 1}):
+            for key, field in (("authors", "author"), ("subjects", "subject"), ("categories", "category")):
+                v = (b.get(field) or "").strip().lower()
+                if v:
+                    prof[key][v] = prof[key].get(v, 0) + 1
+    return prof
+
+
+async def attach_picks(contact: dict, campaign: dict, pool: Optional[list] = None) -> list:
+    """Put this reader's picks on the contact (`_picks`) and return their
+    absolute URLs (to be stored as the send's own trackable links)."""
+    n = _for_you_count(campaign)
+    if not n:
+        return []
+    pool = pool if pool is not None else await release_pool()
+    prof = await reader_profile(contact.get("email_norm") or core.normalise_email(contact.get("email") or ""))
+    picks = core.pick_for_you(prof, pool, n)
+    A = {k for k, v in prof["authors"].items() if v}
+    S = {k for k, v in prof["subjects"].items() if v}
+    out = []
+    for b in picks:
+        why = ("You asked about this one" if b.get("id") in prof["interest"]
+               else f"Because you read {b.get('author')}" if (b.get("author") or "").strip().lower() in A
+               else f"New in {b.get('subject')}" if (b.get("subject") or "").strip().lower() in S else "")
+        out.append({"title": b.get("title"), "author": b.get("author"), "price": f"₹{float(b.get('price') or 0):,.0f}",
+                    "cover": _abs_media(b.get("cover_image") or ""), "url": f"{SITE}/books/{b['id']}", "why": why})
+    contact["_picks"] = out
+    return [p["url"] for p in out]
+
+
+def _abs_media(u: str) -> str:
+    from emailer import media_url
+    return media_url(u) or ""
+
+
+def render_for(campaign: dict, contact: dict, send_id: str, st: dict, links: Optional[list] = None) -> tuple[str, str]:
+    """`links`: this send's own link list (campaign links + the reader's
+    picks) — click tracking redirects by index into exactly this list."""
+    links = links if links is not None else (campaign.get("links") or [])
     L = _links(send_id)
 
     def link_for(u):
@@ -1426,6 +1508,7 @@ async def _run_campaign(cid: str) -> None:
                 await refresh_campaign_stats(cid)
                 return
             tail_batch = any(s.get("tail") for s in batch)
+            pool = None  # latest releases, loaded once per batch when the email has "Picked for you"
             for s in batch:
                 contact = await db.mk_contacts.find_one({"id": s["contact_id"]}, {"_id": 0}) or {}
                 cs = contact.get("email_consent", {}).get("status")
@@ -1438,7 +1521,14 @@ async def _run_campaign(cid: str) -> None:
                     continue
                 if camp["channel"] == "email":
                     try:
-                        html_doc, text_doc = render_for(camp, contact, s["id"], st)
+                        send_links = None
+                        if _for_you_count(camp):
+                            if pool is None:
+                                pool = await release_pool()
+                            extra = await attach_picks(contact, camp, pool)
+                            send_links = (camp.get("links") or []) + [u for u in extra if u not in (camp.get("links") or [])]
+                            await db.mk_sends.update_one({"id": s["id"]}, {"$set": {"links": send_links}})
+                        html_doc, text_doc = render_for(camp, contact, s["id"], st, links=send_links)
                         raw = build_mime(st=st, to=contact["email"], subject=core.personalise(camp["subject"], contact),
                                          html_doc=html_doc, text_doc=text_doc, unsub_post=_links(s["id"])["unsub_post"])
                         mid = await asyncio.to_thread(_send_raw, raw)
@@ -2920,6 +3010,91 @@ async def adm_create_list(body: ListBody, user: dict = Depends(require_admin)):
     return doc
 
 
+class FromUsersBody(BaseModel):
+    user_ids: Optional[list] = None   # specific people ticked in Admin → Users
+    all_customers: bool = False       # everyone with an account (customers) + every guest buyer
+    name: Optional[str] = None
+    template: Optional[str] = None    # "for-you" | "blank" | None (list only)
+    ask_permission: bool = False      # one permission email for those who never decided
+
+
+@admin_router.post("/lists/from-users")
+async def adm_list_from_users(body: FromUsersBody, user: dict = Depends(require_admin)):
+    """Admin → Users → "Email selected" / "Email all customers".
+
+    Makes a static marketing list of those people (creating contacts where
+    needed) and, if asked, a draft campaign aimed at it. CONSENT IS NOT
+    CHANGED: a campaign still reaches only people who agreed to marketing;
+    unsubscribed / complained / bounced people are never mailed. Those who
+    never decided can, if ticked, be sent ONE permission email (the re-confirm
+    campaign) — the lawful way to reach them under the DPDP Act."""
+    people: dict = {}
+    if body.all_customers:
+        async for u in db.users.find({"role": {"$in": [None, "customer"]}}, {"_id": 0, "email": 1, "name": 1, "phone": 1}):
+            if u.get("email"):
+                people.setdefault(core.normalise_email(u["email"]), u)
+        async for o in db.orders.find({}, {"_id": 0, "email": 1, "full_name": 1, "phone": 1}):
+            if o.get("email"):
+                people.setdefault(core.normalise_email(o["email"]), {"email": o["email"], "name": o.get("full_name", ""), "phone": o.get("phone", "")})
+    else:
+        ids = [str(i) for i in (body.user_ids or [])][:5000]
+        if not ids:
+            raise HTTPException(status_code=400, detail="Tick at least one person, or choose all customers")
+        async for u in db.users.find({"id": {"$in": ids}}, {"_id": 0, "email": 1, "name": 1, "phone": 1}):
+            if u.get("email"):
+                people.setdefault(core.normalise_email(u["email"]), u)
+    people.pop("", None)
+    name = (body.name or ("All customers" if body.all_customers else f"Selected customers · {len(people)}")).strip()[:80]
+    name = f"{name} · {_now().strftime('%d %b %Y')}"
+    lst = {"id": str(uuid.uuid4()), "name": name, "kind": "static", "rules": [], "created_at": _iso(),
+           "created_by": user.get("email", ""), "source": "admin-users"}
+    await db.mk_lists.insert_one(dict(lst))
+    counts = {"people": len(people), "added": 0, "subscribed": 0, "no_decision": 0, "opted_out": 0, "blocked": 0, "asked_permission": 0}
+    for norm, u in people.items():
+        c = await upsert_contact(u["email"], name=u.get("name") or "", phone=u.get("phone") or "", source="website account",
+                                 lists=[lst["id"]], customer=True, by=user.get("email", ""))
+        if not c:
+            counts["blocked"] += 1   # erased at their request / removed in a clean-up: never re-added
+            continue
+        counts["added"] += 1
+        cs = (c.get("email_consent") or {}).get("status")
+        if c.get("suppressed") or cs in ("unsubscribed", "complained", "lapsed"):
+            counts["opted_out"] += 1
+        elif cs == "subscribed":
+            counts["subscribed"] += 1
+        else:
+            counts["no_decision"] += 1
+            if body.ask_permission:
+                r = await db.mk_contacts.update_one(
+                    {"id": c["id"], "email_consent.status": {"$nin": ["subscribed", "unsubscribed", "complained", "lapsed"]}},
+                    {"$set": {"permission_pending": True, "permission_list": lst["id"], "permission_since": _iso()}})
+                counts["asked_permission"] += r.modified_count
+    out = {"list": lst, "counts": counts, "campaigns": []}
+    tmpl = (body.template or "").strip()
+    if tmpl in ("for-you", "blank"):
+        t = next((x for x in core.STARTER_TEMPLATES if x["key"] == "for-you"), None) if tmpl == "for-you" else None
+        blocks = _clean_blocks((t or {}).get("blocks") or [])
+        doc = {"id": str(uuid.uuid4()), "name": (t["name"] if t else "Email to customers") + f" — {lst['name']}", "channel": "email",
+               "kind": "standard", "reconfirm_days": None, "subject": (t or {}).get("subject", ""), "preheader": (t or {}).get("preheader", ""),
+               "blocks": blocks, "links": core.collect_links(blocks), "audience": {"list_ids": [lst["id"]], "rules": []},
+               "wa_template": "", "wa_language": "en", "wa_variables": [], "status": "draft", "created_at": _iso(),
+               "created_by": user.get("email", ""), "stats": {}}
+        await db.mk_campaigns.insert_one(dict(doc))
+        out["campaigns"].append({"id": doc["id"], "name": doc["name"], "kind": "standard"})
+    if body.ask_permission and counts["asked_permission"]:
+        blocks = [dict(b) for b in RECONFIRM_BLOCKS]
+        doc = {"id": str(uuid.uuid4()), "name": f"Permission request — {lst['name']}", "channel": "email", "kind": "reconfirm",
+               "reconfirm_days": 30, "subject": "Do you still want to hear from Oakbridge?", "preheader": "",
+               "blocks": blocks, "links": core.collect_links(blocks), "audience": {"list_ids": [lst["id"]], "rules": []},
+               "wa_template": "", "wa_language": "en", "wa_variables": [], "status": "draft", "created_at": _iso(),
+               "created_by": user.get("email", ""), "stats": {}}
+        await db.mk_campaigns.insert_one(dict(doc))
+        out["campaigns"].append({"id": doc["id"], "name": doc["name"], "kind": "reconfirm"})
+    await audit_log(db, "MARKETING_LIST_FROM_USERS", email=user.get("email", ""), role=user.get("role", ""),
+                    meta={"list": lst["id"], "all": body.all_customers, **counts})
+    return out
+
+
 @admin_router.delete("/lists/{lid}")
 async def adm_delete_list(lid: str):
     await db.mk_lists.delete_one({"id": lid})
@@ -2957,13 +3132,18 @@ class CampaignBody(BaseModel):
 
 
 def _clean_blocks(blocks: list) -> list:
-    ok_types = {"heading", "text", "image", "button", "book", "divider", "spacer"}
+    ok_types = {"heading", "text", "image", "button", "book", "divider", "spacer", "for_you"}
     out = []
     for b in (blocks or [])[:60]:
         if not isinstance(b, dict) or b.get("type") not in ok_types:
             continue
         c = {k: (str(v)[:5000] if isinstance(v, str) else v) for k, v in b.items()
-             if k in ("type", "text", "label", "url", "src", "alt", "title", "author", "cover", "price", "book_id")}
+             if k in ("type", "text", "label", "url", "src", "alt", "title", "author", "cover", "price", "book_id", "count")}
+        if c.get("type") == "for_you":
+            try:
+                c["count"] = max(1, min(int(c.get("count") or 3), 6))
+            except (TypeError, ValueError):
+                c["count"] = 3
         for k in ("url", "src", "cover"):
             if c.get(k) and not re.match(r"^https?://", str(c[k]), re.I):
                 c.pop(k)   # only web links / images
@@ -3142,6 +3322,7 @@ async def adm_test_campaign(cid: str, body: TestBody, user: dict = Depends(requi
         if not core.check_syntax(body.to)["ok"]:
             raise HTTPException(status_code=400, detail="Not an email address")
         contact = {"name": user.get("name") or "Test", "email": body.to}
+        await attach_picks(contact, c)   # the test address's own picks (or the newest, if it has no history)
         html_doc, text_doc = core.render_email(c.get("blocks") or [], brand={"name": "Oakbridge Publishing", "logo": st.get("logo"), "footer": st.get("footer")},
                                                contact=contact, link_for=lambda u: core.add_utm(u, cid), unsubscribe_url=f"{SITE}/unsubscribe",
                                                preheader=c.get("preheader") or "")
@@ -3167,8 +3348,10 @@ async def adm_preview(cid: str):
     if not c:
         raise HTTPException(status_code=404, detail="Campaign not found")
     st = await get_settings()
+    pc = dict(PREVIEW_CONTACT)
+    await attach_picks(pc, c)  # sample: the newest releases (the sample reader has no history)
     html_doc, _ = core.render_email(c.get("blocks") or [], brand={"name": "Oakbridge Publishing", "logo": st.get("logo"), "footer": st.get("footer")},
-                                    contact=PREVIEW_CONTACT, link_for=lambda u: u, unsubscribe_url="#",
+                                    contact=pc, link_for=lambda u: u, unsubscribe_url="#",
                                     preheader=core.personalise(c.get("preheader") or "", PREVIEW_CONTACT))
     return {"html": html_doc, "subject": core.personalise(c.get("subject") or "", PREVIEW_CONTACT),
             "unknown_variables": _unknown_vars(c)}

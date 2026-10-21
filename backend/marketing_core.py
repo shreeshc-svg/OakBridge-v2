@@ -682,6 +682,13 @@ def unknown_variables(*texts: str) -> list:
 # one; "Duplicate" makes an editable copy in the team's own templates. Links
 # point at real site pages; book blocks are left for the admin to pick.
 STARTER_TEMPLATES = [
+    {"key": "for-you", "name": "Latest releases — picked for each reader",
+     "description": "Each person gets the new releases closest to what they bought, carted or asked about.",
+     "subject": "{{first_name|Reader}}, new books we think you'll like", "preheader": "Fresh from our press — chosen for you",
+     "blocks": [{"type": "heading", "text": "New for you, {{first_name|reader}}"},
+                {"type": "text", "text": "We've just published a few titles we think fit what you read. Here they are:"},
+                {"type": "for_you", "text": "Picked for you", "count": 3},
+                {"type": "button", "label": "See all new releases", "url": "https://www.oakbridge.in/books?new_release=true"}]},
     {"key": "new-release", "name": "New release", "description": "Announce one new book.",
      "subject": "New from Oakbridge: [book title]", "preheader": "Out now — {{first_name|you}} heard it here first",
      "blocks": [{"type": "heading", "text": "Just published"},
@@ -722,6 +729,38 @@ STARTER_TEMPLATES = [
                 {"type": "text", "text": "Thanks for joining. We'll write when there's a new book, an event or an offer worth your time — no more than a few times a month."},
                 {"type": "button", "label": "Browse the bookstore", "url": "https://www.oakbridge.in/books"}]},
 ]
+
+
+# ------------------------------------------------- "Picked for you" ---
+def pick_for_you(profile: dict, pool: list, n: int = 3) -> list:
+    """Latest releases chosen for ONE reader from what they bought and showed
+    interest in. Pure, so it is tested directly.
+
+    profile: {"bought": set(book ids), "interest": set(book ids from cart /
+              notify-me), "authors": {name: weight}, "subjects": {...},
+              "categories": {...}}  — weights = how often it appeared.
+    pool:    latest releases, NEWEST FIRST (each {id, author, subject, category, …}).
+
+    Never a book they already bought. Scored: a book they put in a cart or
+    asked to be told about (+6), same author (+3 x weight), same subject (+2 x),
+    same category (+1 x); ties keep newest first. Fewer than `n` matches are
+    topped up with the newest releases, so everyone gets a full email."""
+    bought = set(profile.get("bought") or ())
+    interest = set(profile.get("interest") or ())
+    A, S, C = profile.get("authors") or {}, profile.get("subjects") or {}, profile.get("categories") or {}
+    scored = []
+    for i, b in enumerate(pool or []):
+        if not b or b.get("id") in bought:
+            continue
+        sc = (6 if b.get("id") in interest else 0) + 3 * A.get((b.get("author") or "").strip().lower(), 0) \
+            + 2 * S.get((b.get("subject") or "").strip().lower(), 0) + C.get((b.get("category") or "").strip().lower(), 0)
+        scored.append((-sc, i, b))
+    scored.sort(key=lambda t: (t[0], t[1]))
+    matched = [b for sc, _, b in scored if sc < 0][:n]
+    if len(matched) < n:
+        seen = {b.get("id") for b in matched}
+        matched += [b for _, _, b in sorted(scored, key=lambda t: t[1]) if b.get("id") not in seen][:n - len(matched)]
+    return matched
 
 
 def collect_links(blocks: list) -> list:
@@ -788,6 +827,28 @@ def render_email(blocks: list, *, brand: dict, contact: dict, link_for, open_pix
                 f'<div style="padding-top:12px"><a href="{L(b["url"])}" style="color:{navy};font-weight:700;font-size:14px">View the book &rarr;</a></div>'
                 f'</td></tr></table></td></tr>')
             text.append(f"{b.get('title')} — {b.get('author') or ''} {b.get('price') or ''}: {b['url']}")
+        elif t == "for_you":
+            # One reader's own picks (pick_for_you), attached to the contact
+            # as `_picks` by the sender; their links are stored on the send so
+            # click tracking still only ever redirects to known URLs.
+            picks = contact.get("_picks") or []
+            if picks and b.get("text"):
+                s = personalise(b.get("text"), contact)
+                rows.append(f'<tr><td style="padding:18px 32px 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:{red}">{_esc(s)}</td></tr>')
+                text.append(s.upper())
+            for p in picks:
+                cover = f'<img src="{_esc(p.get("cover"))}" alt="" width="110" style="display:block;width:110px;height:auto;border:0">' if p.get("cover") else ""
+                price = f'<div style="font-size:16px;font-weight:700;color:{red};padding-top:6px">{_esc(p.get("price"))}</div>' if p.get("price") else ""
+                why = f'<div style="font-size:12px;color:#6B7280;padding-top:4px">{_esc(p.get("why"))}</div>' if p.get("why") else ""
+                rows.append(
+                    f'<tr><td style="padding:14px 32px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr>'
+                    f'<td width="120" valign="top"><a href="{L(p["url"])}">{cover}</a></td>'
+                    f'<td valign="top" style="font-family:Arial,Helvetica,sans-serif;padding-left:16px">'
+                    f'<div style="font-size:17px;font-weight:700;color:{navy};line-height:1.3">{_esc(p.get("title"))}</div>'
+                    f'<div style="font-size:14px;color:#4B5563;padding-top:4px">{_esc(p.get("author"))}</div>{price}{why}'
+                    f'<div style="padding-top:10px"><a href="{L(p["url"])}" style="color:{navy};font-weight:700;font-size:14px">View the book &rarr;</a></div>'
+                    f'</td></tr></table></td></tr>')
+                text.append(f"{p.get('title')} — {p.get('author') or ''} {p.get('price') or ''}: {p['url']}")
         elif t == "divider":
             rows.append('<tr><td style="padding:12px 32px"><div style="border-top:1px solid #E5E7EB;height:1px;line-height:1px">&nbsp;</div></td></tr>')
             text.append("-" * 20)

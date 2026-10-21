@@ -78,8 +78,10 @@ function useDebounced(v, ms = 300) {
 }
 
 export default function AdminMarketing() {
-    const [tab, setTab] = useState("dash");
-    const [openCampaign, setOpenCampaign] = useState(null);
+    // ?campaign=<id> (from Admin → Users → "Email selected") opens that draft.
+    const deep = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("campaign") : null;
+    const [tab, setTab] = useState(deep ? "campaigns" : "dash");
+    const [openCampaign, setOpenCampaign] = useState(deep || null);
     return (
         <div data-testid="admin-marketing-page">
             <div className="flex flex-wrap items-end justify-between gap-4">
@@ -404,7 +406,7 @@ function CampaignView({ id, onBack, onOpen }) {
     );
 }
 
-const BLOCK_TYPES = [["heading", "Heading"], ["text", "Text"], ["image", "Image"], ["button", "Button"], ["book", "Book"], ["divider", "Divider"], ["spacer", "Space"]];
+const BLOCK_TYPES = [["heading", "Heading"], ["text", "Text"], ["image", "Image"], ["button", "Button"], ["book", "Book"], ["for_you", "Picked for you"], ["divider", "Divider"], ["spacer", "Space"]];
 
 function CampaignEditor({ c, setC, reload }) {
     const [saving, setSaving] = useState(false);
@@ -1054,6 +1056,17 @@ function BlockEditor({ blocks, setBlocks }) {
                         </div>
                     )}
                     {b.type === "book" && <BookPicker block={b} onPick={(p) => upd(i, p)} />}
+                    {b.type === "for_you" && (
+                        <div className="grid sm:grid-cols-[1fr_auto] gap-2 items-center">
+                            <input className={box} value={b.text ?? "Picked for you"} onChange={(e) => upd(i, { text: e.target.value })} placeholder="Small heading above the books" />
+                            <label className="text-xs flex items-center gap-2">Books
+                                <select className="border border-[#E5E7EB] px-2 py-1" value={b.count || 3} onChange={(e) => upd(i, { count: Number(e.target.value) })}>
+                                    {[1, 2, 3, 4, 5, 6].map((n) => <option key={n} value={n}>{n}</option>)}
+                                </select>
+                            </label>
+                            <div className="sm:col-span-2 text-[11px] text-[#6B7280]">Each reader gets different books: the newest releases closest to what they bought, carted or asked to be told about — never one they already own. People with no history get the newest releases. The preview shows the newest releases.</div>
+                        </div>
+                    )}
                 </div>
             ))}
             <div className="flex flex-wrap gap-2">
