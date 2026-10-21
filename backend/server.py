@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field, ConfigDict, EmailStr
 from typing import List, Optional
 import uuid
 from datetime import datetime, timezone, timedelta
+from hot_press import hot_order
 
 
 ROOT_DIR = Path(__file__).parent
@@ -882,6 +883,25 @@ async def list_categories():
 # book carries an explicit new_release flag. release_rank 1 = most recent.
 NEW_RELEASE_TOP_N = 24
 
+
+def _new_release_clause() -> dict:
+    """Which books belong in Hot Off the Press / "New Releases".
+
+    The ticked flag, the most recently published titles, and — since Oct 2026,
+    when pre-orders were put at the top of the row — every pre-order that has
+    not launched yet. That last test compares the launch date's first ten
+    characters (YYYY-MM-DD) against today's UTC date as strings: exact enough
+    to drop a pre-order the day after it launches, without parsing a
+    free-typed field inside the database. Whether it is still a LIVE pre-order
+    (and so sorts in the top group) is decided precisely by _preorder_active.
+    """
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    return {"$or": [
+        {"new_release": True},
+        {"release_rank": {"$lte": NEW_RELEASE_TOP_N}},
+        {"coming_soon": True, "launch_at": {"$gte": today}},
+    ]}
+
 # Fields a storefront search looks at, best-match first.
 SEARCH_FIELDS = ("title", "subtitle", "author", "subject", "isbn", "description")
 
@@ -1373,12 +1393,7 @@ async def list_books(
             # Same problem, better answer: we know the real publication order, so
             # "new releases" means the most recently published titles rather than a
             # flag nobody maintains.
-            clauses.append(
-                {"$or": [
-                    {"new_release": True},
-                    {"release_rank": {"$lte": NEW_RELEASE_TOP_N}},
-                ]}
-            )
+            clauses.append(_new_release_clause())
         else:
             query["new_release"] = False
 
@@ -1414,6 +1429,14 @@ async def list_books(
     sort_stage = {"_in_stock": -1}
     for field, direction in chosen:
         sort_stage[field] = direction
+    # "View all" from Hot Off the Press lands here with the default sort; it
+    # must show the homepage row's order (pre-orders first, newest added
+    # first — see hot_press.py), not in-stock-first, which would sink every
+    # pre-order to the bottom. That order is computed in Python from the
+    # ObjectId, so the whole (small: tick + top 24 + pre-orders) set is
+    # fetched and the page sliced afterwards; pagination stays correct.
+    hot = bool(new_release) and sort in (None, "featured")
+    fetch_n = HOT_FETCH_CAP if hot else limit
     pipeline = [
         {"$match": query},
         {
@@ -1427,7 +1450,9 @@ async def list_books(
         {"$limit": limit},
         {"$project": {"_id": 0, "_in_stock": 0, "_rank": 0}},
     ]
-    docs = await db.books.aggregate(pipeline).to_list(limit)
+    if hot:
+        pipeline = pipeline[:2] + [{"$limit": HOT_FETCH_CAP}, {"$project": {"_in_stock": 0, "_rank": 0}}]
+    docs = await db.books.aggregate(pipeline).to_list(fetch_n)
 
     # Nothing matched a search term — try the nearest in-catalogue spelling
     # before giving up, and report what we changed in a response header so the
@@ -1456,7 +1481,7 @@ async def list_books(
             else:
                 retry_query.pop("$and", None)
             retry_pipeline = [{"$match": retry_query}] + pipeline[1:]
-            docs = await db.books.aggregate(retry_pipeline).to_list(limit)
+            docs = await db.books.aggregate(retry_pipeline).to_list(fetch_n)
             if docs:
                 response.headers["X-Search-Corrected-To"] = fixed
 
@@ -1472,13 +1497,17 @@ async def list_books(
                     red_query.pop("$and", None)
                 docs = await db.books.aggregate(
                     [{"$match": red_query}] + pipeline[1:]
-                ).to_list(limit)
+                ).to_list(fetch_n)
                 if docs:
                     # Same header as a spelling fix, so the storefront says
                     # "Showing results for …" and the visitor can see which
                     # word was set aside rather than being silently overruled.
                     response.headers["X-Search-Corrected-To"] = reduced
 
+    if hot:
+        docs = hot_order(docs, _preorder_active)[skip:skip + limit]
+        for d in docs:
+            d.pop("_id", None)
     return [_decorate_book(d) for d in docs]
 
 
@@ -1535,6 +1564,10 @@ async def _drop_dead_words(
 # have no product_type at all, still count as books.
 NOT_A_HAMPER = {"product_type": {"$ne": "hamper"}}
 
+# Most books the Hot Off the Press set can hold (tick + top 24 + pre-orders);
+# a guard, not a page size.
+HOT_FETCH_CAP = 500
+
 
 @api_router.get("/books/featured", response_model=List[Book])
 async def featured_books(limit: int = 8):
@@ -1554,18 +1587,16 @@ async def new_release_books(limit: int = 8):
     showed a completely different set. Both now agree: explicit flag OR the
     most recently published titles, ordered newest first.
     """
-    cursor = (
-        db.books.find(
-            {**NOT_A_HAMPER, "$or": [
-                {"new_release": True},
-                {"release_rank": {"$lte": NEW_RELEASE_TOP_N}},
-            ]},
-            {"_id": 0},
-        )
-        .sort("release_rank", 1)
-        .limit(limit)
-    )
-    docs = await cursor.to_list(limit)
+    # Order (Oct 2026): live pre-orders first, then everything else, each
+    # newest-ADDED first — hot_press.py has the rule and why. `_id` is kept
+    # for that and removed before the response. `enabled` matches /books: a
+    # pack switched off in Admin left the store but stayed in this row.
+    docs = await db.books.find(
+        {**NOT_A_HAMPER, "enabled": {"$ne": False}, **_new_release_clause()}
+    ).to_list(HOT_FETCH_CAP)
+    docs = hot_order(docs, _preorder_active)[:max(0, min(limit, 60))]
+    for d in docs:
+        d.pop("_id", None)
     return [_decorate_book(d) for d in docs]
 
 
