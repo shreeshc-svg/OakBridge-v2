@@ -1747,7 +1747,14 @@ function VerifyImport() {
                                 <div className="text-xs bg-[#F5F7FA] p-2" data-testid="mk-import-skipped">Will not be imported: {Object.entries(report.skipped).map(([k, n]) => `${n} ${k}`).join(" · ")}</div>
                             )}
                             <RowReport rows={report.rows || []} />
-                            <div className="text-xs text-[#4B5563]">{c.duplicates_in_file || 0} duplicates removed · {c.fixed || 0} typos fixed · columns: email “{report.columns.email}”{report.columns.name ? `, name “${report.columns.name}”` : ""}{report.columns.phone ? `, phone “${report.columns.phone}”` : ""}</div>
+                            {(report.fixed || []).length > 0 && (
+                                <details className="text-xs" open data-testid="mk-import-fixed"><summary className="cursor-pointer text-[#15803D]">{c.fixed} fixed automatically — check them</summary>
+                                    <ul className="mt-1 space-y-0.5">{report.fixed.map((f, i) => (
+                                        <li key={i}><span className="font-mono line-through text-[#9CA3AF]">{f.from}</span> → <span className="font-mono">{f.to}</span> <span className="text-[#6B7280]">— {f.why.replace(/^fixed:?\s*/, "")}</span></li>
+                                    ))}</ul>
+                                </details>
+                            )}
+                            <div className="text-xs text-[#4B5563]">{c.blank_rows ? `${c.blank_rows} empty rows ignored · ` : ""}{c.duplicates_in_file || 0} duplicates removed · {c.fixed || 0} fixed automatically · columns: email “{report.columns.email}”{report.columns.name ? `, name “${report.columns.name}”` : ""}{report.columns.phone ? `, phone “${report.columns.phone}”` : ""}</div>
                             {Object.entries(report.sample || {}).filter(([k]) => ["invalid", "risky", "suppressed"].includes(k)).map(([k, rows]) => (
                                 <details key={k} className="text-xs"><summary className="cursor-pointer" style={{ color: STATUS_COLORS[k] }}>{k}: examples</summary>
                                     <ul className="mt-1 space-y-0.5">{rows.map((r, i) => <li key={i} className="font-mono">{r.input} <span className="text-[#6B7280] font-sans">— {r.reasons.join("; ")}</span></li>)}</ul>

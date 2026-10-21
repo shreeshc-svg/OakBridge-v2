@@ -266,6 +266,52 @@ def _doh_mx(domain: str) -> Optional[bool]:
     return None
 
 
+async def _repair_domains(rows: list, mx: dict) -> None:
+    """Company-domain typos ("mmtckimited.com" -> "mmtclimited.com"), for
+    addresses whose domain doesn't receive email. A fix is used only when it
+    is unambiguous AND the corrected domain really receives email:
+
+    1. the closest domain that already works — elsewhere in this file, or one
+       we have delivered to before — 1 edit away (2 for long names);
+    2. otherwise "one key off" candidates (neighbouring key, dropped or swapped
+       letter), checked for a mail server; used only if exactly one works.
+
+    The repaired address is never trusted more than "risky" (a guess, however
+    good) unless it is proven later. Bounded: 15 bad domains a batch."""
+    bad = sorted({x["syntax"]["email"].split("@")[1] for x in rows
+                  if x["syntax"]["ok"] and mx.get(x["syntax"]["email"].split("@")[1]) is False})[:15]
+    if not bad:
+        return
+    known = {d for d, ok in mx.items() if ok}
+    async for d in db.mk_domains.find({"delivered_n": {"$gt": 0}}, {"_id": 0, "domain": 1}):
+        known.add(d["domain"])
+    fixes: dict = {}
+    for d in bad:
+        k = core.closest_known(d, known)
+        if k:
+            fixes[d] = (k, "a working domain one letter away")
+            continue
+        cands = core.domain_typo_candidates(d)
+        if not cands:
+            continue
+        res = await domains_mx(set(cands))
+        ok = [c for c in cands if res.get(c)]
+        if len(ok) == 1:
+            fixes[d] = (ok[0], "one key off, and that domain receives email")
+            mx[ok[0]] = True
+    for x in rows:
+        s = x["syntax"]
+        if not s["ok"]:
+            continue
+        local, dom = s["email"].split("@")
+        if dom in fixes:
+            new, why = fixes[dom]
+            x["fixed_from"] = x["fixed_from"] or s["email"]
+            x["syntax"] = {**core.check_syntax(f"{local}@{new}"),
+                           "reasons": [r for r in s["reasons"] if r.startswith("fixed")] + [f"fixed domain {dom} -> {new} ({why})"],
+                           "domain_guess": True}
+
+
 async def domains_mx(domains: set) -> dict:
     """{domain: True/False/None}, cached 30 days in mk_domains."""
     out: dict = {}
@@ -701,14 +747,22 @@ async def verify_emails(raw: list, *, autofix: bool = True, ses: str = "cache", 
     for i, r in enumerate(raw):
         s = core.check_syntax(r)
         fixed_from = None
+        if s.get("cleaned") and s["ok"]:
+            # Spreadsheet damage repaired (spaces, mailto:, Name <…>, …): shown
+            # as fixed, with exactly what changed.
+            fixed_from = str(r)
+            s = {**s, "reasons": [f"fixed: {'; '.join(s['cleaned'])}"] + s["reasons"]}
         if autofix and s["ok"] and s["suggestion"]:
-            fixed_from = s["email"]
-            s = {**core.check_syntax(s["suggestion"]), "reasons": [f"fixed typo from {fixed_from}"]}
+            fixed_from = fixed_from or s["email"]
+            prev = s["email"]
+            s = {**core.check_syntax(s["suggestion"]), "reasons": [x for x in s["reasons"] if x.startswith("fixed:")] + [f"fixed typo from {prev}"]}
         if s["ok"] and s["email"].split("@")[1] in extra_disp:
             s.update(ok=False, disposable=True, reasons=s["reasons"] + ["throwaway domain"])
         rows.append({"input": r, "syntax": s, "fixed_from": fixed_from, "name": str(names[i] if i < len(names) else "") or ""})
     domains = {x["syntax"]["email"].split("@")[1] for x in rows if x["syntax"]["ok"]}
     mx = await domains_mx(domains)
+    if autofix:
+        await _repair_domains(rows, mx)
     slow = {d for d in domains if mx.get(d) is None}
     if slow:
         # One immediate retry: a slow DNS answer is not a risk signal. Still
@@ -749,7 +803,9 @@ async def verify_emails(raw: list, *, autofix: bool = True, ses: str = "cache", 
             reasons.append("proven (confirmed account or delivered before)")
         out.append({"input": x["input"], "email": s["email"], "email_norm": n, "status": status,
                     "reasons": reasons, "fixed_from": x["fixed_from"], "role": s.get("role", False), "ses_checked": False,
-                    "_ses": None, "_name": x["name"], "_suggest": bool(s.get("suggestion")) and not x["fixed_from"]})
+                    "_ses": None, "_name": x["name"],
+                    # A guessed domain repair is never trusted above "risky".
+                    "_suggest": (bool(s.get("suggestion")) and not x["fixed_from"]) or bool(s.get("domain_guess"))})
     if ses in ("cache", "live", "refresh"):
         # Only addresses our free checks couldn't settle are worth an SES look:
         # verified ones are proven, invalid/suppressed ones are never sent.
@@ -2260,6 +2316,11 @@ async def adm_import(
         rows = _read_table(data, file.filename)
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=f"Could not read the file: {str(e)[:120]}")
+    # Completely empty rows are not people: Excel often reports rows that only
+    # ever had formatting (a live file had 21 after its last entry, which showed
+    # up as "— empty" invalid addresses). Dropped and counted, never listed.
+    blank_rows = sum(1 for r in rows if not any(str(v or "").strip() for v in r.values()))
+    rows = [r for r in rows if any(str(v or "").strip() for v in r.values())]
     if not rows:
         raise HTTPException(status_code=400, detail="The file has no rows")
     if len(rows) > 50000:
@@ -2295,6 +2356,7 @@ async def adm_import(
     st = await get_settings()
     counts = _count(results)
     counts["duplicates_in_file"] = dups
+    counts["blank_rows"] = blank_rows
     saved = 0
     skipped: dict = {}
     lid = None
@@ -2347,12 +2409,15 @@ async def adm_import(
         sample.setdefault(v["status"], [])
         if len(sample[v["status"]]) < 25:
             sample[v["status"]].append({k: v[k] for k in ("input", "email", "reasons", "fixed_from")})
+    # Every repair the CRM made, so the admin can see exactly what changed.
+    fixed = [{"from": v["fixed_from"], "to": v["email"], "why": next((x for x in v.get("reasons") or [] if x.startswith("fixed")), "")}
+             for v in results if v.get("fixed_from")][:200]
     ses_todo = sum(1 for v in results if v["status"] in ("valid", "risky") and not v.get("ses_checked"))
     # Every row (first 2,000) with its verdict, so the admin sees each address, not just examples.
     row_report = [{"email": v["email"] or v["input"], "name": (r.get(ncol, "") if ncol else "")[:60], "status": v["status"],
                    "score": v.get("score"), "why": (v.get("reasons") or [])[:3], "risk_kind": v.get("risk_kind", "")}
                   for r, v in zip(unique_rows[:2000], results[:2000])]
-    return {"columns": {"email": ecol, "name": ncol, "phone": pcol}, "counts": counts, "sample": sample,
+    return {"columns": {"email": ecol, "name": ncol, "phone": pcol}, "counts": counts, "sample": sample, "fixed": fixed,
             "saved": saved, "list_id": lid, "dry_run": dry_run, "rows": row_report,
             "pending_id": pending_id, "would_save": would_save,
             "skipped": skipped if not dry_run else {},

@@ -24,7 +24,9 @@ print("-- syntax and cleaning --")
 c = m.check_syntax("  <Rohan.K@Gmail.com> ")
 check(c["email"] == "rohan.k@gmail.com" and c["ok"] and not c["reasons"], "trimmed, lowercased, brackets removed")
 check(m.check_syntax("mailto:a@b.co")["email"] == "a@b.co", "mailto: prefix removed")
-for bad in ["", "abc", "a@", "@b.com", "a@b", "a b@c.com x", "a@@b.com", "a@b..com", ".a@b.com"]:
+# Oct 2026: a doubled dot and a stray leading dot are repaired now (clean_raw),
+# not rejected — see the spreadsheet-repair checks below.
+for bad in ["", "abc", "a@", "@b.com", "a@b", "a b@c.com x", "a@@b.com", "john smith@gmail.com"]:
     check(not m.check_syntax(bad)["ok"], f"rejects {bad!r}")
 check(m.check_syntax("first.last+tag@company.co.in")["ok"], "accepts dots, plus and co.in")
 
@@ -235,6 +237,26 @@ for diag in ["smtp; 552-5.2.2 inbox is out of storage space and inactive OverQuo
              "550-5.2.1 The email account that you tried to reach is inactive DisabledUser", "552 1 Requested mail action aborted, mailbox not found"]:
     check(m.dead_mailbox(diag), f"dead mailbox: {diag[:40]}")
 check(not m.dead_mailbox("421 4.7.0 Try again later, closing connection") and not m.dead_mailbox("452 4.2.2 mailbox full"), "a temporary problem is not a dead mailbox")
+
+print("-- spreadsheet repairs (gc and company mail.xlsx, Oct 2026) --")
+for raw, want in [("sumankumar@smcindiaonline.c om", "sumankumar@smcindiaonline.com"),
+                  ("sunilmalhotra@lawareassociate s.com", "sunilmalhotra@lawareassociates.com"),
+                  ("rakeshmishra@mass.motherso n.com", "rakeshmishra@mass.motherson.com"),
+                  ("pramod_chauhan@jindalgroup. com", "pramod_chauhan@jindalgroup.com"),
+                  ("akhileshmishra@crescofutures. Com", "akhileshmishra@crescofutures.com"),
+                  ("bhavikamukherjee91@gmail.co m", "bhavikamukherjee91@gmail.com"),
+                  ("Rahul Rao <rahul@x.com>", "rahul@x.com"), ("mailto:a@b.co", "a@b.co"), ("a [at] b [dot] com", "a@b.com"),
+                  ("a@b..com", "a@b.com"), (".a@b.com", "a@b.com"), ("a@gmail,com.", "a@gmail.com"), ("\u200bx@y.com", "x@y.com"),
+                  ("“a@b.com”", "a@b.com")]:
+    r = m.check_syntax(raw)
+    check(r["ok"] and r["email"] == want, f"{raw!r} -> {want} (got {r['email']!r})")
+r = m.check_syntax("a@b.com; c@d.com")
+check(r["email"] == "a@b.com" and "c@d.com" in " ".join(r["cleaned"]), "two in one cell: first kept, the other named")
+check(m.check_syntax("")["reasons"] == ["no email address in this row"], "empty cell explained plainly")
+check("mmtclimited.com" in m.domain_typo_candidates("mmtckimited.com"), "one-key-off candidates include the intended domain")
+check(m.closest_known("mmtckimited.com", ["mmtclimited.com", "gmail.com"]) == "mmtclimited.com", "closest working domain found")
+check(m.closest_known("abc.com", ["abd.com", "abe.com"]) is None, "two equally close: no guess")
+check(m.closest_known("mmtckimited.com", ["mmtclimited.in"]) is None, "a different ending is never 'corrected' to")
 
 print()
 if failed:

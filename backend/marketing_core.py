@@ -97,6 +97,70 @@ def levenshtein(a: str, b: str, cap: int = 3) -> int:
     return prev[-1]
 
 
+# QWERTY neighbours, for "one key off" company-domain typos (mmtckimited.com
+# -> mmtclimited.com). Used only to propose candidates; a candidate must really
+# receive email before it is used (marketing._repair_domains).
+_KEYS = ["qwertyuiop", "asdfghjkl", "zxcvbnm"]
+_NEAR: dict = {}
+for _r, _row in enumerate(_KEYS):
+    for _c, _ch in enumerate(_row):
+        n = set()
+        for dr in (-1, 0, 1):
+            rr = _r + dr
+            if 0 <= rr < len(_KEYS):
+                for dc in (-1, 0, 1):
+                    cc = _c + dc
+                    if 0 <= cc < len(_KEYS[rr]) and (dr or dc):
+                        n.add(_KEYS[rr][cc])
+        _NEAR[_ch] = n
+
+
+def domain_typo_candidates(domain: str, limit: int = 120) -> list:
+    """Plausible intended domains for one that doesn't receive mail: one key
+    swapped for a neighbour, one letter dropped, two letters swapped — in the
+    name only (the ending .com / .co.in is left alone)."""
+    d = (domain or "").lower()
+    if "." not in d:
+        return []
+    label, _, tld = d.partition(".")
+    out, seen = [], set()
+
+    def add(lbl):
+        if lbl and lbl != label and re.match(r"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$", lbl):
+            c = f"{lbl}.{tld}"
+            if c not in seen:
+                seen.add(c)
+                out.append(c)
+    for i, ch in enumerate(label):
+        for nb in sorted(_NEAR.get(ch, ())):
+            add(label[:i] + nb + label[i + 1:])
+    for i in range(len(label)):
+        add(label[:i] + label[i + 1:])
+    for i in range(len(label) - 1):
+        add(label[:i] + label[i + 1] + label[i] + label[i + 2:])
+    return out[:limit]
+
+
+def closest_known(domain: str, known: Iterable) -> Optional[str]:
+    """A domain from `known` (ones that receive mail / we delivered to) that is
+    almost certainly what was meant: same ending, 1 edit (2 for long names),
+    and the only such match."""
+    d = (domain or "").lower()
+    tld = d.partition(".")[2]
+    hits = []
+    for k in known:
+        k = (k or "").lower()
+        if not k or k == d or k.partition(".")[2] != tld:
+            continue
+        dist = levenshtein(d, k, cap=2)
+        if dist == 1 or (dist == 2 and len(d) >= 12):
+            hits.append((dist, k))
+    hits.sort()
+    if not hits or (len(hits) > 1 and hits[0][0] == hits[1][0]):
+        return None
+    return hits[0][1]
+
+
 def suggest_domain(domain: str) -> Optional[str]:
     """'gmial.com' -> 'gmail.com'. None if the domain looks intended."""
     d = domain.lower()
@@ -116,24 +180,89 @@ def suggest_domain(domain: str) -> Optional[str]:
     return None
 
 
+_INVISIBLE = re.compile(r"[\u200b\u200c\u200d\u2060\ufeff\u00ad]")
+_LOOKALIKES = str.maketrans({"\u2018": "'", "\u2019": "'", "\u201c": '"', "\u201d": '"', "\u00a0": " ",
+                             "\uff20": "@", "\uff0e": ".", "\u3002": "."})
+
+
+def clean_raw(raw) -> tuple:
+    """Repair what spreadsheets do to addresses (Oct 2026: a live import had 11
+    addresses split by a space, e.g. "gmail.co m", "jindalgroup. com").
+    Returns (cleaned, [what was fixed]). Deterministic and safe:
+
+    - invisible characters, non-breaking spaces, curly quotes, full-width @ / .;
+    - "Name <a@b.com>" -> the address; mailto:; [at] / (at) / [dot];
+    - two addresses in one cell -> the first (the rest are named in the note);
+    - spaces inside the DOMAIN (a line-wrap: "gmail.co m") and around @ / dots;
+      a space inside the name part ("john smith@…") is NOT guessed at — it
+      stays invalid for a person to check;
+    - stray punctuation at either end, "gmail,com", doubled dots."""
+    s0 = str(raw or "")
+    t = _INVISIBLE.sub("", s0).translate(_LOOKALIKES)
+    notes = []
+    m = re.search(r"<\s*([^<>\s]+@[^<>\s]+)\s*>", t)
+    if m and t.strip() != m.group(0):
+        t = m.group(1)
+        notes.append("took the address out of “Name <address>”")
+    t = t.strip().strip("<>\"'`()[]{}").strip()
+    t2 = re.sub(r"^mailto:\s*", "", t, flags=re.I)
+    if t2 != t:
+        t = t2
+        notes.append("removed “mailto:”")
+    t2 = re.sub(r"\s*[\[(]\s*at\s*[\])]\s*", "@", t, flags=re.I)
+    t2 = re.sub(r"\s*[\[(]\s*dot\s*[\])]\s*", ".", t2, flags=re.I)
+    if t2 != t:
+        t = t2
+        notes.append("[at] / [dot] written out")
+    if t.count("@") > 1:
+        parts = [p.strip(".,;:") for p in re.split(r"[\s,;/|]+", t) if "@" in p]
+        if len(parts) > 1 and all(p.count("@") == 1 for p in parts):
+            notes.append(f"{len(parts)} addresses in one cell — kept the first; also there: {', '.join(parts[1:])[:80]}")
+            t = parts[0]
+    t2 = re.sub(r"\s*@\s*", "@", t)
+    t2 = re.sub(r"\s*\.\s*", ".", t2)
+    if "@" in t2 and t2.count("@") == 1 and re.search(r"\s", t2.split("@")[0]):
+        return t.strip().lower(), notes  # "john smith@…": not guessed at — a person checks it
+    if "@" in t2 and t2.count("@") == 1:
+        local, dom = t2.split("@")
+        if re.search(r"\s", dom):
+            dom = re.sub(r"\s+", "", dom)
+        dom2 = dom.replace(",", ".")
+        if dom2 != dom:
+            notes.append("comma in the domain changed to a dot")
+        t2 = f"{local}@{dom2}"
+    if t2 != t and re.sub(r"\s+", "", t2) == re.sub(r"\s+", "", t):
+        notes.append("removed spaces inside the address")
+    t = t2
+    t2 = t.strip(".,;: ")
+    if t2 != t:
+        t = t2
+        notes.append("removed stray punctuation at the end")
+    t2 = re.sub(r"\.{2,}", ".", t)
+    if t2 != t:
+        t = t2
+        notes.append("removed a doubled dot")
+    return t.lower(), notes
+
+
 def check_syntax(raw: str) -> dict:
     """First-pass verdict on one address, no network.
 
-    Returns {email, ok, reasons[], suggestion, role, disposable}. `email` is
-    cleaned (trimmed, lowercased, mailto: and surrounding junk removed).
+    Returns {email, ok, reasons[], suggestion, role, disposable, cleaned[]}.
+    `email` is repaired by clean_raw (what was changed is in `cleaned`).
     """
-    e = str(raw or "").strip().strip("<>\"'").strip()
-    e = re.sub(r"^mailto:", "", e, flags=re.I).strip().lower()
-    # "john @ gmail . com" is common in spreadsheets; any other space is not
-    # an address ("a b@c.com", "a@b.com and c@d.com").
-    e = re.sub(r"\s*@\s*", "@", e)
-    e = re.sub(r"\s*\.\s*", ".", e)
-    out = {"email": e, "ok": True, "reasons": [], "suggestion": None, "role": False, "disposable": False}
+    e, cleaned = clean_raw(raw)
+    out = {"email": e, "ok": True, "reasons": [], "suggestion": None, "role": False, "disposable": False, "cleaned": cleaned}
     if not e:
-        out.update(ok=False, reasons=["empty"])
+        out.update(ok=False, reasons=["no email address in this row"])
         return out
     if e.count("@") != 1 or not EMAIL_RE.match(e) or len(e) > 254 or len(e.split("@")[0]) > 64:
-        out.update(ok=False, reasons=["bad format"])
+        why = "bad format"
+        if e.count("@") == 1 and re.search(r"\s", e.split("@")[0]):
+            why = "bad format — a space inside the name part (check by hand)"
+        elif "@" not in e:
+            why = "bad format — no @"
+        out.update(ok=False, reasons=[why])
         return out
     local, domain = e.split("@")
     sug = suggest_domain(domain)
