@@ -48,16 +48,41 @@ export const preorderState = (book, now = Date.now()) => {
         active,
         at,
         label: (book?.coming_soon_label || "").trim() || "Coming soon",
+        /** Admin gave a time of day, not just a date — only then is a clock time shown. */
+        timed: /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/.test((book?.launch_at || "").trim()),
         /** Flagged, but the day has passed — useful to admins, invisible to customers. */
         lapsed: flagged && !!at && at.getTime() <= now,
     };
 };
 
 /** "14 September 2026" — the date, in the form a reader expects. */
+//
+// Pinned to India time (Oct 2026): the launch is an Indian publication day,
+// and the visitor's own zone could otherwise show a different DATE from the
+// IST time printed beside it. A fixed zone also renders identically in the
+// prerender and the browser (no hydration mismatch).
 export const formatLaunchDate = (d) =>
     d
-        ? d.toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })
+        ? d.toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Kolkata" })
         : "";
+
+/**
+ * "5:04 pm IST · 11:34 am GMT" — the launch moment in India time and in GMT
+ * for international buyers (business decision, Oct 2026: two fixed zones are
+ * easier to read than a converted "your time"). When GMT falls on a different
+ * calendar day the GMT date is added, e.g. "1:00 am IST · 7:30 pm GMT, 27 Oct",
+ * so nobody abroad turns up a day late.
+ *
+ * GMT is UTC: no daylight saving, so in British summer it is an hour behind
+ * London's clocks — that is what "GMT" means, and it is stated as such.
+ */
+export const formatLaunchTimes = (d) => {
+    if (!d) return "";
+    const t = (timeZone) => d.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", hour12: true, timeZone });
+    const day = (timeZone) => d.toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone });
+    const gmtDay = day("UTC") !== day("Asia/Kolkata") ? `, ${day("UTC")}` : "";
+    return `${t("Asia/Kolkata")} IST · ${t("UTC")} GMT${gmtDay}`;
+};
 
 const split = (ms) => {
     const s = Math.max(0, Math.floor(ms / 1000));

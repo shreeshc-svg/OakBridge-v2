@@ -7,7 +7,7 @@ import { track } from "../lib/analytics";
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
 import { ebookEdition, printOutOffer } from "../lib/ebook";
-import { preorderState, useCountdown } from "../lib/preorder";
+import { preorderState, useCountdown, formatLaunchDate, formatLaunchTimes } from "../lib/preorder";
 
 const LOW_STOCK = 5;
 
@@ -537,9 +537,15 @@ export default function BookCard({ book, index = 0, compact = false, toEbook = f
                          * would be two contradictory promises anyway — the book
                          * does not exist yet.
                          */
+                        // The launch moment in IST and GMT. On the tile it is only
+                        // the hover title (desktop), not a second line: an extra
+                        // row here would push this card's price out of line with
+                        // its neighbours (see above). Touch screens show no title,
+                        // so the book page prints it in full.
                         <span
                             data-testid={`preorder-countdown-${book.id}`}
                             className="flex items-center gap-1.5 text-[#854F0B]"
+                            title={`Launches ${formatLaunchDate(preorder.at)}${preorder.timed ? `, ${formatLaunchTimes(preorder.at)}` : ""}`}
                         >
                             <Clock size={compact ? 11 : 12} strokeWidth={1.5} className="flex-shrink-0" />
                             <span className="font-mono tracking-tight">

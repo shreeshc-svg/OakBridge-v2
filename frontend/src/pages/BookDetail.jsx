@@ -21,7 +21,7 @@ import { toast } from "sonner";
 import VerifyNotice from "../components/VerifyNotice";
 import { ebookEdition } from "../lib/ebook";
 import { metaDescription, bookSeoTitle, editionLabel, bookFormatUrl, ratingLd } from "../lib/schema";
-import { preorderState, useCountdown, formatLaunchDate } from "../lib/preorder";
+import { preorderState, useCountdown, formatLaunchDate, formatLaunchTimes } from "../lib/preorder";
 
 // Trust badges under the price. Admin-managed via Settings key `pdp_badges`;
 // this is only the fallback when nothing is saved yet. Spelled-out column
@@ -834,7 +834,12 @@ export default function BookDetail() {
                                 ))}
                             </div>
                             <p className="mt-3 text-xs text-[#4B5563] leading-relaxed">
-                                Ships on {formatLaunchDate(preorder.at)}. Pre-order now and we
+                                {preorder.timed ? (
+                                    <>Launches {formatLaunchDate(preorder.at)}, <span data-testid="preorder-launch-times" className="whitespace-nowrap">{formatLaunchTimes(preorder.at)}</span>.</>
+                                ) : (
+                                    <>Ships on {formatLaunchDate(preorder.at)}.</>
+                                )}{" "}
+                                Pre-order now and we
                                 despatch on publication day — you are charged today.
                             </p>
                         </div>

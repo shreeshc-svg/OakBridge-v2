@@ -20,8 +20,8 @@ const src = readFileSync(fileURLToPath(new URL('../src/lib/preorder.js', import.
   .replace(/export const useCountdown[\s\S]*$/m, '')   // and the hook itself
   .replace(/^export /gm, '');
 const m = await import('data:text/javascript;base64,' +
-  Buffer.from(src + '\nexport { preorderState, launchDate, formatLaunchDate };').toString('base64'));
-const { preorderState, launchDate, formatLaunchDate } = m;
+  Buffer.from(src + '\nexport { preorderState, launchDate, formatLaunchDate, formatLaunchTimes };').toString('base64'));
+const { preorderState, launchDate, formatLaunchDate, formatLaunchTimes } = m;
 
 let fail = 0;
 const eq = (n, got, want) => {
@@ -92,6 +92,14 @@ eq('live until 17:04 IST, over after', [
   preorderState({ coming_soon: true, launch_at: '2026-10-28T17:04' }, Date.parse('2026-10-28T11:33:00Z')).active,
   preorderState({ coming_soon: true, launch_at: '2026-10-28T17:04' }, Date.parse('2026-10-28T11:35:00Z')).active,
 ].join(), 'true,false');
+
+console.log('\n-- IST + GMT shown to buyers --');
+const L = launchDate({ launch_at: '2026-10-28T17:04' });
+eq('both zones', formatLaunchTimes(L), '5:04 pm IST · 11:34 am GMT');
+eq('GMT on the previous day gets its date', formatLaunchTimes(launchDate({ launch_at: '2026-10-28T01:00' })), '1:00 am IST · 7:30 pm GMT, 27 Oct');
+eq('launch date is the Indian date, wherever the visitor is', formatLaunchDate(launchDate({ launch_at: '2026-10-28T01:00' })), '28 October 2026');
+eq('timed flag: time given', preorderState({ coming_soon: true, launch_at: '2026-10-28T17:04' }, NOW).timed, true);
+eq('timed flag: date only -> no clock time shown', preorderState({ coming_soon: true, launch_at: '2026-10-28' }, NOW).timed, false);
 
 console.log(fail ? `\n${fail} FAILED` : '\nall assertions passed');
 process.exit(fail ? 1 : 0);
