@@ -136,21 +136,26 @@ function ResetFromSheet({ onDone }) {
             {prev && (prev.count === 0
                 ? <p className="text-sm text-[#15803D]">The warehouse already matches the sheet for all {prev.books} books.</p>
                 : (
+                    <div className="overflow-x-auto">
                     <table className="w-full text-sm" data-testid="wh-reset-table">
-                        <thead><tr className="text-left text-[#4B5563]"><th className="py-1">Book</th><th className="text-right">Warehouse now</th><th className="text-right">Sheet</th><th className="text-right">Owed to orders</th><th className="text-right">Will be</th><th className="text-right">Change</th></tr></thead>
+                        {/* Number columns: fixed padding, no wrapping, same classes on
+                            header and cell — the headers used to wrap ("Warehouse / now")
+                            and sit out of line with their numbers. */}
+                        <thead><tr className="text-left text-[#4B5563] align-bottom"><th className="py-2 pr-4">Book</th><th className="px-3 text-right whitespace-nowrap tabular-nums py-2">Warehouse now</th><th className="px-3 text-right whitespace-nowrap tabular-nums py-2">Sheet</th><th className="px-3 text-right whitespace-nowrap tabular-nums py-2">Owed to orders</th><th className="px-3 text-right whitespace-nowrap tabular-nums py-2">Will be</th><th className="px-3 text-right whitespace-nowrap tabular-nums py-2 pr-0">Change</th></tr></thead>
                         <tbody>
                             {prev.changes.slice(0, 300).map((c) => (
                                 <tr key={c.id} className="border-t border-[#E5E7EB]">
-                                    <td className="py-1 pr-2">{c.title}<div className="font-mono text-xs text-[#4B5563]">{c.isbn}</div></td>
-                                    <td className="text-right font-mono">{c.warehouse}</td>
-                                    <td className="text-right font-mono">{c.sheet}</td>
-                                    <td className="text-right font-mono">{c.owed || ""}</td>
-                                    <td className="text-right font-mono">{c.target}</td>
-                                    <td className={`text-right font-mono ${c.diff > 0 ? "text-[#15803D]" : "text-[#CC0033]"}`}>{c.diff > 0 ? `+${c.diff}` : c.diff}</td>
+                                    <td className="py-2 pr-4">{c.title}<div className="font-mono text-xs text-[#4B5563]">{c.isbn}</div></td>
+                                    <td className="px-3 text-right whitespace-nowrap tabular-nums font-mono">{c.warehouse}</td>
+                                    <td className="px-3 text-right whitespace-nowrap tabular-nums font-mono">{c.sheet}</td>
+                                    <td className="px-3 text-right whitespace-nowrap tabular-nums font-mono text-[#6B7280]">{c.owed || "—"}</td>
+                                    <td className="px-3 text-right whitespace-nowrap tabular-nums font-mono font-semibold">{c.target}</td>
+                                    <td className={`px-3 text-right whitespace-nowrap tabular-nums pr-0 font-mono ${c.diff > 0 ? "text-[#15803D]" : "text-[#CC0033]"}`}>{c.diff > 0 ? `+${c.diff}` : c.diff}</td>
                                 </tr>
                             ))}
                         </tbody>
                     </table>
+                    </div>
                 ))}
         </div>
     );
@@ -208,14 +213,14 @@ function TrialTab({ canSwitch }) {
                         below zero is expected up to what those orders are owed. Anything beyond that is a counting mistake: count the book and save a correction.
                     </p>
                     <table className="mt-3 w-full text-sm">
-                        <thead><tr className="text-left text-[#4B5563]"><th className="py-1">Book</th><th className="text-right">Warehouse</th><th className="text-right">Owed to orders</th><th className="text-right">Website</th><th className="pl-4">What to do</th></tr></thead>
+                        <thead><tr className="text-left text-[#4B5563] align-bottom"><th className="py-2 pr-4">Book</th><th className="px-3 text-right whitespace-nowrap tabular-nums py-2">Warehouse</th><th className="px-3 text-right whitespace-nowrap tabular-nums py-2">Owed to orders</th><th className="px-3 text-right whitespace-nowrap tabular-nums py-2">Website</th><th className="pl-4 py-2">What to do</th></tr></thead>
                         <tbody>
                             {ov.below_zero.map((b) => (
                                 <tr key={b.id} className="border-t border-[#E5E7EB] align-top">
                                     <td className="py-1 pr-2">{b.title}<div className="font-mono text-xs text-[#4B5563]">{b.isbn}</div></td>
-                                    <td className="text-right font-mono text-[#CC0033]">{b.wh_stock}</td>
-                                    <td className="text-right font-mono">{b.owed}</td>
-                                    <td className="text-right font-mono">{b.stock}</td>
+                                    <td className="px-3 text-right whitespace-nowrap tabular-nums font-mono text-[#CC0033]">{b.wh_stock}</td>
+                                    <td className="px-3 text-right whitespace-nowrap tabular-nums font-mono">{b.owed || "—"}</td>
+                                    <td className="px-3 text-right whitespace-nowrap tabular-nums font-mono">{b.stock}</td>
                                     <td className={`pl-4 ${b.unexplained ? "text-[#CC0033]" : "text-[#4B5563]"}`}>{b.note}</td>
                                 </tr>
                             ))}
