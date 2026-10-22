@@ -61,8 +61,15 @@ def fold(s: str) -> str:
     s = unicodedata.normalize("NFKD", s or "").encode("ascii", "ignore").decode()
     s = s.lower().replace("&", " and ")
     s = re.sub(r"(\d)\s*/\s*e\b", r"\1e", s)  # "12 /e", "2/E" -> "12e", "2e"
-    # Courier sheets write editions out: "6th ed", "2nd Ed", "1st edition".
-    s = re.sub(r"(\d+)\s*(?:st|nd|rd|th)\s*(?:edn|ed|edition)\b\.?", r"\1e", s)
+    # Photos of courier labels (Oct 2026, a real sheet): "6th" came back as
+    # "Gth", and the raised "nd" of "2ⁿᵈ" was lost entirely ("2 Ed"). Both
+    # lines then matched no book. A misread digit is restored only when an
+    # ordinal ending AND "ed/edition" follow, so ordinary words are untouched.
+    s = re.sub(r"\b([gbszlio])(?=(?:st|nd|rd|th)\s*(?:edn|ed|edition)\b)",
+               lambda m: {"g": "6", "b": "6", "s": "5", "z": "2", "l": "1", "i": "1", "o": "0"}[m.group(1)], s)
+    # Courier sheets write editions out: "6th ed", "2nd Ed", "1st edition",
+    # and — superscript lost — "2 Ed".
+    s = re.sub(r"(\d+)\s*(?:st|nd|rd|th)?\s*(?:edn|ed|edition)\b\.?", r"\1e", s)
     return re.sub(r"[^a-z0-9]+", " ", s).strip()
 
 
@@ -474,7 +481,7 @@ def score_corrections(read: list, confirmed: list) -> dict:
 # digit ("1O" -> 10) — a bare "O" or "II" is never turned into a number, so a
 # title ending "Part - II" is not mistaken for 11 copies.
 _SEP = r"(?:\s+[xX]|\s*[\u00d7\-\u2013\u2014~_=:*]|\s*\bqty\b\.?)"
-_QTY = r"[0-9lI|i!Oo]{1,3}"
+_QTY = r"[0-9lI|i!TOo]{1,3}"
 _QTY_WORDS = r"(?:cop(?:y|ies)|nos?\.?|pcs?\.?|books?|bks?\.?|sets?)"
 COURIER_BOOK_RE = re.compile(
     rf"^(?P<title>.+?){_SEP}\s*(?P<qty>{_QTY})\s*{_QTY_WORDS}?\s*[.,;]?\s*$", re.I)
@@ -494,11 +501,11 @@ def ocr_qty(tok: str) -> Optional[int]:
     t = (tok or "").strip()
     if not t:
         return None
-    if re.fullmatch(r"[lI|i!]", t):
+    if re.fullmatch(r"[lI|i!T]", t):  # "T copy": a 1 with a serif
         return 1
     if not re.search(r"\d", t):
         return None  # "O", "II", "Io": not a quantity
-    t = re.sub(r"[lI|i!]", "1", t)
+    t = re.sub(r"[lI|i!T]", "1", t)
     t = re.sub(r"[Oo]", "0", t)
     return int(t) if t.isdigit() else None
 PHONE_LINE_RE = re.compile(r"\b(?:mob(?:ile)?|tel|ph(?:one)?|m)\b\.?\s*[:\-]?\s*([+\d][\d\s-]{7,})", re.I)
@@ -630,7 +637,9 @@ def parse_courier_text(text: str, is_title=None) -> list:
     parcels, cur, state = [], None, "books"
     pending_order = ""          # an order number written above a parcel's books
     pending_web = False         # "Website order" written above a parcel's books
-    raw_lines = [r.strip() for r in (text or "").splitlines() if r.strip()]
+    # No label line is 300 characters; capping keeps the patterns linear on
+    # pasted junk (Admin → Courier labels → "Paste from a Word sheet").
+    raw_lines = [r.strip()[:300] for r in (text or "").splitlines() if r.strip()]
     for raw in _merge_split_lines(raw_lines, is_title):
         ln = raw.strip()
         if not ln:
@@ -641,6 +650,16 @@ def parse_courier_text(text: str, is_title=None) -> list:
             bare = WEB_WORDS_RE.sub("", ORDER_NO_RE.sub("", ln)).strip(" ,;:|-")
             if is_title(bare):
                 book = {"title": bare, "qty": 1, "qty_read": False, "raw": ln}
+        if not book and state == "after_from" and not on and not re.match(r"^from\b", ln, re.I):
+            # A label whose book lines the photo lost (shadow, fold). It used
+            # to vanish without a trace — the parcel was never shown. Now it
+            # is a parcel with no books, flagged, so he adds them by hand.
+            cur = {"lines": [], "address": [], "name": "", "org": "", "phone": "", "pincode": "",
+                   "order_number": pending_order, "web_tag": bool(pending_order) or pending_web,
+                   "books_unread": True}
+            parcels.append(cur)
+            pending_order, pending_web = "", False
+            state = "address"
         if book:
             if cur is None or state != "books":
                 cur = {"lines": [], "address": [], "name": "", "org": "", "phone": "", "pincode": "",
@@ -673,7 +692,11 @@ def parse_courier_text(text: str, is_title=None) -> list:
             state = "from"
             continue
         if state == "from":
-            continue  # our own return address
+            # Our own return address. Its last line is our phone number;
+            # whatever follows belongs to the next label.
+            if PHONE_LINE_RE.search(ln):
+                state = "after_from"
+            continue
         state = "address"
         ph = PHONE_LINE_RE.search(ln)
         if ph:
@@ -690,6 +713,17 @@ def parse_courier_text(text: str, is_title=None) -> list:
     for i, p in enumerate(parcels, start=1):
         p["no"] = i
     return parcels
+
+
+def count_labels(text: str) -> int:
+    """How many address labels are on the sheet, independent of the parsing:
+    every label ends with our "From" block. If fewer parcels were read than
+    this, a label was lost (shadow, fold, blur) and the phone says so before
+    anything is confirmed — a missed parcel is never silent."""
+    lines = [ln.strip() for ln in (text or "").splitlines()]
+    froms = sum(1 for ln in lines if re.match(r"^from\b\s*:?\s*$", ln, re.I))
+    ours = sum(1 for ln in lines if re.search(r"oakbridge\s+publishing", ln, re.I))
+    return max(froms, ours)
 
 
 def match_order(parcel: dict, orders: list) -> Optional[dict]:

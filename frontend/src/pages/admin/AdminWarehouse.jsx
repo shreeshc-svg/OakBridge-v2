@@ -9,6 +9,7 @@ import {
 } from "../../lib/api";
 import { useAuth } from "../../context/AuthContext";
 import { isSuperadmin } from "../../lib/rbac";
+import CourierRuns from "../../components/admin/CourierRuns";
 
 /**
  * Admin → Warehouse: the manager's side of the warehouse trial.
@@ -20,13 +21,15 @@ import { isSuperadmin } from "../../lib/rbac";
  *   Accuracy   the error rate of the automatic reading, by document type and
  *              supplier, with the latest corrections and problem reports.
  *   Movements  the ledger, newest first, with Undo for single moves.
+ *   Courier labels  the day's courier run: label sheet (PDF/Word) made here,
+ *              sent to the phone filled in (components/admin/CourierRuns.jsx).
  *   To approve cartons the warehouse has packed, waiting for the
  *              order-management team: Approve (he may ship), Send back
  *              (repack; copies return to stock) or Cancel (copies return).
  *
  * The warehouse role itself never lands here: it is sent to /warehouse.
  */
-const TABS = [["approve", "To approve"], ["trial", "Trial & comparison"], ["docs", "Bills & invoices"], ["accuracy", "Accuracy"], ["moves", "Movements"]];
+const TABS = [["approve", "To approve"], ["courier", "Courier labels"], ["trial", "Trial & comparison"], ["docs", "Bills & invoices"], ["accuracy", "Accuracy"], ["moves", "Movements"]];
 const pct = (x) => (x == null ? "—" : `${Math.round(x * 100)}%`);
 const when = (iso) => (iso ? new Date(iso).toLocaleString("en-IN") : "—");
 
@@ -80,6 +83,7 @@ export default function AdminWarehouse() {
                 {tab === "approve" && <DocsTab key="approve" status="awaiting_approval" onChange={refreshPending} />}
                 {tab === "docs" && <DocsTab key="docs" onChange={refreshPending} canDelete={isSuperadmin(user?.role)} />}
                 {tab === "accuracy" && <AccuracyTab />}
+                {tab === "courier" && <CourierRuns />}
                 {tab === "moves" && <MovesTab q={moveQ} />}
             </div>
         </div>

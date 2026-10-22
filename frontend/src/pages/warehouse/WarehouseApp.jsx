@@ -14,7 +14,7 @@ const isSimilarDoc = (e) => e?.response?.status === 409 && e?.response?.data?.de
 import { ArrowLeft, Camera, FileText, PackagePlus, PackageMinus, Search, ScanBarcode, Truck } from "lucide-react";
 import {
     whState, whLookup, whBooks, whUploadDoc, whConfirmDoc, whReport, whMove, whDocFile, whInbox, whAck, whReopen, whCancelledParcel, whGetDoc, whOpenOrders,
-    formatApiError,
+    whLabels, saveBlob, formatApiError,
 } from "../../lib/api";
 import { useAuth } from "../../context/AuthContext";
 import NoIndex from "../../components/NoIndex";
@@ -584,6 +584,36 @@ function BookPicker({ books, candidates = [], value, onPick, placeholder = "Type
     );
 }
 
+/* ------------------------------------------------- office-made parcel ---- */
+// Read-only: what to pack and where it goes, and one big "Packed" tick. If
+// something is wrong he tells the office, which recalls the run and fixes it
+// — the phone never edits what the office decided.
+const RUN_KIND = { website_order: "Website order", dealer_order: "Phone / dealer order", author_copy: "Author copy", free_copy: "Free copy" };
+function OfficeParcel({ p, byId, packed, onToggle }) {
+    return (
+        <div className={`bg-white border-2 p-3 space-y-2 ${packed ? "border-[#15803D]" : "border-[#7C3AED]"}`} data-testid="wh-office-parcel">
+            <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-mono text-[#4B5563]">PARCEL {p.no}</span>
+                <span className="text-xs bg-[#F3F4F6] px-2 py-0.5">{RUN_KIND[p.kind] || p.kind}{p.order_number ? ` · ${p.order_number}` : ""}</span>
+            </div>
+            <div className="text-lg font-semibold text-[#002B5C]">{p.name}</div>
+            <div className="text-sm text-[#4B5563]">{[p.org, ...(p.address || []).slice(-2)].filter(Boolean).join(" · ")}</div>
+            <ul className="border-t pt-2 space-y-1">
+                {p.lines.map((l) => (
+                    <li key={l.line_no} className="flex justify-between gap-3 text-base">
+                        <span className="text-[#002B5C]">{byId[l.book_id]?.title || l.doc_title}</span>
+                        <span className="font-mono font-semibold whitespace-nowrap">× {l.qty}</span>
+                    </li>
+                ))}
+            </ul>
+            <button type="button" onClick={onToggle} data-testid="wh-parcel-packed"
+                className={`w-full py-3 text-lg font-medium border-2 ${packed ? "bg-[#15803D] border-[#15803D] text-white" : "border-[#15803D] text-[#15803D] bg-white"}`}>
+                {packed ? "✓ Packed" : "Tap when packed"}
+            </button>
+        </div>
+    );
+}
+
 /* ------------------------------------------------------- courier sheet --- */
 /**
  * One DTDC courier run: a sheet of address labels that mixes WEBSITE ORDERS
@@ -654,6 +684,24 @@ function CourierFlow({ practice, onDone, initialDoc = null }) {
     }]);
 
     const linked = parcels.filter((p) => p.kind === "website_order" && p.order_id).length;
+    // Labels counted on the sheet (each ends with our "From" block) vs
+    // parcels read. More labels than parcels = one was lost in the photo.
+    const missingLabels = Math.max(0, (doc?.labels_seen || 0) - parcels.length);
+    // A run the office made in Admin (backend/courier_runs.py): every parcel
+    // is already filled in and matched. He prints the labels, packs, ticks
+    // each parcel, taps Done — nothing to read, pick or correct.
+    const office = doc?.source === "office_run";
+    const [packed, setPacked] = useState({});
+    const packedCount = parcels.filter((p) => packed[p.no]).length;
+    const printLabels = async (fmt) => {
+        try {
+            const blob = await whLabels(doc.id, fmt);
+            if (fmt === "pdf") window.open(URL.createObjectURL(blob), "_blank", "noopener");
+            else saveBlob(blob, `${(doc.doc_number || "courier-labels").replace(/[^A-Za-z0-9._-]+/g, "-")}.docx`);
+        } catch (e) {
+            toast.error(formatApiError(e));
+        }
+    };
     const unlinked = parcels.filter((p) => p.kind === "skip").length;
     const copiesOf = (kind) => parcels.filter((p) => p.kind === kind)
         .reduce((n, p) => n + p.lines.filter((l) => l.include && l.book_id).reduce((a, l) => a + Number(l.qty || 0), 0), 0);
@@ -669,6 +717,15 @@ function CourierFlow({ practice, onDone, initialDoc = null }) {
             toast.error(`Parcel ${[...new Set(noCopies)].join(", ")}: a book has no number of copies. Enter it, or untick the book.`);
             return;
         }
+        // A parcel being sent with no book ticked would remove nothing and
+        // look done. Every sending parcel needs its books.
+        const empty = parcels.filter((p) => p.kind !== "skip" && !p.lines.some((l) => l.include && l.book_id)).map((p) => p.no);
+        if (empty.length) {
+            toast.error(`Parcel ${empty.join(", ")}: no book ticked. Add its books, or choose “Not sending”.`);
+            return;
+        }
+        if (missingLabels > 0 && !window.confirm(
+            `The sheet has ${doc.labels_seen} labels but only ${parcels.length} parcel(s) are here.\n\nOK only if you have checked the sheet and nothing is missing.`)) return;
         if (!practice && !window.confirm(
             `Confirm this courier sheet?\n\n• ${linked} website order(s): marked packed — NOT deducted again (taken off at payment).\n` +
             `• ${dealerCopies} cop${dealerCopies === 1 ? "y" : "ies"} in phone / dealer orders: removed from stock as sales.\n` +
@@ -698,6 +755,10 @@ function CourierFlow({ practice, onDone, initialDoc = null }) {
             <div className="space-y-3">
                 <h1 className="font-serif text-2xl text-[#002B5C]">Courier sheet</h1>
                 <p className="text-sm text-[#4B5563]">The sheet of address labels for today's parcels — PDF from WhatsApp/email, or a photo.</p>
+                <div className="text-sm bg-white border-l-4 border-[#15803D] p-3 space-y-1" data-testid="wh-courier-tips">
+                    <div><b>Best:</b> the PDF the office sent — it is read exactly, nothing to check.</div>
+                    <div><b>Photo:</b> sheet flat on the table, the whole page in the picture, no shadow across it, phone held straight above.</div>
+                </div>
                 <input ref={cam} type="file" accept="image/*" capture="environment" hidden
                     onChange={(e) => e.target.files[0] && start(e.target.files[0])} />
                 <input ref={fileIn} type="file" accept="image/*,application/pdf" hidden
@@ -728,13 +789,39 @@ function CourierFlow({ practice, onDone, initialDoc = null }) {
                 </div>
             )}
             {doc.error && <div className="border border-[#F59E0B] bg-white p-3 text-sm">{doc.error}</div>}
-            {parcels.map((p, pi) => (
+            {office && (
+                <div className="border-2 border-[#15803D] bg-white p-3 space-y-2" data-testid="wh-office-run">
+                    <div className="font-medium text-[#15803D]">From the office — every parcel is already filled in.</div>
+                    <div className="text-sm text-[#4B5563]">1. Print the labels · 2. Pack each parcel and paste its label · 3. Tick it · 4. Tap Done.</div>
+                    <div className="grid grid-cols-2 gap-2">
+                        <button type="button" onClick={() => printLabels("pdf")} className={`${BTN} border-2 border-[#002B5C] text-[#002B5C] bg-white`} data-testid="wh-labels-pdf">Print labels (PDF)</button>
+                        <button type="button" onClick={() => printLabels("docx")} className={`${BTN} border-2 border-[#E5E7EB] text-[#002B5C] bg-white`} data-testid="wh-labels-docx">Word file</button>
+                    </div>
+                </div>
+            )}
+            {missingLabels > 0 && (
+                <div className="border-2 border-[#CC0033] bg-white p-3 text-[#CC0033] font-medium" data-testid="wh-labels-missing">
+                    ⚠️ The sheet has {doc.labels_seen} labels but only {parcels.length} parcel(s) were read.
+                    <span className="block text-sm font-normal text-[#4B5563] mt-1">
+                        Take the photo again (flat, no shadow), or add the missing parcel with “+ Add a parcel” at the bottom.
+                    </span>
+                </div>
+            )}
+            {parcels.map((p, pi) => office ? (
+                <OfficeParcel key={p.no} p={p} byId={byId} packed={!!packed[p.no]}
+                    onToggle={() => setPacked((x) => ({ ...x, [p.no]: !x[p.no] }))} />
+            ) : (
                 <div key={p.no} className={`bg-white border-2 p-3 space-y-3 ${p.kind === "skip" ? "border-[#E5E7EB] opacity-70" : "border-[#7C3AED]"}`} data-testid="wh-parcel">
                     <div>
                         <div className="text-xs font-mono text-[#4B5563]">PARCEL {p.no}</div>
                         <input value={p.name} onChange={(e) => setParcel(pi, { name: e.target.value })} placeholder="Sent to"
                             className="w-full text-lg font-semibold text-[#002B5C] border-b px-1 py-1" />
                         <div className="text-sm text-[#4B5563] mt-1">{[p.org, p.pincode].filter(Boolean).join(" · ")}</div>
+                        {p.books_unread && !p.lines.length && (
+                            <div className="mt-2 text-sm font-medium text-[#CC0033]" data-testid="wh-books-unread">
+                                The books on this label could not be read. Add them below with “+ Add a book”.
+                            </div>
+                        )}
                     </div>
                     <div className="flex flex-col gap-2" data-testid="wh-parcel-order">
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-1" data-testid="wh-parcel-kind">
@@ -796,6 +883,15 @@ function CourierFlow({ practice, onDone, initialDoc = null }) {
                                         {l.qty_read === false && (
                                             <div className="text-xs text-[#B4750F] font-medium" data-testid="wh-qty-unread">Number of copies not readable on the label — 1 filled in, check it.</div>
                                         )}
+                                        {!book && (l.candidates || []).length > 0 && (
+                                            // One tap instead of typing: the closest books the reader found.
+                                            <div className="mt-1 flex flex-col gap-1" data-testid="wh-line-suggestions">
+                                                {l.candidates.slice(0, 3).map((c) => (
+                                                    <button key={c.book_id} type="button" onClick={() => setLine(pi, li, { book_id: c.book_id, include: true })}
+                                                        className="text-left border-2 border-[#002B5C] px-2 py-2 text-sm text-[#002B5C] bg-white">★ {c.title}</button>
+                                                ))}
+                                            </div>
+                                        )}
                                         <BookPicker books={books} candidates={l.candidates || []} value={l.book_id || ""}
                                             onPick={(id) => setLine(pi, li, { book_id: id || null, include: !!id })} />
                                     </div>
@@ -808,11 +904,12 @@ function CourierFlow({ practice, onDone, initialDoc = null }) {
                     <BookPicker books={books} value="" onPick={(id) => addLine(pi, id)} placeholder="+ Add a book: type part of the title…" />
                 </div>
             ))}
-            <button type="button" onClick={addParcel} className="w-full border-2 border-dashed py-3 text-[#002B5C]">+ Add a parcel</button>
+            {!office && <button type="button" onClick={addParcel} className="w-full border-2 border-dashed py-3 text-[#002B5C]">+ Add a parcel</button>}
             <div className="fixed bottom-0 left-0 right-0 bg-white border-t p-3">
-                <button type="button" disabled={busy} onClick={confirm} data-testid="wh-courier-confirm"
-                    className={`w-full ${BTN} text-lg text-white ${practice ? "bg-[#B4750F]" : "bg-[#15803D]"}`}>
-                    {busy ? "Saving…" : practice ? "Save practice (no stock change)" : `Done — ${linked} website order(s) packed`}
+                <button type="button" disabled={busy || (office && packedCount < parcels.length)} onClick={confirm} data-testid="wh-courier-confirm"
+                    className={`w-full ${BTN} text-lg text-white disabled:opacity-60 ${practice ? "bg-[#B4750F]" : "bg-[#15803D]"}`}>
+                    {busy ? "Saving…" : office && packedCount < parcels.length ? `Tick each parcel as packed (${packedCount} of ${parcels.length})`
+                        : practice ? "Save practice (no stock change)" : office ? `Done — all ${parcels.length} parcels packed` : `Done — ${linked} website order(s) packed`}
                 </button>
             </div>
         </div>

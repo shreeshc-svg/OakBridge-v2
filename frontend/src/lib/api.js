@@ -143,6 +143,34 @@ export const whCancelledParcel = (orderId, stillHere) =>
 export const whDocFile = (id, admin = false) =>
     api.get(admin ? `/admin/warehouse/docs/${id}/file` : `/warehouse/docs/${id}/file`, { responseType: "blob" })
         .then((r) => r.data);
+// Courier runs (Oct 2026): the office builds the label sheet in Admin and
+// sends it to the phone already filled in — see backend/courier_runs.py.
+const CR = "/admin/warehouse/courier-runs";
+export const crList = () => api.get(CR).then((r) => r.data);
+export const crCreate = (title) => api.post(CR, { title }).then((r) => r.data);
+export const crGet = (id) => api.get(`${CR}/${id}`).then((r) => r.data);
+export const crSave = (id, body) => api.put(`${CR}/${id}`, body).then((r) => r.data);
+export const crOrders = (runId) => api.get(`${CR}/orders`, { params: { run_id: runId } }).then((r) => r.data);
+export const crPaste = (id, text) => api.post(`${CR}/${id}/paste`, { text }).then((r) => r.data);
+export const crSend = (id) => api.post(`${CR}/${id}/send`).then((r) => r.data);
+export const crRecall = (id) => api.post(`${CR}/${id}/recall`).then((r) => r.data);
+export const crDiscard = (id) => api.post(`${CR}/${id}/discard`).then((r) => r.data);
+export const crSettings = () => api.get(`${CR}/settings`).then((r) => r.data);
+export const crSaveSettings = (lines) => api.put(`${CR}/settings`, { lines }).then((r) => r.data);
+export const crLabels = (id, fmt) => api.get(`${CR}/${id}/labels.${fmt}`, { responseType: "blob", timeout: 120000 }).then((r) => r.data);
+export const whLabels = (docId, fmt) =>
+    api.get(`/warehouse/docs/${docId}/labels.${fmt}`, { responseType: "blob", timeout: 120000 }).then((r) => r.data);
+/** Hand a downloaded file to the browser: "Save as" for Word, opens for PDF (print from there). */
+export const saveBlob = (blob, filename) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+};
 // … and the manager view.
 export const adminWhOverview = () => api.get("/admin/warehouse/overview").then((r) => r.data);
 // adminWhDocs("awaiting_approval") or adminWhDocs({ q, direction, practice, status, date_from, date_to, archived })

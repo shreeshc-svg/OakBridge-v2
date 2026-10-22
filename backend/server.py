@@ -2023,6 +2023,9 @@ from warehouse import wh_router, wh_admin_router  # noqa: E402
 app.include_router(inventory_router)
 app.include_router(wh_router)
 app.include_router(wh_admin_router)
+from courier_runs import admin_router as courier_runs_admin_router, phone_router as courier_runs_phone_router  # noqa: E402
+app.include_router(courier_runs_admin_router)
+app.include_router(courier_runs_phone_router)
 from interakt import admin_router as interakt_admin_router, webhook_router as interakt_webhook_router  # noqa: E402
 app.include_router(interakt_webhook_router)
 app.include_router(interakt_admin_router)

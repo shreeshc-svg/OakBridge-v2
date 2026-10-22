@@ -85,6 +85,32 @@ print("-- OCR slip in the title still matches --")
 check(w.match_line({"title": "Courtroorn Wit & Wisdorn"}, SHELF)["book_id"] == "cww", "'Courtroorn Wit & Wisdorn' -> Courtroom Wit & Wisdom")
 check(w.match_line({"title": "Climate Justise"}, SHELF)["book_id"] == "cj", "'Climate Justise' -> Climate Justice")
 
+print("-- the 22 Oct 2026 sheet (3 labels, photographed with a shadow) --")
+# What the phone showed: "Compulsory English, Gth ed" and "LA/LR, 2 Ed"
+# unmatched, and the middle label (Dr …, Amritsar) missing altogether.
+REAL = [
+    {"id": "ce", "title": "Compulsory English for IAS (Mains) Examination 6/e"},
+    {"id": "la2", "title": "Legal Aptitude & Reasoning LA/LR  2/e (2026-27)"},
+    {"id": "la1", "title": "Legal Aptitude & Reasoning LA/LR"},
+    {"id": "ugc7", "title": "Master Guide to NTA UGC NET | SET | JRF | PhD Paper 1 (Teaching and Research Aptitude),7/e"},
+]
+check(w.match_line({"title": "Compulsory English, Gth ed"}, REAL)["book_id"] == "ce", "'6th' read as 'Gth' -> 6th edition")
+check(w.match_line({"title": "LA/LR, 2 Ed"}, REAL)["book_id"] == "la2", "'2nd' with the raised 'nd' lost ('2 Ed') -> 2nd edition")
+check(w.match_line({"title": "LA/LR, 2\u201c Ed"}, REAL)["book_id"] == "la2", "'2\u201c Ed' (superscript read as a quote) -> 2nd edition")
+check(w.fold("Bright Gth Street") == "bright gth street", "a word like 'Gth' outside an edition is left alone")
+FROM = "From\nOakbridge Publishing Pvt. Ltd.\n934, 9th Floor, Tower B3\nPh. +91 124 430 5970, +91 8800337299\n"
+SHEET = ("Compulsory English, 6th ed- 1 copy\nUGC-NET, 7th ed- 1 copy\nLA/LR, 2 Ed- 1 copy\nMr A Sample, Director\nSample Tutorials\n"
+         "Prayagraj- 211002\nMob- 9000000021\n" + FROM +
+         "Dr B Sample\nSample Institute of Law\nAmritsar- 143105\nMob- 9000000022\n" + FROM +  # its book lines lost in the shadow
+         "Compulsory English, Gth ed- 1 copy\nUGC-NET, 7th ed- 1 copy\nLA/LR, 2 Ed- 1 copy\nMs C Sample\nSample Academy\n"
+         "Amritsar-143002\nMob- 9000000023\n" + FROM)
+ps = w.parse_courier_text(SHEET, w.title_matcher(REAL))
+check(w.count_labels(SHEET) == 3, "3 labels counted on the sheet (one per 'From' block)")
+check([(p["name"], len(p["lines"]), bool(p.get("books_unread"))) for p in ps]
+      == [("Mr A Sample", 3, False), ("Dr B Sample", 0, True), ("Ms C Sample", 3, False)],
+      "the label whose books were lost is still a parcel, flagged 'books not read'")
+check(all(w.match_line(l, REAL)["book_id"] for p in ps for l in p["lines"]), "every book line on the sheet matched")
+
 print("-- reading: more pages, plain-text call, phone screen --")
 import re  # noqa: E402
 src = open(os.path.join(os.path.dirname(HERE), "warehouse.py"), encoding="utf-8").read()
@@ -97,6 +123,12 @@ app = open(os.path.join(os.path.dirname(HERE), "..", "frontend", "src", "pages",
 cf = app[app.index("function CourierFlow"):app.index("function SingleMove")]
 check(cf.count("<BookPicker") == 2 and "{books.map((b) => <option" not in cf, "courier lines + 'add a book': title search, not a 250-row drop-down")
 check("l.qty_read === false" in cf and "noCopies" in cf, "unread copies flagged; a ticked book with no copies can't be confirmed")
+check("missingLabels" in cf and "wh-labels-missing" in cf and "p.books_unread" in cf,
+      "phone: 'N labels, M read' warning + 'books not read' parcel; Done asks before going on")
+check("const empty = parcels.filter((p) => p.kind !== \"skip\"" in cf, "a sending parcel with no book can't be confirmed")
+check("wh-line-suggestions" in cf and "wh-courier-tips" in cf, "one-tap suggested books; photo tips")
+check('doc["labels_seen"] = core.count_labels(res["text"])' in code and 'doc["read_text"] = core.masked_text(res["text"], 8000)' in code,
+      "labels counted and what the photo said kept for Admin")
 
 print()
 if failed:

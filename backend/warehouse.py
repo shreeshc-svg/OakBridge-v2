@@ -500,6 +500,8 @@ async def _suggest_parcels(parcels: list) -> list:
             # "OAK-… written on the sheet is not an open order".
             "written_order": p.get("order_number", ""), "web_tag": bool(p.get("web_tag")),
             "needs_order": not o,
+            # The label was found but none of its book lines could be read.
+            "books_unread": bool(p.get("books_unread")) and not lines,
         })
     return out
 
@@ -603,6 +605,12 @@ async def _create_doc(direction: str, practice: bool, file: Optional[UploadFile]
                 doc["source"] = res["source"]
                 doc["parcels"] = await _suggest_parcels(res["parcels"])
                 doc["read_lines"] = [ln for p in doc["parcels"] for ln in p["lines"]]
+                # What the photo said, for Admin to see why a line was missed
+                # (was only kept for bills). Never sent to the phone.
+                doc["read_text"] = core.masked_text(res["text"], 8000)
+                # Labels on the sheet vs parcels read: a lost label is shown
+                # on the phone and must be dealt with before confirming.
+                doc["labels_seen"] = core.count_labels(res["text"])
                 if not doc["parcels"]:
                     doc["error"] = "No parcels could be read — enter them by hand."
             else:
@@ -844,7 +852,8 @@ async def wh_confirm(doc_id: str, body: ConfirmBody, user: dict = Depends(requir
     read = [{"line_no": r["line_no"], "book_id": r.get("book_id"), "qty": r.get("qty"),
              "include": r.get("include")} for r in doc.get("read_lines") or []]
     confirmed = [ln.model_dump() for ln in body.lines]
-    automated = doc.get("source") != "manual"
+    # An office courier run was typed, not read: nothing to score or learn.
+    automated = doc.get("source") not in ("manual", "office_run")
     # A carton's qty is what he packed; the reader read the invoice. Scoring
     # packed against read counted every short or unscanned carton as a reading
     # error (practice cartons showed "read 0% right").
