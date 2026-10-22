@@ -535,6 +535,55 @@ function DocFlow({ direction, practice, onDone, initialDoc = null }) {
     );
 }
 
+/* ------------------------------------------------------- book picker ---- */
+/**
+ * Find a book by typing part of the TITLE (or the author, or an ISBN).
+ *
+ * Courier labels carry the title, not the ISBN (Oct 2026), but the only way
+ * to fix a line used to be a 250-book drop-down that a phone can't search —
+ * so the team looked the ISBN up elsewhere and scrolled for it. Title words
+ * are matched anywhere and in any order ("tiger sacred"); digits also match
+ * the ISBN. The ★ suggestions the reader found are offered first.
+ */
+const foldText = (s) => String(s || "").toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, " ").trim();
+
+function BookPicker({ books, candidates = [], value, onPick, placeholder = "Type part of the title…", testid }) {
+    const [q, setQ] = useState("");
+    const [open, setOpen] = useState(false);
+    const byId = useMemo(() => Object.fromEntries(books.map((b) => [b.id, b])), [books]);
+    const results = useMemo(() => {
+        const words = foldText(q).split(" ").filter(Boolean);
+        const digits = q.replace(/[^0-9Xx]/g, "");
+        if (!words.length) return candidates.map((c) => byId[c.book_id]).filter(Boolean);
+        return books.filter((b) => {
+            const hay = foldText(`${b.title} ${b.author || ""}`);
+            return words.every((w) => hay.includes(w)) || (digits.length >= 4 && isbnOf(b.isbn).includes(digits.toUpperCase()));
+        }).slice(0, 8);
+    }, [q, books, candidates, byId]);
+    const pick = (id) => { onPick(id); setQ(""); setOpen(false); };
+    const star = new Set(candidates.map((c) => c.book_id));
+    return (
+        <div className="mt-1" data-testid={testid}>
+            <input value={q} onChange={(e) => { setQ(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)}
+                placeholder={value && byId[value] ? `Change: ${placeholder}` : placeholder}
+                className="w-full border-2 px-2 py-2 text-base bg-white" aria-label="Find a book by title or ISBN" />
+            {open && (results.length > 0 || q) && (
+                <div className="border border-t-0 bg-white divide-y max-h-72 overflow-y-auto">
+                    {results.map((b) => (
+                        <button key={b.id} type="button" onClick={() => pick(b.id)}
+                            className={`block w-full text-left px-2 py-2 ${b.id === value ? "bg-[#EEF2F7]" : ""}`}>
+                            <span className="text-base text-[#002B5C]">{star.has(b.id) ? "★ " : ""}{b.title}</span>
+                            <span className="block text-[11px] text-[#4B5563]">{[b.author, b.isbn].filter(Boolean).join(" · ")}</span>
+                        </button>
+                    ))}
+                    {q && !results.length && <div className="px-2 py-2 text-sm text-[#B4750F]">No book with those words — try fewer, or the ISBN.</div>}
+                    {value && <button type="button" onClick={() => pick("")} className="block w-full text-left px-2 py-2 text-sm text-[#CC0033]">Not a book / skip this line</button>}
+                </div>
+            )}
+        </div>
+    );
+}
+
 /* ------------------------------------------------------- courier sheet --- */
 /**
  * One DTDC courier run: a sheet of address labels that mixes WEBSITE ORDERS
@@ -613,6 +662,13 @@ function CourierFlow({ practice, onDone, initialDoc = null }) {
     const freeCopies = copiesOf("free_copy");
 
     const confirm = async () => {
+        // A ticked book with no copies used to go through as 0 — removed
+        // nothing and looked like a reading error afterwards.
+        const noCopies = parcels.flatMap((p) => p.lines.filter((l) => l.include && l.book_id && !(Number(l.qty) >= 1)).map(() => p.no));
+        if (noCopies.length) {
+            toast.error(`Parcel ${[...new Set(noCopies)].join(", ")}: a book has no number of copies. Enter it, or untick the book.`);
+            return;
+        }
         if (!practice && !window.confirm(
             `Confirm this courier sheet?\n\n• ${linked} website order(s): marked packed — NOT deducted again (taken off at payment).\n` +
             `• ${dealerCopies} cop${dealerCopies === 1 ? "y" : "ies"} in phone / dealer orders: removed from stock as sales.\n` +
@@ -647,7 +703,7 @@ function CourierFlow({ practice, onDone, initialDoc = null }) {
                 <input ref={fileIn} type="file" accept="image/*,application/pdf" hidden
                     onChange={(e) => e.target.files[0] && start(e.target.files[0])} />
                 <button type="button" disabled={busy} className={`${BIG} border-[#7C3AED]`} onClick={() => fileIn.current.click()} data-testid="wh-courier-file">
-                    <FileText size={28} /> {busy ? "Reading…" : "Choose PDF or photo"}
+                    <FileText size={28} /> {busy ? "Reading… a long sheet can take a minute" : "Choose PDF or photo"}
                 </button>
                 <button type="button" disabled={busy} className={`${BIG} border-[#E5E7EB]`} onClick={() => cam.current.click()}>
                     <Camera size={28} /> Take a photo
@@ -736,24 +792,20 @@ function CourierFlow({ practice, onDone, initialDoc = null }) {
                                     <div className="flex-1 min-w-0">
                                         {book ? <div className="text-base font-semibold text-[#002B5C]">{book.title}</div>
                                             : <div className="text-base font-semibold text-[#CC0033]">Which book is this?</div>}
-                                        <div className="text-xs text-[#4B5563]">On the sheet: “{l.doc_title}”{l.match === "title" ? " · matched by title — check it" : ""}</div>
-                                        <select value={l.book_id || ""} onChange={(e) => setLine(pi, li, { book_id: e.target.value || null, include: !!e.target.value })}
-                                            className="mt-1 w-full border px-2 py-2 text-base bg-white">
-                                            <option value="">— Not a book / skip —</option>
-                                            {(l.candidates || []).map((c) => <option key={`c-${c.book_id}`} value={c.book_id}>★ {c.title}</option>)}
-                                            {books.map((b) => <option key={b.id} value={b.id}>{b.title} ({b.isbn})</option>)}
-                                        </select>
+                                        <div className="text-xs text-[#4B5563]">On the sheet: “{l.doc_title}”{l.match === "title" && (l.score || 0) < 0.95 ? " · matched by title — check it" : ""}</div>
+                                        {l.qty_read === false && (
+                                            <div className="text-xs text-[#B4750F] font-medium" data-testid="wh-qty-unread">Number of copies not readable on the label — 1 filled in, check it.</div>
+                                        )}
+                                        <BookPicker books={books} candidates={l.candidates || []} value={l.book_id || ""}
+                                            onPick={(id) => setLine(pi, li, { book_id: id || null, include: !!id })} />
                                     </div>
-                                    <input type="number" min={0} value={l.qty} onChange={(e) => setLine(pi, li, { qty: Number(e.target.value) })}
-                                        className="w-16 border-2 px-2 py-2 text-base font-mono" aria-label="Copies" />
+                                    <input type="number" min={1} inputMode="numeric" value={l.qty} onChange={(e) => setLine(pi, li, { qty: e.target.value === "" ? "" : Number(e.target.value) })}
+                                        className={`w-16 border-2 px-2 py-2 text-base font-mono ${l.include && !(Number(l.qty) >= 1) ? "border-[#CC0033]" : l.qty_read === false ? "border-[#F59E0B]" : ""}`} aria-label="Copies" />
                                 </div>
                             </div>
                         );
                     })}
-                    <select value="" onChange={(e) => addLine(pi, e.target.value)} className="w-full border px-2 py-2 text-base bg-white">
-                        <option value="">+ Add a book to this parcel</option>
-                        {books.map((b) => <option key={b.id} value={b.id}>{b.title} ({b.isbn})</option>)}
-                    </select>
+                    <BookPicker books={books} value="" onPick={(id) => addLine(pi, id)} placeholder="+ Add a book: type part of the title…" />
                 </div>
             ))}
             <button type="button" onClick={addParcel} className="w-full border-2 border-dashed py-3 text-[#002B5C]">+ Add a parcel</button>

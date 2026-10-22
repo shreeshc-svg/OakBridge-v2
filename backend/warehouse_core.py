@@ -334,6 +334,20 @@ def parse_goods_tables(tables: list) -> list:
 
 
 # ---------------------------------------------------------------- match ---
+def _has_token(t: str, have: set) -> bool:
+    """Exact word, or — for words of 5+ letters — one OCR slip away
+    ("Courtroorn" for "Courtroom", "Refrencer" for "Referencer"). Short words
+    must match exactly: "law"/"tax" one letter apart are different books."""
+    if t in have:
+        return True
+    if len(t) < 5:
+        return False
+    # "rn" read for "m" is Textract's commonest slip on serif print.
+    tm = t.replace("rn", "m")
+    return any(len(h) >= 5 and (tm == h.replace("rn", "m") or (abs(len(h) - len(t)) <= 2 and SequenceMatcher(None, tm, h).ratio() >= 0.8))
+               for h in have)
+
+
 def match_line(line: dict, books: list, aliases: Optional[dict] = None) -> dict:
     """Pick the catalogue book for one document line.
 
@@ -367,7 +381,7 @@ def match_line(line: dict, books: list, aliases: Optional[dict] = None) -> dict:
         have = set(tokens(f'{b.get("title") or ""} {b.get("author") or ""}'))
         if not have:
             continue
-        cover = sum(1 for t in want if t in have) / len(want)
+        cover = sum(1 for t in want if _has_token(t, have)) / len(want)
         if cover < 0.5:
             continue
         bf = fold(b.get("title") or "")
@@ -450,7 +464,43 @@ def score_corrections(read: list, confirmed: list) -> dict:
 # "In-House Matters -1"), then the recipient's address, then a "From" block
 # with Oakbridge's own address. One sheet mixes paid website orders with free
 # copies to teachers and academies.
-COURIER_BOOK_RE = re.compile(r"^(?P<title>.+?)\s*[-\u2013\u2014]\s*(?P<qty>\d{1,3})\s*(?:cop(?:y|ies)|nos?\.?|pcs\.?)?\s*$", re.I)
+#
+# OCR-TOLERANT QUANTITY (Oct 2026). Photos of the sheet go through Textract,
+# which reads "-1" as "-l", "-I" or "-|", turns the dash into "~" or "_", and
+# the office itself writes "x 2", "× 2", ": 2", "(2)" or "2 copies." with a
+# full stop. Any of those used to fail this pattern, so the line was not a
+# book at all: the title never appeared on the phone and the person had to
+# find the book by hand. A lone l/I/|/i/! is read as 1; O/o only beside a real
+# digit ("1O" -> 10) — a bare "O" or "II" is never turned into a number, so a
+# title ending "Part - II" is not mistaken for 11 copies.
+_SEP = r"(?:\s+[xX]|\s*[\u00d7\-\u2013\u2014~_=:*]|\s*\bqty\b\.?)"
+_QTY = r"[0-9lI|i!Oo]{1,3}"
+_QTY_WORDS = r"(?:cop(?:y|ies)|nos?\.?|pcs?\.?|books?|bks?\.?|sets?)"
+COURIER_BOOK_RE = re.compile(
+    rf"^(?P<title>.+?){_SEP}\s*(?P<qty>{_QTY})\s*{_QTY_WORDS}?\s*[.,;]?\s*$", re.I)
+# "Title (2)" / "Title (2 copies)".
+COURIER_BOOK_PAREN_RE = re.compile(
+    rf"^(?P<title>.+?)\s*\(\s*(?P<qty>{_QTY})\s*{_QTY_WORDS}?\s*\)\s*[.,;]?\s*$", re.I)
+# A line that is ONLY a quantity — Textract split "Title -2" into "Title" and
+# "-2". Needs a separator or a word, so a lone "5" in an address never counts.
+BARE_QTY_RE = re.compile(
+    rf"^\s*(?:(?:[xX\u00d7\-\u2013\u2014~_=:*]|qty\.?)\s*(?P<a>{_QTY})\s*{_QTY_WORDS}?|(?P<b>{_QTY})\s*{_QTY_WORDS})\s*[.,;]?\s*$", re.I)
+# An ISBN anywhere in a book line ("Title (ISBN 978…) - 2"), not only at the end.
+ISBN_ANY_RE = re.compile(r"\(?\s*ISBN\s*[:\-\u2013]?\s*([0-9Xx\- ]{10,17})\s*\)?|\b(97[89][\d\- ]{10,14})\b", re.I)
+
+
+def ocr_qty(tok: str) -> Optional[int]:
+    """'2' -> 2, 'l' / 'I' / '|' -> 1, '1O' -> 10; None if it is not a number."""
+    t = (tok or "").strip()
+    if not t:
+        return None
+    if re.fullmatch(r"[lI|i!]", t):
+        return 1
+    if not re.search(r"\d", t):
+        return None  # "O", "II", "Io": not a quantity
+    t = re.sub(r"[lI|i!]", "1", t)
+    t = re.sub(r"[Oo]", "0", t)
+    return int(t) if t.isdigit() else None
 PHONE_LINE_RE = re.compile(r"\b(?:mob(?:ile)?|tel|ph(?:one)?|m)\b\.?\s*[:\-]?\s*([+\d][\d\s-]{7,})", re.I)
 PIN_RE = re.compile(r"\b(\d{6})\b")
 
@@ -469,7 +519,13 @@ WEB_WORDS_RE = re.compile(r"\[?\s*\b(?:website|web)\s*order\b\s*\]?|\[\s*web\s*\
 def _is_book_line(ln: str) -> Optional[dict]:
     raw = ln.strip()
     line = ORDER_NO_RE.sub("", raw)
-    line = WEB_WORDS_RE.sub("", line).strip(" ,;:|")
+    line = WEB_WORDS_RE.sub("", line).strip(" ,;:")
+    # A trailing "|" is stray OCR — unless it follows a dash, where it is a
+    # "1" ("Title -|"); the pattern below reads it either way.
+    if not re.search(r"[-\u2013\u2014~]\s*\|$", line):
+        line = line.strip(" ,;:|")
+    else:
+        line = line.lstrip(" |")
     isbn = ""
     t = ISBN_TAIL_RE.search(line)
     if t:
@@ -477,10 +533,19 @@ def _is_book_line(ln: str) -> Optional[dict]:
         if len(cand) in (10, 13):
             isbn = cand
             line = line[:t.start()].strip(" ,;:|")
-    m = COURIER_BOOK_RE.match(line)
+    if not isbn:
+        # ISBN in the middle: "Title (ISBN 9789…) - 2".
+        t = ISBN_ANY_RE.search(line)
+        cand = norm_isbn(t.group(1) or t.group(2)) if t else ""
+        if len(cand) in (10, 13):
+            isbn = cand
+            line = re.sub(r"\s{2,}", " ", line[:t.start()] + " " + line[t.end():]).strip(" ,;:|")
+    m = COURIER_BOOK_RE.match(line) or COURIER_BOOK_PAREN_RE.match(line)
     if not m:
         return None
-    title, qty = m.group("title").strip(" ,-"), int(m.group("qty"))
+    title, qty = m.group("title").strip(" ,-~_=:*"), ocr_qty(m.group("qty"))
+    if qty is None:
+        return None
     # "Varanasi- 221010" and "New Delhi - 110068" end in a number too; a pin
     # code is six digits and a city is not a book.
     if not (0 < qty <= 500) or len(tokens(title)) == 0 or re.search(r"\d{5,}", line):
@@ -491,17 +556,91 @@ def _is_book_line(ln: str) -> Optional[dict]:
     return out
 
 
-def parse_courier_text(text: str) -> list:
-    """Courier label sheet -> parcels [{no, lines, name, org, phone, pincode, address}]."""
+def title_matcher(books: list):
+    """A test for "this whole line is a catalogue title", for lines with no
+    quantity at all ("Climate Justice" alone, the "-1" lost in the photo).
+
+    Strict on purpose — it decides book-vs-address: every word of the line
+    must be a word of ONE book's title (not its author: an author copy's
+    label starts with the author's own name), and at least two words, or the
+    whole title exactly. A name, a street or "Sample Law Academy" never
+    passes; "In-House Matters" does.
+    """
+    shelf = [(fold(b.get("title") or ""), set(tokens(b.get("title") or ""))) for b in books or []]
+
+    def is_title(s: str) -> bool:
+        if not s or re.search(r"\d{4,}", s) or PHONE_LINE_RE.search(s):
+            return False
+        f, want = fold(s), tokens(s)
+        if not want:
+            return False
+        for bf, have in shelf:
+            if f == bf or (len(want) >= 2 and all(t in have for t in want)):
+                return True
+        return False
+    return is_title
+
+
+_SEP_CHARS = "\u00d7-\u2013\u2014~_=:*"
+
+
+def _merge_split_lines(lines: list, is_title=None) -> list:
+    """Undo two ways a photo splits ONE book line in two.
+
+    * "Title" / "-2"            (quantity on its own line)   -> "Title - 2"
+    * "Construction Law … (Constructive" / "Counsel Series) – 3"
+      (a long title wrapped)    -> one line, but only when the joined title
+      is a catalogue title and the second half alone is not — so a real
+      address line above a book line is never glued onto it.
+    """
+    out, i = [], 0
+    while i < len(lines):
+        cur = lines[i]
+        nxt = lines[i + 1] if i + 1 < len(lines) else None
+        if nxt is not None and not _is_book_line(cur) and re.search(r"[A-Za-z]{3}", cur):
+            qm = BARE_QTY_RE.match(nxt) or (re.fullmatch(r"\s*\d{1,3}\s*", nxt) and re.search(r"[-\u2013\u2014:x]\s*$", cur))
+            if qm:
+                joined = cur.rstrip(_SEP_CHARS + " ") + " - " + nxt.strip().lstrip("xX" + _SEP_CHARS + " ")
+                if _is_book_line(joined):
+                    out.append(joined)
+                    i += 2
+                    continue
+            if is_title and not re.search(r"\d", cur):
+                b = _is_book_line(nxt)
+                # Every word of the JOINED title must be one book's title
+                # words, so our own "From" address or a recipient line above
+                # a book line can never be glued on.
+                if b and is_title(f'{cur} {b["title"]}'):
+                    out.append(f"{cur} {nxt.strip()}")
+                    i += 2
+                    continue
+        out.append(cur)
+        i += 1
+    return out
+
+
+def parse_courier_text(text: str, is_title=None) -> list:
+    """Courier label sheet -> parcels [{no, lines, name, org, phone, pincode, address}].
+
+    is_title: optional title_matcher(catalogue). With it, a line that is a
+    catalogue title but carries no readable quantity is still a book line
+    (qty 1, `qty_read: False`, so the phone asks him to check the copies),
+    and wrapped titles are re-joined.
+    """
     parcels, cur, state = [], None, "books"
     pending_order = ""          # an order number written above a parcel's books
     pending_web = False         # "Website order" written above a parcel's books
-    for raw in (text or "").splitlines():
+    raw_lines = [r.strip() for r in (text or "").splitlines() if r.strip()]
+    for raw in _merge_split_lines(raw_lines, is_title):
         ln = raw.strip()
         if not ln:
             continue
         on = ORDER_NO_RE.search(ln)
         book = _is_book_line(ln)
+        if not book and is_title and state != "from":
+            bare = WEB_WORDS_RE.sub("", ORDER_NO_RE.sub("", ln)).strip(" ,;:|-")
+            if is_title(bare):
+                book = {"title": bare, "qty": 1, "qty_read": False, "raw": ln}
         if book:
             if cur is None or state != "books":
                 cur = {"lines": [], "address": [], "name": "", "org": "", "phone": "", "pincode": "",

@@ -126,7 +126,8 @@ export const whUploadDoc = (direction, file, practice) => {
     fd.append("direction", direction);
     fd.append("practice", practice ? "true" : "false");
     if (file) fd.append("file", file);
-    return api.post("/warehouse/docs", fd, { timeout: 120000 }).then((r) => r.data);
+    // 3 min: a scanned courier sheet is now read up to 12 pages (was 3).
+    return api.post("/warehouse/docs", fd, { timeout: 180000 }).then((r) => r.data);
 };
 export const whConfirmDoc = (id, body) => api.post(`/warehouse/docs/${id}/confirm`, body).then((r) => r.data);
 export const whReport = (id, note, lineNo) =>
@@ -154,7 +155,7 @@ export const adminWhCreateDoc = (direction, file) => {
     const fd = new FormData();
     fd.append("direction", direction);
     if (file) fd.append("file", file);
-    return api.post("/admin/warehouse/docs", fd, { timeout: 120000 }).then((r) => r.data);
+    return api.post("/admin/warehouse/docs", fd, { timeout: 180000 }).then((r) => r.data);
 };
 export const adminWhEditDoc = (id, body) => api.patch(`/admin/warehouse/docs/${id}`, body).then((r) => r.data);
 export const adminWhEditLines = (id, lines, note) =>

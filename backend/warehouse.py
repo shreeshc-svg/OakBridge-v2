@@ -294,6 +294,35 @@ def _textract(images: list) -> tuple[list, str]:
     return rows, "\n".join(texts)
 
 
+# Courier sheets (Oct 2026): a label sheet is plain lines, never a table, so
+# it is read with DetectDocumentText — the plain-text call, about a tenth of
+# AnalyzeDocument+TABLES' price and quicker — and up to COURIER_MAX_PAGES
+# pages, read four at a time. It used to be the table call on the first THREE
+# pages only, one after another: every parcel from page 4 on was silently
+# missing. If the AWS key is not allowed the plain-text call, the table call
+# (which it is allowed) is used instead, so nothing stops working.
+COURIER_MAX_PAGES = 12
+
+
+def _textract_lines(images: list) -> str:
+    import boto3
+    from concurrent.futures import ThreadPoolExecutor
+
+    client = boto3.client("textract", region_name=TEXTRACT_REGION)
+
+    def one(img: bytes) -> str:
+        try:
+            res = client.detect_document_text(Document={"Bytes": img})
+        except Exception as e:  # noqa: BLE001
+            if "AccessDenied" not in str(e) and "not authorized" not in str(e):
+                raise
+            res = client.analyze_document(Document={"Bytes": img}, FeatureTypes=["TABLES"])
+        return core.textract_text(res.get("Blocks") or [])
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        return "\n".join(pool.map(one, images))  # map keeps page order
+
+
 def _shrink_image(data: bytes) -> bytes:
     """Phone photos -> JPEG under Textract's 10 MB synchronous limit."""
     from PIL import Image, ImageOps
@@ -305,34 +334,40 @@ def _shrink_image(data: bytes) -> bytes:
     return out.getvalue()
 
 
-def _pdf_text_and_pages(data: bytes) -> tuple[str, list]:
+def _pdf_text_and_pages(data: bytes, max_pages: int = 3, scale: float = 2) -> tuple[str, list]:
     import pypdfium2 as pdfium
 
     pdf = pdfium.PdfDocument(data)
     text = "\n".join(p.get_textpage().get_text_range() for p in pdf)
     images = []
     if len(text.strip()) < 40:  # scanned PDF: no text layer — render for Textract
-        for page in list(pdf)[:3]:
+        for page in list(pdf)[:max_pages]:
             buf = io.BytesIO()
-            page.render(scale=2).to_pil().convert("RGB").save(buf, "JPEG", quality=85)
+            page.render(scale=scale).to_pil().convert("RGB").save(buf, "JPEG", quality=85)
             images.append(buf.getvalue())
     return text, images
 
 
-async def read_document(data: bytes, kind: str, direction: str) -> dict:
-    """bytes -> {source, text, rows | parcels}. kind: pdf|image."""
+async def read_document(data: bytes, kind: str, direction: str, books: Optional[list] = None) -> dict:
+    """bytes -> {source, text, rows | parcels}. kind: pdf|image.
+
+    books (courier only): the catalogue, so a line that is a book title with
+    no readable quantity, or a title wrapped onto two lines, is still read as
+    a book (core.title_matcher)."""
     if direction == "courier":
         # Label sheets are plain text, not tables: the PDF's own text, or
-        # Textract's LINE output for a photo, read in order.
+        # Textract's LINE output for a photo, read in order. Scanned pages are
+        # rendered at 3x (was 2x): small label print, "-1" vs "-l".
+        is_title = core.title_matcher(books) if books else None
         if kind == "pdf":
-            text, images = await asyncio.to_thread(_pdf_text_and_pages, data)
+            text, images = await asyncio.to_thread(_pdf_text_and_pages, data, COURIER_MAX_PAGES, 3)
             if not images:
-                return {"source": "pdf_text", "text": text, "parcels": core.parse_courier_text(text)}
-            _, ttext = await asyncio.to_thread(_textract, images)
-            return {"source": "textract_pdf", "text": ttext, "parcels": core.parse_courier_text(ttext)}
+                return {"source": "pdf_text", "text": text, "parcels": core.parse_courier_text(text, is_title)}
+            ttext = await asyncio.to_thread(_textract_lines, images)
+            return {"source": "textract_pdf", "text": ttext, "parcels": core.parse_courier_text(ttext, is_title)}
         img = await asyncio.to_thread(_shrink_image, data)
-        _, ttext = await asyncio.to_thread(_textract, [img])
-        return {"source": "textract_photo", "text": ttext, "parcels": core.parse_courier_text(ttext)}
+        ttext = await asyncio.to_thread(_textract_lines, [img])
+        return {"source": "textract_photo", "text": ttext, "parcels": core.parse_courier_text(ttext, is_title)}
     if kind == "pdf":
         text, images = await asyncio.to_thread(_pdf_text_and_pages, data)
         if not images:
@@ -401,6 +436,9 @@ async def _suggest(rows: list, books: list, start: int = 1, aliases: Optional[di
             "line_no": i, "raw": r.get("raw", ""), "doc_title": r.get("title", ""),
             "doc_isbn": r.get("isbn", ""), "pages": r.get("pages"),
             "qty": r.get("qty") or 0, "book_id": m["book_id"], "match": m["method"],
+            # False when the label had the title but no readable number of
+            # copies: 1 is filled in and the phone asks him to check it.
+            "qty_read": r.get("qty_read", True),
             "score": m["score"], "candidates": m["candidates"],
             # Unmatched lines (Box Charge, tax rows that slipped through) start
             # unticked: the person adds them deliberately, never by accident.
@@ -559,7 +597,8 @@ async def _create_doc(direction: str, practice: bool, file: Optional[UploadFile]
         doc.update({"file_path": path, "file_type": kind, "sha256": sha,
                     "duplicate_of": (dup or {}).get("id", "")})
         try:
-            res = await read_document(data, kind, direction)
+            res = await read_document(data, kind, direction,
+                                      await _catalogue() if direction == "courier" else None)
             if direction == "courier":
                 doc["source"] = res["source"]
                 doc["parcels"] = await _suggest_parcels(res["parcels"])
@@ -1494,7 +1533,8 @@ async def adm_replay(user: dict = Depends(require_admin)):
             continue
         try:
             data, _ = await asyncio.to_thread(get_object, d["file_path"])
-            res = await read_document(data, d.get("file_type") or "pdf", d["direction"])
+            res = await read_document(data, d.get("file_type") or "pdf", d["direction"],
+                                      await _catalogue() if d["direction"] == "courier" else None)
             if d["direction"] == "courier":
                 sugg = [ln for p in await _suggest_parcels(res["parcels"]) for ln in p["lines"]]
             else:
