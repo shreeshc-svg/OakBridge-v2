@@ -11,6 +11,7 @@ from typing import List, Optional
 import uuid
 from datetime import datetime, timezone, timedelta
 from hot_press import hot_order
+from launch_time import parse_launch_at
 
 
 ROOT_DIR = Path(__file__).parent
@@ -1826,22 +1827,15 @@ PREORDER_MAX_QTY = 10  # same per-order cap as the cart (CartContext.jsx)
 def _preorder_active(bdoc: dict) -> bool:
     """Server copy of frontend/src/lib/preorder.js `preorderState().active`.
 
-    Flag AND a future launch date. A date-only value ("2026-10-22") is UTC
-    midnight, exactly as `new Date("2026-10-22")` reads it in the browser, so
-    the two sides flip from pre-order to ordinary title at the same moment.
+    Flag AND a future launch date, read by launch_time.parse_launch_at — the
+    same rule the browser uses, so the two sides flip from pre-order to
+    ordinary title at the same moment. (Until Oct 2026 a time typed in Admin
+    was read as UTC here but as local time in the browser: 5½ hours apart.)
     """
     if not bdoc.get("coming_soon"):
         return False
-    raw = str(bdoc.get("launch_at") or "").strip()
-    if not raw:
-        return False
-    try:
-        at = datetime.fromisoformat(raw.replace("Z", "+00:00"))
-    except ValueError:
-        return False
-    if at.tzinfo is None:
-        at = at.replace(tzinfo=timezone.utc)
-    return at > datetime.now(timezone.utc)
+    at = parse_launch_at(bdoc.get("launch_at"))
+    return bool(at) and at > datetime.now(timezone.utc)
 
 
 def _checkout_consents(payload: "OrderCreate", at: str) -> dict:

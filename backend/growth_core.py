@@ -311,7 +311,10 @@ def merchant_item(book: dict, *, site: str, image_url: str) -> Optional[dict]:
     else:
         item["identifier_exists"] = "no"
     if availability == "preorder" and book.get("launch_at"):
-        d = _dt(book["launch_at"])
+        # Not _dt: a time typed in Admin is India time, not UTC (launch_time.py).
+        from launch_time import parse_launch_at
+
+        d = parse_launch_at(book["launch_at"])
         if d:
             item["availability_date"] = d.isoformat()
     return item

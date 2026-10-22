@@ -80,5 +80,18 @@ eq('junk is refused rather than becoming Invalid Date', launchDate({ launch_at: 
 eq('formats for a reader', formatLaunchDate(new Date('2026-09-14T00:00:00Z')).includes('September'), true);
 eq('no date formats to nothing', formatLaunchDate(null), '');
 
+console.log('\n-- timezone: same instant as backend/launch_time.py --');
+// The Admin box saves "YYYY-MM-DDTHH:MM" with no zone; it means India time,
+// wherever the visitor is (the sandbox runs this in UTC, so a plain
+// new Date() would land 5½ hours late and this check would catch it).
+eq('admin time with no zone = IST', launchDate({ launch_at: '2026-10-28T17:04' }).toISOString(), '2026-10-28T11:34:00.000Z');
+eq('space instead of T, with seconds', launchDate({ launch_at: '2026-10-28 17:04:30' }).toISOString(), '2026-10-28T11:34:30.000Z');
+eq('explicit offset honoured', launchDate({ launch_at: '2026-10-28T17:04Z' }).toISOString(), '2026-10-28T17:04:00.000Z');
+eq('bare date unchanged: UTC midnight', launchDate({ launch_at: '2026-09-14' }).toISOString(), '2026-09-14T00:00:00.000Z');
+eq('live until 17:04 IST, over after', [
+  preorderState({ coming_soon: true, launch_at: '2026-10-28T17:04' }, Date.parse('2026-10-28T11:33:00Z')).active,
+  preorderState({ coming_soon: true, launch_at: '2026-10-28T17:04' }, Date.parse('2026-10-28T11:35:00Z')).active,
+].join(), 'true,false');
+
 console.log(fail ? `\n${fail} FAILED` : '\nall assertions passed');
 process.exit(fail ? 1 : 0);

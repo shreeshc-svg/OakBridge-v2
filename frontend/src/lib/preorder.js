@@ -16,7 +16,15 @@ export const launchDate = (book) => {
     // A bare "2026-09-14" is parsed by JS as UTC midnight, which in IST is
     // 05:30 the same morning — close enough for a publication day, and it
     // keeps a date-only value behaving the same in every browser.
-    const d = new Date(raw);
+    //
+    // A date WITH a time but no offset ("2026-10-28T17:04", which is what the
+    // Admin datetime-local box saves) is India time — it was typed in India.
+    // Left alone, `new Date()` reads it in the VISITOR's zone: right in India,
+    // hours off abroad, and 5½ hours off from the server, which used to read
+    // it as UTC (checkout kept taking pre-orders after the page had flipped).
+    // backend/launch_time.py applies the same rule.
+    const naive = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(raw);
+    const d = new Date(naive ? `${raw.replace(" ", "T")}+05:30` : raw);
     return Number.isNaN(d.getTime()) ? null : d;
 };
 
