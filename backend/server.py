@@ -2041,6 +2041,8 @@ app.include_router(growth_public_router)
 app.include_router(growth_admin_router)
 from email_manager_api import admin_router as email_manager_admin_router  # noqa: E402
 app.include_router(email_manager_admin_router)
+from ai_insights import admin_router as marketing_ai_admin_router  # noqa: E402
+app.include_router(marketing_ai_admin_router)
 
 # The production domains, Vercel preview and local dev are always allowed; any
 # extra origins in the CORS_ORIGINS env var (comma-separated) are merged in. This

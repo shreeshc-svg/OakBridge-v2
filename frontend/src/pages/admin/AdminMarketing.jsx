@@ -4,6 +4,7 @@ import { ArrowDown, ArrowUp, Mail, MessageCircle, Pencil, Plus, Search, Trash2, 
 import {
     mkDashboard, mkHealth, mkProviders, mkSettings, mkSaveSettings, mkVerify, mkImport, mkImportEstimate, mkImports, mkImportApprove, mkImportReject, mkReverify, mkSync, mkContacts, mkPatchContact,
     mkDeleteContact, mkLists, mkCreateList, mkCampaigns, mkNewCampaign, mkCampaign, mkSaveCampaign, mkDuplicate,
+    mkAiGrowth, mkAiCampaign, mkAiDeliverability,
     mkAudience, mkPreview, mkTemplates, mkNewTemplate, mkSaveTemplate, mkDeleteTemplate, mkUseTemplate, mkTemplatePreview, mkUploadEmailImage, mkExportCampaign, mkExportContacts, mkCleanup, mkGrowthFunnel, mkPartners, mkNewPartner, mkSavePartner, mkAutomations, mkSaveAutomations, mkAutomationsPreview, MERCHANT_FEED_URL, mkTestSend, mkSend, mkCampaignAction, mkReport, mkDismissAlert, mkSuppressionSync,
     mkBulkContacts, mkBulkDeleteLists, mkBulkDeleteCampaigns, mkRenameCampaign, mkLearn, mkDisposableRefresh, mkSystemHealth, nlOverview, nlSave, nlDraftNow, nlApprove, nlSkip, fetchBooks, fetchCategories, mediaUrl, formatApiError,
 } from "../../lib/api";
@@ -11,6 +12,7 @@ import { useAuth } from "../../context/AuthContext";
 import { isSuperadmin, canDelete } from "../../lib/rbac";
 import { LineChart, BarChart, Funnel, Donut, Kpi, pct, inr } from "../../components/marketing/Charts";
 import { StepsTable, GrowthInsights, OfficeNetwork } from "../../components/marketing/GrowthInsights";
+import { AIInsightCard, NextActions, SubjectCoach, AISwitch } from "../../components/marketing/AIInsights";
 import { GROWTH_PERIODS, growthPeriod, growthPeriodLabel } from "../../lib/dateRange";
 
 /**
@@ -139,6 +141,8 @@ function Dashboard({ onOpen }) {
             {d.ses_usage?.near_limit && (
                 <div className="border border-[#F59E0B] bg-white text-sm p-3"><SesUsage u={d.ses_usage} /></div>
             )}
+            <NextActions onOpen={onOpen} />
+            <AIInsightCard title="Email health — what this means" load={(refresh) => mkAiDeliverability(refresh)} testid="mk-ai-deliverability" />
             <div className="flex flex-wrap items-center gap-2 text-sm">
                 Period
                 {[7, 30, 90, 365].map((n) => (
@@ -508,6 +512,9 @@ function CampaignEditor({ c, setC, reload }) {
                                     <input className={box} value={c.subject || ""} onChange={(e) => patch({ subject: e.target.value })} data-testid="mk-subject" /></label>
                                 <label className="block">Preview text (shown after the subject in the inbox)<input className={box} value={c.preheader || ""} onChange={(e) => patch({ preheader: e.target.value })} /></label>
                                 <div className="text-xs text-[#6B7280]">Subject {(c.subject || "").length} characters — under 50 reads best on phones.</div>
+                                <SubjectCoach subject={c.subject || ""} preheader={c.preheader || ""}
+                                    about={(c.blocks || []).map((b) => [b.title, b.heading, b.text].filter(Boolean).join(" ")).join(" ").slice(0, 400)}
+                                    onUse={(v) => patch({ subject: v })} onUsePreheader={(v) => patch({ preheader: v })} />
                             </>
                         ) : (
                             <WaFields c={c} patch={patch} />
@@ -671,6 +678,11 @@ function Growth({ onOpen }) {
                             Visits are counted once per browser session without cookies; bots, staff browsers and the office network are excluded, and so are staff accounts' own orders.
                             Orders use the link the buyer first arrived from (remembered for 30 days when they allowed analytics cookies). A partner code wins over everything else.
                         </p>
+                        {!f.empty && (
+                            <div className="mt-4">
+                                <AIInsightCard title="Growth — what changed and why" load={(refresh) => mkAiGrowth(period, refresh)} deps={[pk]} testid="mk-ai-growth" />
+                            </div>
+                        )}
                         <StepsTable f={f} />
                         <GrowthInsights period={period} />
                         <OfficeNetwork />
@@ -1172,6 +1184,9 @@ function CampaignReport({ id, status, reload }) {
                 </span>
             </div>
             {r.campaign.paused_reason && <div className="border border-[#CC0033] text-[#CC0033] p-2 text-sm">{r.campaign.paused_reason}</div>}
+            {!isWa && (s.sent || 0) > 0 && (
+                <AIInsightCard title="How this campaign did — and what to change next time" load={(refresh) => mkAiCampaign(id, refresh)} deps={[id]} testid="mk-ai-campaign" />
+            )}
             {["sent", "cancelled", "paused"].includes(status) && !isWa && <CleanupPanel campaignId={id} />}
             {status === "preparing" && (
                 <div className="border border-[#7c3aed] text-[#5b21b6] p-2 text-sm" data-testid="mk-preparing">
@@ -2020,6 +2035,7 @@ function Settings() {
     );
     return (
         <div className="grid xl:grid-cols-2 gap-6" data-testid="mk-settings">
+            <div className="xl:col-span-2"><AISwitch canEdit={su} /></div>
             <Panel title="Sender">
                 <div className="space-y-2">
                     {F("from_name", "From name")}
