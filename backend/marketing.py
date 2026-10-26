@@ -3333,8 +3333,8 @@ async def adm_get_campaign(cid: str):
 
 
 @admin_router.patch("/campaigns/{cid}")
-async def adm_patch_campaign(cid: str, body: CampaignBody):
-    c = await db.mk_campaigns.find_one({"id": cid}, {"_id": 0, "status": 1})
+async def adm_patch_campaign(cid: str, body: CampaignBody, user: dict = Depends(require_admin)):
+    c = await db.mk_campaigns.find_one({"id": cid}, {"_id": 0, "status": 1, "edit_logged_at": 1, "edit_logged_by": 1})
     if not c:
         raise HTTPException(status_code=404, detail="Campaign not found")
     if c["status"] not in ("draft", "scheduled"):
@@ -3350,8 +3350,19 @@ async def adm_patch_campaign(cid: str, body: CampaignBody):
     for k in ("name", "subject", "preheader", "wa_template"):
         if k in upd:
             upd[k] = str(upd[k]).strip()[:300]
+    changed = sorted(k for k in upd if k != "links")
     upd["updated_at"] = _iso()
+    upd["updated_by"] = user.get("email", "")
+    # Campaign activity log: the editor saves often, so one "edited" line per
+    # person per 10 minutes, naming what was changed — not one per keystroke.
+    me = user.get("email", "")
+    quiet = c.get("edit_logged_by") == me and (c.get("edit_logged_at") or "") >= (_now() - timedelta(minutes=10)).isoformat()
+    if not quiet:
+        upd.update(edit_logged_at=upd["updated_at"], edit_logged_by=me)
     await db.mk_campaigns.update_one({"id": cid}, {"$set": upd})
+    if not quiet:
+        await audit_log(db, "MARKETING_CAMPAIGN_EDITED", email=me, role=user.get("role", ""),
+                        meta={"campaign": cid, "fields": ", ".join(changed)[:200]})
     return await db.mk_campaigns.find_one({"id": cid}, {"_id": 0})
 
 
@@ -3452,6 +3463,8 @@ async def adm_test_campaign(cid: str, body: TestBody, user: dict = Depends(requi
             mid = await asyncio.to_thread(_send_raw, raw)
         except Exception as e:  # noqa: BLE001
             raise HTTPException(status_code=502, detail=f"SES refused it: {str(e)[:250]}")
+        await audit_log(db, "MARKETING_CAMPAIGN_TEST", email=user.get("email", ""), role=user.get("role", ""),
+                        meta={"campaign": cid, "channel": "email", "to": body.to[:120]})
         return {"ok": True, "message_id": mid}
     from interakt import send_campaign_message
     rec = await send_campaign_message(template=c.get("wa_template"), language=c.get("wa_language") or "en",
@@ -3459,6 +3472,8 @@ async def adm_test_campaign(cid: str, body: TestBody, user: dict = Depends(requi
                                       phone=body.to, dedupe="", campaign_id="", force_test=True)
     if not rec or rec.get("status") == "failed":
         raise HTTPException(status_code=502, detail=(rec or {}).get("error") or "Not sent")
+    await audit_log(db, "MARKETING_CAMPAIGN_TEST", email=user.get("email", ""), role=user.get("role", ""),
+                    meta={"campaign": cid, "channel": "whatsapp", "to": "…" + "".join(ch for ch in body.to if ch.isdigit())[-4:]})
     return {"ok": True}
 
 
@@ -3737,6 +3752,118 @@ async def adm_campaign_action(cid: str, action: str, user: dict = Depends(requir
         await start_campaign(cid)
     await audit_log(db, f"MARKETING_CAMPAIGN_{action.upper()}", email=user.get("email", ""), role=user.get("role", ""), meta={"campaign": cid})
     return {"ok": True, "status": new}
+
+
+_ACT_WORDS = {
+    "MARKETING_CAMPAIGN_SEND": "Pressed Send", "MARKETING_CAMPAIGN_PAUSE": "Paused", "MARKETING_CAMPAIGN_RESUME": "Resumed",
+    "MARKETING_CAMPAIGN_CANCEL": "Cancelled", "MARKETING_CAMPAIGN_RENAMED": "Renamed", "MARKETING_CAMPAIGN_EDITED": "Edited",
+    "MARKETING_CAMPAIGN_TEST": "Sent a test", "MARKETING_AI_ACTION_DRAFT": "Created from 'Do this next'",
+}
+
+
+def _mins(a: Optional[str], b: Optional[str]) -> Optional[float]:
+    try:
+        return round((datetime.fromisoformat(b) - datetime.fromisoformat(a)).total_seconds() / 60, 1) if a and b else None
+    except ValueError:
+        return None
+
+
+@admin_router.get("/campaigns/{cid}/activity")
+async def adm_campaign_activity(cid: str):
+    """Who did what, when, to this campaign — and where its audience came from.
+
+    One timeline from three sources: the campaign's own fields (created,
+    checks started/finished, sending started/finished, automatic pauses),
+    the audit log (Send, Pause, Resume, Cancel, edits, test sends, renames —
+    each with the person's email), and the sends themselves (first delivery,
+    open, click, order). The audience section names every list with who
+    created it, who APPROVED its import and when, and the file it came from.
+    """
+    c = await db.mk_campaigns.find_one({"id": cid}, {"_id": 0, "blocks": 0})
+    if not c:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    ev = [{"at": c.get("created_at"), "who": c.get("created_by") or "", "what": "Created",
+           "detail": f"from template “{c['template_name']}”" if c.get("template_name") else (c.get("note") or "")[:160]}]
+    try:
+        await db.audit_events.create_index("meta.campaign")
+    except Exception:  # noqa: BLE001
+        pass
+    async for a in db.audit_events.find({"meta.campaign": cid}, {"_id": 0}).sort("at", 1).limit(500):
+        m = a.get("meta") or {}
+        detail = ""
+        if a["action"] == "MARKETING_CAMPAIGN_SEND":
+            detail = (f"to {m.get('candidates')} possible recipients"
+                      + (f", scheduled for {m['schedule_at']}" if m.get("schedule_at") else ""))
+        elif a["action"] == "MARKETING_CAMPAIGN_EDITED":
+            detail = f"changed: {m.get('fields') or '—'}"
+        elif a["action"] == "MARKETING_CAMPAIGN_TEST":
+            detail = f"to {m.get('to')}"
+        ev.append({"at": a.get("at"), "who": a.get("email") or "", "what": _ACT_WORDS.get(a["action"], a["action"].title()),
+                   "detail": detail})
+    p = c.get("prepare") or {}
+    if p.get("started_at"):
+        ev.append({"at": p["started_at"], "who": "system", "what": "Checking addresses",
+                   "detail": f"{p.get('candidates', 0)} candidates"})
+    if p.get("finished_at"):
+        sk = p.get("skipped") or {}
+        ev.append({"at": p["finished_at"], "who": "system", "what": "Checks finished",
+                   "detail": f"{c.get('queued', 0)} queued to send"
+                             + (f", {sum(int(v or 0) for v in sk.values()) if isinstance(sk, dict) else sk} skipped" if sk else "")})
+    if c.get("started_at"):
+        ev.append({"at": c["started_at"], "who": "system", "what": "Sending started", "detail": ""})
+    if c.get("paused_reason") and c.get("status") == "paused":
+        ev.append({"at": c.get("paused_at"), "who": "system", "what": "Paused automatically", "detail": c["paused_reason"][:200]})
+    if c.get("tail_stopped_at"):
+        ev.append({"at": c["tail_stopped_at"], "who": "system", "what": "Stopped the unconfirmed tail",
+                   "detail": "bounces from unconfirmed addresses passed the limit"})
+    if c.get("finished_at"):
+        ev.append({"at": c["finished_at"], "who": "system", "what": "Finished sending", "detail": ""})
+    firsts = {}
+    for f, label in (("delivered_at", "First delivered"), ("opened_at", "First opened"), ("clicked_at", "First click")):
+        x = await db.mk_sends.find_one({"campaign_id": cid, f: {"$exists": True, "$ne": None}}, {"_id": 0, f: 1}, sort=[(f, 1)])
+        if x and x.get(f):
+            firsts[f] = x[f]
+            ev.append({"at": x[f], "who": "recipient", "what": label, "detail": ""})
+    tag = core.campaign_tag(cid)
+    o = await db.orders.find_one({"attribution.utm_campaign": tag, "payment_status": "paid"}, {"_id": 0, "created_at": 1, "order_number": 1},
+                                 sort=[("created_at", 1)])
+    if o:
+        ev.append({"at": o.get("created_at"), "who": "customer", "what": "First paid order", "detail": o.get("order_number", "")})
+    ev = sorted([e for e in ev if e.get("at")], key=lambda e: e["at"])
+
+    # ---- where the audience came from ----
+    aud = c.get("audience") or {}
+    lists = []
+    for lid in aud.get("list_ids") or []:
+        lst = await db.mk_lists.find_one({"id": lid}, {"_id": 0, "id": 1, "name": 1, "kind": 1, "created_by": 1, "created_at": 1,
+                                                       "approved_by": 1, "source": 1, "rules": 1, "audience": 1})
+        if not lst:
+            lists.append({"id": lid, "name": "(deleted list)", "missing": True})
+            continue
+        imp = await db.mk_imports.find_one({"list_id": lid}, {"_id": 0, "file": 1, "by": 1, "at": 1, "approved_by": 1,
+                                                             "approved_at": 1, "saved": 1, "audience": 1})
+        lists.append({**lst, "members": await db.mk_contacts.count_documents({"lists": lid}),
+                      "import": imp or None})
+    excluded = [x.get("name") async for x in db.mk_lists.find({"id": {"$in": aud.get("exclude_list_ids") or []}}, {"_id": 0, "name": 1})]
+
+    # ---- metrics ----
+    s = c.get("stats") or {}
+    sent = int(s.get("sent") or 0)
+    dur = _mins(c.get("started_at"), c.get("finished_at"))
+    metrics = {
+        "possible_recipients": p.get("candidates"), "queued": c.get("queued"), "sent": sent,
+        "delivered": int(s.get("delivered") or 0), "opened": int(s.get("opened") or 0), "clicked": int(s.get("clicked") or 0),
+        "bounced": int(s.get("bounced") or 0), "complained": int(s.get("complained") or 0), "unsubscribed": int(s.get("unsubscribed") or 0),
+        "orders": int(s.get("paid") or 0), "revenue": round(float(s.get("revenue") or 0), 2),
+        "revenue_per_100_sent": round(float(s.get("revenue") or 0) * 100 / sent, 2) if sent else None,
+        "checks_minutes": _mins(p.get("started_at"), p.get("finished_at")),
+        "sending_minutes": dur, "per_minute": round(sent / dur, 1) if dur and dur > 0 else None,
+        "minutes_to_first_open": _mins(c.get("started_at"), firsts.get("opened_at")),
+        "minutes_to_first_click": _mins(c.get("started_at"), firsts.get("clicked_at")),
+        "sent_by": c.get("sent_by") or "", "created_by": c.get("created_by") or "",
+        "last_edited_by": c.get("updated_by") or "", "last_edited_at": c.get("updated_at"),
+    }
+    return {"events": ev, "lists": lists, "excluded_lists": excluded, "rules": aud.get("rules") or [], "metrics": metrics}
 
 
 @admin_router.get("/campaigns/{cid}/report")

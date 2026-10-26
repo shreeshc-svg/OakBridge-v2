@@ -4,7 +4,7 @@ import { ArrowDown, ArrowUp, Mail, MessageCircle, Pencil, Plus, Search, Trash2, 
 import {
     mkDashboard, mkHealth, mkProviders, mkSettings, mkSaveSettings, mkVerify, mkImport, mkImportEstimate, mkImports, mkImportApprove, mkImportReject, mkReverify, mkSync, mkContacts, mkPatchContact,
     mkDeleteContact, mkLists, mkCreateList, mkCampaigns, mkNewCampaign, mkCampaign, mkSaveCampaign, mkDuplicate,
-    mkAiGrowth, mkAiCampaign, mkAiDeliverability, mkListMembers, mkExportList,
+    mkAiGrowth, mkAiCampaign, mkAiDeliverability, mkListMembers, mkExportList, mkActivity,
     mkAudience, mkPreview, mkTemplates, mkNewTemplate, mkSaveTemplate, mkDeleteTemplate, mkUseTemplate, mkTemplatePreview, mkUploadEmailImage, mkExportCampaign, mkExportContacts, mkCleanup, mkGrowthFunnel, mkPartners, mkNewPartner, mkSavePartner, mkAutomations, mkSaveAutomations, mkAutomationsPreview, MERCHANT_FEED_URL, mkTestSend, mkSend, mkCampaignAction, mkReport, mkDismissAlert, mkSuppressionSync,
     mkBulkContacts, mkBulkDeleteLists, mkBulkDeleteCampaigns, mkRenameCampaign, mkLearn, mkDisposableRefresh, mkSystemHealth, nlOverview, nlSave, nlDraftNow, nlApprove, nlSkip, fetchBooks, fetchCategories, mediaUrl, formatApiError,
 } from "../../lib/api";
@@ -406,7 +406,88 @@ function CampaignView({ id, onBack, onOpen }) {
                     onClick={async () => { if (await deleteCampaigns([id], [c])) onBack(); }} data-testid="mk-camp-delete"><Trash2 size={13} /> Delete</button>}
             </div>
             {editable ? <CampaignEditor c={c} setC={setC} reload={load} /> : <CampaignReport id={id} status={c.status} reload={load} />}
+            <CampaignActivity id={id} status={c.status} />
         </div>
+    );
+}
+
+/** Campaign activity & audit: a timeline of who did what and when (created,
+ *  edits, test sends, Send, pauses, finish, first open/click/order), where the
+ *  audience came from (each list's creator, who approved its import, the
+ *  file) and the sending metrics. Backend: marketing.py adm_campaign_activity. */
+const WHO_TONE = { system: "text-[#6B7280]", recipient: "text-[#15803D]", customer: "text-[#15803D]" };
+const fmtMin = (m) => (m == null ? "—" : m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${Math.round(m % 60)} min`);
+function CampaignActivity({ id, status }) {
+    const [d, setD] = useState(null);
+    const [open, setOpen] = useState(true);
+    const load = useCallback(() => { mkActivity(id).then(setD).catch(() => setD({ error: true })); }, [id]);
+    useEffect(() => {
+        load();
+        if (!["sending", "preparing"].includes(status)) return undefined;
+        const t = setInterval(load, 30000);
+        return () => clearInterval(t);
+    }, [load, status]);
+    if (!d) return null;
+    if (d.error) return <p className="text-xs text-[#CC0033]">Couldn't load the activity log.</p>;
+    const m = d.metrics || {};
+    const Stat = ({ label, v }) => <div className="border border-[#E5E7EB] bg-white px-3 py-2"><div className="text-[11px] text-[#6B7280]">{label}</div><div className="font-medium text-[#002B5C] tabular-nums">{v ?? "—"}</div></div>;
+    return (
+        <Panel title="Activity & audit log" right={<button type="button" className="text-xs underline" onClick={() => setOpen(!open)}>{open ? "Hide" : "Show"}</button>}>
+            {open && (
+                <div className="space-y-5 text-sm" data-testid="mk-campaign-activity">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                        <Stat label="Created by" v={m.created_by || "—"} />
+                        <Stat label="Sent by" v={m.sent_by || "not sent yet"} />
+                        <Stat label="Last edited" v={m.last_edited_by ? `${m.last_edited_by} · ${when(m.last_edited_at)}` : "—"} />
+                        <Stat label="Possible → queued → sent" v={`${m.possible_recipients ?? "—"} → ${m.queued ?? "—"} → ${m.sent}`} />
+                        <Stat label="Address checks took" v={fmtMin(m.checks_minutes)} />
+                        <Stat label="Sending took" v={m.sending_minutes == null ? "—" : `${fmtMin(m.sending_minutes)}${m.per_minute ? ` · ${m.per_minute}/min` : ""}`} />
+                        <Stat label="First open / first click after" v={`${fmtMin(m.minutes_to_first_open)} / ${fmtMin(m.minutes_to_first_click)}`} />
+                        <Stat label="Orders · revenue · per 100 sent" v={`${m.orders} · ${inr(m.revenue)} · ${m.revenue_per_100_sent == null ? "—" : inr(m.revenue_per_100_sent)}`} />
+                        <Stat label="Bounced · complaints · unsubscribed" v={`${m.bounced} · ${m.complained} · ${m.unsubscribed}`} />
+                    </div>
+
+                    <div>
+                        <div className="font-medium text-[#002B5C] mb-1">Audience — where it came from</div>
+                        {!d.lists.length && !d.rules.length ? <p className="text-xs text-[#6B7280]">No list chosen yet.</p> : (
+                            <ul className="space-y-2">
+                                {d.lists.map((l) => (
+                                    <li key={l.id} className="border border-[#E5E7EB] bg-white p-2 text-xs">
+                                        <b className="text-sm text-[#002B5C]">{l.name}</b> <span className="text-[#6B7280]">{l.kind}{l.members != null ? ` · ${l.members} contacts` : ""}</span>
+                                        {!l.missing && (
+                                            <div className="mt-1 text-[#4B5563] space-y-0.5">
+                                                <div>Created by <b>{l.created_by || "—"}</b> on {when(l.created_at)}{l.source ? ` (${l.source})` : ""}</div>
+                                                {l.import && <div>Imported from <b>{l.import.file || "a file"}</b> by <b>{l.import.by || "—"}</b> on {when(l.import.at)} · <span className="text-[#15803D]">approved by <b>{l.import.approved_by || "—"}</b> on {when(l.import.approved_at)}</span>{l.import.audience === "known" ? " · existing clients" : " · not known (permission email first)"}</div>}
+                                                {!l.import && l.approved_by && <div className="text-[#15803D]">Approved by <b>{l.approved_by}</b></div>}
+                                                {!l.import && !l.approved_by && l.kind === "static" && <div>Not from an import (made in Admin)</div>}
+                                            </div>
+                                        )}
+                                    </li>
+                                ))}
+                                {d.rules.length > 0 && <li className="text-xs text-[#4B5563]">Rules: {d.rules.map((r) => [r.type, r.category, r.value, r.days ? `${r.days} days` : ""].filter(Boolean).join(" ")).join(" + ")}</li>}
+                                {d.excluded_lists.length > 0 && <li className="text-xs text-[#4B5563]">Excluded: {d.excluded_lists.join(", ")}</li>}
+                            </ul>
+                        )}
+                    </div>
+
+                    <div>
+                        <div className="font-medium text-[#002B5C] mb-1">Timeline</div>
+                        <ol className="border-l-2 border-[#E5E7EB] ml-2 space-y-2">
+                            {d.events.map((e, i) => (
+                                <li key={`${e.at}-${i}`} className="pl-3 relative">
+                                    <span className="absolute -left-[5px] top-1.5 w-2 h-2 rounded-full bg-[#002B5C]" />
+                                    <span className="text-xs text-[#6B7280] tabular-nums">{when(e.at)}</span>{" "}
+                                    <b className="text-[#002B5C]">{e.what}</b>{" "}
+                                    <span className={`text-xs ${WHO_TONE[e.who] || "text-[#4B5563]"}`}>by {e.who || "—"}</span>
+                                    {e.detail && <span className="block text-xs text-[#4B5563]">{e.detail}</span>}
+                                </li>
+                            ))}
+                        </ol>
+                        <p className="text-[11px] text-[#6B7280] mt-2">Times in your browser's time zone. People are shown by their Admin sign-in; "system" is the sender working on its own (checks, automatic pauses).</p>
+                    </div>
+                </div>
+            )}
+        </Panel>
     );
 }
 

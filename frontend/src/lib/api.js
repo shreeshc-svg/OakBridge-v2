@@ -786,6 +786,8 @@ export const mkSend = (id, confirmCount, scheduleAt) =>
     api.post(`/admin/marketing/campaigns/${id}/send`, { confirm_count: confirmCount, schedule_at: scheduleAt || null }).then((r) => r.data);
 export const mkCampaignAction = (id, action) => api.post(`/admin/marketing/campaigns/${id}/${action}`).then((r) => r.data);
 export const mkReport = (id) => api.get(`/admin/marketing/campaigns/${id}/report`).then((r) => r.data);
+// Who did what, when, to a campaign + where its audience came from.
+export const mkActivity = (id) => api.get(`/admin/marketing/campaigns/${id}/activity`).then((r) => r.data);
 
 // ====== Admin → Marketing → AI insights (backend/ai_insights.py) ======
 // Code computes every number; the model only words it and is checked.
