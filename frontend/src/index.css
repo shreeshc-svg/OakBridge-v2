@@ -912,3 +912,36 @@ body:has(.hx-top .hx-hero:is(:not(.hx-light), .is-art)) .hdr:not(.is-solid):not(
     .atc-shine::after { display: none; }
     .atc-tile:hover .atc-plus { transform: none; }
 }
+
+/* ===== Asterisk launcher (Oct 2026) ========================================
+ * "Aster" (ChatWidget.jsx) blinks and turns a sixth now and then; soft amber
+ * rings breathe out of the launcher so it is noticed without nagging. Rings
+ * begin 3 s after load (never during the first paint, so speed scores are
+ * unaffected), pause while the chat is open, and are off for reduced motion.
+ * transform-box: fill-box makes SVG transform-origin behave the same in
+ * Safari as in Chrome/Firefox (Safari otherwise rotates about the SVG's 0,0).
+ * .is-yielding: a buy button is under the launcher — fade it out of the way.
+ */
+.asterisk-launcher { isolation: isolate; }
+.asterisk-launcher::before, .asterisk-launcher::after {
+    content: ""; position: absolute; inset: 0; border-radius: 9999px; border: 2px solid #F59E0B;
+    opacity: 0; pointer-events: none; z-index: -1;
+    animation: asterisk-ring 3.6s ease-out 3s infinite;
+}
+.asterisk-launcher::after { animation-delay: 4.8s; }
+.asterisk-launcher.is-open::before, .asterisk-launcher.is-open::after { animation: none; opacity: 0; }
+.asterisk-launcher.is-yielding { opacity: .18; pointer-events: none; }
+.asterisk-launcher.is-yielding::before, .asterisk-launcher.is-yielding::after { animation-play-state: paused; opacity: 0; }
+@keyframes asterisk-ring { 0% { transform: scale(1); opacity: .65; } 70%, 100% { transform: scale(1.75); opacity: 0; } }
+
+.aster-char .aster-arms { transform-box: fill-box; transform-origin: center; animation: aster-turn 10s ease-in-out 4s infinite; }
+.aster-char .aster-eyes { transform-box: fill-box; transform-origin: center; animation: aster-blink 5s ease-in-out 2s infinite; }
+@keyframes aster-turn { 0%, 78% { transform: rotate(0deg); } 88%, 100% { transform: rotate(60deg); } }
+@keyframes aster-blink { 0%, 93%, 100% { transform: scaleY(1); } 96% { transform: scaleY(.1); } }
+.asterisk-launcher:hover .aster-char { transform: scale(1.06); transition: transform .2s ease; }
+
+@media (prefers-reduced-motion: reduce) {
+    .asterisk-launcher::before, .asterisk-launcher::after,
+    .aster-char .aster-arms, .aster-char .aster-eyes { animation: none !important; }
+    .asterisk-launcher::before { opacity: .5; transform: scale(1.12); }  /* a still halo instead of motion */
+}
