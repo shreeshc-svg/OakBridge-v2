@@ -77,7 +77,7 @@ SECTION_LABELS: dict[str, str] = {
     "orders": "Orders",
     "whatsapp": "WhatsApp",
     "marketing": "Marketing",
-    "coupons": "Coupons",
+    "coupons": "Coupons & Promotions",
     "messages": "Messages",
     "submissions": "Submissions",
     "waitlists": "Waitlists",

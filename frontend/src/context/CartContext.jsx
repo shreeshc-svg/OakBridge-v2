@@ -8,12 +8,14 @@ import React, {
     useState,
 } from "react";
 import { useAuth } from "./AuthContext";
-import { saveCart, loadCart, fetchSettings, fetchSiteContent } from "../lib/api";
+import { saveCart, loadCart, fetchSettings, fetchSiteContent, fetchPromotion } from "../lib/api";
 import { track } from "../lib/analytics";
 import { trackStep } from "../lib/attribution";
 import { API } from "../lib/api";
 import { preorderState } from "../lib/preorder";
 import { useBootState } from "../lib/boot";
+import { isPrerender } from "../lib/runtime";
+import { PROMO_KEY, promoDiscount } from "../lib/promotion";
 
 const CartContext = createContext(null);
 const STORAGE_KEY = "oakbridge_cart_v1";
@@ -58,6 +60,28 @@ export function CartProvider({ children }) {
         fetchSettings().then(setSettings).catch(() => {});
         fetchSiteContent().then(setSite).catch(() => {});
     }, [setSettings, setSite]);
+
+    /*
+     * Festive promotion (Admin → Coupons & Promotions). Plain state, loaded
+     * after the first render and never in the prerender: an offer starts and
+     * ends between builds, so baking it into the page would be wrong for
+     * somebody. The last one seen is remembered so the banner appears at once
+     * on the next page; it is dropped when its end time passes.
+     */
+    const [promo, setPromo] = useState(null);
+    useEffect(() => {
+        if (isPrerender()) return;
+        try {
+            const c = JSON.parse(localStorage.getItem(PROMO_KEY) || "null");
+            if (c && new Date(c.ends_at) > new Date()) setPromo(c);
+        } catch { /* ignore */ }
+        fetchPromotion()
+            .then((p) => {
+                setPromo(p);
+                try { p ? localStorage.setItem(PROMO_KEY, JSON.stringify(p)) : localStorage.removeItem(PROMO_KEY); } catch { /* private mode */ }
+            })
+            .catch(() => {});
+    }, []);
 
     const { isAuthenticated } = useAuth();
     const cartLoaded = useRef(false);
@@ -129,6 +153,8 @@ export function CartProvider({ children }) {
                     quantity: Math.min(qty, cap),
                     stock: cap,
                     preorder,
+                    // For the festive offer preview: hampers don't earn it.
+                    product_type: book.product_type || "book",
                     binding,
                     size,
                 },
@@ -186,13 +212,20 @@ export function CartProvider({ children }) {
         const shipFlat = Number(settings?.ship_flat ?? 60);
         const subtotal = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
         const count = items.reduce((sum, i) => sum + i.quantity, 0);
-        const discount = coupon && subtotal > 0 ? Math.min(coupon.discount, subtotal) : 0;
+        // Coupon vs festive promotion: the better of the two, never both —
+        // the same rule the server applies (promotions_core.py). This is a
+        // preview; the order endpoint decides.
+        const couponOff = coupon && subtotal > 0 ? Math.min(coupon.discount, subtotal) : 0;
+        const promoOff = promoDiscount(promo, items, subtotal);
+        const discountSource = promoOff <= 0 && couponOff <= 0 ? "" : promoOff >= couponOff ? "promo" : "coupon";
+        const discount = discountSource === "promo" ? promoOff : couponOff;
+        const promoShort = promo && promo.min_order > subtotal ? Math.ceil(promo.min_order - subtotal) : 0;
         const discounted = Math.max(0, subtotal - discount);
         const shipping = discounted === 0 ? 0 : discounted > freeThr ? 0 : shipFlat;
         const tax = Math.round((discounted * taxPct) / 100);
         const total = discounted + shipping + tax;
-        return { subtotal, discount, shipping, tax, total, count, taxPct };
-    }, [items, coupon, settings]);
+        return { subtotal, discount, shipping, tax, total, count, taxPct, couponOff, promoOff, discountSource, promoShort };
+    }, [items, coupon, settings, promo]);
 
     const value = useMemo(
         () => ({
@@ -208,10 +241,11 @@ export function CartProvider({ children }) {
             clearCoupon,
             settings,
             site,
+            promo,
             itemKey,
             ...totals,
         }),
-        [items, isOpen, addItem, removeItem, updateQty, clear, coupon, setCoupon, clearCoupon, settings, site, totals],
+        [items, isOpen, addItem, removeItem, updateQty, clear, coupon, setCoupon, clearCoupon, settings, site, promo, totals],
     );
 
     return <CartContext.Provider value={value}>{children}</CartContext.Provider>;

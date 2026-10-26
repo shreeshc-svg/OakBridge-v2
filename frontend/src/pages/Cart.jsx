@@ -1,3 +1,4 @@
+import { PromoCartLine, PromoHint } from "../components/PromoBits";
 import React from "react";
 import Breadcrumbs from "../components/Breadcrumbs";
 import { Link, useNavigate } from "react-router-dom";
@@ -25,6 +26,7 @@ export default function Cart() {
         updateQty,
         removeItem,
         subtotal,
+        coupon,
         shipping,
         tax,
         total,
@@ -149,6 +151,8 @@ export default function Cart() {
                                         {formatINR(subtotal)}
                                     </dd>
                                 </div>
+                                <PromoCartLine coupon={coupon} />
+                                <PromoHint />
                                 <div className="flex justify-between">
                                     <dt className="text-[#4B5563]">Shipping</dt>
                                     <dd className="font-mono text-[#002B5C]">

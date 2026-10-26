@@ -1,3 +1,4 @@
+import { PromoHint } from "./PromoBits";
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -22,6 +23,9 @@ export default function CartSheet() {
         removeItem,
         updateQty,
         subtotal,
+        discount,
+        discountSource,
+        promo,
         count,
     } = useCart();
     const nav = useNavigate();
@@ -182,6 +186,12 @@ export default function CartSheet() {
                             <p className="text-xs text-[#4B5563] mt-1">
                                 Shipping & taxes calculated at checkout.
                             </p>
+                            {discountSource === "promo" && promo && (
+                                <p data-testid="cart-promo-saving" className="text-xs text-[#CC0033] mt-1">
+                                    <b>{promo.label}</b>: −{formatINR(discount)} at checkout
+                                </p>
+                            )}
+                            <PromoHint className="mt-1" />
                             <VerifyNotice className="mt-4" />
                             <div className="grid grid-cols-2 gap-3 mt-4">
                                 <button

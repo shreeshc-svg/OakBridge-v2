@@ -46,7 +46,7 @@ export const ADMIN_NAV = [
     // Lives under /admin/marketing/… so the Marketing permission covers it
     // (lib/rbac sectionForPath -> "marketing"; backend /api/admin/marketing/emails).
     { to: "/admin/marketing/emails", label: "Email Manager", icon: MailCheck },
-    { to: "/admin/coupons", label: "Coupons", icon: Tag },
+    { to: "/admin/coupons", label: "Coupons & Promotions", icon: Tag },
     { to: "/admin/pages", label: "Pages", icon: LayoutTemplate },
     { to: "/admin/page-bookstore", label: "Bookstore Page", icon: LayoutTemplate },
     { to: "/admin/page-book", label: "Book Page", icon: BookOpen },

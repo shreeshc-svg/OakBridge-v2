@@ -1,3 +1,4 @@
+import { PromoStrip } from "./PromoBits";
 import React from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import Header from "./Header";
@@ -33,6 +34,7 @@ export default function Layout() {
     }, [loc.pathname, loc.search]);
     return (
         <div className="min-h-screen flex flex-col bg-[#FFFFFF]">
+            <PromoStrip />
             <Header />
             <main className="flex-1">
                 <Outlet />

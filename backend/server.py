@@ -381,6 +381,10 @@ class Order(BaseModel):
     notes: str = ""
     coupon_code: Optional[str] = None
     discount: float = 0
+    # Festive promotion that gave `discount` instead of a coupon (promotions.py).
+    # Declared, or response_model=Order drops them and the receipt can't name the occasion.
+    promo_id: Optional[str] = None
+    promo_label: Optional[str] = None
     # Where the parcel goes, when that is not where the invoice goes. Declared
     # here or response_model=Order drops it and the packing slip silently ships
     # a gift back to the buyer.
@@ -1878,7 +1882,7 @@ async def create_order(payload: OrderCreate, user: Optional[dict] = Depends(get_
         bdoc = await db.books.find_one(
             {"id": it.book_id},
             {"_id": 0, "id": 1, "title": 1, "author": 1, "cover_image": 1, "price": 1, "stock": 1, "variants": 1,
-             "coming_soon": 1, "launch_at": 1},
+             "coming_soon": 1, "launch_at": 1, "product_type": 1},
         )
         if not bdoc:
             raise HTTPException(status_code=404, detail=f"Book not found: {it.book_id}")
@@ -1922,6 +1926,21 @@ async def create_order(payload: OrderCreate, user: Optional[dict] = Depends(get_
             discount = float(cres.discount)
             coupon_code = cres.code
 
+    # Festive promotion (Admin → Coupons & Promotions): the better of it and
+    # the coupon, never both — decided here, whatever the browser showed.
+    promo_id = promo_label = None
+    from promotions import live_promotion
+    import promotions_core as pcore
+    promo = await live_promotion()
+    if promo:
+        eligible = pcore.eligible_subtotal([
+            {"price": i.price, "quantity": i.quantity, "product_type": books_by_id[i.book_id].get("product_type"),
+             "preorder": _preorder_active(books_by_id[i.book_id])} for i in server_items])
+        promo_off = pcore.discount(promo, eligible, subtotal)
+        if pcore.choose(promo_off, discount) == "promo":
+            discount, coupon_code = promo_off, None
+            promo_id, promo_label = promo["id"], promo["label"]
+
     settings = await _get_settings()
     tax_pct = float(settings.get("tax_percent", 0) or 0)
     free_thr = float(settings.get("free_ship_threshold", 1500) or 0)
@@ -1950,6 +1969,8 @@ async def create_order(payload: OrderCreate, user: Optional[dict] = Depends(get_
         total=total,
         coupon_code=coupon_code,
         discount=discount,
+        promo_id=promo_id,
+        promo_label=promo_label,
         notes=payload.notes or "",
         # Only carried when the box actually goes somewhere else. Storing a
         # half-filled delivery address on every ordinary order would leave the
@@ -2043,6 +2064,9 @@ from email_manager_api import admin_router as email_manager_admin_router  # noqa
 app.include_router(email_manager_admin_router)
 from ai_insights import admin_router as marketing_ai_admin_router  # noqa: E402
 app.include_router(marketing_ai_admin_router)
+from promotions import public_router as promotions_public_router, admin_router as promotions_admin_router  # noqa: E402
+app.include_router(promotions_public_router)
+app.include_router(promotions_admin_router)
 
 # The production domains, Vercel preview and local dev are always allowed; any
 # extra origins in the CORS_ORIGINS env var (comma-separated) are merged in. This

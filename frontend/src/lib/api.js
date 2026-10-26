@@ -307,6 +307,12 @@ export const adminImportStoreLinks = (file, dryRun = true) => {
     return api.post(`/admin/books/store-links/import?dry_run=${dryRun ? "true" : "false"}`, fd).then((r) => r.data);
 };
 export const fetchSettings = () => api.get("/settings").then((r) => r.data);
+// Festive promotion live right now, or null (backend/promotions.py).
+export const fetchPromotion = () => api.get("/promotions/current").then((r) => r.data.promotion || null);
+export const adminPromotions = () => api.get("/admin/coupons/promotions").then((r) => r.data.promotions || []);
+export const adminSavePromotion = (body, id) =>
+    (id ? api.put(`/admin/coupons/promotions/${id}`, body) : api.post("/admin/coupons/promotions", body)).then((r) => r.data);
+export const adminDeletePromotion = (id) => api.delete(`/admin/coupons/promotions/${id}`).then((r) => r.data);
 export const adminSetSetting = (key, value) =>
     api.put("/admin/settings", { key, value }).then((r) => r.data);
 

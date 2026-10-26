@@ -1,3 +1,4 @@
+import { PromoBadge } from "../components/PromoBits";
 import React, { useEffect, useRef, useState } from "react";
 import { bootHas, useBootState } from "../lib/boot";
 import { track } from "../lib/analytics";
@@ -715,6 +716,7 @@ export default function BookDetail() {
                                 </>
                             )}
                         </div>
+                        {!oos && !preorder.active && <PromoBadge book={book} />}
                         {ebookPrice === null && oos && (
                             /* Out of print, with no eBook price we are allowed to
                                show. Promised rather than sold — and still a line

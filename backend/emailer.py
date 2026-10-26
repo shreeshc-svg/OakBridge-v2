@@ -296,7 +296,7 @@ def render_order_receipt_html(order: dict) -> str:
         <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
           <tr><td style="padding:6px 0;color:{BRAND_GREY};font-size:13px;">Subtotal</td>
               <td style="padding:6px 0;text-align:right;color:{BRAND_NAVY};font-size:13px;">{_money(order.get('subtotal', 0))}</td></tr>
-          { f'<tr><td style="padding:6px 0;color:{BRAND_GREY};font-size:13px;">Discount ({order.get("coupon_code","")})</td><td style="padding:6px 0;text-align:right;color:{BRAND_RED};font-size:13px;">- {_money(order.get("discount",0))}</td></tr>' if order.get('discount') else '' }
+          { f'<tr><td style="padding:6px 0;color:{BRAND_GREY};font-size:13px;">{_html.escape(order.get("promo_label") or "")}{"" if order.get("promo_label") else "Discount (" + _html.escape(order.get("coupon_code") or "") + ")"}</td><td style="padding:6px 0;text-align:right;color:{BRAND_RED};font-size:13px;">- {_money(order.get("discount",0))}</td></tr>' if order.get('discount') else '' }
           <tr><td style="padding:6px 0;color:{BRAND_GREY};font-size:13px;">Shipping</td>
               <td style="padding:6px 0;text-align:right;color:{BRAND_NAVY};font-size:13px;">{_money(order.get('shipping', 0))}</td></tr>
           <tr><td style="padding:6px 0;color:{BRAND_GREY};font-size:13px;">Tax</td>

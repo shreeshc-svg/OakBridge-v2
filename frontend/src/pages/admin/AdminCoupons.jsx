@@ -11,6 +11,7 @@ import {
 import { toast } from "sonner";
 import { useAuth } from "../../context/AuthContext";
 import { canDelete } from "../../lib/rbac";
+import PromotionsPanel from "../../components/admin/PromotionsPanel";
 import AdminToolbar from "../../components/AdminToolbar";
 
 const BLANK = {
@@ -271,10 +272,9 @@ export default function AdminCoupons() {
         <div data-testid="admin-coupons-page">
             <div className="flex flex-wrap items-end justify-between gap-4">
                 <div>
-                    <div className="overline">Promotions</div>
-                    <h1 className="font-serif text-4xl mt-2 text-[#002B5C]">
-                        Coupons ({items.length})
-                    </h1>
+                    <div className="overline">Offers</div>
+                    <h1 className="font-serif text-4xl mt-2 text-[#002B5C]">Coupons &amp; Promotions</h1>
+                    <div className="text-sm text-[#4B5563] mt-1">Coupons ({items.length})</div>
                 </div>
                 <button
                     onClick={() => setEditing("new")}
@@ -284,6 +284,9 @@ export default function AdminCoupons() {
                     <Plus size={14} strokeWidth={1.5} /> New Coupon
                 </button>
             </div>
+
+            <PromotionsPanel />
+            <h2 className="font-serif text-2xl text-[#002B5C] mt-8">Coupon codes</h2>
 
             <AdminToolbar
                 query={q}

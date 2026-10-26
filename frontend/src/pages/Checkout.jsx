@@ -1,7 +1,8 @@
+import { PromoCartLine, PromoHint } from "../components/PromoBits";
 import React, { useEffect, useState } from "react";
 import Breadcrumbs from "../components/Breadcrumbs";
 import { Link, useNavigate } from "react-router-dom";
-import { CheckCircle2, Tag, X } from "lucide-react";
+import { CheckCircle2 } from "lucide-react";
 import { useCart } from "../context/CartContext";
 import {
     createOrder,
@@ -544,28 +545,9 @@ export default function Checkout() {
                                     {formatINR(subtotal)}
                                 </dd>
                             </div>
-                            {discount > 0 && coupon && (
-                                <div
-                                    data-testid="checkout-discount-line"
-                                    className="flex justify-between text-[#CC0033]"
-                                >
-                                    <dt className="flex items-center gap-2">
-                                        <Tag size={12} strokeWidth={1.5} />
-                                        {coupon.code}
-                                        <button
-                                            type="button"
-                                            onClick={clearCoupon}
-                                            data-testid="checkout-coupon-remove"
-                                            className="text-[#4B5563] hover:text-[#CC0033]"
-                                        >
-                                            <X size={12} strokeWidth={1.5} />
-                                        </button>
-                                    </dt>
-                                    <dd className="font-mono">
-                                        −{formatINR(discount)}
-                                    </dd>
-                                </div>
-                            )}
+                            {/* Coupon or festive promotion — the better one (PromoBits / promotions_core). */}
+                            <PromoCartLine coupon={coupon} onRemoveCoupon={clearCoupon} />
+                            <PromoHint />
                             <div className="flex justify-between">
                                 <dt className="text-[#4B5563]">Shipping</dt>
                                 <dd className="font-mono text-[#002B5C]">

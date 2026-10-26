@@ -361,7 +361,8 @@ def build_invoice_pdf(order: dict, isbn_map: dict | None = None) -> bytes:
 
     tdata = [trow("Subtotal", _money(order.get("subtotal", 0)))]
     if order.get("discount"):
-        code = order.get("coupon_code") or "Discount"
+        # A coupon code, or the festive promotion's name ("Diwali Sale").
+        code = order.get("coupon_code") or order.get("promo_label") or "Discount"
         tdata.append(trow(f"Less: Discount ({code})", "(-) " + _money(order.get("discount", 0)), red=True))
     if float(order.get("shipping", 0) or 0) > 0:
         tdata.append(trow("Shipping", _money(order.get("shipping", 0))))
