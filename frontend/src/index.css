@@ -866,3 +866,49 @@ body:has(.hx-top .hx-hero:is(:not(.hx-light), .is-art)) .hdr:not(.is-solid):not(
 .ht-cta:hover,.ht-cta:focus-visible{background:#F59E0B; color:#002B5C; outline:none}
 @keyframes ht-glow{50%{box-shadow:0 0 22px 2px rgba(245,158,11,.45)}}
 @media (prefers-reduced-motion: reduce){ .ht-hint,.ht-cta{animation:none} }
+
+/* ===== Add to Cart highlight (Oct 2026) =====================================
+ * PDP (.atc-shine): a soft light sweeps across the button every few seconds
+ * and a faint brand-red ring breathes behind it — enough to pull the eye to
+ * the one action that matters, calm enough not to look like an ad. It stops
+ * while hovered (the button is already being looked at) and presses in on
+ * click.
+ * PLP tiles (.atc-tile): a grid of 24 animated buttons would be noise, so a
+ * tile's "Add +" only glints: its underline shimmers once every ~7 s, each
+ * tile at its own moment (--atc-delay, set from the book id), and the "+"
+ * nudges on hover.
+ * Everything is off for people who ask their device for reduced motion.
+ */
+.atc-shine { position: relative; overflow: hidden; isolation: isolate; animation: atc-ring 3.2s ease-in-out 1s infinite; }
+.atc-shine::after {
+    content: ""; position: absolute; inset: -2px auto -2px -60%; width: 45%; z-index: 1; pointer-events: none;
+    background: linear-gradient(105deg, transparent 0%, rgba(255,255,255,.08) 30%, rgba(255,255,255,.38) 50%, rgba(255,255,255,.08) 70%, transparent 100%);
+    transform: skewX(-18deg); animation: atc-sweep 3.2s ease-in-out 1s infinite;
+}
+.atc-shine > * { position: relative; z-index: 2; }
+.atc-shine:hover, .atc-shine:focus-visible { animation: none; transform: translateY(-1px); box-shadow: 0 8px 22px -10px rgba(0,43,92,.55); }
+.atc-shine:hover::after, .atc-shine:focus-visible::after { animation: none; opacity: 0; }
+.atc-shine:active { transform: translateY(0) scale(.97); }
+@keyframes atc-sweep { 0%, 55% { left: -60%; } 85%, 100% { left: 120%; } }
+@keyframes atc-ring {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(204,0,51,0); }
+    60% { box-shadow: 0 0 0 0 rgba(204,0,51,.28); }
+    85% { box-shadow: 0 0 0 7px rgba(204,0,51,0); }
+}
+
+.atc-tile .atc-line {
+    background-image: linear-gradient(90deg, currentColor 0%, currentColor 40%, #CC0033 50%, currentColor 60%, currentColor 100%);
+    background-size: 300% 1px; background-repeat: no-repeat; background-position: 100% 100%;
+    border-bottom: 0 !important; padding-bottom: 2px;
+    animation: atc-glint 7s ease-in-out infinite; animation-delay: var(--atc-delay, 0s);
+}
+.atc-tile .atc-plus { display: inline-block; transition: transform .2s ease; }
+.atc-tile:hover .atc-plus { transform: rotate(90deg) scale(1.15); }
+.atc-tile:active { transform: scale(.94); }
+@keyframes atc-glint { 0%, 80% { background-position: 100% 100%; } 95%, 100% { background-position: 0% 100%; } }
+
+@media (prefers-reduced-motion: reduce) {
+    .atc-shine, .atc-shine::after, .atc-tile .atc-line { animation: none !important; }
+    .atc-shine::after { display: none; }
+    .atc-tile:hover .atc-plus { transform: none; }
+}

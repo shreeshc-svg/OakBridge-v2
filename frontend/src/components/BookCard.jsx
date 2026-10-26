@@ -464,10 +464,13 @@ export default function BookCard({ book, index = 0, compact = false, toEbook = f
                     <button
                         onClick={() => addItem(book)}
                         data-testid={`${preorder.active ? "preorder" : "add-to-cart"}-${book.id}`}
-                        className={`group/add -m-2.5 p-2.5 font-medium transition-colors ${preorder.active ? "text-[#B4750F] hover:text-[#002B5C]" : "text-[#002B5C] hover:text-[#CC0033]"} ${compact ? "text-[10px]" : "text-xs"}`}
+                        className={`atc-tile group/add -m-2.5 p-2.5 font-medium transition-colors ${preorder.active ? "text-[#B4750F] hover:text-[#002B5C]" : "text-[#002B5C] hover:text-[#CC0033]"} ${compact ? "text-[10px]" : "text-xs"}`}
+                        // Each tile glints at its own moment (index.css .atc-tile), from
+                        // a stable hash of the id — same in the prerender and the browser.
+                        style={{ "--atc-delay": `${[...String(book.id)].reduce((n, ch) => (n * 31 + ch.charCodeAt(0)) % 7000, 0) / 1000}s` }}
                     >
-                        <span className="border-b border-current pb-0.5">
-                            {preorder.active ? "Pre-order" : "Add +"}
+                        <span className="atc-line border-b border-current pb-0.5">
+                            {preorder.active ? "Pre-order" : <>Add <span className="atc-plus">+</span></>}
                         </span>
                     </button>
                 )}

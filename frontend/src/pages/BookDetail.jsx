@@ -921,10 +921,11 @@ export default function BookDetail() {
                                 <button
                                     onClick={onAdd}
                                     data-testid="add-to-cart-main-button"
-                                    className="inline-flex items-center gap-2 bg-[#002B5C] text-[#FFFFFF] px-8 py-4 text-sm font-medium hover:bg-[#001F42] transition-all"
+                                    className="atc-shine inline-flex items-center gap-2 bg-[#002B5C] text-[#FFFFFF] px-8 py-4 text-sm font-medium hover:bg-[#001F42] transition-all"
                                 >
+                                    {/* .atc-shine (index.css): light sweep + soft ring to draw the eye. */}
                                     <ShoppingBag size={16} strokeWidth={1.5} />
-                                    Add to Cart
+                                    <span>Add to Cart</span>
                                 </button>
                             )}
                             <button
