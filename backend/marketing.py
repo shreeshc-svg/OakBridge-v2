@@ -2829,14 +2829,14 @@ async def adm_campaign_export(cid: str, format: str = "xlsx", user: dict = Depen
     return _download(data, media, f"campaign-{_slug(c.get('name'))}-{_now():%Y-%m-%d}.{ext}")
 
 
-@admin_router.get("/contacts/export")
-async def adm_contacts_export(q: Optional[str] = None, status: Optional[str] = None, list_id: Optional[str] = None,
-                              consent: Optional[str] = None, removed: str = "hide", format: str = "xlsx",
-                              user: dict = Depends(require_admin)):
-    """The Contacts list as shown (same filters), for fixing records outside
-    the site or keeping a copy before a clean-up. Personal data: logged."""
-    fmt = "csv" if format == "csv" else "xlsx"
-    flt = _contact_filter(q, status, list_id, consent, removed)
+CONTACT_EXPORT_HEADER = ["Email", "Name", "Phone", "Address status", "Score", "Why", "Email consent", "Consent source",
+                         "Consent date", "WhatsApp consent", "Suppressed (why)", "Clean-up group", "Lists", "Source",
+                         "Emails sent", "Opened", "Clicked", "Added"]
+
+
+async def _contact_export_rows(flt: dict) -> tuple[list, list]:
+    """(header, rows) for a contacts export — one shape for Contacts and for
+    Lists & segments, so both files open with the same columns."""
     list_names = {x["id"]: x.get("name", "") async for x in db.mk_lists.find({}, {"_id": 0, "id": 1, "name": 1})}
     rows = []
     async for page in dbutil.batches(db.mk_contacts, flt, {"_id": 0}, size=1000):
@@ -2852,8 +2852,18 @@ async def adm_contacts_export(q: Optional[str] = None, status: Optional[str] = N
                 break
         if len(rows) >= EXPORT_MAX:
             break
-    header = ["Email", "Name", "Phone", "Address status", "Score", "Why", "Email consent", "Consent source", "Consent date",
-              "WhatsApp consent", "Suppressed (why)", "Clean-up group", "Lists", "Source", "Emails sent", "Opened", "Clicked", "Added"]
+    return CONTACT_EXPORT_HEADER, rows
+
+
+@admin_router.get("/contacts/export")
+async def adm_contacts_export(q: Optional[str] = None, status: Optional[str] = None, list_id: Optional[str] = None,
+                              consent: Optional[str] = None, removed: str = "hide", format: str = "xlsx",
+                              user: dict = Depends(require_admin)):
+    """The Contacts list as shown (same filters), for fixing records outside
+    the site or keeping a copy before a clean-up. Personal data: logged."""
+    fmt = "csv" if format == "csv" else "xlsx"
+    flt = _contact_filter(q, status, list_id, consent, removed)
+    header, rows = await _contact_export_rows(flt)
     data, media, ext = _table_bytes([("Contacts", header, rows)], fmt)
     await audit_log(db, "MARKETING_EXPORT", email=user.get("email", ""), role=user.get("role", ""),
                     meta={"what": "contacts", "rows": len(rows), "format": ext, "filters": {"q": q, "status": status, "list": list_id,
@@ -3063,6 +3073,51 @@ async def adm_lists():
             lst["confirmed"] = confirmed
             lst["risky"] = by_action
     return lists
+
+
+async def _list_member_filter(lid: str, q: Optional[str] = None) -> tuple[dict, dict]:
+    """(list, Mongo filter for its members). A static list is whoever was
+    added to it; a segment is whoever its rules match — the SAME filter the
+    list's count uses, so "View" shows exactly the number on the row."""
+    lst = await db.mk_lists.find_one({"id": lid}, {"_id": 0})
+    if not lst:
+        raise HTTPException(status_code=404, detail="List not found")
+    if lst.get("kind") == "segment":
+        flt = await audience_filter({"channel": "email", "audience": {"rules": lst.get("rules") or []}})
+    else:
+        flt = {"lists": lid}
+    if q and q.strip():
+        rx = {"$regex": re.escape(q.strip()[:80]), "$options": "i"}
+        flt = {"$and": [flt, {"$or": [{"email": rx}, {"name": rx}, {"phone": rx}]}]}
+    return lst, flt
+
+
+@admin_router.get("/lists/{lid}/members")
+async def adm_list_members(lid: str, q: Optional[str] = None, page: int = 1, per: int = 50):
+    """Admin → Marketing → Lists & segments → View: who is in it, newest first."""
+    lst, flt = await _list_member_filter(lid, q)
+    per = min(max(per, 10), 200)
+    total = await db.mk_contacts.count_documents(flt)
+    rows = await db.mk_contacts.find(flt, {"_id": 0, "id": 1, "email": 1, "name": 1, "phone": 1, "email_status": 1,
+                                           "email_consent.status": 1, "suppressed": 1, "source": 1, "created_at": 1,
+                                           "customer": 1, "stats": 1}) \
+        .sort("created_at", -1).skip((max(page, 1) - 1) * per).limit(per).to_list(per)
+    return {"list": {k: lst.get(k) for k in ("id", "name", "kind", "rules", "created_at", "source")},
+            "total": total, "page": max(page, 1), "per": per, "rows": rows}
+
+
+@admin_router.get("/lists/{lid}/export")
+async def adm_list_export(lid: str, q: Optional[str] = None, format: str = "xlsx", user: dict = Depends(require_admin)):
+    """One list or segment as Excel / CSV — same columns as the Contacts
+    export. Personal data: every export is logged."""
+    fmt = "csv" if format == "csv" else "xlsx"
+    lst, flt = await _list_member_filter(lid, q)
+    header, rows = await _contact_export_rows(flt)
+    data, media, ext = _table_bytes([((lst.get("name") or "List")[:31], header, rows)], fmt)
+    await audit_log(db, "MARKETING_EXPORT", email=user.get("email", ""), role=user.get("role", ""),
+                    meta={"what": "list", "list": lid, "kind": lst.get("kind"), "rows": len(rows), "format": ext})
+    slug = re.sub(r"[^A-Za-z0-9-]+", "-", lst.get("name") or "list").strip("-")[:50] or "list"
+    return _download(data, media, f"{slug}-{_now():%Y-%m-%d}.{ext}")
 
 
 @admin_router.post("/lists")

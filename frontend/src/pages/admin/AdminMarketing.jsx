@@ -4,7 +4,7 @@ import { ArrowDown, ArrowUp, Mail, MessageCircle, Pencil, Plus, Search, Trash2, 
 import {
     mkDashboard, mkHealth, mkProviders, mkSettings, mkSaveSettings, mkVerify, mkImport, mkImportEstimate, mkImports, mkImportApprove, mkImportReject, mkReverify, mkSync, mkContacts, mkPatchContact,
     mkDeleteContact, mkLists, mkCreateList, mkCampaigns, mkNewCampaign, mkCampaign, mkSaveCampaign, mkDuplicate,
-    mkAiGrowth, mkAiCampaign, mkAiDeliverability,
+    mkAiGrowth, mkAiCampaign, mkAiDeliverability, mkListMembers, mkExportList,
     mkAudience, mkPreview, mkTemplates, mkNewTemplate, mkSaveTemplate, mkDeleteTemplate, mkUseTemplate, mkTemplatePreview, mkUploadEmailImage, mkExportCampaign, mkExportContacts, mkCleanup, mkGrowthFunnel, mkPartners, mkNewPartner, mkSavePartner, mkAutomations, mkSaveAutomations, mkAutomationsPreview, MERCHANT_FEED_URL, mkTestSend, mkSend, mkCampaignAction, mkReport, mkDismissAlert, mkSuppressionSync,
     mkBulkContacts, mkBulkDeleteLists, mkBulkDeleteCampaigns, mkRenameCampaign, mkLearn, mkDisposableRefresh, mkSystemHealth, nlOverview, nlSave, nlDraftNow, nlApprove, nlSkip, fetchBooks, fetchCategories, mediaUrl, formatApiError,
 } from "../../lib/api";
@@ -1459,6 +1459,8 @@ function Lists() {
     const reverify = async (lid) => {
         try { const r = await mkReverify(lid); toast.success(`Re-checked: ${Object.entries(r.counts).map(([k, v]) => `${k} ${v}`).join(", ")}`); load(); } catch (e) { toast.error(formatApiError(e)); }
     };
+    const [viewing, setViewing] = useState(null);
+    if (viewing) return <ListMembers list={viewing} onBack={() => setViewing(null)} />;
     return (
         <div className="grid lg:grid-cols-2 gap-6">
             <Panel title="Lists and segments">
@@ -1472,10 +1474,12 @@ function Lists() {
                                 <input type="checkbox" checked={lists.every((l) => sel.sel.has(l.id))} onChange={(e) => sel.setAll(lists.map((l) => l.id), e.target.checked)} data-testid="mk-lists-select-all" /> Select all</label></li>
                         )}
                         {lists.map((l) => (
-                            <li key={l.id} className="py-2 flex items-center gap-3">
+                            <li key={l.id} className="py-2 flex flex-wrap items-center gap-x-3 gap-y-1">
                                 {canDelete(user) && <input type="checkbox" aria-label={`Select ${l.name}`} checked={sel.sel.has(l.id)} onChange={() => sel.toggle(l.id)} />}
-                                <div className="flex-1"><b>{l.name}</b> <span className="text-xs text-[#6B7280]">{l.kind}</span>
+                                <div className="flex-1 min-w-[12rem]"><button type="button" className="font-bold text-left text-[#002B5C] hover:underline" onClick={() => setViewing(l)} data-testid="mk-list-open">{l.name}</button> <span className="text-xs text-[#6B7280]">{l.kind}</span>
                                     <div className="text-xs text-[#4B5563]">{l.count ?? 0} contacts{l.kind === "static" ? ` · ${listReach(l)}` : ""}{l.rules?.length ? ` · ${l.rules.map((r) => r.type).join(" + ")}` : ""}</div></div>
+                                <button type="button" className="text-xs underline" onClick={() => setViewing(l)} data-testid="mk-list-view">View</button>
+                                <ExportButtons onExport={(fmt) => mkExportList(l.id, fmt)} label="Export" testid="mk-list-export" />
                                 {l.kind === "static" && <button type="button" className="text-xs underline" onClick={() => reverify(l.id)}>Re-verify</button>}
                                 {canDelete(user) && <button type="button" aria-label="Delete list" onClick={() => delLists([l.id])}><Trash2 size={14} className="text-[#CC0033]" /></button>}
                             </li>
@@ -1517,6 +1521,69 @@ function Lists() {
                     <p className="text-xs text-[#6B7280]">Campaigns always skip people who haven't opted in, unsubscribed, bounced or complained — whatever the list says.</p>
                 </div>
             </Panel>
+        </div>
+    );
+}
+
+/** Lists & segments → View: who is in one list or segment, searchable, 50 a
+ *  page, with Excel / CSV export of the whole list (or of the search). A
+ *  segment shows whoever its rules match right now — the same count as on
+ *  the list row. Backend: marketing.py adm_list_members / adm_list_export. */
+function ListMembers({ list, onBack }) {
+    const [q, setQ] = useState("");
+    const dq = useDebounced(q);
+    const [page, setPage] = useState(1);
+    const [d, setD] = useState(null);
+    useEffect(() => { setPage(1); }, [dq]);
+    useEffect(() => {
+        setD(null);
+        mkListMembers(list.id, { q: dq || undefined, page, per: 50 }).then(setD).catch((e) => { toast.error(formatApiError(e)); setD({ rows: [], total: 0 }); });
+    }, [list.id, dq, page]);
+    const pages = d ? Math.max(1, Math.ceil(d.total / (d.per || 50))) : 1;
+    return (
+        <div className="space-y-4" data-testid="mk-list-members">
+            <div className="flex flex-wrap items-center gap-3">
+                <button type="button" className="text-sm underline" onClick={onBack}>← Lists & segments</button>
+                <h2 className="font-serif text-2xl text-[#002B5C]">{list.name}</h2>
+                <span className="text-xs bg-[#F3F4F6] px-2 py-0.5">{list.kind === "segment" ? "Segment (rules, always up to date)" : "Static list"}</span>
+                <span className="ml-auto"><ExportButtons onExport={(fmt) => mkExportList(list.id, fmt, dq)} label={dq ? "Export these" : "Export all"} testid="mk-list-members-export" /></span>
+            </div>
+            {list.kind === "segment" && list.rules?.length > 0 && (
+                <p className="text-xs text-[#4B5563]">Rules: {list.rules.map((r) => [r.type, r.category, r.value, r.days ? `${r.days} days` : ""].filter(Boolean).join(" ")).join(" + ")}. Only people who can receive marketing email are included.</p>
+            )}
+            <div className="flex flex-wrap items-center gap-3">
+                <input className={`${box} max-w-sm`} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, email or phone" />
+                <span className="text-sm text-[#4B5563]">{d ? `${d.total} contact${d.total === 1 ? "" : "s"}` : "Loading…"}</span>
+            </div>
+            <div className="overflow-x-auto border border-[#E5E7EB] bg-white">
+                <table className="w-full text-sm">
+                    <thead><tr className="text-left text-[#4B5563] bg-[#F9FAFB]">
+                        <th className="p-2">Email</th><th className="p-2">Name</th><th className="p-2">Phone</th><th className="p-2">Address</th>
+                        <th className="p-2">Consent</th><th className="p-2">Source</th><th className="p-2 text-right whitespace-nowrap">Sent · Opened · Clicked</th><th className="p-2">Added</th></tr></thead>
+                    <tbody>
+                        {(d?.rows || []).map((c) => (
+                            <tr key={c.id} className="border-t border-[#E5E7EB]">
+                                <td className="p-2 font-mono text-xs break-all">{c.email}{c.customer && <span className="ml-1 text-[10px] bg-[#DCFCE7] text-[#15803D] px-1">customer</span>}</td>
+                                <td className="p-2">{c.name || "—"}</td>
+                                <td className="p-2 whitespace-nowrap">{c.phone || "—"}</td>
+                                <td className="p-2 whitespace-nowrap">{c.email_status || "—"}{c.suppressed ? <span className="block text-[10px] text-[#CC0033]">suppressed</span> : null}</td>
+                                <td className="p-2 whitespace-nowrap">{c.email_consent?.status || "—"}</td>
+                                <td className="p-2 text-xs">{c.source || "—"}</td>
+                                <td className="p-2 text-right tabular-nums whitespace-nowrap">{c.stats?.sent || 0} · {c.stats?.opened || 0} · {c.stats?.clicked || 0}</td>
+                                <td className="p-2 text-xs whitespace-nowrap">{(c.created_at || "").slice(0, 10)}</td>
+                            </tr>
+                        ))}
+                        {d && !d.rows.length && <tr><td colSpan={8} className="p-4 text-[#6B7280]">{dq ? "No one matches that search." : "No one in this list yet."}</td></tr>}
+                    </tbody>
+                </table>
+            </div>
+            {pages > 1 && (
+                <div className="flex items-center gap-3 text-sm">
+                    <button type="button" className="border px-3 py-1 disabled:opacity-40" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</button>
+                    <span>Page {page} of {pages}</span>
+                    <button type="button" className="border px-3 py-1 disabled:opacity-40" disabled={page >= pages} onClick={() => setPage(page + 1)}>Next</button>
+                </div>
+            )}
         </div>
     );
 }

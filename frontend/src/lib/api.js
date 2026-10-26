@@ -731,6 +731,11 @@ export const mkContacts = (params) => api.get("/admin/marketing/contacts", { par
 export const mkPatchContact = (id, body) => api.patch(`/admin/marketing/contacts/${id}`, body).then((r) => r.data);
 export const mkDeleteContact = (id, erase = false) => api.delete(`/admin/marketing/contacts/${id}`, { params: { erase } }).then((r) => r.data);
 export const mkLists = () => api.get("/admin/marketing/lists").then((r) => r.data);
+// Lists & segments → View / Export (who is in one list or segment).
+export const mkListMembers = (id, params = {}) => api.get(`/admin/marketing/lists/${id}/members`, { params }).then((r) => r.data);
+export const mkExportList = (id, format = "xlsx", q = "") =>
+    api.get(`/admin/marketing/lists/${id}/export`, { params: { format, ...(q ? { q } : {}) }, responseType: "blob", timeout: 300000 })
+        .then((r) => downloadBlob(r, `list.${format}`));
 export const mkCreateList = (body) => api.post("/admin/marketing/lists", body).then((r) => r.data);
 export const mkDeleteList = (id) => api.delete(`/admin/marketing/lists/${id}`).then((r) => r.data);
 export const mkCampaigns = () => api.get("/admin/marketing/campaigns").then((r) => r.data);
