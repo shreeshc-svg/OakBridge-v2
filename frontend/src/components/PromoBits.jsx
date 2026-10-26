@@ -58,6 +58,20 @@ export function PromoBadge({ book }) {
     );
 }
 
+// Bookstore (and any listing): the same badge as the book page, as a full
+// row above the grid, so the offer is seen before a book is opened.
+export function PromoBar({ className = "" }) {
+    const { promo } = useCart();
+    if (!promo) return null;
+    return (
+        <div data-testid="promo-bar" className={`flex flex-wrap items-center gap-x-3 gap-y-1 border border-[#F59E0B] bg-[#FFF8EB] px-4 py-3 text-sm text-[#002B5C] ${className}`}>
+            <span className="font-semibold text-[#B45309]">{promo.label}</span>
+            <span>{promo.offer} — taken off at checkout</span>
+            <span className="text-xs text-[#6B7280] sm:ml-auto">Ends {endsOn(promo.ends_at)}</span>
+        </div>
+    );
+}
+
 export function PromoCartLine({ coupon, onRemoveCoupon, className = "" }) {
     const { promo, discount, discountSource, couponOff } = useCart();
     if (!(discount > 0)) return null;

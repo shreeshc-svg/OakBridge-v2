@@ -1,3 +1,4 @@
+import { PromoBar } from "../components/PromoBits";
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { bootRead, bootWrite, useBootState } from "../lib/boot";
 import Seo from "../components/Seo";
@@ -795,6 +796,8 @@ export default function Home() {
                         View all new titles <ArrowUpRight size={14} strokeWidth={1.5} />
                     </Link>
                 </div>
+                {/* Festive offer, when one is live — right above the new books. */}
+                <PromoBar className="mb-6 md:mb-8" />
                 <BookRail books={newReleasesRow} label="New this season" />
             </section>
             )}

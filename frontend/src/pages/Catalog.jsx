@@ -6,6 +6,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { Search, SlidersHorizontal, X, Clock, BookOpen } from "lucide-react";
 import BookCard from "../components/BookCard";
 import { fetchBooks, fetchBooksWithMeta, fetchCategories, fetchSiteContent, fetchSettings, mediaUrl, logSearch, fetchSuggestIndex, fetchAuthors } from "../lib/api";
+import { PromoBar } from "../components/PromoBits";
 import EbookCta from "../components/EbookCta";
 import CategoryRow from "../components/CategoryRow";
 import { catalogueTotalFrom } from "../lib/catalogue";
@@ -829,6 +830,8 @@ export default function Catalog() {
                     {/* E-book platform strip — above the listing so it reads as an
                         alternative format, not an advert. Hidden until configured. */}
                     <EbookCta variant="bar" site={site} className="mb-6" />
+                    {/* Festive offer, when one is live (Admin → Coupons & Promotions). */}
+                    <PromoBar className="mb-6" />
 
                     {/* Client-side correction: the URL was rewritten to the fixed
                         spelling, so `search` is the correction and correctedFrom
