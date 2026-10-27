@@ -298,7 +298,7 @@ export default function BookCard({ book, index = 0, compact = false, toEbook = f
                             data-testid={`pod-badge-${book.id}`}
                             className={`absolute inset-x-0 top-0 bg-[#002B5C] text-[#F59E0B] font-mono uppercase text-center ${compact ? "text-[8px] tracking-[0.14em] py-1" : "text-[10px] tracking-[0.18em] py-1.5"}`}
                         >
-                            Print on demand
+                            New · Print on demand
                         </span>
                     )}
                     {!preorder.active && !pod && !oos && book.bestseller && (

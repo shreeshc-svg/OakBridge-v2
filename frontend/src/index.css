@@ -945,3 +945,9 @@ body:has(.hx-top .hx-hero:is(:not(.hx-light), .is-art)) .hdr:not(.is-solid):not(
     .aster-char .aster-arms, .aster-char .aster-eyes { animation: none !important; }
     .asterisk-launcher::before { opacity: .5; transform: scale(1.12); }  /* a still halo instead of motion */
 }
+
+/* "NEW" chip on the Print on Demand button (BookDetail.jsx): a soft pulse a
+   few times after load to announce the new service, then still. */
+.pod-new { display: inline-block; animation: pod-new-pulse 1.6s ease-in-out 1s 4; }
+@keyframes pod-new-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.18); } }
+@media (prefers-reduced-motion: reduce) { .pod-new { animation: none; } }
