@@ -224,7 +224,13 @@ function RunEditor({ id, onClose }) {
             {parcels.map((p, i) => (
                 <ParcelCard key={i} p={{ ...p, no: i + 1 }} books={books} editable={editable}
                     onChange={(patch) => setP(i, patch)} onLine={(li, patch) => setLine(i, li, patch)}
-                    onAddBook={(b) => setP(i, { lines: [...p.lines, { book_id: b.id, label: b.title, qty: 1 }] })}
+                    // Scanning / adding a book already on this label adds a copy
+                    // instead of a second line for the same book.
+                    onAddBook={(b) => setP(i, {
+                        lines: p.lines.some((l) => l.book_id === b.id)
+                            ? p.lines.map((l) => (l.book_id === b.id ? { ...l, qty: (Number(l.qty) || 0) + 1 } : l))
+                            : [...p.lines, { book_id: b.id, label: b.title, qty: 1 }],
+                    })}
                     onRemoveLine={(li) => setP(i, { lines: p.lines.filter((_, j) => j !== li) })}
                     onUp={() => move(i, -1)} onDown={() => move(i, 1)}
                     onRemove={() => window.confirm(`Remove parcel ${i + 1}?`) && change((ps) => ps.filter((_, k) => k !== i))} />
@@ -342,23 +348,49 @@ function ParcelCard({ p, books, editable, onChange, onLine, onAddBook, onRemoveL
     );
 }
 
+// ISBN as digits only ("978-93-95764-54-4" -> "9789395764544"); ISBN-10s
+// keep their final X.
+const isbnKey = (s) => String(s || "").replace(/[^0-9Xx]/g, "").toUpperCase();
+
 function BookSearch({ books, onPick }) {
     const [q, setQ] = useState("");
+    const [miss, setMiss] = useState("");
     const hits = useMemo(() => {
         const w = fold(q).split(" ").filter(Boolean);
-        const digits = q.replace(/\D/g, "");
+        const digits = isbnKey(q);
         if (!w.length) return [];
         return books.filter((b) => w.every((x) => fold(`${b.title} ${b.author || ""}`).includes(x))
-            || (digits.length >= 4 && String(b.isbn || "").replace(/\D/g, "").includes(digits))).slice(0, 8);
+            || (digits.length >= 4 && isbnKey(b.isbn).includes(digits))).slice(0, 8);
     }, [q, books]);
+    const pick = (b) => { onPick(b); setQ(""); setMiss(""); };
+    /*
+     * Enter adds straight away when it is unambiguous — a full ISBN typed or
+     * read by a barcode scanner (scanners type the number and press Enter),
+     * or a search with exactly one match. A full ISBN we don't have says so
+     * instead of silently doing nothing.
+     */
+    const onKey = (e) => {
+        if (e.key !== "Enter") return;
+        e.preventDefault();
+        const key = isbnKey(q);
+        if (key.length === 10 || key.length === 13) {
+            const exact = books.find((b) => isbnKey(b.isbn) === key);
+            if (exact) return pick(exact);
+            setMiss(`No book with ISBN ${key} in the catalogue.`);
+            return;
+        }
+        if (hits.length === 1) pick(hits[0]);
+    };
     return (
         <div>
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="+ Add a book: type part of the title or ISBN"
+            <input value={q} onChange={(e) => { setQ(e.target.value); setMiss(""); }} onKeyDown={onKey} inputMode="search"
+                placeholder="+ Add a book: title, author or ISBN (scan or type, then Enter)" data-testid="cr-book-search"
                 className="w-full border border-dashed border-[#9CA3AF] px-2 py-1.5 text-sm" />
+            {miss && <p className="text-[11px] text-[#CC0033] mt-1">{miss}</p>}
             {hits.length > 0 && (
                 <div className="border border-t-0 divide-y max-h-60 overflow-y-auto">
                     {hits.map((b) => (
-                        <button key={b.id} type="button" onClick={() => { onPick(b); setQ(""); }} className="block w-full text-left px-2 py-1.5 text-sm hover:bg-[#F3F4F6]">
+                        <button key={b.id} type="button" onClick={() => pick(b)} className="block w-full text-left px-2 py-1.5 text-sm hover:bg-[#F3F4F6]">
                             {b.title}<span className="block text-[11px] text-[#6B7280]">{[b.author, b.isbn].filter(Boolean).join(" · ")}</span>
                         </button>
                     ))}
