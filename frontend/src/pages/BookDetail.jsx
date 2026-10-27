@@ -965,7 +965,7 @@ export default function BookDetail() {
                                 Same price, printed specially for your order.{" "}
                                 {podDates ? <>Dispatched between <b className="text-[#002B5C]">{fmtPodDay(podDates[0])}</b> and <b className="text-[#002B5C]">{fmtPodDay(podDates[1])}</b> (5–7 working days).</>
                                     : <>Dispatched in 5–7 working days.</>}
-                                {" "}Not cancellable or returnable unless damaged or misprinted.
+                                {" "}Not cancellable or returnable after payment.
                             </p>
                         </div>
                     )}
