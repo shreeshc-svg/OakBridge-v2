@@ -601,7 +601,11 @@ function OfficeParcel({ p, byId, packed, onToggle }) {
             <ul className="border-t pt-2 space-y-1">
                 {p.lines.map((l) => (
                     <li key={l.line_no} className="flex justify-between gap-3 text-base">
-                        <span className="text-[#002B5C]">{byId[l.book_id]?.title || l.doc_title}</span>
+                        <span className="text-[#002B5C]">
+                            {byId[l.book_id]?.title || l.doc_title}
+                            {/* ISBN to check against the barcode while packing. */}
+                            {(l.doc_isbn || byId[l.book_id]?.isbn) && <span className="block text-[11px] font-mono text-[#4B5563]">ISBN {l.doc_isbn || byId[l.book_id]?.isbn}</span>}
+                        </span>
                         <span className="font-mono font-semibold whitespace-nowrap">× {l.qty}</span>
                     </li>
                 ))}

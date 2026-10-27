@@ -296,6 +296,11 @@ async def _labels(parcels: list, fmt: str, title: str) -> Response:
     if not parcels:
         raise HTTPException(status_code=400, detail="No parcels to print.")
     from_lines = await _from_lines()
+    # The catalogue's ISBN for each line, looked up now (an ISBN corrected in
+    # Admin → Books prints corrected) rather than copied into the run.
+    books = await _books()
+    parcels = [{**p, "lines": [{**ln, "isbn": (books.get(ln.get("book_id")) or {}).get("isbn") or ""}
+                               for ln in p.get("lines") or []]} for p in parcels]
     import asyncio
     data = await asyncio.to_thread(labels_pdf if fmt == "pdf" else labels_docx, parcels, from_lines,
                                    *([title] if fmt == "pdf" else []))

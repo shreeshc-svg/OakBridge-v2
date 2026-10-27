@@ -89,7 +89,10 @@ def label_lines(p: dict, from_lines: list) -> list:
     out = []
     for ln in p.get("lines") or []:
         q = int(ln.get("qty") or 0)
-        out.append((f"{ln.get('label') or ''} - {q} {'copy' if q == 1 else 'copies'}", True))
+        # ISBN beside each book (as on the office's 13 Oct 2026 sheet) so the
+        # packer can check the exact edition against the barcode.
+        isbn = f" (ISBN {ln['isbn']})" if ln.get("isbn") else ""
+        out.append((f"{ln.get('label') or ''} - {q} {'copy' if q == 1 else 'copies'}{isbn}", True))
     if p.get("order_number"):
         out.append((f"Order {p['order_number']}", False))
     out.append(("", False))

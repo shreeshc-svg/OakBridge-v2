@@ -314,7 +314,7 @@ function ParcelCard({ p, books, editable, onChange, onLine, onAddBook, onRemoveL
                                     <input value={l.label} disabled={!editable} onChange={(e) => onLine(li, { label: e.target.value })} className={inp}
                                         aria-label="Name printed on the label" />
                                     <div className={`text-[11px] mt-0.5 ${b ? "text-[#4B5563]" : "text-[#CC0033]"}`}>
-                                        {b ? `Catalogue: ${b.title}` : "Not matched to a book — pick it below and remove this line"}
+                                        {b ? <>Catalogue: {b.title}{b.isbn && <> · <span className="font-mono">ISBN {b.isbn}</span></>}</> : "Not matched to a book — pick it below and remove this line"}
                                     </div>
                                     {!b && (l.candidates || []).length > 0 && editable && (
                                         <div className="flex flex-wrap gap-1 mt-1">
