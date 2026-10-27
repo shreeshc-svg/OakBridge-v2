@@ -548,11 +548,17 @@ async def wh_lookup(code: str, _: dict = Depends(require_warehouse)):
 
 
 @wh_router.get("/books")
-async def wh_books(_: dict = Depends(require_warehouse)):
-    """Compact catalogue for picking a book by hand."""
+async def wh_books(all: bool = False, _: dict = Depends(require_warehouse)):
+    """Compact catalogue for picking a book by hand.
+
+    all=true also lists packs and gift hampers — for Courier labels, where a
+    website order can be for a pack ("Law & Laughter - Collector's Edition")
+    and must match it. The warehouse screens keep the default: stock is
+    counted per book, so a pack is never booked in or out as one item.
+    """
+    flt = {} if all else {"product_type": {"$nin": ["hamper", "pack"]}}
     return await db.books.find(
-        {"product_type": {"$nin": ["hamper", "pack"]}},
-        {"_id": 0, "id": 1, "title": 1, "isbn": 1, "author": 1, "wh_stock": 1, "stock": 1},
+        flt, {"_id": 0, "id": 1, "title": 1, "isbn": 1, "author": 1, "wh_stock": 1, "stock": 1, "product_type": 1},
     ).sort("title", 1).to_list(5000)
 
 

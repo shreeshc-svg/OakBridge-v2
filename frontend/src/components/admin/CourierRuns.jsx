@@ -96,7 +96,9 @@ function RunEditor({ id, onClose }) {
 
     const apply = (r) => { setRun(r); setTitle(r.title); setParcels(r.parcels || []); setDirty(false); };
     useEffect(() => { crGet(id).then(apply).catch((e) => toast.error(formatApiError(e))); }, [id]);
-    useEffect(() => { whBooks().then(setBooks).catch(() => {}); }, []);
+    // Packs and gift hampers too: a website order can be for one, and its
+    // line must match (the server still refuses them as free/author copies).
+    useEffect(() => { whBooks({ all: true }).then(setBooks).catch(() => {}); }, []);
     const editable = run?.status === "draft";
 
     const change = (fn) => { setParcels(fn); setDirty(true); };
@@ -391,7 +393,7 @@ function BookSearch({ books, onPick }) {
                 <div className="border border-t-0 divide-y max-h-60 overflow-y-auto">
                     {hits.map((b) => (
                         <button key={b.id} type="button" onClick={() => pick(b)} className="block w-full text-left px-2 py-1.5 text-sm hover:bg-[#F3F4F6]">
-                            {b.title}<span className="block text-[11px] text-[#6B7280]">{[b.author, b.isbn].filter(Boolean).join(" · ")}</span>
+                            {b.title}{b.product_type === "pack" ? " (pack)" : b.product_type === "hamper" ? " (gift hamper)" : ""}<span className="block text-[11px] text-[#6B7280]">{[b.author, b.isbn].filter(Boolean).join(" · ")}</span>
                         </button>
                     ))}
                 </div>

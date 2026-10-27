@@ -120,7 +120,7 @@ export const syncInventoryFromSheet = () =>
 // Warehouse system (backend/warehouse.py). Phone screen …
 export const whState = () => api.get("/warehouse/state").then((r) => r.data);
 export const whLookup = (code) => api.get("/warehouse/lookup", { params: { code } }).then((r) => r.data);
-export const whBooks = () => api.get("/warehouse/books").then((r) => r.data);
+export const whBooks = (opts = {}) => api.get("/warehouse/books", { params: opts.all ? { all: true } : {} }).then((r) => r.data);
 export const whUploadDoc = (direction, file, practice) => {
     const fd = new FormData();
     fd.append("direction", direction);
