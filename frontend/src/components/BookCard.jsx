@@ -13,7 +13,7 @@ import { podActive } from "../lib/pod";
 const LOW_STOCK = 5;
 
 export default function BookCard({ book, index = 0, compact = false, toEbook = false }) {
-    const { addItem, settings, site } = useCart();
+    const { addItem, settings, site, podSchedule } = useCart();
 
     /*
      * Where the cover and title lead.
@@ -122,6 +122,9 @@ export default function BookCard({ book, index = 0, compact = false, toEbook = f
     // Print on demand (lib/pod.js): out of stock but still sold — printed for
     // the order. Never in the out-of-stock branch, same as a pre-order.
     const pod = podActive(book, preorder.active);
+    // "NEW" while the service is new — switched off in Admin → Orders (pod.py).
+    // False until the schedule loads, so the prerendered page never has it.
+    const showPodNew = podSchedule?.show_new === true;
     const oos = stock <= 0 && !preorder.active && !pod;
     /*
      * Out of print, not out of reach: what the price row shows instead of the
@@ -298,7 +301,7 @@ export default function BookCard({ book, index = 0, compact = false, toEbook = f
                             data-testid={`pod-badge-${book.id}`}
                             className={`absolute inset-x-0 top-0 bg-[#002B5C] text-[#F59E0B] font-mono uppercase text-center ${compact ? "text-[8px] tracking-[0.14em] py-1" : "text-[10px] tracking-[0.18em] py-1.5"}`}
                         >
-                            New · Print on demand
+                            {showPodNew ? "New · " : ""}Print on demand
                         </span>
                     )}
                     {!preorder.active && !pod && !oos && book.bestseller && (
@@ -484,6 +487,7 @@ export default function BookCard({ book, index = 0, compact = false, toEbook = f
                         <span className="atc-line border-b border-current pb-0.5">
                             {preorder.active ? "Pre-order" : pod ? "Print on demand" : <>Add <span className="atc-plus">+</span></>}
                         </span>
+                        {pod && showPodNew && <span className="ml-1 align-middle bg-[#F59E0B] text-[#002B5C] text-[8px] font-bold uppercase tracking-wider px-1 py-px">New</span>}
                     </button>
                 )}
             </div>

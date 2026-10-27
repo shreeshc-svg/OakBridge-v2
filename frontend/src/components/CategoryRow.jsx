@@ -44,7 +44,7 @@ import React, { useEffect, useRef } from "react";
  * because nothing on this site is rounded — not the cards, not the badges, not
  * the buttons — and a radius here would read as a stray widget.
  */
-function Tab({ id, label, count, isOn, onSelect, innerRef }) {
+function Tab({ id, label, count, isOn, onSelect, innerRef, highlight = false, isNew = false }) {
     return (
         <button
             type="button"
@@ -57,10 +57,15 @@ function Tab({ id, label, count, isOn, onSelect, innerRef }) {
             className={`flex-shrink-0 inline-flex items-center gap-2 whitespace-nowrap border px-3.5 h-11 sm:h-9 text-sm transition-colors ${
                 isOn
                     ? "border-[#002B5C] bg-[#002B5C] text-white font-semibold"
-                    : "border-[#E5E7EB] bg-white text-[#4B5563] hover:border-[#002B5C] hover:text-[#002B5C]"
+                    : highlight
+                      // The Print on Demand shelf stands out from the plain tabs.
+                      ? "border-[#F59E0B] bg-[#FFF8EB] text-[#002B5C] font-medium hover:bg-[#F59E0B]/20"
+                      : "border-[#E5E7EB] bg-white text-[#4B5563] hover:border-[#002B5C] hover:text-[#002B5C]"
             }`}
         >
             {label}
+            {/* A new kind of shelf (Print on Demand, Oct 2026) says so. */}
+            {isNew && <span className="pod-new bg-[#F59E0B] text-[#002B5C] text-[9px] font-bold uppercase tracking-wider px-1 py-px">New</span>}
             {count != null && (
                 /* Dimmed against whichever background it lands on. At full
                    strength on navy the count competes with the label; at
@@ -75,11 +80,15 @@ function Tab({ id, label, count, isOn, onSelect, innerRef }) {
     );
 }
 
-export default function CategoryRow({ cats, active, onSelect, total }) {
+export default function CategoryRow({ cats, active, onSelect, total, showNew = false }) {
     const railRef = useRef(null);
     const activeRef = useRef(null);
 
-    const shown = (cats || []).filter((c) => (Number(c.book_count) || 0) > 0);
+    // Print on Demand (a "virtual" shelf, Oct 2026) goes right after "All":
+    // on a phone the row scrolls sideways, and a new service parked at the far
+    // end of it is never seen.
+    const shown = (cats || []).filter((c) => (Number(c.book_count) || 0) > 0)
+        .sort((a, b) => Number(!!b.virtual) - Number(!!a.virtual));
 
     // Arriving on /books?category=bespoke with the tab off-screen looks like the
     // tab is missing. Bring it into view — but only along the rail, never by
@@ -137,6 +146,8 @@ export default function CategoryRow({ cats, active, onSelect, total }) {
                         label={c.name}
                         count={c.book_count}
                         isOn={active === c.id}
+                        highlight={c.id === "print-on-demand"}
+                        isNew={showNew && c.id === "print-on-demand"}
                         onSelect={onSelect}
                         innerRef={active === c.id ? activeRef : null}
                     />

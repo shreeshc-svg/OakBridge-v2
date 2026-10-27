@@ -67,6 +67,12 @@ ext = open(os.path.join(ROOT, "backend", "extensions.py"), encoding="utf-8").rea
 check(ext.count("pre-order or print on demand, not both") == 2, "a book can't be both pre-order and POD (create + edit)")
 gc = open(os.path.join(ROOT, "backend", "growth_core.py"), encoding="utf-8").read()
 check('availability = "backorder"' in gc, "Google feed: POD listed as backorder with a date")
+pod = open(os.path.join(ROOT, "backend", "pod.py"), encoding="utf-8").read()
+check('show_new = bool(st["show_new"]) and (not st["new_until"] or today <= st["new_until"])' in pod
+      and '"explore_strip": bool(st["explore_strip"])' in pod, "'NEW' labels: on/off + automatic end date; Explore strip on/off")
+for f in ("components/BookCard.jsx", "pages/BookDetail.jsx", "pages/Catalog.jsx"):
+    src = open(os.path.join(ROOT, "frontend", "src", f), encoding="utf-8").read()
+    check("show_new === true" in src, f"{f}: 'NEW' only when switched on (and never in the prerender)")
 print()
 if failed:
     print(f"{failed} check(s) failed")

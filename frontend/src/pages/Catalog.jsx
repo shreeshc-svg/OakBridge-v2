@@ -7,6 +7,8 @@ import { Search, SlidersHorizontal, X, Clock, BookOpen } from "lucide-react";
 import BookCard from "../components/BookCard";
 import { fetchBooks, fetchBooksWithMeta, fetchCategories, fetchSiteContent, fetchSettings, mediaUrl, logSearch, fetchSuggestIndex, fetchAuthors } from "../lib/api";
 import { PromoBar } from "../components/PromoBits";
+import { PodExplore } from "../components/PodBits";
+import { useCart } from "../context/CartContext";
 import EbookCta from "../components/EbookCta";
 import CategoryRow from "../components/CategoryRow";
 import { catalogueTotalFrom } from "../lib/catalogue";
@@ -222,6 +224,8 @@ const EBOOK_FILTER_KEY = "ebook";
 const ebooksOn = (site) => String(site?.ebook_enabled ?? "on").toLowerCase() !== "off";
 
 export default function Catalog() {
+    // Print on Demand flags ("NEW" labels, Explore strip) — Admin → Orders.
+    const { podSchedule } = useCart();
     const [sp, setSp] = useSearchParams();
     /*
      * Boot state (lib/boot.js). /books is prerendered with the first page of
@@ -755,6 +759,7 @@ export default function Catalog() {
                     active={category}
                     total={catalogueTotal || null}
                     onSelect={(id) => update("category", id)}
+                    showNew={podSchedule?.show_new === true}
                 />
             </div>
 
@@ -832,6 +837,11 @@ export default function Catalog() {
                     <EbookCta variant="bar" site={site} className="mb-6" />
                     {/* Festive offer, when one is live (Admin → Coupons & Promotions). */}
                     <PromoBar className="mb-6" />
+                    {/* New service: point readers to the Print on Demand shelf. */}
+                    {category !== "print-on-demand" && podSchedule?.explore_strip === true && (
+                        <PodExplore className="mb-6" showNew={podSchedule?.show_new === true} count={cats.find((c) => c.id === "print-on-demand")?.book_count || 0}
+                            onOpen={() => update("category", "print-on-demand")} />
+                    )}
 
                     {/* Client-side correction: the URL was rewritten to the fixed
                         spelling, so `search` is the correction and correctedFrom

@@ -36,3 +36,24 @@ export function PodAck({ checked, onChange }) {
         </label>
     );
 }
+
+/**
+ * Bookstore: an invitation to the Print on Demand shelf, shown above the
+ * listing (phones included — the category row scrolls sideways there) until
+ * the visitor is on that shelf. Only when there are POD titles.
+ */
+export function PodExplore({ count, onOpen, className = "", showNew = true }) {
+    if (!count) return null;
+    return (
+        <button type="button" onClick={onOpen} data-testid="pod-explore"
+            className={`w-full text-left flex items-center gap-3 border border-[#002B5C] bg-[#002B5C] text-white px-4 py-3 hover:bg-[#001F42] transition-colors ${className}`}>
+            {showNew && <span className="pod-new flex-shrink-0 bg-[#F59E0B] text-[#002B5C] text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5">New</span>}
+            <span className="flex-1 min-w-0 text-sm leading-snug">
+                <b className="text-[#F59E0B]">Print on Demand</b>
+                <span className="hidden sm:inline"> — out-of-stock titles printed specially for you, at the same price.</span>
+                <span className="sm:hidden"> — out-of-stock titles printed for you.</span>
+            </span>
+            <span className="flex-shrink-0 text-xs underline whitespace-nowrap">Explore {count} →</span>
+        </button>
+    );
+}

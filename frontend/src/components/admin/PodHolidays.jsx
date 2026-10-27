@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { adminPodHolidays, adminSavePodHolidays, formatApiError } from "../../lib/api";
+import { adminPodHolidays, adminSavePodHolidays, adminPodSettings, adminSavePodSettings, formatApiError } from "../../lib/api";
 
 /**
  * Admin → Orders → Print-on-demand holidays. Days listed here (plus every
@@ -16,7 +16,15 @@ export default function PodHolidays() {
     const [open, setOpen] = useState(false);
     const [rows, setRows] = useState(null);
     const [busy, setBusy] = useState(false);
+    const [st, setSt] = useState(null);
     useEffect(() => { if (open && rows === null) adminPodHolidays().then(setRows).catch(() => setRows([])); }, [open, rows]);
+    useEffect(() => { if (open && st === null) adminPodSettings().then(setSt).catch(() => setSt({ show_new: true, new_until: "", explore_strip: true })); }, [open, st]);
+    const saveSt = async (patch) => {
+        const next = { ...st, ...patch };
+        setSt(next);
+        try { setSt(await adminSavePodSettings(next)); toast.success("Saved — the storefront updates on the next page load."); }
+        catch (e) { toast.error(formatApiError(e)); }
+    };
     const save = async () => {
         setBusy(true);
         try { setRows(await adminSavePodHolidays(rows.filter((r) => r.date))); toast.success("Holidays saved — dispatch dates now skip them."); }
@@ -27,9 +35,29 @@ export default function PodHolidays() {
     return (
         <div className="mt-4 border border-[#E5E7EB] bg-white" data-testid="pod-holidays">
             <button type="button" onClick={() => setOpen(!open)} className="w-full text-left px-4 py-3 text-sm text-[#002B5C] flex justify-between">
-                <span><b>Print-on-demand holidays</b> <span className="text-[#6B7280]">— skipped (with weekends) in the 5–7 working-day dispatch dates</span></span>
+                <span><b>Print on demand — settings &amp; holidays</b> <span className="text-[#6B7280]">— “NEW” labels, Bookstore strip, and days skipped in the 5–7 working-day dates</span></span>
                 <span>{open ? "−" : "+"}</span>
             </button>
+            {open && st && (
+                <div className="px-4 pb-3 mb-2 border-b border-[#E5E7EB] space-y-2 text-sm" data-testid="pod-settings">
+                    <label className="flex items-center gap-2">
+                        <input type="checkbox" checked={!!st.show_new} onChange={(e) => saveSt({ show_new: e.target.checked })} />
+                        Show the “NEW” labels (book page, tiles, Bookstore tab)
+                    </label>
+                    {st.show_new && (
+                        <label className="flex flex-wrap items-center gap-2 pl-6 text-xs text-[#4B5563]">
+                            …and hide them automatically after
+                            <input type="date" value={st.new_until || ""} onChange={(e) => saveSt({ new_until: e.target.value })} className="border px-2 py-0.5" />
+                            {st.new_until && <button type="button" className="underline" onClick={() => saveSt({ new_until: "" })}>no end date</button>}
+                        </label>
+                    )}
+                    <label className="flex items-center gap-2">
+                        <input type="checkbox" checked={!!st.explore_strip} onChange={(e) => saveSt({ explore_strip: e.target.checked })} />
+                        Show the “Explore Print on Demand” strip in the Bookstore
+                    </label>
+                    <p className="text-[11px] text-[#6B7280]">The Print on Demand tab and the books' “Print on demand” button stay either way — these only control the “new service” announcements.</p>
+                </div>
+            )}
             {open && (
                 <div className="px-4 pb-4 space-y-2 text-sm">
                     {rows === null ? <p className="text-[#6B7280]">Loading…</p> : (

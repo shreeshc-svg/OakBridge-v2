@@ -957,14 +957,14 @@ export default function BookDetail() {
                                 <span>{preorder.active ? "Pre-order" : pod ? "Print on Demand" : "Buy Now"}</span>
                                 {/* New service (Oct 2026): flagged so a reader who expected
                                     "Out of stock" notices they can still have the book. */}
-                                {pod && <span className="pod-new ml-1 bg-[#F59E0B] text-[#002B5C] text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5">New</span>}
+                                {pod && podSchedule?.show_new === true && <span className="pod-new ml-1 bg-[#F59E0B] text-[#002B5C] text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5">New</span>}
                             </button>
                         </div>
                     )}
                     {pod && (
                         <div data-testid="pod-info" className="mt-4 max-w-md border border-[#F59E0B] bg-[#FFF8EB] p-3 text-sm text-[#002B5C]">
                             <div className="flex items-center gap-2">
-                                <span className="bg-[#002B5C] text-[#F59E0B] text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5">New at Oakbridge</span>
+                                {podSchedule?.show_new === true && <span className="bg-[#002B5C] text-[#F59E0B] text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5">New at Oakbridge</span>}
                                 <span className="font-semibold">Printed on demand for you</span>
                             </div>
                             <p className="mt-1 text-xs text-[#B45309]">Out of stock? We now print it specially for you — no waiting for a reprint.</p>
