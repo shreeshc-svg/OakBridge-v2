@@ -1,3 +1,4 @@
+import { PodCartNote, PodAck } from "../components/PodBits";
 import { PromoCartLine, PromoHint } from "../components/PromoBits";
 import React, { useEffect, useState } from "react";
 import Breadcrumbs from "../components/Breadcrumbs";
@@ -57,6 +58,7 @@ export default function Checkout() {
         clearCoupon,
         // For the tax label below — the rate is read, never hardcoded.
         settings,
+        hasPod,
     } = useCart();
     const [form, setForm] = useState({
         full_name: "",
@@ -92,6 +94,8 @@ export default function Checkout() {
     const [couponMsg, setCouponMsg] = useState(null);
     const [submitting, setSubmitting] = useState(false);
     const [agreed, setAgreed] = useState(false);
+    // Print on demand: "printed for me, not cancellable/returnable" (PodBits).
+    const [podAck, setPodAck] = useState(false);
     const { user, refresh } = useAuth();
     const [otpCode, setOtpCode] = useState("");
     const [verifyingAcc, setVerifyingAcc] = useState(false);
@@ -183,6 +187,10 @@ export default function Checkout() {
             toast.error("Please accept the Terms and Privacy Policy to continue.");
             return;
         }
+        if (hasPod && !podAck) {
+            toast.error("Please confirm the print-on-demand note to continue.");
+            return;
+        }
         setSubmitting(true);
         /*
          * "Checkout started" means the customer committed, not that they landed
@@ -208,6 +216,7 @@ export default function Checkout() {
                 total,
                 coupon_code: coupon?.code || null,
                 discount: discount || 0,
+                pod_ack: Boolean(hasPod && podAck),
                 // Sent as false rather than omitted when the block is collapsed,
                 // so a gift address typed and then unticked is not silently
                 // honoured by the server.
@@ -548,6 +557,7 @@ export default function Checkout() {
                             {/* Coupon or festive promotion — the better one (PromoBits / promotions_core). */}
                             <PromoCartLine coupon={coupon} onRemoveCoupon={clearCoupon} />
                             <PromoHint />
+                            <PodCartNote className="mt-2" />
                             <div className="flex justify-between">
                                 <dt className="text-[#4B5563]">Shipping</dt>
                                 <dd className="font-mono text-[#002B5C]">
@@ -684,9 +694,10 @@ export default function Checkout() {
                                 </div>
                             </div>
                         )}
+                        <div className="mt-4"><PodAck checked={podAck} onChange={setPodAck} /></div>
                         <button
                             type="submit"
-                            disabled={submitting || !agreed || notVerified}
+                            disabled={submitting || !agreed || notVerified || (hasPod && !podAck)}
                             data-testid="place-order-button"
                             className="mt-4 w-full bg-[#002B5C] text-[#FFFFFF] py-4 text-sm font-medium hover:bg-[#001F42] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                         >

@@ -23,6 +23,7 @@ import VerifyNotice from "../components/VerifyNotice";
 import { ebookEdition } from "../lib/ebook";
 import { metaDescription, bookSeoTitle, editionLabel, bookFormatUrl, ratingLd } from "../lib/schema";
 import { preorderState, useCountdown, formatLaunchDate, formatLaunchTimes } from "../lib/preorder";
+import { podActive, dispatchWindow, fmtPodDay } from "../lib/pod";
 
 // Trust badges under the price. Admin-managed via Settings key `pdp_badges`;
 // this is only the fallback when nothing is saved yet. Spelled-out column
@@ -87,7 +88,7 @@ export default function BookDetail() {
     const [tab, setTab] = useState("description");
     // `site` for the eBook copy and toggles below — CartContext already fetches
     // site content once for the whole app, so this costs no extra request.
-    const { addItem, setIsOpen, site } = useCart();
+    const { addItem, setIsOpen, site, podSchedule } = useCart();
     const { user, isAuthenticated } = useAuth();
     const nav = useNavigate();
     const [notifyEmail, setNotifyEmail] = useState("");
@@ -349,14 +350,18 @@ export default function BookDetail() {
 
     const LOW_STOCK = 5;
     const stock = hasVariants ? activeStock : Number.isFinite(book.stock) ? book.stock : 0;
-    const oos = stock <= 0 && !preorder.active;
-    // Quantity is capped at stock everywhere below; a pre-order has none, so it
-    // gets the same per-order limit the cart uses.
-    const qtyCap = preorder.active ? 10 : stock;
+    // Print on demand (lib/pod.js): out of stock but sold — printed for this
+    // order, dispatched in 5–7 working days. Never the out-of-stock panel.
+    const pod = podActive({ ...book, stock }, preorder.active);
+    const oos = stock <= 0 && !preorder.active && !pod;
+    // Quantity is capped at stock everywhere below; a pre-order / POD has
+    // none, so it gets the same per-order limit the cart uses.
+    const qtyCap = preorder.active || pod ? 10 : stock;
+    const podDates = pod && podSchedule ? dispatchWindow(Date.now(), podSchedule.holidays) : null;
     // No stock line on a pre-order: it has no copies by definition, so this
     // read "Only 0 left in stock — order soon" right above the Pre-order
     // button, contradicting it.
-    const low = !oos && !preorder.active && stock <= LOW_STOCK;
+    const low = !oos && !preorder.active && !pod && stock <= LOW_STOCK;
 
     /*
      * The line that earns the click, so it is not a hard character cut.
@@ -919,7 +924,7 @@ export default function BookDetail() {
                              * like the safe option, and a cart full of
                              * unpaid pre-orders reserves nothing for anybody.
                              */}
-                            {!preorder.active && (
+                            {!preorder.active && !pod && (
                                 <button
                                     onClick={onAdd}
                                     data-testid="add-to-cart-main-button"
@@ -941,16 +946,27 @@ export default function BookDetail() {
                                         nav("/login", { state: { from: { pathname: "/checkout" } } });
                                     }
                                 }}
-                                data-testid={preorder.active ? "preorder-button" : "buy-now-button"}
+                                data-testid={preorder.active ? "preorder-button" : pod ? "pod-button" : "buy-now-button"}
                                 className={
-                                    preorder.active
-                                        ? "inline-flex items-center gap-2 bg-[#002B5C] text-[#FFFFFF] px-8 py-4 text-sm font-medium hover:bg-[#001F42] transition-all"
+                                    preorder.active || pod
+                                        ? `${pod ? "atc-shine " : ""}inline-flex items-center gap-2 bg-[#002B5C] text-[#FFFFFF] px-8 py-4 text-sm font-medium hover:bg-[#001F42] transition-all`
                                         : "inline-flex items-center gap-2 border border-[#002B5C] px-8 py-4 text-sm font-medium hover:bg-[#F5F7FA] transition-all"
                                 }
                             >
-                                {preorder.active && <ShoppingBag size={16} strokeWidth={1.5} />}
-                                {preorder.active ? "Pre-order" : "Buy Now"}
+                                {(preorder.active || pod) && <ShoppingBag size={16} strokeWidth={1.5} />}
+                                <span>{preorder.active ? "Pre-order" : pod ? "Print on Demand" : "Buy Now"}</span>
                             </button>
+                        </div>
+                    )}
+                    {pod && (
+                        <div data-testid="pod-info" className="mt-4 max-w-md border border-[#F59E0B] bg-[#FFF8EB] p-3 text-sm text-[#002B5C]">
+                            <div className="font-semibold">Printed on demand for you</div>
+                            <p className="mt-1 text-[#4B5563] leading-snug">
+                                Same price, printed specially for your order.{" "}
+                                {podDates ? <>Dispatched between <b className="text-[#002B5C]">{fmtPodDay(podDates[0])}</b> and <b className="text-[#002B5C]">{fmtPodDay(podDates[1])}</b> (5–7 working days).</>
+                                    : <>Dispatched in 5–7 working days.</>}
+                                {" "}Not cancellable or returnable unless damaged or misprinted.
+                            </p>
                         </div>
                     )}
 

@@ -259,6 +259,18 @@ async def _deliver_paid_order(order_id: str) -> None:
     except Exception:  # noqa: BLE001
         logger.exception("Stock decrement failed for order %s", order_id)
 
+    # Print on demand: the 5–7 working days run from the PAYMENT, not from when
+    # the order was started, so the dates are fixed again here (before the
+    # receipt and the office email go out with them).
+    try:
+        po = await db.orders.find_one({"id": order_id, "pod": True, "pod_dates_fixed": {"$ne": True}}, {"_id": 0, "id": 1})
+        if po:
+            from pod import window_now
+            a, b = await window_now()
+            await db.orders.update_one({"id": order_id}, {"$set": {"dispatch_from": a, "dispatch_to": b, "pod_dates_fixed": True}})
+    except Exception:  # noqa: BLE001
+        logger.exception("POD dispatch dates failed for order %s", order_id)
+
     try:
         fresh = await db.orders.find_one({"id": order_id}, {"_id": 0})
         if fresh and await _claim_once(order_id, "paid_emails_sent"):
@@ -362,9 +374,16 @@ async def _apply_stock_decrement(order_id: str) -> None:
             # and must not raise the backorder alarm — the whole point is that
             # the book does not exist yet. Stock still goes negative-safe: the
             # guarded update simply does nothing.
-            book = await db.books.find_one({"id": bid}, {"_id": 0, "coming_soon": 1})
+            book = await db.books.find_one({"id": bid}, {"_id": 0, "coming_soon": 1, "pod": 1})
             if (book or {}).get("coming_soon"):
                 logger.info("Pre-order line, no stock to decrement: book=%s order=%s", bid, order_id)
+                continue
+            # Print on demand: no copy exists until it is printed for this
+            # order — expected, not a backorder alarm. The copy is still owed
+            # (order_stock.order_owed: bought minus stock_taken), so when the
+            # printed copies are booked in they go to this order first.
+            if (book or {}).get("pod"):
+                logger.info("Print-on-demand line, printed per order: book=%s order=%s", bid, order_id)
                 continue
             # Short: take what IS there for this order. Leaving 1 copy on sale
             # when a paid order needs 2 lets a second customer buy it, and then

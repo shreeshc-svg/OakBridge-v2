@@ -171,6 +171,7 @@ class BookAdminCreate(BaseModel):
     coming_soon: Optional[bool] = None
     launch_at: Optional[str] = None        # ISO datetime; when it publishes
     coming_soon_label: Optional[str] = None
+    pod: Optional[bool] = None             # print on demand while out of stock (pod_core.py)
     rating: float = 4.5
     stock: int = 100
     variants: Optional[list] = None
@@ -212,6 +213,7 @@ class BookAdminUpdate(BaseModel):
     coming_soon: Optional[bool] = None
     launch_at: Optional[str] = None        # ISO datetime; when it publishes
     coming_soon_label: Optional[str] = None
+    pod: Optional[bool] = None             # print on demand while out of stock (pod_core.py)
     stock: Optional[int] = None
     variants: Optional[list] = None
     # Optional[bool], but False still reaches the update: admin_update_book
@@ -1618,6 +1620,9 @@ def clean_store_links(raw) -> dict:
 async def admin_create_book(payload: BookAdminCreate):
     doc = {"id": str(uuid.uuid4()), **payload.model_dump()}
     doc["store_links"] = clean_store_links(doc.get("store_links"))
+    if doc.get("coming_soon") and doc.get("pod"):
+        raise HTTPException(status_code=400, detail="A book can be a pre-order or print on demand, not both.")
+    doc["pod"] = bool(doc.get("pod"))
     if doc.get("coming_soon"):
         doc["stock"] = 0  # a pre-order has no copies yet (see admin_update_book)
     _finalise_volume_set(doc)
@@ -1659,10 +1664,14 @@ async def admin_update_book(book_id: str, payload: BookAdminUpdate):
         raise HTTPException(status_code=400, detail="No updates provided")
     prev = await db.books.find_one(
         {"id": book_id},
-        {"_id": 0, "stock": 1, "release_rank": 1, "is_volume_set": 1, "volumes": 1, "coming_soon": 1},
+        {"_id": 0, "stock": 1, "release_rank": 1, "is_volume_set": 1, "volumes": 1, "coming_soon": 1, "pod": 1},
     )
     if prev is None:
         raise HTTPException(status_code=404, detail="Book not found")
+    # A pre-order is a promise of a publication day; print on demand is a
+    # promise of 5–7 working days. One book can't make both.
+    if updates.get("coming_soon", prev.get("coming_soon")) and updates.get("pod", prev.get("pod")):
+        raise HTTPException(status_code=400, detail="A book can be a pre-order or print on demand, not both.")
 
     # A pre-order carries no stock: there are no printed copies, and any number
     # here showed "Only N left in stock" on the storefront. Locked server-side

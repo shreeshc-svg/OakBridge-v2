@@ -11,5 +11,7 @@
  */
 export function catalogueTotalFrom(cats) {
     if (!Array.isArray(cats)) return 0;
-    return cats.reduce((n, c) => n + (Number(c && c.book_count) || 0), 0);
+    // A virtual shelf (Print on Demand) re-lists books that already count
+    // under their real category — adding it would count them twice.
+    return cats.reduce((n, c) => n + (c && !c.virtual ? Number(c.book_count) || 0 : 0), 0);
 }

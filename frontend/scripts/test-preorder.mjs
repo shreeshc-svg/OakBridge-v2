@@ -40,13 +40,13 @@ const eq = (n, got, want) => {
   const srv = read('../../backend/server.py');
   const ok = (n, c) => { if (!c) fail++; console.log(`${c ? 'ok  ' : 'FAIL'}  ${n}`); };
   console.log('-- pre-order stock --');
-  ok('product page shows no "Only N left" on a pre-order', /const low = !oos && !preorder\.active && stock <= LOW_STOCK/.test(pdp));
-  ok('book tile shows no "Only N left" on a pre-order', /const low = !oos && !preorder\.active && stock <= LOW_STOCK/.test(card));
+  ok('product page shows no "Only N left" on a pre-order', /const low = !oos && !preorder\.active && (!pod && )?stock <= LOW_STOCK/.test(pdp));
+  ok('book tile shows no "Only N left" on a pre-order', /const low = !oos && !preorder\.active && (!pod && )?stock <= LOW_STOCK/.test(card));
   ok('admin stock field is locked while Pre-order is ticked', /const preorderStock = name === "stock" && !!form\.coming_soon/.test(admin));
   ok('admin form saves a pre-order with 0 stock', /stock: form\.coming_soon \? 0 : Number\(form\.stock\)/.test(admin));
   ok('server refuses stock on a pre-order (Inventory screen cannot bypass)', /stock is locked at 0/.test(ext) && /updates\["stock"\] = 0/.test(ext));
   ok('checkout caps a live pre-order per order instead of refusing it as out of stock',
-     /avail = PREORDER_MAX_QTY if _preorder_active\(bdoc\) else/.test(srv));
+     (/avail = PREORDER_MAX_QTY if _preorder_active\(bdoc\) else/.test(srv) || (/is_pre = _preorder_active\(bdoc\)/.test(srv) && /avail = PREORDER_MAX_QTY if is_pre else/.test(srv))));
 }
 
 const NOW = Date.parse('2026-08-19T12:00:00Z');

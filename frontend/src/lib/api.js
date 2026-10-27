@@ -307,6 +307,10 @@ export const adminImportStoreLinks = (file, dryRun = true) => {
     return api.post(`/admin/books/store-links/import?dry_run=${dryRun ? "true" : "false"}`, fd).then((r) => r.data);
 };
 export const fetchSettings = () => api.get("/settings").then((r) => r.data);
+// Print on demand: holidays + cut-off for the dispatch dates (backend/pod.py).
+export const fetchPodSchedule = () => api.get("/pod/schedule").then((r) => r.data);
+export const adminPodHolidays = () => api.get("/admin/orders/pod-holidays").then((r) => r.data.holidays || []);
+export const adminSavePodHolidays = (holidays) => api.put("/admin/orders/pod-holidays", { holidays }).then((r) => r.data.holidays || []);
 // Festive promotion live right now, or null (backend/promotions.py).
 export const fetchPromotion = () => api.get("/promotions/current").then((r) => r.data.promotion || null);
 export const adminPromotions = () => api.get("/admin/coupons/promotions").then((r) => r.data.promotions || []);

@@ -286,8 +286,15 @@ def merchant_item(book: dict, *, site: str, image_url: str) -> Optional[dict]:
     if price <= 0:
         return None
     mrp = float(book.get("original_price") or 0)
+    pod_dates = None
     if book.get("coming_soon"):
         availability = "preorder"
+    elif book.get("pod") and int(book.get("stock") or 0) <= 0:
+        # Print on demand: still buyable — Google calls that "backorder" and
+        # wants the date it becomes available (latest dispatch, weekends skipped).
+        import pod_core
+        availability = "backorder"
+        pod_dates = pod_core.dispatch_window(datetime.now(timezone.utc))
     else:
         availability = "in_stock" if int(book.get("stock") or 0) > 0 else "out_of_stock"
     isbn = re.sub(r"[^0-9Xx]", "", book.get("isbn") or "")
@@ -310,6 +317,8 @@ def merchant_item(book: dict, *, site: str, image_url: str) -> Optional[dict]:
         item["gtin"] = isbn
     else:
         item["identifier_exists"] = "no"
+    if pod_dates:
+        item["availability_date"] = datetime.combine(pod_dates[1], datetime.min.time(), tzinfo=timezone.utc).isoformat()
     if availability == "preorder" and book.get("launch_at"):
         # Not _dt: a time typed in Admin is India time, not UTC (launch_time.py).
         from launch_time import parse_launch_at

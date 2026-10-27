@@ -8,6 +8,7 @@ import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
 import { ebookEdition, printOutOffer } from "../lib/ebook";
 import { preorderState, useCountdown, formatLaunchDate, formatLaunchTimes } from "../lib/preorder";
+import { podActive } from "../lib/pod";
 
 const LOW_STOCK = 5;
 
@@ -118,7 +119,10 @@ export default function BookCard({ book, index = 0, compact = false, toEbook = f
      */
     const preorder = preorderState(book);
     const left = useCountdown(preorder.active ? preorder.at : null);
-    const oos = stock <= 0 && !preorder.active;
+    // Print on demand (lib/pod.js): out of stock but still sold — printed for
+    // the order. Never in the out-of-stock branch, same as a pre-order.
+    const pod = podActive(book, preorder.active);
+    const oos = stock <= 0 && !preorder.active && !pod;
     /*
      * Out of print, not out of reach: what the price row shows instead of the
      * old grey cover and OUT OF STOCK stamp. Computed for every card so the
@@ -129,7 +133,7 @@ export default function BookCard({ book, index = 0, compact = false, toEbook = f
     // no filter, it only dresses the tile.
     const starred = !!book.star_title;
     // A pre-order has no stock to run low on (same rule as the product page).
-    const low = !oos && !preorder.active && stock <= LOW_STOCK;
+    const low = !oos && !preorder.active && !pod && stock <= LOW_STOCK;
     const discount = book.original_price
         ? Math.round(100 - (book.price / book.original_price) * 100)
         : 0;
@@ -289,12 +293,20 @@ export default function BookCard({ book, index = 0, compact = false, toEbook = f
                             {preorder.label}
                         </span>
                     )}
-                    {!preorder.active && !oos && book.bestseller && (
+                    {pod && (
+                        <span
+                            data-testid={`pod-badge-${book.id}`}
+                            className={`absolute inset-x-0 top-0 bg-[#002B5C] text-[#F59E0B] font-mono uppercase text-center ${compact ? "text-[8px] tracking-[0.14em] py-1" : "text-[10px] tracking-[0.18em] py-1.5"}`}
+                        >
+                            Print on demand
+                        </span>
+                    )}
+                    {!preorder.active && !pod && !oos && book.bestseller && (
                         <span className={`absolute top-2 left-2 bg-[#002B5C] text-[#FFFFFF] font-mono uppercase tracking-widest px-1.5 py-0.5 ${compact ? "text-[8px]" : "text-[10px] top-3 left-3 px-2 py-1"}`}>
                             Bestseller
                         </span>
                     )}
-                    {!preorder.active && !oos && book.new_release && !book.bestseller && (
+                    {!preorder.active && !pod && !oos && book.new_release && !book.bestseller && (
                         <span className={`absolute top-2 left-2 bg-[#F59E0B] text-[#002B5C] font-mono uppercase tracking-widest px-1.5 py-0.5 ${compact ? "text-[8px]" : "text-[10px] top-3 left-3 px-2 py-1"}`}>
                             New Arrival
                         </span>
@@ -463,14 +475,14 @@ export default function BookCard({ book, index = 0, compact = false, toEbook = f
                      */
                     <button
                         onClick={() => addItem(book)}
-                        data-testid={`${preorder.active ? "preorder" : "add-to-cart"}-${book.id}`}
+                        data-testid={`${preorder.active ? "preorder" : pod ? "pod" : "add-to-cart"}-${book.id}`}
                         className={`atc-tile group/add -m-2.5 p-2.5 font-medium transition-colors ${preorder.active ? "text-[#B4750F] hover:text-[#002B5C]" : "text-[#002B5C] hover:text-[#CC0033]"} ${compact ? "text-[10px]" : "text-xs"}`}
                         // Each tile glints at its own moment (index.css .atc-tile), from
                         // a stable hash of the id — same in the prerender and the browser.
                         style={{ "--atc-delay": `${[...String(book.id)].reduce((n, ch) => (n * 31 + ch.charCodeAt(0)) % 7000, 0) / 1000}s` }}
                     >
                         <span className="atc-line border-b border-current pb-0.5">
-                            {preorder.active ? "Pre-order" : <>Add <span className="atc-plus">+</span></>}
+                            {preorder.active ? "Pre-order" : pod ? "Print on demand" : <>Add <span className="atc-plus">+</span></>}
                         </span>
                     </button>
                 )}
@@ -555,6 +567,11 @@ export default function BookCard({ book, index = 0, compact = false, toEbook = f
                                 {left.days}d {String(left.hours).padStart(2, "0")}h{" "}
                                 {String(left.minutes).padStart(2, "0")}m
                             </span>
+                        </span>
+                    ) : pod ? (
+                        <span data-testid={`pod-time-${book.id}`} className="flex items-center gap-1.5 text-[#4B5563]">
+                            <Truck size={compact ? 11 : 12} strokeWidth={1.5} className="flex-shrink-0" />
+                            Printed for you · 5–7 working days
                         </span>
                     ) : showDelivery ? (
                         <span

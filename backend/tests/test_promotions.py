@@ -75,7 +75,7 @@ ROOT = os.path.dirname(os.path.dirname(HERE))
 srv = open(os.path.join(ROOT, "backend", "server.py"), encoding="utf-8").read()
 check("pcore.choose(promo_off, discount) == \"promo\"" in srv and "discount, coupon_code = promo_off, None" in srv,
       "order endpoint decides on the server; a winning promotion replaces the coupon (no double discount)")
-check('"product_type": 1},' in srv and "promo_label: Optional[str] = None" in srv, "book type loaded; promo fields declared on Order")
+check(('"product_type": 1},' in srv or '"product_type": 1, "pod": 1},' in srv) and "promo_label: Optional[str] = None" in srv, "book type loaded; promo fields declared on Order")
 check("app.include_router(promotions_admin_router)" in srv, "routers mounted")
 pr = open(os.path.join(ROOT, "backend", "promotions.py"), encoding="utf-8").read()
 check('prefix="/api/admin/coupons/promotions"' in pr and "pc.overlaps(doc, other)" in pr, "admin under Coupons permission; overlaps refused")

@@ -183,6 +183,10 @@ class Book(BaseModel):
     coming_soon: bool = False
     launch_at: Optional[str] = None
     coming_soon_label: Optional[str] = None
+    # Print on demand (pod_core.py): sold at the listed price while stock is
+    # 0, printed per order, dispatched in 5–7 working days. Declared, or
+    # response_model=Book drops it and the storefront never sees the offer.
+    pod: bool = False
     variants: list = Field(default_factory=list)  # [{binding,size,price,mrp?,stock?}]
 
     # ---- Gift hampers -------------------------------------------------------
@@ -251,6 +255,16 @@ class Category(BaseModel):
     # Declared, or response_model=Category drops it and the bookstore row falls
     # back to alphabetical -- the trap documented at the top of this file.
     order: int = 99
+    # A computed shelf, not a stored category (e.g. Print on Demand): its books
+    # also belong to a real category, so it is left out of the "All" total.
+    virtual: bool = False
+
+
+# Bookstore → "Print on Demand" tab (pod_core.py). Treated like a category in
+# the URL (?category=print-on-demand) so the existing category row, links and
+# filters work unchanged; it selects books, it isn't a field on them.
+POD_CATEGORY = "print-on-demand"
+POD_SHELF = {"pod": True, "stock": {"$lte": 0}, "coming_soon": {"$ne": True}}
 
 
 class NewsletterSignup(BaseModel):
@@ -314,6 +328,9 @@ class OrderCreate(BaseModel):
     total: float
     notes: Optional[str] = ""
     coupon_code: Optional[str] = None
+    # "Printed specially for me — no cancellation or return unless damaged or
+    # misprinted." Required when the cart holds a print-on-demand book.
+    pod_ack: bool = False
     discount: Optional[float] = 0
 
     # ---- Gift delivery ------------------------------------------------------
@@ -385,6 +402,12 @@ class Order(BaseModel):
     # Declared, or response_model=Order drops them and the receipt can't name the occasion.
     promo_id: Optional[str] = None
     promo_label: Optional[str] = None
+    # Print on demand (pod_core.py): the order waits for its printed copy and
+    # ships in one parcel. Dates are India-time days, recomputed at payment.
+    pod: bool = False
+    pod_items: List[str] = Field(default_factory=list)
+    dispatch_from: Optional[str] = None
+    dispatch_to: Optional[str] = None
     # Where the parcel goes, when that is not where the invoice goes. Declared
     # here or response_model=Order drops it and the packing slip silently ships
     # a gift back to the buyer.
@@ -881,6 +904,11 @@ async def list_categories():
     # assigned to them -- no deploy, no switch.
     for c in cats:
         c["book_count"] = await db.books.count_documents({**NOT_A_HAMPER, "category": c["id"]})
+    n_pod = await db.books.count_documents({**NOT_A_HAMPER, "enabled": {"$ne": False}, **POD_SHELF})
+    if n_pod:
+        cats.append({"id": POD_CATEGORY, "name": "Print on Demand", "order": 1000, "book_count": n_pod, "virtual": True,
+                     "description": "Out-of-stock titles we print specially for your order — same price, dispatched in 5–7 working days.",
+                     "image": ""})
     return cats
 
 
@@ -1338,6 +1366,7 @@ async def list_books(
     search: Optional[str] = None,
     bestseller: Optional[bool] = None,
     new_release: Optional[bool] = None,
+    pod: Optional[bool] = None,
     ebook: Optional[bool] = None,
     min_price: Optional[float] = None,
     max_price: Optional[float] = None,
@@ -1363,6 +1392,8 @@ async def list_books(
         # shelf with a 200 and no clue what went wrong.
         if category == RETIRED_CATEGORY:
             query["category"] = {"$in": list(PROFESSIONAL_SPLIT.values())}
+        elif category == POD_CATEGORY:
+            clauses.append(dict(POD_SHELF))
         else:
             query["category"] = category
     if subject:
@@ -1392,6 +1423,10 @@ async def list_books(
         # would list titles with nowhere to go and hide titles that are there.
         has_link = {"ebook_url": {"$nin": [None, ""]}}
         clauses.append(has_link if ebook else {"$nor": [has_link]})
+
+    if pod:
+        # Bookstore → "Print on Demand" tab: ticked, no stock, not a pre-order.
+        clauses.append(dict(POD_SHELF))
 
     if new_release is not None:
         if new_release:
@@ -1882,7 +1917,7 @@ async def create_order(payload: OrderCreate, user: Optional[dict] = Depends(get_
         bdoc = await db.books.find_one(
             {"id": it.book_id},
             {"_id": 0, "id": 1, "title": 1, "author": 1, "cover_image": 1, "price": 1, "stock": 1, "variants": 1,
-             "coming_soon": 1, "launch_at": 1, "product_type": 1},
+             "coming_soon": 1, "launch_at": 1, "product_type": 1, "pod": 1},
         )
         if not bdoc:
             raise HTTPException(status_code=404, detail=f"Book not found: {it.book_id}")
@@ -1891,7 +1926,14 @@ async def create_order(payload: OrderCreate, user: Optional[dict] = Depends(get_
         # is capped per order instead of by stock — otherwise every pre-order
         # was refused here as "out of stock" while the page offered to take it.
         # payments._apply_stock_decrement already skips its decrement.
-        avail = PREORDER_MAX_QTY if _preorder_active(bdoc) else int(bdoc.get("stock", 0) or 0)
+        # Print on demand (pod_core.py): no stock by design, printed per order,
+        # capped per order like a pre-order.
+        import pod_core
+        is_pre = _preorder_active(bdoc)
+        if pod_core.pod_active(bdoc, preorder=is_pre):
+            avail = pod_core.MAX_QTY
+        else:
+            avail = PREORDER_MAX_QTY if is_pre else int(bdoc.get("stock", 0) or 0)
         if it.quantity > avail:
             shortages.append({"title": bdoc.get("title", "Item"), "requested": it.quantity, "available": avail})
     if shortages:
@@ -1925,6 +1967,20 @@ async def create_order(payload: OrderCreate, user: Optional[dict] = Depends(get_
         if cres.valid:
             discount = float(cres.discount)
             coupon_code = cres.code
+
+    # Print on demand: the customer must have confirmed it is printed for them
+    # (no cancellation / return unless damaged), and the whole order then
+    # ships together in 5–7 working days.
+    import pod_core
+    pod_items = [i.book_id for i in server_items
+                 if pod_core.pod_active(books_by_id[i.book_id], preorder=_preorder_active(books_by_id[i.book_id]))]
+    dispatch_from = dispatch_to = None
+    if pod_items:
+        if not payload.pod_ack:
+            raise HTTPException(status_code=400, detail="Please confirm the print-on-demand note at checkout: the book is "
+                                                        "printed for you and can't be cancelled or returned unless damaged.")
+        from pod import window_now
+        dispatch_from, dispatch_to = await window_now()
 
     # Festive promotion (Admin → Coupons & Promotions): the better of it and
     # the coupon, never both — decided here, whatever the browser showed.
@@ -1971,6 +2027,10 @@ async def create_order(payload: OrderCreate, user: Optional[dict] = Depends(get_
         discount=discount,
         promo_id=promo_id,
         promo_label=promo_label,
+        pod=bool(pod_items),
+        pod_items=pod_items,
+        dispatch_from=dispatch_from,
+        dispatch_to=dispatch_to,
         notes=payload.notes or "",
         # Only carried when the box actually goes somewhere else. Storing a
         # half-filled delivery address on every ordinary order would leave the
@@ -2065,6 +2125,9 @@ app.include_router(email_manager_admin_router)
 from ai_insights import admin_router as marketing_ai_admin_router  # noqa: E402
 app.include_router(marketing_ai_admin_router)
 from promotions import public_router as promotions_public_router, admin_router as promotions_admin_router  # noqa: E402
+from pod import public_router as pod_public_router, admin_router as pod_admin_router  # noqa: E402
+app.include_router(pod_public_router)
+app.include_router(pod_admin_router)
 app.include_router(promotions_public_router)
 app.include_router(promotions_admin_router)
 

@@ -55,6 +55,7 @@ const BLANK = {
     coming_soon: false,
     launch_at: "",
     coming_soon_label: "",
+    pod: false,
     ebook_url: "",
     ebook_price: "",
     store_links: {},
@@ -826,6 +827,8 @@ function BookForm({ initial, categories, onClose, onSaved }) {
                     blurb: (v.blurb || "").trim(),
                 })),
                 coming_soon: !!form.coming_soon,
+                // Print on demand: only takes effect while stock is 0 (pod_core.py).
+                pod: !!form.pod && !form.coming_soon,
                 // Empty rather than a half-value: a flag with no date is treated
                 // as not-a-pre-order everywhere, so it shows nothing rather than
                 // a countdown to an invalid time.
@@ -1120,6 +1123,32 @@ function BookForm({ initial, categories, onClose, onSaved }) {
                                 </div>
                             </div>
                         )}
+                    </div>
+
+                    {/* Print on demand (backend/pod_core.py). Only matters at zero
+                        stock: the title stays buyable at its price, printed per
+                        order, dispatched in 5–7 working days. Not with Pre-order. */}
+                    <div className="col-span-2 border border-[#002B5C]/20 bg-[#002B5C]/[0.03] p-4">
+                        <label className={`flex items-start gap-2.5 ${form.coming_soon ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}>
+                            <input
+                                type="checkbox"
+                                name="pod"
+                                checked={!!form.pod && !form.coming_soon}
+                                disabled={!!form.coming_soon}
+                                onChange={onChange}
+                                data-testid="book-form-pod"
+                                className="mt-0.5 accent-[#002B5C] w-4 h-4"
+                            />
+                            <span>
+                                <span className="block text-sm font-medium text-[#002B5C]">Print on demand when out of stock</span>
+                                <span className="block text-[11px] text-[#4B5563] mt-0.5">
+                                    When stock is 0, customers see a “Print on Demand” button instead of “Out of stock”, pay the listed
+                                    price, and get a dispatch date 5–7 working days away (weekends and the holidays in Orders skipped).
+                                    The book also appears in the Bookstore's Print on Demand tab. Add stock and it sells normally again.
+                                    {form.coming_soon ? " Not available for a pre-order." : ""}
+                                </span>
+                            </span>
+                        </label>
                     </div>
 
                     {/* Per title, because only some titles are on the reader.

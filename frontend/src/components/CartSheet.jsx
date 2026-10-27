@@ -1,3 +1,4 @@
+import { PodCartNote } from "./PodBits";
 import { PromoHint } from "./PromoBits";
 import React from "react";
 import { useNavigate } from "react-router-dom";
@@ -192,6 +193,7 @@ export default function CartSheet() {
                                 </p>
                             )}
                             <PromoHint className="mt-1" />
+                            <PodCartNote className="mt-2" />
                             <VerifyNotice className="mt-4" />
                             <div className="grid grid-cols-2 gap-3 mt-4">
                                 <button

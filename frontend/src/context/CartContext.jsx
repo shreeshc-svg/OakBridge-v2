@@ -16,6 +16,8 @@ import { preorderState } from "../lib/preorder";
 import { useBootState } from "../lib/boot";
 import { isPrerender } from "../lib/runtime";
 import { PROMO_KEY, promoDiscount } from "../lib/promotion";
+import { podActive, POD_MAX_QTY, dispatchWindow } from "../lib/pod";
+import { fetchPodSchedule } from "../lib/api";
 
 const CartContext = createContext(null);
 const STORAGE_KEY = "oakbridge_cart_v1";
@@ -69,6 +71,14 @@ export function CartProvider({ children }) {
      * on the next page; it is dropped when its end time passes.
      */
     const [promo, setPromo] = useState(null);
+    // Print-on-demand holidays (for the 5–7 working-day dates). Loaded after
+    // the first render: the dates depend on today, so they never belong in
+    // the prerendered page.
+    const [podSchedule, setPodSchedule] = useState(null);
+    useEffect(() => {
+        if (isPrerender()) return;
+        fetchPodSchedule().then(setPodSchedule).catch(() => setPodSchedule({ holidays: [] }));
+    }, []);
     useEffect(() => {
         if (isPrerender()) return;
         try {
@@ -131,9 +141,11 @@ export function CartProvider({ children }) {
          * on the shelf.
          */
         const preorder = preorderState(book).active;
-        if (stock <= 0 && !preorder) return;
+        // Print on demand (lib/pod.js): sold at zero stock, printed per order.
+        const pod = podActive(book, preorder);
+        if (stock <= 0 && !preorder && !pod) return;
         trackStep(API, "add_to_cart"); // Marketing → Growth funnel step (cookie-free, once per session)
-        const cap = preorder ? PREORDER_MAX_QTY : stock;
+        const cap = preorder ? PREORDER_MAX_QTY : pod ? POD_MAX_QTY : stock;
         const k = keyOf(book.id, binding, size);
         setItems((prev) => {
             const existing = prev.find((i) => itemKey(i) === k);
@@ -155,6 +167,7 @@ export function CartProvider({ children }) {
                     preorder,
                     // For the festive offer preview: hampers don't earn it.
                     product_type: book.product_type || "book",
+                    pod,
                     binding,
                     size,
                 },
@@ -224,8 +237,11 @@ export function CartProvider({ children }) {
         const shipping = discounted === 0 ? 0 : discounted > freeThr ? 0 : shipFlat;
         const tax = Math.round((discounted * taxPct) / 100);
         const total = discounted + shipping + tax;
-        return { subtotal, discount, shipping, tax, total, count, taxPct, couponOff, promoOff, discountSource, promoShort };
-    }, [items, coupon, settings, promo]);
+        // A cart with a print-on-demand book ships together, in 5–7 working days.
+        const hasPod = items.some((i) => i.pod);
+        const podWindow = hasPod && podSchedule ? dispatchWindow(Date.now(), podSchedule.holidays) : null;
+        return { subtotal, discount, shipping, tax, total, count, taxPct, couponOff, promoOff, discountSource, promoShort, hasPod, podWindow };
+    }, [items, coupon, settings, promo, podSchedule]);
 
     const value = useMemo(
         () => ({
@@ -242,10 +258,11 @@ export function CartProvider({ children }) {
             settings,
             site,
             promo,
+            podSchedule,
             itemKey,
             ...totals,
         }),
-        [items, isOpen, addItem, removeItem, updateQty, clear, coupon, setCoupon, clearCoupon, settings, site, promo, totals],
+        [items, isOpen, addItem, removeItem, updateQty, clear, coupon, setCoupon, clearCoupon, settings, site, promo, podSchedule, totals],
     );
 
     return <CartContext.Provider value={value}>{children}</CartContext.Provider>;

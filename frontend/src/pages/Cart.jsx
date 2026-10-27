@@ -1,3 +1,4 @@
+import { PodCartNote } from "../components/PodBits";
 import { PromoCartLine, PromoHint } from "../components/PromoBits";
 import React from "react";
 import Breadcrumbs from "../components/Breadcrumbs";
@@ -153,6 +154,7 @@ export default function Cart() {
                                 </div>
                                 <PromoCartLine coupon={coupon} />
                                 <PromoHint />
+                                <PodCartNote />
                                 <div className="flex justify-between">
                                     <dt className="text-[#4B5563]">Shipping</dt>
                                     <dd className="font-mono text-[#002B5C]">

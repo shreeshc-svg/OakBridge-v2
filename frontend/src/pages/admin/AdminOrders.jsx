@@ -1,3 +1,4 @@
+import PodHolidays from "../../components/admin/PodHolidays";
 import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { MailCheck, FileDown, Send, Truck, SearchCheck, BanknoteX, Undo2 } from "lucide-react";
@@ -316,7 +317,8 @@ export default function AdminOrders() {
                     .toLowerCase()
                     .includes(needle),
         );
-        if (status !== "all") a = a.filter((o) => o.status === status);
+        if (status === "pod") a = a.filter((o) => o.pod);
+        else if (status !== "all") a = a.filter((o) => o.status === status);
         const t = (o) => new Date(o.created_at || 0).getTime();
         a = [...a].sort((x, y) => {
             if (sort === "oldest") return t(x) - t(y);
@@ -370,6 +372,7 @@ export default function AdminOrders() {
                 </h1>
                 <ExportButton path="/admin/orders/export.csv" count={orders.length} className="mt-3" />
             </div>
+            <PodHolidays />
             <AdminToolbar
                 query={q}
                 onQuery={setQ}
@@ -378,6 +381,7 @@ export default function AdminOrders() {
                 onFilter={setStatus}
                 filterOptions={[
                     { value: "all", label: "All statuses" },
+                    { value: "pod", label: "Print on demand" },
                     ...STATUSES.map((s) => ({ value: s, label: s })),
                 ]}
                 sort={sort}
@@ -435,6 +439,13 @@ export default function AdminOrders() {
                                     <div className="mt-1.5">
                                         <PaymentBadge status={o.payment_status} />
                                     </div>
+                                    {o.pod && (
+                                        <div className="mt-1.5 font-sans" data-testid={`pod-order-${o.id}`}>
+                                            <span className="inline-block bg-[#002B5C] text-[#F59E0B] text-[9px] uppercase tracking-widest px-1.5 py-0.5">Print on demand</span>
+                                            {o.dispatch_to && <div className="text-[10px] text-[#4B5563] mt-0.5">Dispatch {o.dispatch_from?.slice(5)} → {o.dispatch_to?.slice(5)}</div>}
+                                            <div className="text-[10px] text-[#4B5563]">Print: {(o.items || []).filter((i) => (o.pod_items || []).includes(i.book_id)).map((i) => `${i.quantity}× ${i.title}`).join(", ")}</div>
+                                        </div>
+                                    )}
                                     {/* Customer WhatsApp replies (interakt.py), linked by phone. */}
                                     {o.wa_replies > 0 && (
                                         <Link to={`/admin/whatsapp?order=${encodeURIComponent(o.order_number || o.id)}`}

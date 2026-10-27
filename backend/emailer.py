@@ -181,6 +181,41 @@ def _order_items_rows(items: list) -> str:
     return "".join(rows)
 
 
+def _pod_day(s: str) -> str:
+    try:
+        from datetime import date as _d
+        return _d.fromisoformat(str(s)[:10]).strftime("%a %d %b").replace(" 0", " ")
+    except ValueError:
+        return str(s or "")
+
+
+def _pod_receipt_note(order: dict) -> str:
+    """'What happens next' for an order with a print-on-demand book: printed
+    for them, the whole order ships together, dispatch dates (pod_core.py)."""
+    if not order.get("pod") or not order.get("dispatch_to"):
+        return ""
+    import html as _h
+    titles = {i.get("book_id"): i.get("title", "") for i in order.get("items") or []}
+    names = ", ".join(_h.escape(titles.get(b, "")) for b in order.get("pod_items") or [] if titles.get(b)) or "your book"
+    return f"""
+      <tr><td style="padding:24px 36px 0;">
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#FFFBF2;">
+          <tr>
+            <td width="3" style="width:3px;background-color:{BRAND_AMBER};font-size:0;line-height:0;">&nbsp;</td>
+            <td style="padding:18px 20px;">
+              <div style="font-family:monospace;text-transform:uppercase;letter-spacing:1.5px;font-size:10px;color:#8A6A12;">Printed on demand for you</div>
+              <p style="margin:9px 0 0;font-size:15px;line-height:1.65;color:{BRAND_GREY};">
+                <strong style="color:{BRAND_NAVY};">{names}</strong> is being printed specially for this order.
+                Since your order includes a print-on-demand book, everything will be shipped and delivered together.
+                Expected dispatch: <strong style="color:{BRAND_NAVY};">{_pod_day(order.get('dispatch_from'))} &ndash; {_pod_day(order.get('dispatch_to'))}</strong>
+                (5&ndash;7 working days). Your tracking number (AWB) will arrive at this email address once it ships.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td></tr>"""
+
+
 def render_order_receipt_html(order: dict) -> str:
     """Branded HTML receipt for a paid order. `order` is the dict from db.orders."""
     # The customer's own receipt shows where the parcel is going, not where the
@@ -219,9 +254,9 @@ def render_order_receipt_html(order: dict) -> str:
         order.get("status") or ""
     ).strip().lower() in shipped_states
 
+    pod_note = _pod_receipt_note(order) if not already_moving else ""
     next_note = (
-        ""
-        if already_moving
+        pod_note if pod_note or already_moving
         else f"""
       <tr><td style="padding:24px 36px 0;">
         <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#FFFBF2;">
@@ -431,7 +466,7 @@ def render_admin_paid_order_html(order: dict) -> str:
 <body style="margin:0;padding:24px;background-color:#FFFFFF;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:{BRAND_NAVY};">
 <table cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:560px;border:1px solid #E5E7EB;">
   <tr><td style="background-color:{BRAND_NAVY};color:#FFFFFF;padding:18px 24px;">
-    <div style="font-family:monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:{BRAND_AMBER};">New paid order</div>
+    <div style="font-family:monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:{BRAND_AMBER};">{"New paid order · PRINT ON DEMAND" if order.get("pod") else "New paid order"}</div>
     <div style="font-family:Georgia,serif;font-size:22px;margin-top:4px;">{order.get('order_number','')}</div>
   </td></tr>
   <tr><td style="padding:24px;">
@@ -442,6 +477,7 @@ def render_admin_paid_order_html(order: dict) -> str:
           <td style="color:{BRAND_NAVY};padding:6px 0;font-family:monospace;">{order.get('phone','—')}</td></tr>
       <tr><td style="color:{BRAND_GREY};padding:6px 0;vertical-align:top;">Titles</td>
           <td style="color:{BRAND_NAVY};padding:6px 0;">{_order_titles(order)}</td></tr>
+      {_pod_admin_row(order)}
       <tr><td style="color:{BRAND_GREY};padding:6px 0;">Total paid</td>
           <td style="color:{BRAND_NAVY};padding:6px 0;font-family:Georgia,serif;font-size:18px;">{_money(order.get('total',0))}</td></tr>
       <tr><td style="color:{BRAND_GREY};padding:6px 0;">Razorpay payment</td>
@@ -456,6 +492,21 @@ def render_admin_paid_order_html(order: dict) -> str:
 </table>
 </body></html>
 """
+
+
+def _pod_admin_row(order: dict) -> str:
+    """Office email: which books must be sent to the printer, and the date
+    promised to the customer."""
+    if not order.get("pod"):
+        return ""
+    import html as _h
+    items = {i.get("book_id"): i for i in order.get("items") or []}
+    rows = "<br>".join(f"{int(items[b].get('quantity', 1))} × {_h.escape(items[b].get('title', ''))}"
+                       for b in order.get("pod_items") or [] if b in items) or "—"
+    return (f'<tr><td style="color:#CC0033;padding:6px 0;vertical-align:top;font-weight:600;">Print on demand</td>'
+            f'<td style="color:{BRAND_NAVY};padding:6px 0;">{rows}<br><span style="color:{BRAND_GREY};font-size:12px;">'
+            f'Send to printing. Promised dispatch {_pod_day(order.get("dispatch_from"))} – {_pod_day(order.get("dispatch_to"))}; '
+            f'the whole order ships together.</span></td></tr>')
 
 
 def _order_titles(order: dict) -> str:
@@ -555,7 +606,8 @@ async def send_admin_paid_order(order: dict) -> bool:
     """Notify the internal Oakbridge inbox the moment an order is paid."""
     if not ADMIN_NOTIFY_EMAIL:
         return False
-    subject = f"💸 New paid order — {order.get('order_number','')} · {_money(order.get('total',0))}"
+    subject = (("[Print on Demand] " if order.get("pod") else "")
+               + f"💸 New paid order — {order.get('order_number','')} · {_money(order.get('total',0))}")
     html = render_admin_paid_order_html(order)
     return await send_email(to=ADMIN_NOTIFY_EMAIL, subject=subject, html=html)
 
