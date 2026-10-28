@@ -10,6 +10,7 @@ import {
 import { useAuth } from "../../context/AuthContext";
 import { isSuperadmin } from "../../lib/rbac";
 import CourierRuns from "../../components/admin/CourierRuns";
+import WarehouseInventory from "../../components/admin/WarehouseInventory";
 
 /**
  * Admin → Warehouse: the manager's side of the warehouse trial.
@@ -29,7 +30,7 @@ import CourierRuns from "../../components/admin/CourierRuns";
  *
  * The warehouse role itself never lands here: it is sent to /warehouse.
  */
-const TABS = [["approve", "To approve"], ["courier", "Courier labels"], ["trial", "Trial & comparison"], ["docs", "Bills & invoices"], ["accuracy", "Accuracy"], ["moves", "Movements"]];
+const TABS = [["approve", "To approve"], ["inventory", "Inventory"], ["courier", "Courier labels"], ["trial", "Trial & comparison"], ["docs", "Bills & invoices"], ["accuracy", "Accuracy"], ["moves", "Movements"]];
 const pct = (x) => (x == null ? "—" : `${Math.round(x * 100)}%`);
 const when = (iso) => (iso ? new Date(iso).toLocaleString("en-IN") : "—");
 
@@ -84,6 +85,7 @@ export default function AdminWarehouse() {
                 {tab === "docs" && <DocsTab key="docs" onChange={refreshPending} canDelete={isSuperadmin(user?.role)} />}
                 {tab === "accuracy" && <AccuracyTab />}
                 {tab === "courier" && <CourierRuns />}
+                {tab === "inventory" && <WarehouseInventory onHistory={(q) => { setMoveQ(q); setTab("moves"); }} />}
                 {tab === "moves" && <MovesTab q={moveQ} />}
             </div>
         </div>

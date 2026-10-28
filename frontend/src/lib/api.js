@@ -173,6 +173,12 @@ export const saveBlob = (blob, filename) => {
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 60000);
 };
+// Admin → Warehouse → Inventory: the warehouse's own counts (warehouse.py).
+export const adminWhInventory = () => api.get("/admin/warehouse/inventory").then((r) => r.data);
+export const adminWhSetCount = (bookId, count, note) =>
+    api.post(`/admin/warehouse/inventory/${bookId}/count`, { count, note }).then((r) => r.data);
+export const adminWhInvMove = (bookId, qty, reason, note) =>
+    api.post(`/admin/warehouse/inventory/${bookId}/move`, { qty, reason, note }).then((r) => r.data);
 // … and the manager view.
 export const adminWhOverview = () => api.get("/admin/warehouse/overview").then((r) => r.data);
 // adminWhDocs("awaiting_approval") or adminWhDocs({ q, direction, practice, status, date_from, date_to, archived })

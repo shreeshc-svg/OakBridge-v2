@@ -1117,6 +1117,101 @@ async def adm_overview():
             "below_zero": below, "below_zero_unexplained": sum(1 for b in below if b["unexplained"] > 0)}
 
 
+# ------------------------------------------------- warehouse inventory ---
+# Admin → Warehouse → Inventory (Oct 2026): the warehouse's own counts, with
+# the same search / view / edit / export as Admin → Inventory, but every
+# change is a MOVEMENT in the ledger (who, when, why) — never a silent
+# overwrite. Nothing here deletes: a book leaves the warehouse count only by a
+# movement out, and a wrong movement is undone in Movements (24 h).
+INV_FIELDS = {"_id": 0, "id": 1, "title": 1, "author": 1, "isbn": 1, "category": 1, "price": 1, "cover_image": 1,
+              "stock": 1, "wh_stock": 1, "coming_soon": 1, "pod": 1}
+
+
+async def _inventory_rows() -> tuple[list, int, dict]:
+    from features import _low_stock_threshold
+    state = await get_state()
+    books = await db.books.find({"product_type": {"$nin": list(NOT_COUNTED)}}, INV_FIELDS).sort("title", 1).to_list(5000)
+    owed = await order_stock.owed_by_book(db, since=state.get("started_at")) if state.get("started_at") else {}
+    last = {r["_id"]: r async for r in db.stock_movements.aggregate([
+        {"$match": {"undone": {"$ne": True}}}, {"$sort": {"at": -1}},
+        {"$group": {"_id": "$book_id", "at": {"$first": "$at"}, "reason": {"$first": "$reason"}, "n": {"$sum": 1}}}])}
+    rows = []
+    for b in books:
+        wh = b.get("wh_stock")
+        lm = last.get(b["id"]) or {}
+        rows.append({**b, "wh_stock": int(wh) if wh is not None else None, "stock": int(b.get("stock") or 0),
+                     "owed": int(owed.get(b["id"], 0)), "diff": (int(wh) - int(b.get("stock") or 0)) if wh is not None else None,
+                     "last_at": lm.get("at"), "last_reason": lm.get("reason"), "moves": int(lm.get("n") or 0)})
+    return rows, await _low_stock_threshold(), state
+
+
+@wh_admin_router.get("/inventory")
+async def adm_inventory():
+    rows, threshold, state = await _inventory_rows()
+    return {"mode": state["mode"], "threshold": threshold, "rows": rows}
+
+
+@wh_admin_router.get("/inventory/export.csv")
+async def adm_inventory_export(user: dict = Depends(require_admin)):
+    from csv_export import csv_response
+    rows, _, state = await _inventory_rows()
+    await audit_log(db, "WAREHOUSE_INVENTORY_EXPORT", email=user.get("email", ""), role=user.get("role", ""),
+                    meta={"rows": len(rows)})
+    return csv_response(
+        f"warehouse-inventory-{_now():%Y-%m-%d}.csv",
+        ["Title", "Author", "ISBN", "Category", "Price", "Warehouse count", "Website stock", "Owed to orders",
+         "Difference", "Last movement", "Last reason", "Movements"],
+        ([r.get("title", ""), r.get("author", ""), r.get("isbn", ""), r.get("category", ""), r.get("price", ""),
+          "" if r["wh_stock"] is None else r["wh_stock"], r["stock"], r["owed"], "" if r["diff"] is None else r["diff"],
+          (r.get("last_at") or "")[:16], r.get("last_reason") or "", r["moves"]] for r in rows))
+
+
+class CountBody(BaseModel):
+    count: int
+    note: str
+
+
+class AdminMoveBody(BaseModel):
+    qty: int
+    reason: str
+    note: Optional[str] = ""
+
+
+@wh_admin_router.post("/inventory/{book_id}/count")
+async def adm_set_count(book_id: str, body: CountBody, user: dict = Depends(require_admin)):
+    """'There are N on the shelf' — saved as the correction that gets there."""
+    if not (0 <= body.count <= 100000):
+        raise HTTPException(status_code=400, detail="Enter a count between 0 and 1,00,000.")
+    note = (body.note or "").strip()
+    if len(note) < 3:
+        raise HTTPException(status_code=400, detail="Say why (e.g. 'shelf counted 28 Oct').")
+    b = await db.books.find_one({"id": book_id, "product_type": {"$nin": list(NOT_COUNTED)}}, {"_id": 0, "wh_stock": 1})
+    if not b:
+        raise HTTPException(status_code=404, detail="Book not found (packs and hampers are counted per book).")
+    diff = body.count - int(b.get("wh_stock") or 0)
+    if diff == 0:
+        return {"ok": True, "unchanged": True}
+    mv = await _apply(book_id, diff, "correction_in" if diff > 0 else "correction_out", actor=user,
+                      note=f"Counted in Admin: {note}"[:300])
+    await audit_log(db, "WAREHOUSE_COUNT_SET", email=user.get("email", ""), role=user.get("role", ""),
+                    meta={"book": book_id, "count": body.count, "change": diff})
+    return {"ok": True, "movement": mv, "below_zero": await _below_zero([book_id]) if diff < 0 else []}
+
+
+@wh_admin_router.post("/inventory/{book_id}/move")
+async def adm_inventory_move(book_id: str, body: AdminMoveBody, user: dict = Depends(require_admin)):
+    """Copies in (printer, return) or out (damaged, sample, author copy, offline sale)."""
+    if body.reason not in (IN_REASONS | OUT_REASONS) - {"opening"}:
+        raise HTTPException(status_code=400, detail="Unknown reason")
+    if not (0 < body.qty <= 100000):
+        raise HTTPException(status_code=400, detail="Enter a quantity above 0.")
+    if not await db.books.find_one({"id": book_id, "product_type": {"$nin": list(NOT_COUNTED)}}, {"_id": 1}):
+        raise HTTPException(status_code=404, detail="Book not found (packs and hampers are counted per book).")
+    sign = 1 if body.reason in IN_REASONS else -1
+    mv = await _apply(book_id, sign * body.qty, body.reason, actor=user, note=f"Admin: {(body.note or '').strip()}"[:300])
+    return {"ok": True, "movement": mv, "below_zero": await _below_zero([book_id]) if sign < 0 else []}
+
+
 @wh_admin_router.get("/docs")
 async def adm_docs(limit: int = 100, status: Optional[str] = None, q: Optional[str] = None,
                    direction: Optional[str] = None, practice: Optional[str] = None,
