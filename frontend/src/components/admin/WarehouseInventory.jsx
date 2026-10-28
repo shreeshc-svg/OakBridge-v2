@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Search, AlertTriangle, PackageX } from "lucide-react";
-import { adminWhInventory, adminWhSetCount, adminWhInvMove, formatApiError, formatINR, mediaUrl } from "../../lib/api";
+import { Search, AlertTriangle, PackageX, Download, FileText, X, GitCompare } from "lucide-react";
+import { adminWhInventory, adminWhSetCount, adminWhInvMove, adminWhInventoryXlsx, adminWhBrochure, saveBlob, fetchCategories,
+    formatApiError, formatINR, mediaUrl } from "../../lib/api";
 import ExportButton from "./ExportButton";
 
 /**
@@ -49,29 +50,30 @@ export default function WarehouseInventory({ onHistory }) {
     const low = all.filter((b) => (b.wh_stock ?? 0) > 0 && b.wh_stock <= d.threshold).length;
     const diffs = all.filter((b) => b.diff).length;
     const uncounted = all.filter((b) => b.wh_stock == null).length;
-    const Tile = ({ label, v, tone = "", k }) => (
-        <button type="button" onClick={() => k && setView(view === k ? "all" : k)}
-            className={`text-left bg-white border p-4 ${view === k ? "border-[#002B5C] ring-1 ring-[#002B5C]" : "border-[#E5E7EB]"}`}>
-            <div className="overline !text-[10px]">{label}</div>
-            <div className={`font-serif text-2xl mt-1 ${tone || "text-[#002B5C]"}`}>{v}</div>
-        </button>
-    );
     return (
         <div className="mt-6 space-y-5" data-testid="wh-inventory">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="text-sm text-[#4B5563] max-w-3xl">
+            <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-3">
+                <p className="text-sm text-[#4B5563] max-w-2xl">
                     The warehouse's own count of every book (packs and hampers are counted per book). Mode: <b>{d.mode}</b>
                     {d.mode !== "live" && " — during the trial these counts don't change the website's stock."}
                 </p>
-                <ExportButton path="/admin/warehouse/inventory/export.csv" label="Export CSV" count={all.length} />
+                <div className="flex flex-wrap items-center gap-2" data-testid="wh-inv-exports">
+                    <ExportButton path="/admin/warehouse/inventory/export.csv" label="CSV" className="h-10" />
+                    <XlsxButton />
+                    <BrochureButton />
+                </div>
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
-                <Tile label="Titles" v={all.length} />
-                <Tile label="Units on shelf" v={units} />
-                <Tile label="Shelf value" v={formatINR(value)} />
-                <Tile label={<span className="inline-flex items-center gap-1"><PackageX size={12} />Out / below 0</span>} v={out} tone="text-[#CC0033]" k="out" />
-                <Tile label={<span className="inline-flex items-center gap-1"><AlertTriangle size={12} />Low (≤ {d.threshold})</span>} v={low} tone="text-[#B45309]" k="low" />
-                <Tile label="≠ website" v={diffs} k="diff" />
+            {/* Six tiles, one height, one label style. Money is shortened
+                (₹2.39 Cr) so it can never overflow; the exact figure is in the
+                tooltip and in the Excel export. The last three filter the
+                table: click to filter, click again (or ✕) to clear. */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3" data-testid="wh-inv-tiles">
+                <StatTile label="Titles" value={num(all.length)} />
+                <StatTile label="Units on shelf" value={num(units)} />
+                <StatTile label="Shelf value" value={compactINR(value)} title={`${formatINR(value)} at selling price`} hint="at selling price" />
+                <StatTile label="Out / below 0" value={num(out)} icon={PackageX} tone="text-[#CC0033]" active={view === "out"} onClick={() => setView(view === "out" ? "all" : "out")} />
+                <StatTile label={`Low (≤ ${d.threshold})`} value={num(low)} icon={AlertTriangle} tone="text-[#B45309]" active={view === "low"} onClick={() => setView(view === "low" ? "all" : "low")} />
+                <StatTile label="≠ Website" value={num(diffs)} icon={GitCompare} tone={diffs ? "text-[#CC0033]" : ""} active={view === "diff"} onClick={() => setView(view === "diff" ? "all" : "diff")} />
             </div>
             <div className="flex flex-wrap items-center gap-3">
                 <div className="relative">
@@ -80,7 +82,12 @@ export default function WarehouseInventory({ onHistory }) {
                         className="w-full sm:w-80 border border-[#E5E7EB] bg-white pl-9 pr-3 py-2 text-sm outline-none focus:border-[#002B5C]" />
                 </div>
                 {uncounted > 0 && <button type="button" onClick={() => setView(view === "uncounted" ? "all" : "uncounted")} className="text-xs underline text-[#B45309]">{uncounted} never counted</button>}
-                {view !== "all" && <button type="button" className="text-xs underline" onClick={() => setView("all")}>Show all</button>}
+                {view !== "all" && (
+                    <button type="button" onClick={() => setView("all")}
+                        className="inline-flex items-center gap-1 text-xs bg-[#002B5C] text-white px-2 py-1">
+                        {VIEW_LABEL[view]} <X size={12} aria-label="Clear filter" />
+                    </button>
+                )}
                 <span className="text-xs text-[#6B7280] ml-auto">{rows.length} shown</span>
             </div>
             <div className="bg-white border border-[#E5E7EB] overflow-x-auto">
@@ -169,5 +176,104 @@ function EditPanel({ b, onDone }) {
             </div>
             <p className="md:col-span-2 text-[11px] text-[#6B7280]">Every change is a line in Movements with your name and note. A mistake is undone there (within 24 hours), not deleted.</p>
         </div>
+    );
+}
+
+const today = () => new Date().toISOString().slice(0, 10);
+
+/** Founders / internal reports: Summary + Inventory sheets (warehouse.py adm_inventory_xlsx). */
+function XlsxButton() {
+    const [busy, setBusy] = useState(false);
+    const go = async () => {
+        setBusy(true);
+        try { saveBlob(await adminWhInventoryXlsx(), `warehouse-inventory-${today()}.xlsx`); }
+        catch (e) { toast.error(formatApiError(e)); } finally { setBusy(false); }
+    };
+    return (
+        <button type="button" onClick={go} disabled={busy} data-testid="wh-inv-xlsx"
+            className="inline-flex items-center gap-2 h-10 border border-[#002B5C] text-[#002B5C] px-4 text-sm font-medium hover:bg-[#F5F7FA] transition-colors disabled:opacity-50">
+            <Download size={14} strokeWidth={1.5} />{busy ? "Preparing…" : "Excel"}
+        </button>
+    );
+}
+
+/**
+ * Vendor catalogue PDF: titles with cover, author, ISBN, edition, binding,
+ * pages, MRP and availability — no internal counts (warehouse.py
+ * adm_inventory_brochure). Options: one category or all, only what can be
+ * ordered (in stock, print on demand, pre-order), with or without covers.
+ */
+function BrochureButton() {
+    const [open, setOpen] = useState(false);
+    const [cats, setCats] = useState([]);
+    const [o, setO] = useState({ category: "", available_only: true, covers: true });
+    const [busy, setBusy] = useState(false);
+    useEffect(() => { if (open && !cats.length) fetchCategories().then((c) => setCats(Array.isArray(c) ? c.filter((x) => x.book_count) : [])).catch(() => {}); }, [open, cats.length]);
+    const go = async () => {
+        setBusy(true);
+        try {
+            const blob = await adminWhBrochure(o);
+            saveBlob(blob, `oakbridge-${o.category || "catalogue"}-${today().slice(0, 7)}.pdf`);
+            setOpen(false);
+        } catch (e) {
+            let msg = formatApiError(e);
+            try { const t = await e?.response?.data?.text?.(); if (t) msg = JSON.parse(t).detail || msg; } catch { /* keep msg */ }
+            toast.error(msg);
+        } finally { setBusy(false); }
+    };
+    return (
+        <span className="relative">
+            <button type="button" onClick={() => setOpen(!open)} data-testid="wh-inv-brochure" aria-expanded={open}
+                className="inline-flex items-center gap-2 h-10 bg-[#002B5C] text-white px-4 text-sm font-medium hover:bg-[#001F42] transition-colors">
+                <FileText size={14} strokeWidth={1.5} />Vendor brochure (PDF)
+            </button>
+            {open && (
+                <div className="absolute right-0 z-20 mt-2 w-72 bg-white border border-[#E5E7EB] shadow-lg p-3 space-y-2 text-sm">
+                    <div className="font-medium text-[#002B5C]">Catalogue for book vendors</div>
+                    <p className="text-[11px] text-[#6B7280]">Title, author, ISBN, edition, binding, pages, MRP and availability. No stock numbers.</p>
+                    <select value={o.category} onChange={(e) => setO({ ...o, category: e.target.value })} className="w-full border border-[#E5E7EB] px-2 py-1.5">
+                        <option value="">All categories</option>
+                        {cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                    <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={o.available_only} onChange={(e) => setO({ ...o, available_only: e.target.checked })} /> Only titles that can be ordered (hide out of stock)</label>
+                    <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={o.covers} onChange={(e) => setO({ ...o, covers: e.target.checked })} /> With cover images (slower)</label>
+                    <button type="button" disabled={busy} onClick={go} className="w-full bg-[#002B5C] text-white py-2 text-xs disabled:opacity-50">{busy ? "Making the PDF… (up to a minute)" : "Download PDF"}</button>
+                </div>
+            )}
+        </span>
+    );
+}
+
+const VIEW_LABEL = { out: "Out / below 0", low: "Low stock", diff: "≠ Website", uncounted: "Never counted" };
+const num = (n) => Number(n || 0).toLocaleString("en-IN");
+// ₹2,38,82,935 -> "₹2.39 Cr"; ₹4,52,300 -> "₹4.52 L"; smaller amounts in full.
+const compactINR = (n) => {
+    const v = Number(n || 0);
+    if (Math.abs(v) >= 1e7) return `₹${(v / 1e7).toFixed(2)} Cr`;
+    if (Math.abs(v) >= 1e5) return `₹${(v / 1e5).toFixed(2)} L`;
+    return formatINR(v);
+};
+
+/** One summary tile. With onClick it is a filter toggle (pressed = filtering). */
+function StatTile({ label, value, icon: Icon = null, tone = "", hint = "", title, onClick, active = false }) {
+    const body = (
+        <>
+            <div className="flex items-center gap-1.5 h-4 min-w-0">
+                {Icon && <Icon size={12} strokeWidth={1.75} className={`flex-shrink-0 ${tone || "text-[#4B5563]"}`} aria-hidden="true" />}
+                <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#4B5563] truncate">{label}</span>
+            </div>
+            <div className={`mt-2 font-serif text-2xl leading-none tabular-nums truncate ${tone || "text-[#002B5C]"}`} title={title}>{value}</div>
+            <div className="mt-1.5 h-4 text-[11px] text-[#6B7280] truncate">
+                {onClick ? (active ? "Filtering — click to clear" : "Click to filter") : hint}
+            </div>
+        </>
+    );
+    const box = "min-w-0 text-left bg-white border p-4 transition-colors";
+    if (!onClick) return <div className={`${box} border-[#E5E7EB]`}>{body}</div>;
+    return (
+        <button type="button" onClick={onClick} aria-pressed={active}
+            className={`${box} focus:outline-none focus-visible:ring-2 focus-visible:ring-[#002B5C] ${active ? "border-[#002B5C] bg-[#F5F7FA]" : "border-[#E5E7EB] hover:border-[#002B5C]"}`}>
+            {body}
+        </button>
     );
 }

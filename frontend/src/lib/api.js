@@ -177,6 +177,11 @@ export const saveBlob = (blob, filename) => {
 export const adminWhInventory = () => api.get("/admin/warehouse/inventory").then((r) => r.data);
 export const adminWhSetCount = (bookId, count, note) =>
     api.post(`/admin/warehouse/inventory/${bookId}/count`, { count, note }).then((r) => r.data);
+// Files to share: Excel for founders/reports, a vendor catalogue PDF.
+export const adminWhInventoryXlsx = () =>
+    api.get("/admin/warehouse/inventory/export.xlsx", { responseType: "blob", timeout: 120000 }).then((r) => r.data);
+export const adminWhBrochure = (params) =>
+    api.get("/admin/warehouse/inventory/brochure.pdf", { params, responseType: "blob", timeout: 180000 }).then((r) => r.data);
 export const adminWhInvMove = (bookId, qty, reason, note) =>
     api.post(`/admin/warehouse/inventory/${bookId}/move`, { qty, reason, note }).then((r) => r.data);
 // … and the manager view.

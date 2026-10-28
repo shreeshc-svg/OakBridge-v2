@@ -1124,7 +1124,8 @@ async def adm_overview():
 # overwrite. Nothing here deletes: a book leaves the warehouse count only by a
 # movement out, and a wrong movement is undone in Movements (24 h).
 INV_FIELDS = {"_id": 0, "id": 1, "title": 1, "author": 1, "isbn": 1, "category": 1, "price": 1, "cover_image": 1,
-              "stock": 1, "wh_stock": 1, "coming_soon": 1, "pod": 1}
+              "stock": 1, "wh_stock": 1, "coming_soon": 1, "pod": 1, "original_price": 1, "edition": 1, "binding": 1,
+              "pages": 1, "publication_year": 1, "enabled": 1}
 
 
 async def _inventory_rows() -> tuple[list, int, dict]:
@@ -1164,6 +1165,71 @@ async def adm_inventory_export(user: dict = Depends(require_admin)):
         ([r.get("title", ""), r.get("author", ""), r.get("isbn", ""), r.get("category", ""), r.get("price", ""),
           "" if r["wh_stock"] is None else r["wh_stock"], r["stock"], r["owed"], "" if r["diff"] is None else r["diff"],
           (r.get("last_at") or "")[:16], r.get("last_reason") or "", r["moves"]] for r in rows))
+
+
+async def _category_names() -> dict:
+    return {c["id"]: c.get("name", c["id"]) async for c in db.categories.find({}, {"_id": 0, "id": 1, "name": 1}).sort("order", 1)}
+
+
+@wh_admin_router.get("/inventory/export.xlsx")
+async def adm_inventory_xlsx(user: dict = Depends(require_admin)):
+    """Founders / internal reports: Summary + Inventory sheets."""
+    import inventory_reports as ir
+    rows, threshold, state = await _inventory_rows()
+    data = await asyncio.to_thread(ir.inventory_xlsx, rows, threshold, state["mode"], await _category_names())
+    await audit_log(db, "WAREHOUSE_INVENTORY_EXPORT", email=user.get("email", ""), role=user.get("role", ""),
+                    meta={"rows": len(rows), "format": "xlsx"})
+    return Response(content=data, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": f'attachment; filename="warehouse-inventory-{_now():%Y-%m-%d}.xlsx"',
+                             "Cache-Control": "private, no-store"})
+
+
+def _storage_key(url: str) -> Optional[str]:
+    """Our own cover path ('/api/files/oakbridge/covers/x.jpg') -> storage key.
+    Only our storage is read; outside URLs are skipped (no fetching the web)."""
+    m = re.match(r"^/api/files/([A-Za-z0-9_\-./]+\.(?:jpe?g|png|webp))$", url or "")
+    return m.group(1) if m and ".." not in m.group(1) else None
+
+
+@wh_admin_router.get("/inventory/brochure.pdf")
+async def adm_inventory_brochure(category: str = "", available_only: bool = True, covers: bool = True,
+                                 user: dict = Depends(require_admin)):
+    """Vendor catalogue PDF — titles, MRP, availability; no internal counts."""
+    import inventory_reports as ir
+    from concurrent.futures import ThreadPoolExecutor
+    rows, _, _ = await _inventory_rows()
+    rows = [r for r in rows if r.get("enabled") is not False and (not category or r.get("category") == category)]
+    if available_only:
+        rows = [r for r in rows if ir.availability(r) != "Out of stock"]
+    if not rows:
+        raise HTTPException(status_code=400, detail="No titles match — try including out-of-stock titles or another category.")
+    imgs = None
+    if covers:
+        keys = {r["id"]: _storage_key(r.get("cover_image") or "") for r in rows}
+
+        def fetch(item):
+            bid, key = item
+            if not key:
+                return bid, None
+            try:
+                data, _ = get_object(key)
+                return bid, ir.thumbnail(data)
+            except Exception:  # noqa: BLE001 — a missing cover leaves a gap, never an error
+                return bid, None
+
+        def fetch_all():
+            with ThreadPoolExecutor(max_workers=8) as pool:
+                return {b: d for b, d in pool.map(fetch, keys.items()) if d}
+        imgs = await asyncio.to_thread(fetch_all)
+    names = await _category_names()
+    label = f"{names.get(category, category)} catalogue" if category else "Catalogue"
+    data = await asyncio.to_thread(ir.brochure_pdf, rows, names, imgs, title=label)
+    await audit_log(db, "WAREHOUSE_BROCHURE", email=user.get("email", ""), role=user.get("role", ""),
+                    meta={"rows": len(rows), "category": category, "covers": covers})
+    slug = re.sub(r"[^a-z0-9]+", "-", label.lower()).strip("-")
+    return Response(content=data, media_type="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="oakbridge-{slug}-{_now():%Y-%m}.pdf"',
+                             "Cache-Control": "private, no-store"})
 
 
 class CountBody(BaseModel):
