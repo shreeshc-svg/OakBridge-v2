@@ -73,6 +73,8 @@ check('show_new = bool(st["show_new"]) and (not st["new_until"] or today <= st["
 for f in ("components/BookCard.jsx", "pages/BookDetail.jsx", "pages/Catalog.jsx"):
     src = open(os.path.join(ROOT, "frontend", "src", f), encoding="utf-8").read()
     check("show_new === true" in src, f"{f}: 'NEW' only when switched on (and never in the prerender)")
+check("async def list_categories(shelves: bool = False):" in srv and "if shelves else 0" in srv,
+      "admin category pickers never offer 'Print on Demand' (only the Bookstore asks for shelves)")
 print()
 if failed:
     print(f"{failed} check(s) failed")

@@ -292,7 +292,7 @@ export default function Catalog() {
      */
 
     useEffect(() => {
-        fetchCategories().then(setCats).catch(() => {});
+        fetchCategories({ shelves: true }).then(setCats).catch(() => {});
         fetchSiteContent().then(setSite).catch(() => {});
         fetchSettings().then(setSettings).catch(() => {});
     }, [setCats, setSite, setSettings]);

@@ -43,7 +43,9 @@ api.interceptors.response.use(
 );
 
 // Public
-export const fetchCategories = () => api.get("/categories").then((r) => r.data);
+// shelves: also the computed storefront shelves (Print on Demand). Only the
+// Bookstore row asks for them; admin pickers must never offer them.
+export const fetchCategories = (opts = {}) => api.get("/categories", { params: opts.shelves ? { shelves: true } : {} }).then((r) => r.data);
 export const fetchBooks = (params = {}) =>
     api.get("/books", { params }).then((r) => r.data);
 /**

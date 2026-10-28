@@ -893,7 +893,7 @@ async def sitemap():
 
 
 @api_router.get("/categories", response_model=List[Category])
-async def list_categories():
+async def list_categories(shelves: bool = False):
     # Sorted by the seed's `order`, not Mongo's natural order -- the bookstore
     # renders this list straight into the row above the grid, so "whatever order
     # the last deploy inserted them in" is not good enough. `id` breaks ties so
@@ -904,7 +904,10 @@ async def list_categories():
     # assigned to them -- no deploy, no switch.
     for c in cats:
         c["book_count"] = await db.books.count_documents({**NOT_A_HAMPER, "category": c["id"]})
-    n_pod = await db.books.count_documents({**NOT_A_HAMPER, "enabled": {"$ne": False}, **POD_SHELF})
+    # Virtual shelves only for the storefront row (?shelves=true). Admin's
+    # category pickers (Books, Packs, Pages, Marketing) call it plain, so
+    # nobody can assign a book to "Print on Demand" as if it were a category.
+    n_pod = await db.books.count_documents({**NOT_A_HAMPER, "enabled": {"$ne": False}, **POD_SHELF}) if shelves else 0
     if n_pod:
         cats.append({"id": POD_CATEGORY, "name": "Print on Demand", "order": 1000, "book_count": n_pod, "virtual": True,
                      "description": "Out-of-stock titles we print specially for your order — same price, dispatched in 5–7 working days.",
