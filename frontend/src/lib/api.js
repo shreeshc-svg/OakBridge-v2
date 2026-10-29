@@ -217,7 +217,9 @@ export const adminWhUndoMove = (id) => api.post(`/admin/warehouse/movements/${id
 export const adminWhAccuracy = (days = 30) =>
     api.get("/admin/warehouse/accuracy", { params: { days } }).then((r) => r.data);
 export const adminWhReplay = () => api.post("/admin/warehouse/replay", null, { timeout: 300000 }).then((r) => r.data);
-export const adminWhMode = (mode) => api.post("/admin/warehouse/mode", { mode }).then((r) => r.data);
+export const adminWhMode = (mode, overrideReason) =>
+    api.post("/admin/warehouse/mode", { mode, ...(overrideReason ? { override_reason: overrideReason } : {}) }).then((r) => r.data);
+export const adminWhGoLiveCheck = () => api.get("/admin/warehouse/go-live-check").then((r) => r.data);
 // Trial re-baseline: warehouse counts := the stock sheet (as synced to the website).
 export const adminWhResetFromSheet = (body) => api.post("/admin/warehouse/reset-from-sheet", body, { timeout: 300000 }).then((r) => r.data);
 

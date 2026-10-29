@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { Search, X } from "lucide-react";
 import {
     adminWhOverview, adminWhDocs, adminWhDoc, adminWhUndoDoc, adminWhTestCase, adminWhAccuracy,
-    adminWhReplay, adminWhMode, adminWhMovements, adminWhUndoMove, adminWhReview, adminWhCreateDoc, adminWhEditDoc,
+    adminWhReplay, adminWhMode, adminWhGoLiveCheck, adminWhMovements, adminWhUndoMove, adminWhReview, adminWhCreateDoc, adminWhEditDoc,
     adminWhEditLines, adminWhDeleteDoc, adminWhRestoreDoc, adminWhResetFromSheet, syncInventoryFromSheet, whBooks, whDocFile, formatApiError,
 } from "../../lib/api";
 import { useAuth } from "../../context/AuthContext";
@@ -193,12 +193,7 @@ function TrialTab({ canSwitch }) {
                                 Start trial
                             </button>
                         )}
-                        {ov.mode === "trial" && (
-                            <button type="button" className="bg-[#15803D] text-white px-4 py-2 text-sm" data-testid="wh-go-live"
-                                onClick={() => setMode("live", `Go live?\n\n• Website stock is replaced by the warehouse counts (${ov.difference_count} books differ today).${ov.below_zero_unexplained ? `\n• ⚠️ ${ov.below_zero_unexplained} book(s) have a warehouse count below zero that waiting orders do not explain — count them first (list below).` : ""}\n• Copies owed to paid pre-orders/backorders are given to those orders first.\n• Hampers and packs keep their own website stock.\n• The Google-sheet sync stops.\n• From now on stock changes only through the warehouse screen and website orders.`)}>
-                                Go live
-                            </button>
-                        )}
+
                         {ov.mode !== "off" && (
                             <button type="button" className="border border-[#CC0033] text-[#CC0033] px-4 py-2 text-sm"
                                 onClick={() => setMode("off", "Stop the warehouse system? The sheet sync takes over stock again. Recorded movements are kept.")}>
@@ -208,6 +203,8 @@ function TrialTab({ canSwitch }) {
                     </div>
                 ) : <p className="mt-3 text-xs text-[#4B5563]">Only a superadmin can start, go live or stop.</p>}
             </div>
+
+            {ov.mode === "trial" && <GoLiveChecklist canSwitch={canSwitch} ov={ov} onLive={load} />}
 
             {ov.mode === "trial" && canSwitch && <ResetFromSheet onDone={load} />}
 
@@ -719,5 +716,79 @@ function MovesTab({ q = "" }) {
                 {!moves.length && <tr><td className="p-3 text-[#4B5563]" colSpan={7}>{term ? `Nothing matches “${term}”.` : "No movements yet."}</td></tr>}
             </tbody>
         </table>
+    );
+}
+
+/**
+ * Pre-launch checklist for Go live (warehouse.py go_live_checks). "Must"
+ * items block the button (and the server refuses too). "Should" items can be
+ * passed by a superadmin with a written reason, which is logged.
+ */
+function GoLiveChecklist({ canSwitch, ov, onLive }) {
+    const [c, setC] = useState(null);
+    const [reason, setReason] = useState("");
+    const [busy, setBusy] = useState(false);
+    const load = useCallback(() => { adminWhGoLiveCheck().then(setC).catch((e) => toast.error(formatApiError(e))); }, []);
+    useEffect(load, [load]);
+    if (!c) return <p className="text-sm text-[#4B5563]">Checking readiness…</p>;
+    const must = c.checks.filter((x) => x.level === "must");
+    const should = c.checks.filter((x) => x.level === "should");
+    const needReason = c.ready && c.should_open.length > 0;
+    const canGo = canSwitch && c.ready && (!needReason || reason.trim().length >= 10);
+    const go = async () => {
+        if (!window.confirm(`Go live?\n\n• Website stock is replaced by the warehouse counts.\n• Copies owed to paid pre-orders/backorders go to those orders first.\n• Hampers and packs keep their own website stock.\n• The Google-sheet sync stops.\n• From now on stock changes only through the warehouse screens and website orders.`)) return;
+        setBusy(true);
+        try {
+            await adminWhMode("live", needReason ? reason.trim() : undefined);
+            toast.success("The warehouse is live.");
+            onLive();
+        } catch (e) {
+            const d = e?.response?.data?.detail;
+            toast.error(d?.msg || formatApiError(e));
+            load();
+        } finally { setBusy(false); }
+    };
+    const Row = ({ x }) => (
+        <li className="flex items-start gap-3 py-2 border-t border-[#E5E7EB] first:border-t-0" data-testid={`golive-${x.key}`}>
+            <span className={`mt-0.5 w-5 h-5 flex-shrink-0 rounded-full flex items-center justify-center text-[11px] font-bold ${x.ok ? "bg-[#DCFCE7] text-[#15803D]" : x.level === "must" ? "bg-[#FEE2E2] text-[#CC0033]" : "bg-[#FEF3C7] text-[#B45309]"}`}>{x.ok ? "✓" : "!"}</span>
+            <div className="flex-1 min-w-0">
+                <div className="text-sm text-[#002B5C]">{x.label}</div>
+                <div className="text-xs text-[#4B5563]">{x.detail}</div>
+                {!x.ok && <div className="text-xs text-[#6B7280] mt-0.5">How to fix: {x.fix}</div>}
+            </div>
+        </li>
+    );
+    return (
+        <div className={`border-2 bg-white p-5 ${c.ready ? (c.should_open.length ? "border-[#F59E0B]" : "border-[#15803D]") : "border-[#CC0033]"}`} data-testid="wh-golive-checklist">
+            <div className="flex flex-wrap items-center gap-3">
+                <h2 className="font-serif text-2xl text-[#002B5C]">Go-live checklist</h2>
+                <span className={`text-xs px-2 py-0.5 ${c.ready ? (c.should_open.length ? "bg-[#FEF3C7] text-[#92400E]" : "bg-[#DCFCE7] text-[#15803D]") : "bg-[#FEE2E2] text-[#CC0033]"}`}>
+                    {!c.ready ? "Not ready" : c.should_open.length ? `Ready — ${c.should_open.length} recommendation(s) open` : "Ready"}
+                </span>
+                <button type="button" className="ml-auto text-xs underline" onClick={load}>Check again</button>
+            </div>
+            <p className="text-xs text-[#4B5563] mt-1">Going live makes the warehouse the source of website stock. “Must” items block it; “Should” items are about the team's habits.</p>
+            <div className="grid lg:grid-cols-2 gap-6 mt-4">
+                <div><div className="text-xs font-semibold uppercase tracking-wider text-[#CC0033] mb-1">Must</div><ul>{must.map((x) => <Row key={x.key} x={x} />)}</ul></div>
+                <div><div className="text-xs font-semibold uppercase tracking-wider text-[#B45309] mb-1">Should</div><ul>{should.map((x) => <Row key={x.key} x={x} />)}</ul></div>
+            </div>
+            {canSwitch ? (
+                <div className="mt-4 pt-4 border-t border-[#E5E7EB] space-y-2">
+                    {needReason && (
+                        <label className="block text-sm">
+                            <span className="text-[#002B5C]">Why go live with recommendations open? <span className="text-xs text-[#6B7280]">(saved in the audit log)</span></span>
+                            <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={2} className="mt-1 w-full border border-[#E5E7EB] px-2 py-1.5 text-sm"
+                                placeholder="e.g. Counts verified by a full shelf count on 30 Oct; printer bookings start today." />
+                        </label>
+                    )}
+                    <button type="button" disabled={!canGo || busy} onClick={go} data-testid="wh-go-live"
+                        className="bg-[#15803D] text-white px-4 py-2 text-sm disabled:opacity-40 disabled:cursor-not-allowed">
+                        {busy ? "Going live…" : "Go live"}
+                    </button>
+                    {!c.ready && <span className="ml-3 text-xs text-[#CC0033]">Fix the “must” items first.</span>}
+                </div>
+            ) : <p className="mt-3 text-xs text-[#4B5563]">Only a superadmin can go live.</p>}
+            <p className="text-[11px] text-[#9CA3AF] mt-2">Checked {when(c.checked_at)} · {ov.books} books tracked</p>
+        </div>
     );
 }

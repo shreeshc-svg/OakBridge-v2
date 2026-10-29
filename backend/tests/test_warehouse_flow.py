@@ -149,7 +149,29 @@ async def main():
     # t1 still owes 8 of a (took 2 of 10 loose... plus 2 inside hampers) — the
     # warehouse already took all of it off; "pre" owes 5 the warehouse never saw.
     owed_before = await order_stock.owed_by_book(db)
-    await wh.adm_mode(wh.ModeBody(mode="live"), SUPER)
+    # Pre-launch checklist (Oct 2026): this fixture has a real mismatch and a
+    # 0-day trial, so Go live is refused — then the checklist is stubbed to
+    # "ready" to test what going live itself does.
+    chk = await wh.go_live_checks()
+    check(not chk["ready"] and "match" in chk["must_open"] and "trial_length" in chk["should_open"],
+          f"checklist blocks a mismatched count and flags a short trial ({chk['must_open']}, {chk['should_open']})")
+    try:
+        await wh.adm_mode(wh.ModeBody(mode="live"), SUPER)
+        check(False, "Go live refused while a 'must' item is open")
+    except Exception as e:  # noqa: BLE001
+        check("go_live_blocked" in str(getattr(e, "detail", e)), "Go live refused while a 'must' item is open")
+    real_checks = wh.go_live_checks
+
+    async def ready():
+        return {"checks": [], "ready": True, "must_open": [], "should_open": ["trial_length"]}
+    wh.go_live_checks = ready
+    try:
+        await wh.adm_mode(wh.ModeBody(mode="live"), SUPER)
+        check(False, "a 'should' item needs a written reason")
+    except Exception as e:  # noqa: BLE001
+        check("go_live_needs_reason" in str(getattr(e, "detail", e)), "a 'should' item needs a written reason")
+    await wh.adm_mode(wh.ModeBody(mode="live", override_reason="Full shelf count done, test fixture"), SUPER)
+    wh.go_live_checks = real_checks
     check(book("h")["stock"] == 12 and book("p")["stock"] == 7, "hamper and pack keep their website stock")
     check(book("a")["stock"] == book("a")["wh_stock"],
           f"website = warehouse for a ({book('a')['stock']} vs {book('a')['wh_stock']})")

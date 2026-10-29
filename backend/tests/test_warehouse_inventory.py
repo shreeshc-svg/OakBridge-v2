@@ -58,6 +58,12 @@ try:
 except ImportError:
     check(pdf[:5] == b"%PDF-", "brochure builds")
 check('"WAREHOUSE_BROCHURE"' in inv and "_storage_key(" in inv and "no fetching the web" in src, "brochure: audited; covers only from our own storage")
+gl = code[code.index("async def go_live_checks"):code.index('@wh_admin_router.get("/go-live-check")')]
+check(all(k in gl for k in ('"key": "counted", "level": "must"', '"key": "match", "level": "must"', '"key": "below_zero", "level": "must"',
+                            '"key": "printer", "level": "should"', '"key": "no_reset", "level": "should"')), "go-live checklist: musts + shoulds")
+mode = code[code.index("async def adm_mode"):]
+check('"go_live_blocked"' in mode and "len(reason) < 10" in mode and '"override_reason"' in mode,
+      "server enforces the checklist; overriding a 'should' needs a logged reason")
 print()
 if failed:
     print(f"{failed} check(s) failed")

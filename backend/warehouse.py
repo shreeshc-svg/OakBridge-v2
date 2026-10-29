@@ -1779,6 +1779,89 @@ async def adm_reset_from_sheet(body: ResetBody, user: dict = Depends(require_sup
 
 class ModeBody(BaseModel):
     mode: str  # trial | live | off
+    # Go live with a "should" item still open: the superadmin says why (logged).
+    override_reason: Optional[str] = None
+
+
+GO_LIVE_DAYS = 14
+
+
+async def go_live_checks() -> dict:
+    """Pre-launch checklist for Go live (Admin → Warehouse → Trial).
+
+    "must" items block Go live — going live with them open would put wrong
+    numbers on the website at once. "should" items are about whether the
+    team's habits are in place; a superadmin may go live past them by giving
+    a reason, which is logged. All counted live from the data, never cached.
+    """
+    state = await get_state()
+    now = _now()
+    since = (now - timedelta(days=GO_LIVE_DAYS)).isoformat()
+    ov = await adm_overview()
+    # A difference equal to the copies owed to waiting orders is expected:
+    # the warehouse took them off when paid, the website gives them out when
+    # filled — exactly what Go live settles (stock = count + owed). Only the
+    # rest is a real mismatch.
+    owed = await order_stock.owed_by_book(db, since=state.get("started_at")) if state.get("started_at") else {}
+    real_diff = [d for d in ov.get("differences") or [] if int(d.get("wh_stock") or 0) + owed.get(d["id"], 0) != int(d.get("stock") or 0)]
+    never = await db.books.count_documents({"product_type": {"$nin": list(NOT_COUNTED)}, "wh_stock": {"$exists": False}})
+    printer = await db.stock_movements.count_documents({"reason": "printer", "undone": {"$ne": True}, "at": {"$gte": since}})
+    reset_days = sorted({str(m.get("at"))[:10] async for m in db.stock_movements.find(
+        {"note": {"$regex": "^Reset from the stock sheet"}, "at": {"$gte": since}}, {"_id": 0, "at": 1})})
+    stale = (now - timedelta(days=2)).isoformat()
+    drafts = await db.warehouse_docs.count_documents({"status": "draft", "practice": False, "archived": {"$ne": True},
+                                                      "created_at": {"$lt": stale}})
+    waiting = await db.warehouse_docs.count_documents({"status": "awaiting_approval", "practice": False})
+    acc = (await adm_accuracy(days=30)).get("groups", {}).get("all") or {}
+    started = state.get("started_at")
+    trial_days = (now - datetime.fromisoformat(started)).days if started else 0
+    checks = [
+        {"key": "trial", "level": "must", "ok": state["mode"] == "trial",
+         "label": "The trial is running", "detail": f"Mode: {state['mode']}", "fix": "Start the trial first."},
+        {"key": "counted", "level": "must", "ok": never == 0,
+         "label": "Every book has a warehouse count",
+         "detail": f"{never} book(s) never counted" if never else "All books counted",
+         "fix": "Admin → Warehouse → Inventory → 'never counted' → set each count."},
+        {"key": "match", "level": "must", "ok": not real_diff,
+         "label": "Warehouse and website counts match (allowing for copies owed to waiting orders)",
+         "detail": (f"{len(real_diff)} book(s) differ: " + ", ".join((d.get("title") or "")[:30] for d in real_diff[:3])
+                    + ("…" if len(real_diff) > 3 else "")) if real_diff else "All match",
+         "fix": "Inventory → '≠ Website' → count those books and save the counts."},
+        {"key": "below_zero", "level": "must", "ok": ov["below_zero_unexplained"] == 0,
+         "label": "No unexplained counts below zero",
+         "detail": f"{ov['below_zero_unexplained']} book(s)" if ov["below_zero_unexplained"] else "None",
+         "fix": "Count the books listed under 'Below zero' and save a correction."},
+        {"key": "trial_length", "level": "should", "ok": trial_days >= GO_LIVE_DAYS,
+         "label": f"Trial has run at least {GO_LIVE_DAYS} days", "detail": f"{trial_days} day(s) so far",
+         "fix": "Keep running the trial."},
+        {"key": "printer", "level": "should", "ok": printer > 0,
+         "label": f"Printer deliveries booked in on the phone (last {GO_LIVE_DAYS} days)",
+         "detail": f"{printer} booked in" if printer else "None booked in",
+         "fix": "Book every delivery in with 'Books arrived from printer' — after going live, a delivery not booked in never reaches the website."},
+        {"key": "no_reset", "level": "should", "ok": not reset_days,
+         "label": f"No reset from the stock sheet needed (last {GO_LIVE_DAYS} days)",
+         "detail": ("Reset on " + ", ".join(reset_days)) if reset_days else "No resets",
+         "fix": "A reset means the counts drifted. Run two weeks without one."},
+        {"key": "drafts", "level": "should", "ok": drafts == 0,
+         "label": "No unfinished scans older than 2 days", "detail": f"{drafts} unfinished" if drafts else "None",
+         "fix": "Bills & invoices → status: draft → confirm the real ones, delete the duplicates."},
+        {"key": "approvals", "level": "should", "ok": waiting == 0,
+         "label": "No cartons waiting for approval", "detail": f"{waiting} waiting" if waiting else "None",
+         "fix": "To approve → approve or send back."},
+        {"key": "accuracy", "level": "should", "ok": (acc.get("accuracy") or 0) >= 0.85 and (acc.get("docs") or 0) >= 10,
+         "label": "Document reading at least 85% right (last 30 days, 10+ documents)",
+         "detail": (f"{round((acc.get('accuracy') or 0) * 100)}% over {acc.get('docs', 0)} documents") if acc.get("docs") else "No documents yet",
+         "fix": "Keep confirming documents on the phone; see the Accuracy tab."},
+    ]
+    must_open = [c["key"] for c in checks if c["level"] == "must" and not c["ok"]]
+    should_open = [c["key"] for c in checks if c["level"] == "should" and not c["ok"]]
+    return {"checks": checks, "ready": not must_open, "must_open": must_open, "should_open": should_open,
+            "checked_at": now.isoformat()}
+
+
+@wh_admin_router.get("/go-live-check")
+async def adm_go_live_check():
+    return await go_live_checks()
 
 
 @wh_admin_router.post("/mode")
@@ -1808,6 +1891,15 @@ async def adm_mode(body: ModeBody, user: dict = Depends(require_superadmin)):
     elif body.mode == "live":
         if state["mode"] != "trial":
             raise HTTPException(status_code=409, detail="Start the trial first.")
+        # Pre-launch checklist, enforced here as well as shown on screen.
+        chk = await go_live_checks()
+        if chk["must_open"]:
+            raise HTTPException(status_code=409, detail={"code": "go_live_blocked", "checks": chk["checks"],
+                                                         "msg": "Not ready to go live — fix the items marked 'must' first."})
+        reason = (body.override_reason or "").strip()
+        if chk["should_open"] and len(reason) < 10:
+            raise HTTPException(status_code=409, detail={"code": "go_live_needs_reason", "checks": chk["checks"],
+                                                         "msg": "Some checks are still open. Give a reason (10+ characters) to go live anyway."})
         # The warehouse becomes the stock master: its counts go onto the site.
         # Books only — hampers and packs keep their own website stock (the
         # warehouse never counted them; see _not_tracked).
@@ -1835,5 +1927,6 @@ async def adm_mode(body: ModeBody, user: dict = Depends(require_superadmin)):
         raise HTTPException(status_code=400, detail="mode must be trial, live or off")
     await db.integrations.update_one({"key": STATE_KEY}, {"$set": {"key": STATE_KEY, **fields}}, upsert=True)
     await audit_log(db, "WAREHOUSE_MODE_CHANGED", email=user.get("email", ""), role=user.get("role", ""),
-                    meta={"from": state["mode"], "to": body.mode})
+                    meta={"from": state["mode"], "to": body.mode,
+                          **({"override_reason": (body.override_reason or "")[:300]} if body.mode == "live" and body.override_reason else {})})
     return await get_state()
