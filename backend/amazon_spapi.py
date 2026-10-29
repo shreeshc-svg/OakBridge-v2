@@ -195,23 +195,30 @@ async def sync_fba(by: str = "schedule") -> dict:
                 by10[i10] = b["id"]
         elif len(d) == 10:
             by10[d] = b["id"]
-    manual = {m["sku"]: m["book_id"] async for m in db.amazon_sku_map.find({}, {"_id": 0, "sku": 1, "book_id": 1})}
+    maps = await db.amazon_sku_map.find({}, {"_id": 0, "sku": 1, "book_id": 1, "ignored": 1}).to_list(5000)
+    manual = {m["sku"]: m["book_id"] for m in maps if m.get("book_id")}
+    # SKUs staff marked "not on our site" (old editions, non-book listings):
+    # kept and synced, but never counted as "to link" again.
+    ignored = {m["sku"] for m in maps if m.get("ignored")}
     now = datetime.now(timezone.utc).isoformat()
-    seen, matched = set(), 0
+    seen, matched, n_ignored = set(), 0, 0
     for s in summaries:
         row = summary_row(s)
         if not row["sku"]:
             continue
         bid, how = match_book(row, by13, by10, manual)
         matched += bool(bid)
+        n_ignored += (not bid) and row["sku"] in ignored
         seen.add(row["sku"])
         await db.amazon_fba.update_one({"sku": row["sku"]}, {"$set": {**row, "book_id": bid, "matched_by": how,
+                                                                      "ignored": (not bid) and row["sku"] in ignored,
                                                                       "synced_at": now, "gone": False}}, upsert=True)
     # SKUs Amazon no longer reports: keep the row but show zero (not stale numbers).
     await db.amazon_fba.update_many({"sku": {"$nin": list(seen)}},
                                     {"$set": {"available": 0, "inbound": 0, "reserved": 0, "total": 0, "gone": True,
                                               "synced_at": now}})
-    res = {"skus": len(seen), "matched": matched, "unmatched": len(seen) - matched, "at": now}
+    res = {"skus": len(seen), "matched": matched, "ignored": n_ignored, "unmatched": len(seen) - matched - n_ignored,
+           "at": now}
     await db.integrations.update_one({"key": SETTINGS_KEY}, {"$set": {"key": SETTINGS_KEY, "last_sync": res,
                                                                      "last_error": ""}}, upsert=True)
     log.info("amazon: FBA sync %s by %s", res, by)
@@ -263,7 +270,7 @@ async def amz_status():
     st = await settings()
     return {"configured": configured(), "marketplace": _cfg()["marketplace"], **st,
             "skus": await db.amazon_fba.count_documents({"gone": {"$ne": True}}),
-            "unmatched": await db.amazon_fba.count_documents({"book_id": None, "gone": {"$ne": True}})}
+            "unmatched": await db.amazon_fba.count_documents({"book_id": None, "ignored": {"$ne": True}, "gone": {"$ne": True}})}
 
 
 @admin_router.post("/sync")
@@ -285,6 +292,7 @@ async def amz_skus(unmatched: bool = False):
     flt = {"gone": {"$ne": True}}
     if unmatched:
         flt["book_id"] = None
+        flt["ignored"] = {"$ne": True}
     rows = await db.amazon_fba.find(flt, {"_id": 0}).sort("title", 1).to_list(5000)
     return {"rows": rows}
 
@@ -292,6 +300,7 @@ async def amz_skus(unmatched: bool = False):
 class LinkBody(BaseModel):
     sku: str
     book_id: Optional[str] = None     # None = unlink
+    ignore: bool = False              # "not on our site" — stop asking to link this SKU
 
 
 @admin_router.post("/link")
@@ -306,11 +315,16 @@ async def amz_link(body: LinkBody, user: dict = Depends(require_admin)):
                                                                   "by": user.get("email", ""),
                                                                   "at": datetime.now(timezone.utc).isoformat()}}, upsert=True)
         await db.amazon_fba.update_one({"sku": sku}, {"$set": {"book_id": body.book_id, "matched_by": "manual"}})
+    elif body.ignore:
+        await db.amazon_sku_map.update_one({"sku": sku}, {"$set": {"sku": sku, "book_id": None, "ignored": True,
+                                                                  "by": user.get("email", ""),
+                                                                  "at": datetime.now(timezone.utc).isoformat()}}, upsert=True)
+        await db.amazon_fba.update_one({"sku": sku}, {"$set": {"book_id": None, "matched_by": "", "ignored": True}})
     else:
         await db.amazon_sku_map.delete_one({"sku": sku})
-        await db.amazon_fba.update_one({"sku": sku}, {"$set": {"book_id": None, "matched_by": ""}})
+        await db.amazon_fba.update_one({"sku": sku}, {"$set": {"book_id": None, "matched_by": "", "ignored": False}})
     await audit_log(db, "AMAZON_SKU_LINK", email=user.get("email", ""), role=user.get("role", ""),
-                    meta={"sku": sku, "book": body.book_id or ""})
+                    meta={"sku": sku, "book": body.book_id or "", "ignored": bool(body.ignore and not body.book_id)})
     return {"ok": True}
 
 

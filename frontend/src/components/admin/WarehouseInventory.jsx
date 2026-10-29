@@ -303,6 +303,7 @@ function StatTile({ label, value, icon: Icon = null, tone = "", hint = "", title
  * Status, "Sync now", the low-at-Amazon level, and the Amazon SKUs that could
  * not be linked to a book by ISBN, for staff to link by hand.
  */
+const IGNORE = "__ignore__";
 function AmazonPanel({ amz, onChanged }) {
     const [busy, setBusy] = useState(false);
     const [show, setShow] = useState(false);
@@ -313,7 +314,7 @@ function AmazonPanel({ amz, onChanged }) {
         setBusy(true);
         try {
             const r = await amzSync();
-            toast.success(`Amazon stock synced: ${r.skus} SKUs, ${r.matched} linked to books${r.unmatched ? `, ${r.unmatched} to link` : ""}.`);
+            toast.success(`Amazon stock synced: ${r.skus} SKUs, ${r.matched} linked to books${r.unmatched ? `, ${r.unmatched} to link` : ""}${r.ignored ? `, ${r.ignored} hidden` : ""}.`);
             onChanged();
             if (show) setRows(await amzSkus(true));
         } catch (e) { toast.error(formatApiError(e)); } finally { setBusy(false); }
@@ -326,7 +327,12 @@ function AmazonPanel({ amz, onChanged }) {
         }
     };
     const link = async (sku, bookId) => {
-        try { await amzLink(sku, bookId); setRows((r) => r.filter((x) => x.sku !== sku)); onChanged(); toast.success("Linked."); }
+        const ignore = bookId === IGNORE;
+        try {
+            await amzLink(sku, ignore ? null : bookId, ignore);
+            setRows((r) => r.filter((x) => x.sku !== sku)); onChanged();
+            toast.success(ignore ? "Hidden — this Amazon listing won't be asked about again." : "Linked.");
+        }
         catch (e) { toast.error(formatApiError(e)); }
     };
     const ls = amz.last_sync;
@@ -360,6 +366,7 @@ function AmazonPanel({ amz, onChanged }) {
                             <span className="text-xs text-[#4B5563] flex-1 min-w-[12rem] truncate" title={r.title}>{r.title || r.asin} · {r.available} available</span>
                             <select defaultValue="" onChange={(e) => e.target.value && link(r.sku, e.target.value)} className="border border-[#E5E7EB] px-2 py-1 text-xs max-w-[18rem]">
                                 <option value="">Link to a book…</option>
+                                <option value={IGNORE}>Not on our site (old edition / other) — stop asking</option>
                                 {books.map((b) => <option key={b.id} value={b.id}>{b.title} ({b.isbn})</option>)}
                             </select>
                         </div>

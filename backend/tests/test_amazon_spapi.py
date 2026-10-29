@@ -82,5 +82,9 @@ check("AmazonPanel" in inv and "amz_low" in inv, "admin inventory shows Amazon p
 api = code_only(os.path.join(fe, "lib", "api.js"))
 check(all(f in api for f in ("amzStatus", "amzSync", "amzSkus", "amzLink", "amzSaveSettings")), "api.js Amazon calls")
 
+amz = code_only(os.path.join(ROOT, "amazon_spapi.py"))
+check('"ignored": {"$ne": True}' in amz and "n_ignored" in amz, "hidden SKUs are not counted as 'to link'")
+check("Not on our site" in inv, "admin can hide an Amazon listing that is not on our site")
+
 print("\nall passed" if not failed else f"\n{failed} FAILED")
 sys.exit(1 if failed else 0)

@@ -182,7 +182,7 @@ const AMZ = "/admin/warehouse/amazon";
 export const amzStatus = () => api.get(`${AMZ}/status`).then((r) => r.data);
 export const amzSync = () => api.post(`${AMZ}/sync`, null, { timeout: 180000 }).then((r) => r.data);
 export const amzSkus = (unmatched = false) => api.get(`${AMZ}/skus`, { params: unmatched ? { unmatched: true } : {} }).then((r) => r.data.rows || []);
-export const amzLink = (sku, bookId) => api.post(`${AMZ}/link`, { sku, book_id: bookId || null }).then((r) => r.data);
+export const amzLink = (sku, bookId, ignore = false) => api.post(`${AMZ}/link`, { sku, book_id: bookId || null, ignore }).then((r) => r.data);
 export const amzSaveSettings = (low_at) => api.put(`${AMZ}/settings`, { low_at }).then((r) => r.data);
 // Files to share: Excel for founders/reports, a vendor catalogue PDF.
 export const adminWhInventoryXlsx = () =>
