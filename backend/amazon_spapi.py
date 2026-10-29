@@ -8,7 +8,9 @@ the book in our catalogue (by ISBN). Admin → Warehouse → Inventory then show
 a replenishment shipment can be sent.
 
 WHAT IT NEVER DOES
-* Writes nothing to Amazon (no listings, prices or quantities change).
+* This module writes nothing to Amazon. (Easy Ship quantities — our own
+  shelf offered on Amazon — are set by amazon_easyship.py, behind its own
+  admin switch; it only ever touches Easy Ship listings, never FBA.)
 * Reads no buyer data — the app was registered with no restricted (PII) roles.
 * Changes neither our warehouse count nor website stock. Amazon sells from
   Amazon's warehouse; our shelf changes only when we SEND books to Amazon,
@@ -60,7 +62,10 @@ def _cfg() -> dict:
             "client_secret": os.environ.get("SPAPI_LWA_CLIENT_SECRET", "").strip(),
             "refresh_token": os.environ.get("SPAPI_REFRESH_TOKEN", "").strip(),
             "region": (os.environ.get("SPAPI_REGION") or "eu").strip().lower(),
-            "marketplace": (os.environ.get("SPAPI_MARKETPLACE_ID") or "A21TJRUUN4KGV").strip()}
+            "marketplace": (os.environ.get("SPAPI_MARKETPLACE_ID") or "A21TJRUUN4KGV").strip(),
+            # Merchant token (Seller Central → Settings → Account Info). Only the
+            # Listings API needs it (amazon_easyship.py).
+            "seller_id": os.environ.get("SPAPI_SELLER_ID", "").strip()}
 
 
 def configured() -> bool:
@@ -98,12 +103,18 @@ def _access_token() -> str:
 
 
 def _get(path: str, params: dict) -> dict:
+    return _call("GET", path, params)
+
+
+def _call(method: str, path: str, params: Optional[dict] = None, body: Optional[dict] = None) -> dict:
+    """One SP-API request (blocking — callers run it in a thread)."""
     import requests
     c = _cfg()
     for attempt in range(4):
-        r = requests.get(ENDPOINTS[c["region"]] + path, params=params,
-                         headers={"x-amz-access-token": _access_token(), "accept": "application/json",
-                                  "user-agent": "OakbridgeInventorySync/1.0 (Language=Python)"}, timeout=30)
+        r = requests.request(method, ENDPOINTS[c["region"]] + path, params=params, json=body,
+                             headers={"x-amz-access-token": _access_token(), "accept": "application/json",
+                                      "content-type": "application/json",
+                                      "user-agent": "OakbridgeInventorySync/1.0 (Language=Python)"}, timeout=30)
         if r.status_code == 429 and attempt < 3:     # throttled: back off and retry
             time.sleep(2 * (attempt + 1))
             continue
@@ -212,10 +223,10 @@ def suggest_book(amz_title: str, books: list) -> Optional[dict]:
 
 
 # ------------------------------------------------------------------ sync ---
-async def sync_fba(by: str = "schedule") -> dict:
-    if not configured():
-        raise AmazonError("Amazon keys are not set on the server (SPAPI_* in Render).")
-    summaries = await asyncio.to_thread(fetch_fba_inventory)
+async def link_index() -> tuple[dict, dict, dict, set]:
+    """(by ISBN-13, by ISBN-10, staff links, SKUs marked "not on our site") —
+    shared by the FBA sync and the Easy Ship listings (amazon_easyship.py), so
+    one link made by staff applies to both."""
     books = await db.books.find({"product_type": {"$nin": ["hamper"]}}, {"_id": 0, "id": 1, "isbn": 1}).to_list(5000)
     by13, by10 = {}, {}
     for b in books:
@@ -232,6 +243,18 @@ async def sync_fba(by: str = "schedule") -> dict:
     # SKUs staff marked "not on our site" (old editions, non-book listings):
     # kept and synced, but never counted as "to link" again.
     ignored = {m["sku"] for m in maps if m.get("ignored")}
+    return by13, by10, manual, ignored
+
+
+# Both Amazon collections a SKU can live in: FBA stock rows and Easy Ship
+# listings. Linking / "to link" counts look at both.
+_UNLINKED = {"book_id": None, "ignored": {"$ne": True}, "gone": {"$ne": True}}
+
+async def sync_fba(by: str = "schedule") -> dict:
+    if not configured():
+        raise AmazonError("Amazon keys are not set on the server (SPAPI_* in Render).")
+    summaries = await asyncio.to_thread(fetch_fba_inventory)
+    by13, by10, manual, ignored = await link_index()
     now = datetime.now(timezone.utc).isoformat()
     seen, matched, n_ignored = set(), 0, 0
     for s in summaries:
@@ -307,7 +330,8 @@ async def amz_status():
     st = await settings()
     return {"configured": configured(), "marketplace": _cfg()["marketplace"], **st,
             "skus": await db.amazon_fba.count_documents({"gone": {"$ne": True}}),
-            "unmatched": await db.amazon_fba.count_documents({"book_id": None, "ignored": {"$ne": True}, "gone": {"$ne": True}})}
+            "unmatched": await db.amazon_fba.count_documents(_UNLINKED)
+            + await db.amazon_listings.count_documents({**_UNLINKED, "channel": "mfn"})}
 
 
 @admin_router.post("/sync")
@@ -331,6 +355,10 @@ async def amz_skus(unmatched: bool = False):
         flt["book_id"] = None
         flt["ignored"] = {"$ne": True}
     rows = await db.amazon_fba.find(flt, {"_id": 0}).sort("title", 1).to_list(5000)
+    if unmatched:
+        seen = {r["sku"] for r in rows}
+        rows += [{**r, "available": r.get("qty") or 0, "easy_ship": True}
+                 async for r in db.amazon_listings.find({**flt, "channel": "mfn"}, {"_id": 0}) if r["sku"] not in seen]
     if unmatched and rows:
         books = await db.books.find({"product_type": {"$nin": ["hamper"]}}, {"_id": 0, "id": 1, "title": 1, "isbn": 1}).to_list(5000)
         for r in rows:
@@ -347,7 +375,8 @@ class LinkBody(BaseModel):
 @admin_router.post("/link")
 async def amz_link(body: LinkBody, user: dict = Depends(require_admin)):
     sku = (body.sku or "").strip()[:80]
-    if not await db.amazon_fba.find_one({"sku": sku}, {"_id": 1}):
+    if not (await db.amazon_fba.find_one({"sku": sku}, {"_id": 1})
+            or await db.amazon_listings.find_one({"sku": sku}, {"_id": 1})):
         raise HTTPException(status_code=404, detail="Unknown Amazon SKU — sync first.")
     if body.book_id:
         if not await db.books.find_one({"id": body.book_id}, {"_id": 1}):
@@ -356,14 +385,17 @@ async def amz_link(body: LinkBody, user: dict = Depends(require_admin)):
                                                                   "by": user.get("email", ""),
                                                                   "at": datetime.now(timezone.utc).isoformat()}}, upsert=True)
         await db.amazon_fba.update_one({"sku": sku}, {"$set": {"book_id": body.book_id, "matched_by": "manual"}})
+        await db.amazon_listings.update_one({"sku": sku}, {"$set": {"book_id": body.book_id, "matched_by": "manual"}})
     elif body.ignore:
         await db.amazon_sku_map.update_one({"sku": sku}, {"$set": {"sku": sku, "book_id": None, "ignored": True,
                                                                   "by": user.get("email", ""),
                                                                   "at": datetime.now(timezone.utc).isoformat()}}, upsert=True)
         await db.amazon_fba.update_one({"sku": sku}, {"$set": {"book_id": None, "matched_by": "", "ignored": True}})
+        await db.amazon_listings.update_one({"sku": sku}, {"$set": {"book_id": None, "matched_by": "", "ignored": True}})
     else:
         await db.amazon_sku_map.delete_one({"sku": sku})
         await db.amazon_fba.update_one({"sku": sku}, {"$set": {"book_id": None, "matched_by": "", "ignored": False}})
+        await db.amazon_listings.update_one({"sku": sku}, {"$set": {"book_id": None, "matched_by": "", "ignored": False}})
     await audit_log(db, "AMAZON_SKU_LINK", email=user.get("email", ""), role=user.get("role", ""),
                     meta={"sku": sku, "book": body.book_id or "", "ignored": bool(body.ignore and not body.book_id)})
     return {"ok": True}

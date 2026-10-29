@@ -4095,6 +4095,8 @@ async def periodic() -> dict:
     try:
         import amazon_spapi
         amazon_spapi.schedule_tick()          # Amazon FBA stock, every 6 h (only when the SPAPI_* keys are set)
+        import amazon_easyship
+        amazon_easyship.schedule_tick()       # Easy Ship orders + quantities, every 15 min (no-op while switched off)
     except Exception:  # noqa: BLE001
         log.warning("amazon: schedule tick failed", exc_info=True)
     return {"ok": True, "started": started}

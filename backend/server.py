@@ -2131,6 +2131,8 @@ from promotions import public_router as promotions_public_router, admin_router a
 from pod import public_router as pod_public_router, admin_router as pod_admin_router  # noqa: E402
 from amazon_spapi import admin_router as amazon_admin_router  # noqa: E402
 app.include_router(amazon_admin_router)
+from amazon_easyship import router as amazon_easyship_router  # noqa: E402
+app.include_router(amazon_easyship_router)
 app.include_router(pod_public_router)
 app.include_router(pod_admin_router)
 app.include_router(promotions_public_router)

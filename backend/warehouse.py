@@ -211,6 +211,29 @@ async def record_website_sale(order: dict, lines: list) -> None:
         log.exception("warehouse: could not record website order %s", order.get("order_number"))
 
 
+async def record_amazon_order(amazon_order_id: str, lines: list, *, cancelled: bool = False) -> None:
+    """An Amazon Easy Ship order (amazon_easyship.py) -> movement per book.
+
+    Like a website order: website stock was already taken by the caller, so
+    only the warehouse count moves (touch_stock=False). cancelled=True puts
+    the copies back as "amazon_cancel". System-made, so neither reason is in
+    OUT_REASONS / IN_REASONS (staff cannot type them) and neither can be
+    undone by hand. Never raises (runs after stock has already changed)."""
+    try:
+        if (await get_state())["mode"] == "off":
+            return
+        lines = [(b, q) for b, q in lines if b and q > 0]
+        skip = await _not_tracked(b for b, _ in lines)
+        for bid, qty in lines:
+            if bid in skip:
+                continue
+            await _apply(bid, int(qty) if cancelled else -int(qty), "amazon_cancel" if cancelled else "amazon_order",
+                         actor={"email": "amazon"}, doc_id=amazon_order_id, touch_stock=False,
+                         note="Amazon order cancelled — copies back" if cancelled else "Amazon Easy Ship order")
+    except Exception:  # noqa: BLE001
+        log.exception("warehouse: could not record Amazon order %s", amazon_order_id)
+
+
 async def record_fill(order: dict, book_id: str, qty: int) -> None:
     """Copies given to a waiting order (order_stock.fill_waiting_orders).
 
@@ -1666,7 +1689,8 @@ async def adm_undo_move(mv_id: str, user: dict = Depends(require_admin)):
     mv = await db.stock_movements.find_one({"id": mv_id}, {"_id": 0})
     # Website order/return movements follow the order's status (order_stock.py);
     # undoing one here would leave the ledger disagreeing with the order.
-    if not mv or mv.get("undone") or mv.get("reason") in ("website_order", "website_return", "opening"):
+    if not mv or mv.get("undone") or mv.get("reason") in ("website_order", "website_return", "opening",
+                                                                "amazon_order", "amazon_cancel"):
         raise HTTPException(status_code=409, detail="This movement cannot be undone here.")
     if _now() - datetime.fromisoformat(mv["at"]) > timedelta(hours=UNDO_HOURS):
         raise HTTPException(status_code=409, detail=f"Undo is only possible within {UNDO_HOURS} hours.")

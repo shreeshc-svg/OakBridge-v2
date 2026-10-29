@@ -5,6 +5,7 @@ import { adminWhInventory, adminWhSetCount, adminWhInvMove, adminWhInventoryXlsx
     amzStatus, amzSync, amzSkus, amzLink, amzSaveSettings,
     formatApiError, formatINR, mediaUrl } from "../../lib/api";
 import ExportButton from "./ExportButton";
+import AmazonEasyShip from "./AmazonEasyShip";
 
 /**
  * Admin → Warehouse → Inventory (Oct 2026): the WAREHOUSE's counts, with the
@@ -19,7 +20,8 @@ const IN = [["printer", "Arrived from printer"], ["return", "Customer return (go
 const OUT = [["damaged", "Damaged"], ["sample", "Free copy / sample"], ["author_copy", "Author copy"], ["sale_offline", "Offline / dealer sale"],
     ["amazon_fba", "Sent to Amazon FBA"], ["amazon_vendor_po", "Amazon Vendor PO"]];
 const REASON = Object.fromEntries([...IN, ...OUT, ["correction_in", "Correction +"], ["correction_out", "Correction −"],
-    ["website_order", "Website order"], ["opening", "Opening count"]]);
+    ["website_order", "Website order"], ["opening", "Opening count"],
+    ["amazon_order", "Amazon order (Easy Ship)"], ["amazon_cancel", "Amazon order cancelled"]]);
 const when = (iso) => (iso ? new Date(iso).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : "—");
 
 export default function WarehouseInventory({ onHistory }) {
@@ -362,7 +364,8 @@ function AmazonPanel({ amz, onChanged }) {
                     </>
                 )}
             </div>
-            <p className="text-[11px] text-[#6B7280] mt-1">Read-only: shows stock held in Amazon's warehouses; it never changes your shelf, your website stock or anything on Amazon. Synced every 6 hours.</p>
+            <p className="text-[11px] text-[#6B7280] mt-1">FBA (read-only): stock held in Amazon's warehouses; it never changes your shelf, your website stock or anything on Amazon. Synced every 6 hours.</p>
+            {amz.configured && <AmazonEasyShip onChanged={onChanged} />}
             {show && rows && (
                 <div className="mt-3 border-t border-[#E5E7EB] pt-3 space-y-2">
                     {!rows.length ? <p className="text-xs text-[#6B7280]">Every Amazon SKU is linked to a book.</p> : rows.map((r) => (

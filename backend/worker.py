@@ -43,6 +43,7 @@ import marketing  # noqa: E402  (registers the marketing job handlers)
 import newsletter  # noqa: E402,F401  (registers the newsletter job handler)
 import growth  # noqa: E402,F401  (registers the abandoned-checkout / review email job)
 import amazon_spapi  # noqa: E402,F401  (registers the Amazon FBA stock sync job)
+import amazon_easyship  # noqa: E402,F401  (registers the Amazon Easy Ship orders/quantity job)
 from extensions import db  # noqa: E402
 
 CONCURRENCY = max(1, int(os.environ.get("WORKER_CONCURRENCY", "3")))
