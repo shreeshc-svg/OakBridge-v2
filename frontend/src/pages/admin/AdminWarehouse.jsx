@@ -572,6 +572,7 @@ function EditDetails({ doc, onSaved }) {
                 {doc.direction === "out" && (
                     <label>Type<select className={box} value={v.party_kind} onChange={(e) => setV({ ...v, party_kind: e.target.value })}>
                         <option value="sale_offline">Sale / shop</option><option value="author_copy">Author copy</option>
+                        <option value="amazon_fba">Sent to Amazon FBA</option><option value="amazon_vendor_po">Amazon Vendor PO</option>
                     </select></label>
                 )}
                 <label className="sm:col-span-2">Office note<input className={box} value={v.note} onChange={(e) => setV({ ...v, note: e.target.value })} /></label>

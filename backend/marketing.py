@@ -4092,6 +4092,11 @@ async def periodic() -> dict:
     dispatch("mk_disposable", dedupe=hour)    # weekly
     dispatch("mk_lapse", dedupe=hour)
     dispatch("mk_auto", dedupe=hour)          # abandoned-checkout + review emails (growth.py), when switched on
+    try:
+        import amazon_spapi
+        amazon_spapi.schedule_tick()          # Amazon FBA stock, every 6 h (only when the SPAPI_* keys are set)
+    except Exception:  # noqa: BLE001
+        log.warning("amazon: schedule tick failed", exc_info=True)
     return {"ok": True, "started": started}
 
 

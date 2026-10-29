@@ -37,7 +37,8 @@ const BTN = "px-4 py-3 text-base font-medium disabled:opacity-50";
 
 const IN_REASONS = [["return", "Return (good copy)"], ["correction_in", "Correction: add"]];
 const OUT_REASONS = [["damaged", "Damaged"], ["sample", "Sample / gift"], ["author_copy", "Author copy"],
-    ["sale_offline", "Bulk / shop order"], ["correction_out", "Correction: remove"]];
+    ["sale_offline", "Bulk / shop order"], ["amazon_fba", "Sent to Amazon FBA"], ["amazon_vendor_po", "Amazon Vendor PO"],
+    ["correction_out", "Correction: remove"]];
 
 export default function WarehouseApp() {
     const { user } = useAuth();
@@ -446,10 +447,11 @@ function DocFlow({ direction, practice, onDone, initialDoc = null }) {
                     <input value={head.party_name} onChange={(e) => setHead({ ...head, party_name: e.target.value })}
                         className="mt-1 w-full border px-3 py-2 text-base" /></label>
                 {isOut && (
-                    <div className="flex gap-2">
-                        {[["sale_offline", "Sale / shop"], ["author_copy", "Author copy"]].map(([v, l]) => (
+                    // Amazon cartons kept apart from dealer sales (warehouse.py CARTON_KINDS).
+                    <div className="grid grid-cols-2 gap-2">
+                        {[["sale_offline", "Sale / shop"], ["author_copy", "Author copy"], ["amazon_fba", "To Amazon FBA"], ["amazon_vendor_po", "Amazon Vendor PO"]].map(([v, l]) => (
                             <button key={v} type="button" onClick={() => setHead({ ...head, party_kind: v })}
-                                className={`${BTN} flex-1 border-2 ${head.party_kind === v ? "border-[#002B5C] bg-[#002B5C] text-white" : "border-[#E5E7EB] bg-white"}`}>
+                                className={`${BTN} border-2 ${head.party_kind === v ? "border-[#002B5C] bg-[#002B5C] text-white" : "border-[#E5E7EB] bg-white"}`}>
                                 {l}
                             </button>
                         ))}

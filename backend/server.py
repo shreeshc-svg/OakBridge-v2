@@ -2129,6 +2129,8 @@ from ai_insights import admin_router as marketing_ai_admin_router  # noqa: E402
 app.include_router(marketing_ai_admin_router)
 from promotions import public_router as promotions_public_router, admin_router as promotions_admin_router  # noqa: E402
 from pod import public_router as pod_public_router, admin_router as pod_admin_router  # noqa: E402
+from amazon_spapi import admin_router as amazon_admin_router  # noqa: E402
+app.include_router(amazon_admin_router)
 app.include_router(pod_public_router)
 app.include_router(pod_admin_router)
 app.include_router(promotions_public_router)

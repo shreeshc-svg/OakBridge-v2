@@ -80,7 +80,11 @@ NOT_COUNTED = ("hamper", "pack")
 COURIER_DEDUCT = {"dealer_order": "sale_offline", "author_copy": "author_copy", "free_copy": "sample"}
 COURIER_KINDS = set(COURIER_DEDUCT) | {"website_order", "skip"}
 IN_REASONS = {"printer", "return", "correction_in", "opening"}
-OUT_REASONS = {"damaged", "sample", "author_copy", "sale_offline", "correction_out"}
+OUT_REASONS = {"damaged", "sample", "author_copy", "sale_offline", "correction_out", "amazon_fba", "amazon_vendor_po"}
+# Cartons can go to a dealer, an author, Amazon's FBA warehouse (our own stock,
+# moved to Amazon) or Amazon Retail against a Vendor Central purchase order
+# (a sale). Kept apart so reports never mix Amazon with dealer sales.
+CARTON_KINDS = ("sale_offline", "author_copy", "amazon_fba", "amazon_vendor_po")
 
 
 def _now() -> datetime:
@@ -801,7 +805,7 @@ async def wh_confirm(doc_id: str, body: ConfirmBody, user: dict = Depends(requir
     doc_number = (body.doc_number if body.doc_number is not None else doc.get("doc_number")) or ""
     party = (body.party_name if body.party_name is not None else doc.get("party_name")) or ""
     party_kind = body.party_kind or doc.get("party_kind") or ""
-    if doc["direction"] == "out" and party_kind not in ("sale_offline", "author_copy"):
+    if doc["direction"] == "out" and party_kind not in CARTON_KINDS:
         party_kind = "sale_offline"
 
     if not doc["practice"] and (await get_state())["mode"] == "off":
@@ -1136,13 +1140,21 @@ async def _inventory_rows() -> tuple[list, int, dict]:
     last = {r["_id"]: r async for r in db.stock_movements.aggregate([
         {"$match": {"undone": {"$ne": True}}}, {"$sort": {"at": -1}},
         {"$group": {"_id": "$book_id", "at": {"$first": "$at"}, "reason": {"$first": "$reason"}, "n": {"$sum": 1}}}])}
+    try:
+        import amazon_spapi
+        amz = await amazon_spapi.by_book()
+    except Exception:  # noqa: BLE001 — Amazon numbers are extra; never break the page
+        amz = {}
     rows = []
     for b in books:
         wh = b.get("wh_stock")
         lm = last.get(b["id"]) or {}
+        az = amz.get(b["id"]) or {}
         rows.append({**b, "wh_stock": int(wh) if wh is not None else None, "stock": int(b.get("stock") or 0),
                      "owed": int(owed.get(b["id"], 0)), "diff": (int(wh) - int(b.get("stock") or 0)) if wh is not None else None,
-                     "last_at": lm.get("at"), "last_reason": lm.get("reason"), "moves": int(lm.get("n") or 0)})
+                     "last_at": lm.get("at"), "last_reason": lm.get("reason"), "moves": int(lm.get("n") or 0),
+                     "amz_available": az.get("available"), "amz_inbound": az.get("inbound"),
+                     "amz_reserved": az.get("reserved"), "amz_total": az.get("total")})
     return rows, await _low_stock_threshold(), state
 
 
@@ -1420,7 +1432,7 @@ async def adm_edit_details(doc_id: str, body: DocDetailsBody, user: dict = Depen
     if body.note is not None:
         upd["office_note"] = body.note.strip()[:500]
     if body.party_kind is not None:
-        if doc["direction"] != "out" or body.party_kind not in ("sale_offline", "author_copy"):
+        if doc["direction"] != "out" or body.party_kind not in CARTON_KINDS:
             raise HTTPException(status_code=400, detail="Sale / author copy applies to outgoing invoices only.")
         upd["party_kind"] = body.party_kind
     if not upd:
@@ -1436,7 +1448,7 @@ async def adm_edit_details(doc_id: str, body: DocDetailsBody, user: dict = Depen
         await db.stock_movements.update_many({"doc_id": doc_id}, {"$set": mv_set})
     if "party_kind" in upd:
         await db.stock_movements.update_many(
-            {"doc_id": doc_id, "reason": {"$in": ["sale_offline", "author_copy"]}},
+            {"doc_id": doc_id, "reason": {"$in": list(CARTON_KINDS)}},
             {"$set": {"reason": upd["party_kind"]}})
     await audit_log(db, "WAREHOUSE_DOC_EDITED", email=user.get("email", ""), role=user.get("role", ""),
                     meta={"doc": doc_id, "before": before, "after": {k: upd[k] for k in before}})

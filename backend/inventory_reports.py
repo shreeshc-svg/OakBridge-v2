@@ -20,7 +20,8 @@ from typing import Optional
 from xml.sax.saxutils import escape
 
 INVENTORY_HEADER = ["Title", "Author", "ISBN", "Category", "Price (Rs)", "MRP (Rs)", "Warehouse count", "Website stock",
-                    "Owed to orders", "Difference", "Status", "Last movement", "Last reason", "Movements"]
+                    "Owed to orders", "Difference", "Status", "Last movement", "Last reason", "Movements",
+                    "Amazon FBA available", "Amazon FBA inbound"]
 
 
 def status_of(r: dict, threshold: int) -> str:
@@ -89,8 +90,8 @@ def inventory_xlsx(rows: list, threshold: int, mode: str, cat_names: dict) -> by
                     float(r.get("original_price") or r.get("price") or 0),
                     r.get("wh_stock"), int(r.get("stock") or 0), int(r.get("owed") or 0), r.get("diff"),
                     status_of(r, threshold), (r.get("last_at") or "")[:16].replace("T", " "), r.get("last_reason") or "",
-                    int(r.get("moves") or 0)])
-    widths = [48, 28, 16, 18, 11, 11, 14, 13, 13, 11, 16, 17, 16, 11]
+                    int(r.get("moves") or 0), r.get("amz_available"), r.get("amz_inbound")])
+    widths = [48, 28, 16, 18, 11, 11, 14, 13, 13, 11, 16, 17, 16, 11, 14, 14]
     for i, w in enumerate(widths, start=1):
         inv.column_dimensions[get_column_letter(i)].width = w
     for row in inv.iter_rows(min_row=2, min_col=5, max_col=6):
