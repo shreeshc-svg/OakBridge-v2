@@ -1154,7 +1154,8 @@ async def _inventory_rows() -> tuple[list, int, dict]:
                      "owed": int(owed.get(b["id"], 0)), "diff": (int(wh) - int(b.get("stock") or 0)) if wh is not None else None,
                      "last_at": lm.get("at"), "last_reason": lm.get("reason"), "moves": int(lm.get("n") or 0),
                      "amz_available": az.get("available"), "amz_inbound": az.get("inbound"),
-                     "amz_reserved": az.get("reserved"), "amz_total": az.get("total")})
+                     "amz_reserved": az.get("reserved"), "amz_total": az.get("total"),
+                     "amz_stocked": az.get("stocked")})
     return rows, await _low_stock_threshold(), state
 
 

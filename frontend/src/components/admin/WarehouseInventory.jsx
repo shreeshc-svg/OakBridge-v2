@@ -44,7 +44,7 @@ export default function WarehouseInventory({ onHistory }) {
         if (view === "low") a = a.filter((b) => wh(b) > 0 && wh(b) <= d.threshold);
         if (view === "diff") a = a.filter((b) => b.diff);
         if (view === "uncounted") a = a.filter((b) => b.wh_stock == null);
-        if (view === "amz_low") a = a.filter((b) => b.amz_available != null && b.amz_available <= (amz?.low_at ?? 5));
+        if (view === "amz_low") a = a.filter((b) => amzLow(b, amz));
         return [...a].sort((x, y) => wh(x) - wh(y));
     }, [d, q, view, amz]);
 
@@ -58,7 +58,7 @@ export default function WarehouseInventory({ onHistory }) {
     const uncounted = all.filter((b) => b.wh_stock == null).length;
     const hasAmz = all.some((b) => b.amz_total != null);
     const amzUnits = all.reduce((n, b) => n + (b.amz_available || 0), 0);
-    const amzLow = all.filter((b) => b.amz_available != null && b.amz_available <= (amz?.low_at ?? 5)).length;
+    const amzLowN = all.filter((b) => amzLow(b, amz)).length;
     return (
         <div className="mt-6 space-y-5" data-testid="wh-inventory">
             <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-3">
@@ -85,7 +85,7 @@ export default function WarehouseInventory({ onHistory }) {
                 <StatTile label={`Low (≤ ${d.threshold})`} value={num(low)} icon={AlertTriangle} tone="text-[#B45309]" active={view === "low"} onClick={() => setView(view === "low" ? "all" : "low")} />
                 <StatTile label="≠ Website" value={num(diffs)} icon={GitCompare} tone={diffs ? "text-[#CC0033]" : ""} active={view === "diff"} onClick={() => setView(view === "diff" ? "all" : "diff")} />
                 {hasAmz && <StatTile label="At Amazon (FBA)" value={num(amzUnits)} hint="available to sell" />}
-                {hasAmz && <StatTile label={`Low at Amazon (≤ ${amz?.low_at ?? 5})`} value={num(amzLow)} icon={AlertTriangle} tone={amzLow ? "text-[#B45309]" : ""}
+                {hasAmz && <StatTile label={`Low at Amazon (≤ ${amz?.low_at ?? 5})`} value={num(amzLowN)} icon={AlertTriangle} tone={amzLowN ? "text-[#B45309]" : ""}
                     active={view === "amz_low"} onClick={() => setView(view === "amz_low" ? "all" : "amz_low")} />}
             </div>
             <div className="flex flex-wrap items-center gap-3">
@@ -130,8 +130,8 @@ export default function WarehouseInventory({ onHistory }) {
                                     <td className="px-3 py-2 text-right font-mono">{b.stock}{b.diff ? <span className="block text-[10px] text-[#CC0033]">{b.diff > 0 ? "+" : ""}{b.diff} vs website</span> : null}</td>
                                     <td className="px-3 py-2 text-right font-mono">{b.owed || "—"}</td>
                                     {hasAmz && (
-                                        <td className={`px-3 py-2 text-right font-mono ${b.amz_available != null && b.amz_available <= (amz?.low_at ?? 5) ? "text-[#B45309]" : ""}`}>
-                                            {b.amz_total == null ? <span className="text-[#9CA3AF]">—</span> : <>{num(b.amz_available)}{b.amz_inbound ? <span className="block text-[10px] text-[#6B7280]">+{num(b.amz_inbound)} inbound</span> : null}</>}
+                                        <td className={`px-3 py-2 text-right font-mono ${amzLow(b, amz) ? "text-[#B45309]" : ""}`}>
+                                            {b.amz_total == null ? <span className="text-[#9CA3AF]">—</span> : !b.amz_stocked ? <span className="text-[11px] text-[#9CA3AF]" title="Listed on Amazon but never sent to FBA">not at FBA</span> : <>{num(b.amz_available)}{b.amz_inbound ? <span className="block text-[10px] text-[#6B7280]">+{num(b.amz_inbound)} inbound</span> : null}</>}
                                         </td>
                                     )}
                                     <td className="px-3 py-2 text-xs text-[#4B5563] whitespace-nowrap">{b.last_at ? <>{when(b.last_at)}<span className="block">{REASON[b.last_reason] || b.last_reason}</span></> : "—"}</td>
@@ -304,6 +304,11 @@ function StatTile({ label, value, icon: Icon = null, tone = "", hint = "", title
  * not be linked to a book by ISBN, for staff to link by hand.
  */
 const IGNORE = "__ignore__";
+// Low at Amazon only for books that have actually held FBA stock: a listing
+// never sent to Amazon's warehouse is 0 forever and is not "running low".
+function amzLow(b, amz) {
+    return !!b.amz_stocked && b.amz_available != null && b.amz_available <= (amz?.low_at ?? 5);
+}
 function AmazonPanel({ amz, onChanged }) {
     const [busy, setBusy] = useState(false);
     const [show, setShow] = useState(false);
@@ -364,6 +369,10 @@ function AmazonPanel({ amz, onChanged }) {
                         <div key={r.sku} className="flex flex-wrap items-center gap-2">
                             <span className="font-mono text-xs w-40 truncate" title={r.sku}>{r.sku}</span>
                             <span className="text-xs text-[#4B5563] flex-1 min-w-[12rem] truncate" title={r.title}>{r.title || r.asin} · {r.available} available</span>
+                            {r.suggest && (
+                                <button type="button" onClick={() => link(r.sku, r.suggest.id)} title={`ISBN ${r.suggest.isbn} — check it is the same edition`}
+                                    className="border border-[#002B5C] text-[#002B5C] px-2 py-1 text-xs max-w-[16rem] truncate">Link: {r.suggest.title}</button>
+                            )}
                             <select defaultValue="" onChange={(e) => e.target.value && link(r.sku, e.target.value)} className="border border-[#E5E7EB] px-2 py-1 text-xs max-w-[18rem]">
                                 <option value="">Link to a book…</option>
                                 <option value={IGNORE}>Not on our site (old edition / other) — stop asking</option>

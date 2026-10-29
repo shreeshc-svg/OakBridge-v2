@@ -179,6 +179,38 @@ def match_book(row: dict, by13: dict, by10: dict, manual: dict) -> tuple[Optiona
     return None, ""
 
 
+_STOP = {"the", "and", "a", "an", "of", "for", "in", "to", "by", "with", "on", "from", "book", "books", "edition",
+         "paperback", "pb", "hardcover", "hb", "oakbridge", "vol", "volume", "set"}
+
+
+def title_tokens(t) -> set:
+    """Words that identify a title: before any " | " tail, lower-case, no
+    stop-words, no single letters or bare numbers (edition marks like 12/e)."""
+    t = str(t or "").split(" | ")[0].lower()
+    return {w for w in re.findall(r"[a-z0-9]+", t) if w not in _STOP and len(w) > 1 and not w.isdigit()}
+
+
+def suggest_book(amz_title: str, books: list) -> Optional[dict]:
+    """Best catalogue title fully (≥ 80 %) contained in the Amazon title — a
+    SUGGESTION only; staff confirm, because Amazon titles are often an older
+    edition of the same book (different ISBN)."""
+    a = title_tokens(amz_title)
+    if not a:
+        return None
+    best, key = None, (0.0, 0.0)
+    for b in books:
+        bt = title_tokens(b.get("title"))
+        common = len(a & bt)
+        if len(bt) < 2 or common < 2:
+            continue
+        k = (common / len(bt), 2 * common / (len(a) + len(bt)))
+        if k > key:
+            best, key = b, k
+    if not best or key[0] < 0.8:
+        return None
+    return {"id": best["id"], "title": best.get("title", ""), "isbn": best.get("isbn", ""), "score": round(key[0], 2)}
+
+
 # ------------------------------------------------------------------ sync ---
 async def sync_fba(by: str = "schedule") -> dict:
     if not configured():
@@ -210,7 +242,10 @@ async def sync_fba(by: str = "schedule") -> dict:
         matched += bool(bid)
         n_ignored += (not bid) and row["sku"] in ignored
         seen.add(row["sku"])
-        await db.amazon_fba.update_one({"sku": row["sku"]}, {"$set": {**row, "book_id": bid, "matched_by": how,
+        # "Has this SKU ever held stock at FBA?" — a listing that was never sent
+        # to Amazon's warehouse is 0 forever and must not count as "low at Amazon".
+        stocked = {"last_stocked_at": now} if (row["available"] or row["inbound"] or row["total"]) else {}
+        await db.amazon_fba.update_one({"sku": row["sku"]}, {"$set": {**row, **stocked, "book_id": bid, "matched_by": how,
                                                                       "ignored": (not bid) and row["sku"] in ignored,
                                                                       "synced_at": now, "gone": False}}, upsert=True)
     # SKUs Amazon no longer reports: keep the row but show zero (not stale numbers).
@@ -229,9 +264,11 @@ async def by_book() -> dict:
     """{book_id: {available, inbound, reserved, total, skus}} for the Inventory page."""
     out: dict = {}
     async for r in db.amazon_fba.find({"book_id": {"$ne": None}}, {"_id": 0}):
-        a = out.setdefault(r["book_id"], {"available": 0, "inbound": 0, "reserved": 0, "unfulfillable": 0, "total": 0, "skus": []})
+        a = out.setdefault(r["book_id"], {"available": 0, "inbound": 0, "reserved": 0, "unfulfillable": 0, "total": 0,
+                                          "skus": [], "stocked": False})
         for k in ("available", "inbound", "reserved", "unfulfillable", "total"):
             a[k] += int(r.get(k) or 0)
+        a["stocked"] = a["stocked"] or bool(r.get("last_stocked_at"))
         a["skus"].append(r["sku"])
     return out
 
@@ -294,6 +331,10 @@ async def amz_skus(unmatched: bool = False):
         flt["book_id"] = None
         flt["ignored"] = {"$ne": True}
     rows = await db.amazon_fba.find(flt, {"_id": 0}).sort("title", 1).to_list(5000)
+    if unmatched and rows:
+        books = await db.books.find({"product_type": {"$nin": ["hamper"]}}, {"_id": 0, "id": 1, "title": 1, "isbn": 1}).to_list(5000)
+        for r in rows:
+            r["suggest"] = suggest_book(r.get("title", ""), books)
     return {"rows": rows}
 
 

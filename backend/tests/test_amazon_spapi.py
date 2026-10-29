@@ -13,10 +13,11 @@ from typing import Optional
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 SRC = open(os.path.join(ROOT, "amazon_spapi.py"), encoding="utf-8").read()
-PURE = {"isbn_digits", "isbn13_to_10", "summary_row", "match_book"}
+PURE = {"isbn_digits", "isbn13_to_10", "summary_row", "match_book", "title_tokens", "suggest_book", "_STOP"}
 ns = {"re": re, "Optional": Optional}
 tree = ast.parse(SRC)
-exec(compile(ast.Module([n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in PURE], []),
+exec(compile(ast.Module([n for n in tree.body if (isinstance(n, ast.FunctionDef) and n.name in PURE)
+                          or (isinstance(n, ast.Assign) and getattr(n.targets[0], "id", "") in PURE)], []),
              "amazon_spapi_pure", "exec"), ns)
 
 failed = 0
@@ -84,6 +85,23 @@ check(all(f in api for f in ("amzStatus", "amzSync", "amzSkus", "amzLink", "amzS
 
 amz = code_only(os.path.join(ROOT, "amazon_spapi.py"))
 check('"ignored": {"$ne": True}' in amz and "n_ignored" in amz, "hidden SKUs are not counted as 'to link'")
+# --- title suggestions (real Amazon titles from the live account, 29 Oct 2026)
+CAT = [{"id": "st", "title": "Sacred Tiger Tales ", "isbn": "9788199624542"},
+       {"id": "vk", "title": "Vishwa Ka Itihaas", "isbn": "9789391032128"},
+       {"id": "tc", "title": "Tax, Constitution and the Supreme Court", "isbn": "9789391032852"},
+       {"id": "ee", "title": "Environment and Ecology with Disaster Management", "isbn": "9789395764667"},
+       {"id": "sp", "title": "Software Protection", "isbn": "9788193746875"},
+       {"id": "sg", "title": "Samanya Gyan (Hindi)", "isbn": "9789391032388"}]
+sg = ns["suggest_book"]
+check((sg("Sacred Tiger Tales – From Vedic Hymns to Tryst With Stripes", CAT) or {}).get("id") == "st", "suggest: subtitle on Amazon")
+check((sg("Vishwa Ka Itihaas (Hindi) PB", CAT) or {}).get("id") == "vk", "suggest: format words ignored")
+check((sg("Tax, Constitution and the Supreme Court: Analysing the evolution", CAT) or {}).get("id") == "tc", "suggest: long Amazon title")
+check(sg("Environment & Ecology - A Complete Guide by R Rajgopalan", CAT) is None, "no suggestion for a different book")
+check(sg("UPPSC - Samanya Adhyayan Paper II (General Studies Paper 2)", CAT) is None, "one shared word is not a match")
+check(sg("LIBRA - The Advocate's App (Box Version)", CAT) is None, "non-book listing: no suggestion")
+check("last_stocked_at" in amz and "amz_stocked" in code_only(os.path.join(ROOT, "warehouse.py")),
+      "never-stocked FBA listings tracked (not 'low at Amazon')")
+check("amz_stocked" in inv and "not at FBA" in inv, "admin: low-at-Amazon only for books that held FBA stock")
 check("Not on our site" in inv, "admin can hide an Amazon listing that is not on our site")
 
 print("\nall passed" if not failed else f"\n{failed} FAILED")
