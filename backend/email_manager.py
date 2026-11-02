@@ -67,6 +67,9 @@ KINDS: list[dict] = [
      "note": "Payments sometimes fail for reasons that have nothing to do with you — a bank timeout, an OTP that came late. "
              "Your books are still set aside. If it keeps happening, reply here and I can send you a fresh payment link "
              "or arrange another way to pay."},
+    {"key": "order_last_chance", "label": "Last chance (order written off)", "group": "Orders", "trigger": "When an unpaid, bounced order is written off in Admin → Orders", "locked": False,
+     "note": "I didn't want your order to close without one last word. If something stopped you — the price, the delivery date, "
+             "a payment that kept failing — reply and tell me; I'll do what I can."},
     {"key": "payment_link", "label": "Payment link (try another way to pay)", "group": "Orders", "trigger": "Sent from Admin → Orders, or when an order is marked bounced", "locked": False,
      "note": "I've kept order {order_number} open for you. If you have a question before paying — delivery time, "
              "a bulk quantity, a GST invoice in your institution's name — reply and I'll answer it first."},
@@ -467,6 +470,7 @@ def sample(kind: str) -> tuple[str, str, dict]:
         "password_reset": ("Reset your Oakbridge password", lambda: emailer.render_password_reset_html("Ananya", "https://www.oakbridge.in/reset")),
         "receipt": ("Your Oakbridge order — OB-10482", lambda: emailer.render_order_receipt_html(order)),
         "payment_failed": ("Your payment didn't go through", lambda: emailer.render_order_failed_html({**order, "status": "failed"}, "")),
+        "order_last_chance": ("Last chance: your books are waiting — OB-10482", lambda: emailer.render_last_chance_html(order, "https://rzp.io/sample")),
         "payment_link": ("Your payment didn’t go through — try another way — OB-10482", lambda: emailer.render_payment_link_html(order, "https://rzp.io/sample")),
         "dispatched": ("Your Oakbridge order has been dispatched — OB-10482", lambda: emailer.render_order_dispatched_html({**order, "status": "shipped", "courier": "DTDC", "tracking_id": "D1234567890"}, "")),
         "status_update": ("Your Oakbridge order OB-10482 — processing", lambda: emailer.render_order_status_update_html({**order, "status": "processing"}, "")),

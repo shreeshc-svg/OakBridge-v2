@@ -1309,6 +1309,98 @@ def render_payment_link_html(order: dict, url: str) -> str:
 """
 
 
+def render_last_chance_html(order: dict, url: str, days: int = 7) -> str:
+    """Sent when an unpaid (bounced) order is written off: one last, warm nudge.
+
+    It leans on what the reader stands to lose — and every one of those things
+    is TRUE, which is the line this email must not cross: nothing is reserved
+    for an unpaid order (so the copies really do go back on sale), the link
+    really does expire in `days` (payments.PAYMENT_LINK_TTL_DAYS), and the order really is
+    closing. No invented countdown, no fake "only 2 left": a made-up scarcity
+    claim is a consumer-protection problem and the fastest way to the spam
+    folder, and an Oakbridge reader who catches one stops trusting the rest.
+    """
+    esc = lambda v: _html.escape(str(v or ""))
+    who = esc((order.get("full_name") or "there").split(" ")[0])
+    items = order.get("items") or []
+    rows = "".join(
+        f'<tr><td style="padding:7px 0;font-size:14px;color:{BRAND_NAVY};">'
+        f'<span style="font-family:monospace;color:{BRAND_GREY};">{int(it.get("quantity") or 1)}&times;</span> '
+        f'{esc(it.get("title"))}'
+        + (f'<div style="font-size:12px;color:{BRAND_GREY};">{esc(it.get("author"))}</div>' if it.get("author") else "")
+        + "</td></tr>"
+        for it in items
+    )
+    total = f"{float(order.get('total') or 0):,.0f}"
+    books = "these books" if len(items) != 1 else "this book"
+    bullet = lambda t: (f'<tr><td style="padding:6px 0;font-size:14px;line-height:1.6;color:{BRAND_NAVY};">'
+                        f'<span style="color:{BRAND_AMBER};">&#9679;</span>&nbsp; {t}</td></tr>')
+    return f"""\
+<!DOCTYPE html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background-color:#F5F7FA;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:{BRAND_NAVY};">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#F5F7FA;padding:40px 16px;">
+  <tr><td align="center">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="560" style="max-width:560px;background-color:#FFFFFF;border:1px solid #E5E7EB;">
+      <tr><td style="background-color:{BRAND_NAVY};padding:28px 36px;color:#FFFFFF;">
+        <div style="font-family:Georgia,serif;font-size:22px;">Oakbridge <span style="color:{BRAND_AMBER};">Publishing</span></div>
+        <div style="font-family:monospace;text-transform:uppercase;letter-spacing:2px;font-size:11px;margin-top:6px;color:rgba(255,255,255,0.6);">Order {esc(order.get('order_number'))} &middot; Last chance</div>
+      </td></tr>
+      <tr><td style="padding:34px 36px 8px;">
+        <h1 style="margin:0;font-family:Georgia,serif;font-weight:normal;font-size:23px;">Hi {who}, don&#8217;t let {books} slip away.</h1>
+        <p style="margin:14px 0 0;font-size:15px;line-height:1.6;color:{BRAND_GREY};">
+          Your order never completed payment, so we are closing it. Before we do, here is one last link &mdash;
+          it reopens your order exactly as you left it, with your books and address already filled in.
+        </p>
+      </td></tr>
+      <tr><td style="padding:18px 36px 0;">
+        <table cellpadding="0" cellspacing="0" border="0" width="100%" style="border-top:1px solid #E5E7EB;">{rows}</table>
+        <div style="border-top:1px solid #E5E7EB;margin-top:10px;padding-top:12px;font-family:Georgia,serif;font-size:20px;">Total &#8377;{total}</div>
+      </td></tr>
+      <tr><td style="padding:22px 36px 0;">
+        <div style="font-family:monospace;text-transform:uppercase;letter-spacing:1.6px;font-size:10px;color:{BRAND_GREY};margin-bottom:6px;">What you&#8217;d be missing</div>
+        <table cellpadding="0" cellspacing="0" border="0" width="100%">
+          {bullet("<b>Your copies go back on sale.</b> Nothing is held for an unpaid order, and popular titles and new editions do sell through.")}
+          {bullet("<b>Straight from the publisher.</b> Genuine Oakbridge copies, packed by our own team &mdash; not a reseller&#8217;s stock.")}
+          {bullet("<b>Real people behind your order.</b> A question about delivery, a GST invoice or a bulk quantity? Reply and we answer it ourselves.")}
+          {bullet(f"<b>This link closes in {int(days)} days.</b> After that the order is gone and you would start again from scratch.")}
+        </table>
+      </td></tr>
+      <tr><td style="padding:26px 36px 0;">
+        <a href="{url}" style="display:inline-block;background-color:{BRAND_NAVY};color:#FFFFFF;text-decoration:none;font-size:15px;font-weight:600;padding:14px 30px;">Complete my order</a>
+        <div style="font-size:13px;color:{BRAND_GREY};margin-top:10px;">Pay by UPI, card, net banking or wallet &mdash; if one didn&#8217;t work before, another usually does.</div>
+      </td></tr>
+      <tr><td style="padding:24px 36px 36px;">
+        <div style="border-top:1px solid #E5E7EB;padding-top:20px;font-size:12px;line-height:1.7;color:{BRAND_GREY};">
+          If money left your account for an unsuccessful attempt, your bank reverses it automatically, normally within 5&ndash;7 working days.<br>
+          Changed your mind? No need to do anything &mdash; nothing has been charged.<br>
+          Any questions, just reply to this email.
+        </div>
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+</body></html>
+"""
+
+
+async def send_last_chance(order: dict, url: str, days: int = 7) -> bool:
+    """Write-off of an unpaid order (Admin → Orders): render_last_chance_html."""
+    to = order.get("email")
+    if not to:
+        return False
+    import email_manager as em
+    items = order.get("items") or []
+    what = "your books" if len(items) != 1 else "your book"
+    return await send_email(
+        to=to,
+        subject=f"Last chance: {what} are waiting \u2014 {order.get('order_number','')}" if len(items) != 1
+        else f"Last chance: {what} is waiting \u2014 {order.get('order_number','')}",
+        html=render_last_chance_html(order, url, days),
+        kind="order_last_chance",
+        ctx=em.order_ctx(order),
+    )
+
+
 async def send_payment_link(order: dict, url: str) -> bool:
     """Email the reopened order's payment link (render_payment_link_html)."""
     to = order.get("email")

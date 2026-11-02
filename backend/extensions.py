@@ -2055,8 +2055,29 @@ async def admin_write_off_order(
         },
     )
 
+    # Writing off is our bookkeeping, not the customer's goodbye: they get one
+    # last, warm "don't miss out" email with a fresh 7-day link to the same
+    # order (emailer.render_last_chance_html). If they pay, the order is paid
+    # like any other and the dashboard stops counting it as written off
+    # (state "paid" wins in the revenue split above).
+    emailed = False
+    if payload.written_off and order.get("email"):
+        try:
+            from payments import PAYMENT_LINK_TTL_DAYS, make_payment_token
+            from emailer import send_last_chance
+            full = await db.orders.find_one({"id": order_id}, {"_id": 0})
+            site = (os.environ.get("SITE_URL") or "https://www.oakbridge.in").rstrip("/")
+            emailed = bool(await send_last_chance(full, f"{site}/pay/{order_id}?t={make_payment_token(order_id)}",
+                                                  PAYMENT_LINK_TTL_DAYS))
+        except Exception:  # noqa: BLE001 — the write-off itself has already succeeded
+            log.exception("write-off: last-chance email failed for %s", order.get("order_number"))
+        if emailed:
+            await db.orders.update_one({"id": order_id}, {
+                "$set": {"payment_link_sent_at": now, "last_chance_sent_at": now},
+                "$inc": {"payment_link_count": 1}})
+
     fresh = await db.orders.find_one({"id": order_id}, {"_id": 0})
-    return {"ok": True, "written_off": bool(payload.written_off), "order": fresh}
+    return {"ok": True, "written_off": bool(payload.written_off), "order": fresh, "emailed": emailed}
 
 
 @admin_router.post("/orders/{order_id}/tracking")

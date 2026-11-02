@@ -85,7 +85,7 @@ export default function AdminOrders() {
             );
             toast.success(
                 written_off
-                    ? `${formatINR(order.total)} written off — it has left Not collected.`
+                    ? `${formatINR(order.total)} written off — it has left Not collected.${res.emailed ? " Last-chance email sent to the customer." : res.already ? "" : " (No last-chance email — no address or sending failed.)"}`
                     : `${formatINR(order.total)} is back in Not collected.`,
             );
             setWriteOffFor(null);
