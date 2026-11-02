@@ -60,7 +60,8 @@ L = [{"sku": "A", "channel": "mfn", "book_id": "b1", "qty": 5},
      {"sku": "C", "channel": "afn", "book_id": "b1", "qty": 0},
      {"sku": "D", "channel": "mfn", "book_id": None, "qty": 3},
      {"sku": "E", "channel": "mfn", "book_id": "b1", "qty": 1},
-     {"sku": "F", "channel": "mfn", "book_id": "b1", "qty": 1, "pushed_qty": 5},
+     {"sku": "F", "channel": "mfn", "book_id": "b1", "qty": 1, "pushed_qty": 5, "push_at": "2026-10-30T10:00", "synced_at": "2026-10-30T09:00"},
+     {"sku": "H", "channel": "mfn", "book_id": "b1", "qty": 9, "pushed_qty": 5, "push_at": "2026-10-30T10:00", "synced_at": "2026-10-30T11:00"},
      {"sku": "G", "channel": "mfn", "book_id": "b1", "qty": 9, "gone": True}]
 BOOKS = {"b1": {"id": "b1", "stock": 7}, "b2": {"id": "b2", "stock": 0}}
 plan = {p["sku"]: p for p in c.push_plan(L, BOOKS, 2, {"E"})}
@@ -69,7 +70,8 @@ check(plan["A"]["target"] == 5 and plan["A"]["push"] is False, "already right ->
 check(plan["B"]["target"] == 0 and plan["B"]["push"] is True, "'--' on Amazon, no stock -> set 0")
 check(plan["D"]["push"] is False and plan["D"]["target"] is None, "unlinked SKU -> skipped")
 check(plan["E"]["push"] is False and "switched off" in plan["E"]["why"], "per-SKU sync off -> skipped")
-check(plan["F"]["push"] is False, "last pushed value wins over a stale report quantity")
+check(plan["F"]["push"] is False, "last pushed value wins over an older report quantity")
+check(plan["H"]["push"] is True and plan["H"]["target"] == 5, "a newer report (hand-edited on Amazon) is corrected back")
 
 # --- order stages: never take twice, restore only what was taken
 check(c.order_step("new", "Unshipped") == "take", "new order -> take")

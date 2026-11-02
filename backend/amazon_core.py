@@ -105,7 +105,11 @@ def push_plan(listings: list, books: dict, buffer: int, no_push: set) -> list:
             plan.append({**line, "target": None, "push": False, "why": "sync switched off for this SKU"})
             continue
         q, why = target_qty(books.get(bid), buffer)
-        known = l.get("pushed_qty") if l.get("pushed_qty") is not None else l.get("qty")
+        # What Amazon has now: our last push, unless a listings report read
+        # AFTER that push says otherwise (staff changed it in Seller Central) —
+        # then the report wins, so a hand-typed number never silently stays.
+        pushed_later = l.get("pushed_qty") is not None and (l.get("push_at") or "") >= (l.get("synced_at") or "")
+        known = l.get("pushed_qty") if pushed_later else l.get("qty")
         plan.append({**line, "target": q, "push": known != q, "why": why})
     return plan
 

@@ -104,8 +104,11 @@ def _download_report() -> str:
             raise sp.AmazonError("Amazon is still preparing the listings report — it will be picked up on the next run.")
         time.sleep(10)
     doc = sp._get(f"/reports/2021-06-30/documents/{rep['reportDocumentId']}", {})
-    r = requests.get(doc["url"], timeout=60)     # pre-signed link: no Amazon token is sent
-    r.raise_for_status()
+    try:
+        r = requests.get(doc["url"], timeout=60)     # pre-signed link: no Amazon token is sent
+        r.raise_for_status()
+    except requests.RequestException as e:
+        raise sp.AmazonError(f"Could not download the listings report: {type(e).__name__}") from None
     raw = gzip.decompress(r.content) if (doc.get("compressionAlgorithm") or "").upper() == "GZIP" else r.content
     for enc in ("utf-8", "cp1252"):
         try:
@@ -387,9 +390,15 @@ router = APIRouter(prefix="/api/admin/warehouse/amazon/easyship", tags=["amazon"
 async def es_status():
     st = await get_settings()
     st.pop("orders_cursor", None)
-    return {**st, "ready": ready(), "keys": sp.configured(), "seller_id": bool(sp._cfg()["seller_id"]),
+    lp = (st.get("last_pull") or {}).get("at")
+    # Runs in the WORKER service: missing SPAPI_* keys there = silently never runs.
+    stale = st["on"] and (not lp or _now() - datetime.fromisoformat(lp) > timedelta(minutes=3 * RUN_EVERY_MIN))
+    return {**st, "sync_stale": bool(stale), "ready": ready(), "keys": sp.configured(), "seller_id": bool(sp._cfg()["seller_id"]),
             "listings": await db.amazon_listings.count_documents({"channel": "mfn", "gone": {"$ne": True}}),
-            "attention": await db.amazon_orders.count_documents({"needs_attention": True})}
+            # A run that died between claiming an order and finishing it leaves
+            # "taking"/"restoring": counted here so it is seen, not silent.
+            "attention": await db.amazon_orders.count_documents(
+                {"$or": [{"needs_attention": True}, {"stage": {"$in": ["taking", "restoring"]}}]})}
 
 
 @router.get("/preview")

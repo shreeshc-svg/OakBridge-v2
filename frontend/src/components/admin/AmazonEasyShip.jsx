@@ -81,6 +81,7 @@ export default function AmazonEasyShip({ onChanged }) {
                         {" · "}<button type="button" className="underline" onClick={showOrders}>{orders ? "Hide Amazon orders" : "Amazon orders"}</button>
                         {st.attention ? <span className="text-[#CC0033]"> · {st.attention} need attention</span> : null}
                     </div>
+                    {st.sync_stale && <div className="text-[#CC0033]">Sync is ON but has not run in the last 45 minutes — check the worker service in Render has the SPAPI_* keys and SPAPI_SELLER_ID.</div>}
                     {st.last_error && <div className="text-[#CC0033]">Last error ({when(st.last_error_at)}): {st.last_error}</div>}
                     {lpu?.failed?.length ? <div className="text-[#CC0033]">Not accepted by Amazon: {lpu.failed.join(" · ")}</div> : null}
                 </div>

@@ -356,6 +356,7 @@ function AmazonPanel({ amz, onChanged }) {
                             {amz.unmatched ? <> · <button type="button" className="underline text-[#B45309]" onClick={openLinks}>{amz.unmatched} SKU(s) to link</button></> : null}
                         </span>
                         {amz.last_error && <span className="text-xs text-[#CC0033]">Last error: {amz.last_error}</span>}
+                        {amz.sync_stale && <span className="text-xs text-[#CC0033]">Automatic sync is not running — add the SPAPI_* keys to the worker service in Render too.</span>}
                         <label className="ml-auto flex items-center gap-1 text-xs text-[#4B5563]">Warn at Amazon ≤
                             <input type="number" min={0} defaultValue={amz.low_at} className="w-14 border border-[#E5E7EB] px-1 py-0.5"
                                 onBlur={(e) => amzSaveSettings(Number(e.target.value) || 0).then(onChanged).catch((er) => toast.error(formatApiError(er)))} />

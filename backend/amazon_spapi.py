@@ -91,8 +91,11 @@ def _access_token() -> str:
     if _token["value"] and time.time() < _token["exp"] - 60:
         return _token["value"]
     c = _cfg()
-    r = requests.post(LWA_URL, data={"grant_type": "refresh_token", "refresh_token": c["refresh_token"],
-                                     "client_id": c["client_id"], "client_secret": c["client_secret"]}, timeout=20)
+    try:
+        r = requests.post(LWA_URL, data={"grant_type": "refresh_token", "refresh_token": c["refresh_token"],
+                                         "client_id": c["client_id"], "client_secret": c["client_secret"]}, timeout=20)
+    except requests.RequestException as e:
+        raise AmazonError(f"Could not reach Amazon login: {type(e).__name__}") from None
     if r.status_code != 200:
         raise AmazonError(f"Amazon login refused ({r.status_code}): {_clean_err(r.text)}")
     j = r.json()
@@ -111,10 +114,19 @@ def _call(method: str, path: str, params: Optional[dict] = None, body: Optional[
     import requests
     c = _cfg()
     for attempt in range(4):
-        r = requests.request(method, ENDPOINTS[c["region"]] + path, params=params, json=body,
-                             headers={"x-amz-access-token": _access_token(), "accept": "application/json",
-                                      "content-type": "application/json",
-                                      "user-agent": "OakbridgeInventorySync/1.0 (Language=Python)"}, timeout=30)
+        # A network failure is an AmazonError like any other: callers catch
+        # AmazonError per step, and anything else would abort the whole run —
+        # a flaky listings report must never stop Amazon orders being taken off stock.
+        try:
+            r = requests.request(method, ENDPOINTS[c["region"]] + path, params=params, json=body,
+                                 headers={"x-amz-access-token": _access_token(), "accept": "application/json",
+                                          "content-type": "application/json",
+                                          "user-agent": "OakbridgeInventorySync/1.0 (Language=Python)"}, timeout=30)
+        except requests.RequestException as e:
+            if attempt < 3:
+                time.sleep(2 * (attempt + 1))
+                continue
+            raise AmazonError(f"Could not reach Amazon: {type(e).__name__}") from None
         if r.status_code == 429 and attempt < 3:     # throttled: back off and retry
             time.sleep(2 * (attempt + 1))
             continue
@@ -328,7 +340,11 @@ admin_router = APIRouter(prefix="/api/admin/warehouse/amazon", tags=["amazon"], 
 @admin_router.get("/status")
 async def amz_status():
     st = await settings()
-    return {"configured": configured(), "marketplace": _cfg()["marketplace"], **st,
+    ls = (st.get("last_sync") or {}).get("at")
+    # The 6-hourly sync runs in the WORKER service: if its Render environment
+    # lacks the SPAPI_* keys, nothing runs and nothing errors. Say so.
+    stale = bool(ls) and datetime.now(timezone.utc) - datetime.fromisoformat(ls) > timedelta(hours=SYNC_EVERY_HOURS + 1)
+    return {"configured": configured(), "marketplace": _cfg()["marketplace"], **st, "sync_stale": stale,
             "skus": await db.amazon_fba.count_documents({"gone": {"$ne": True}}),
             "unmatched": await db.amazon_fba.count_documents(_UNLINKED)
             + await db.amazon_listings.count_documents({**_UNLINKED, "channel": "mfn"})}
