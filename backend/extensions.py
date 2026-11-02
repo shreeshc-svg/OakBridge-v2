@@ -303,6 +303,10 @@ class WriteOffUpdate(BaseModel):
 
     written_off: bool = True
     note: Optional[str] = ""
+    # Send the customer the last-chance email (emailer.send_last_chance).
+    # Default False: an older client that doesn't send the field must never
+    # email a customer by surprise; the admin dialog sends True unless unticked.
+    notify: bool = False
 
 
 class TrackingUpdate(BaseModel):
@@ -2036,7 +2040,7 @@ async def admin_write_off_order(
         {"$push": {"status_history": {
             "status": "written_off" if payload.written_off else "write_off_reversed",
             "note": note,
-            "notify_requested": False,
+            "notify_requested": bool(payload.written_off and payload.notify),
             "notified": False,
             "at": now,
         }}},
@@ -2061,7 +2065,7 @@ async def admin_write_off_order(
     # like any other and the dashboard stops counting it as written off
     # (state "paid" wins in the revenue split above).
     emailed = False
-    if payload.written_off and order.get("email"):
+    if payload.written_off and payload.notify and order.get("email"):
         try:
             from payments import PAYMENT_LINK_TTL_DAYS, make_payment_token
             from emailer import send_last_chance

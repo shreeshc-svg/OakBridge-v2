@@ -472,8 +472,8 @@ export const adminListOrders = () =>
  * in the CSV, and only leaves the Not collected total. Superadmin only, and the
  * backend refuses it on anything that is paid or not already bounced.
  */
-export const adminWriteOffOrder = (id, { written_off = true, note = "" } = {}) =>
-    api.post(`/admin/orders/${id}/write-off`, { written_off, note }).then((r) => r.data);
+export const adminWriteOffOrder = (id, { written_off = true, note = "", notify = false } = {}) =>
+    api.post(`/admin/orders/${id}/write-off`, { written_off, note, notify }).then((r) => r.data);
 // "Returned — put back in stock" for a cancelled order whose parcel had left.
 export const adminRestockOrder = (id) => api.post(`/admin/orders/${id}/restock`).then((r) => r.data);
 export const adminUpdateOrder = (id, status, opts = {}) =>

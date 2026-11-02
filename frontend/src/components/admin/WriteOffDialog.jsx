@@ -24,6 +24,9 @@ import { formatINR } from "../../lib/api";
 export default function WriteOffDialog({ order, busy, onConfirm, onCancel }) {
     const undoing = Boolean(order.written_off);
     const [note, setNote] = React.useState("");
+    // Last-chance email (emailer.render_last_chance_html): on by default, the
+    // admin can untick it — e.g. the customer already said no, or was a test.
+    const [notify, setNotify] = React.useState(Boolean(order.email));
     const firstRef = React.useRef(null);
 
     React.useEffect(() => {
@@ -126,9 +129,31 @@ export default function WriteOffDialog({ order, busy, onConfirm, onCancel }) {
                         />
                     </label>
 
+                    {!undoing && (
+                        <label className="mt-4 flex items-start gap-2 text-sm text-[#002B5C]">
+                            <input
+                                type="checkbox"
+                                checked={notify}
+                                disabled={!order.email}
+                                onChange={(e) => setNotify(e.target.checked)}
+                                data-testid="write-off-notify"
+                                className="mt-0.5"
+                            />
+                            <span>
+                                Email the customer a last-chance link to complete the order
+                                <span className="block text-xs text-[#4B5563]">
+                                    {order.email
+                                        ? "Untick to write off quietly — nothing is sent."
+                                        : "This order has no email address."}
+                                </span>
+                            </span>
+                        </label>
+                    )}
+
                     <p className="mt-3 text-xs text-[#4B5563]">
                         Recorded in Audit Logs against your account, and on this order's own
-                        history. The customer is not emailed.
+                        history.{" "}
+                        {undoing || !notify ? "The customer is not emailed." : "The customer gets one last-chance email."}
                     </p>
                 </div>
 
@@ -141,7 +166,7 @@ export default function WriteOffDialog({ order, busy, onConfirm, onCancel }) {
                         Cancel
                     </button>
                     <button
-                        onClick={() => onConfirm({ written_off: !undoing, note: note.trim() })}
+                        onClick={() => onConfirm({ written_off: !undoing, note: note.trim(), notify: !undoing && notify })}
                         disabled={busy}
                         data-testid="write-off-confirm"
                         className="inline-flex items-center gap-2 bg-[#002B5C] text-white px-5 py-2.5 text-sm font-medium hover:bg-[#001F42] disabled:opacity-50"

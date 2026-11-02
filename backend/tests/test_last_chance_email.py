@@ -49,7 +49,12 @@ check("closes in 3 days" in emailer.render_last_chance_html(o, "u", 3), "days co
 
 ext = open(os.path.join(ROOT, "extensions.py"), encoding="utf-8").read()
 fn = ext.split("async def admin_write_off_order")[1].split("\n@admin_router")[0]
-check("send_last_chance(" in fn and "if payload.written_off and order.get(\"email\")" in fn, "write-off sends it (not on reversal)")
+check("send_last_chance(" in fn and "if payload.written_off and payload.notify and order.get(\"email\")" in fn,
+      "write-off sends it only when the admin leaves 'email the customer' ticked (never on reversal)")
+check("notify: bool = False" in ext, "API default is no email (an old client never emails by surprise)")
+dlg = open(os.path.join(ROOT, "..", "frontend", "src", "components", "admin", "WriteOffDialog.jsx"), encoding="utf-8").read()
+check('data-testid="write-off-notify"' in dlg and "notify: !undoing && notify" in dlg, "dialog: tick box, on by default, sent with the write-off")
+check("The customer is not emailed.\n" not in dlg, "dialog no longer always claims the customer is not emailed")
 check(fn.index('raise HTTPException(\n                status_code=400,\n                detail="This order is paid') < fn.index("send_last_chance("),
       "never sent for a paid order (refused before)")
 check('"already": True}' in fn.split("send_last_chance(")[0], "double-click write-off returns early: no second email")

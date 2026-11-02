@@ -72,11 +72,11 @@ export default function AdminOrders() {
             .finally(() => setLoading(false));
     };
 
-    const applyWriteOff = async ({ written_off, note }) => {
+    const applyWriteOff = async ({ written_off, note, notify }) => {
         const order = writeOffFor;
         setSavingWriteOff(true);
         try {
-            const res = await adminWriteOffOrder(order.id, { written_off, note });
+            const res = await adminWriteOffOrder(order.id, { written_off, note, notify });
             // Patch the one row rather than refetching all 500: the list is
             // client-side filtered and sorted, and a reload would throw away
             // whatever the admin was looking at mid-task.
@@ -85,7 +85,7 @@ export default function AdminOrders() {
             );
             toast.success(
                 written_off
-                    ? `${formatINR(order.total)} written off — it has left Not collected.${res.emailed ? " Last-chance email sent to the customer." : res.already ? "" : " (No last-chance email — no address or sending failed.)"}`
+                    ? `${formatINR(order.total)} written off — it has left Not collected.${res.emailed ? " Last-chance email sent to the customer." : res.already || !notify ? "" : " (No last-chance email — no address or sending failed.)"}`
                     : `${formatINR(order.total)} is back in Not collected.`,
             );
             setWriteOffFor(null);
