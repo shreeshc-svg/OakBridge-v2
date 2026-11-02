@@ -617,13 +617,11 @@ export default function AdminOrders() {
                                                 onClick={() => onSendPaymentLink(o.id)}
                                                 disabled={linking === o.id}
                                                 data-testid={`order-paylink-${o.id}`}
-                                                title={o.payment_status === "failed"
-                                                    ? "Payment was declined: email the customer a link to pay with a different method (UPI, another card, net banking, wallet)"
-                                                    : "Email this customer a link to finish paying for this order"}
+                                                title="Email the customer a link to pay for this order with a different method (UPI, another card, net banking, wallet)"
                                                 className="inline-flex items-center gap-1.5 border border-[#F59E0B] text-[#854F0B] bg-[#FAEEDA] hover:bg-[#F6E3C4] px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50"
                                             >
                                                 <Send size={12} strokeWidth={1.5} />
-                                                {linking === o.id ? "Sending…" : o.payment_status === "failed" ? "Ask to pay another way" : "Payment link"}
+                                                {linking === o.id ? "Sending…" : "Ask to pay another way"}
                                             </button>
                                         )}
                                         <button
