@@ -203,7 +203,9 @@ check("attachments=files)" in mk and '"status": "paused"' in mk.split("marketing
 check('"wa_variables", "attachments")' in mk, "duplicate keeps the attachments")
 feat = open(os.path.join(ROOT, "features.py"), encoding="utf-8").read()
 check('"mk-attach"' in feat.split("_PRIVATE_SEGMENTS = ")[1].split("\n")[0], "/api/files never serves mk-attach/")
-check("marketing_attachments_router" in open(os.path.join(ROOT, "server.py"), encoding="utf-8").read(), "router included")
+srv = open(os.path.join(ROOT, "server.py"), encoding="utf-8").read()
+check(-1 < srv.find("app.include_router(marketing_attachments_router)") < srv.find("app.include_router(marketing_admin_router)"),
+      "attachments router registered BEFORE marketing's catch-all POST /campaigns/{cid}/{action}")
 
 print("\nall passed" if not failed else f"\n{failed} FAILED")
 sys.exit(1 if failed else 0)

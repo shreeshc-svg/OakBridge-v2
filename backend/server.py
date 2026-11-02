@@ -2116,9 +2116,12 @@ app.include_router(interakt_admin_router)
 from marketing import (admin_router as marketing_admin_router, public_router as marketing_public_router,  # noqa: E402
                        tasks_router as marketing_tasks_router)
 app.include_router(marketing_public_router)
-app.include_router(marketing_admin_router)
+# BEFORE marketing_admin_router: its catch-all POST /campaigns/{cid}/{action}
+# (pause/resume/cancel) would otherwise swallow POST /campaigns/{cid}/attachments
+# and answer "Unknown action". FastAPI matches routes in registration order.
 from marketing_attachments import router as marketing_attachments_router  # noqa: E402
 app.include_router(marketing_attachments_router)
+app.include_router(marketing_admin_router)
 app.include_router(marketing_tasks_router)
 from newsletter import router as newsletter_router  # noqa: E402  (also registers the nl_tick job)
 app.include_router(newsletter_router)
