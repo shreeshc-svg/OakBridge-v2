@@ -1229,6 +1229,11 @@ async def send_contact_ack(msg: dict) -> bool:
 
 # ====== Unpaid order: the link that reopens it ======
 
+def payment_failed(order: dict) -> bool:
+    """Razorpay reported a declined payment (payments.py sets "failed")."""
+    return order.get("payment_status") == "failed"
+
+
 def render_payment_link_html(order: dict, url: str) -> str:
     """Ask a customer to finish an order they started but did not pay for.
 
@@ -1253,6 +1258,33 @@ def render_payment_link_html(order: dict, url: str) -> str:
         for it in (order.get("items") or [])
     )
     total = f"{float(order.get('total') or 0):,.0f}"
+    # A payment the bank or Razorpay DECLINED is a different conversation from
+    # one the customer walked away from: they wanted the books and something
+    # in the payment path said no. Retrying the same card usually fails the
+    # same way, so the useful thing is to name the other ways to pay, and to
+    # say plainly that a debit for a failed payment comes back on its own —
+    # the question that otherwise arrives as a support email.
+    failed = payment_failed(order)
+    headline = f"Hi {who}, your payment didn&#8217;t go through." if failed else f"Hi {who}, your order is waiting."
+    intro = (
+        "We tried to take payment for this order but it was declined, so we have not processed it. "
+        "This is usually the bank or payment app, not you &mdash; and another method normally works."
+        if failed else
+        "You started this order with us but the payment was not completed, so we have not processed it."
+    )
+    methods = (
+        f'<tr><td style="padding:20px 36px 0;">'
+        f'<div style="border:1px solid #E5E7EB;background:#F5F7FA;padding:14px 18px;font-size:14px;line-height:1.7;color:{BRAND_NAVY};">'
+        f'<b>Try a different way to pay</b><br>'
+        f'UPI (GPay, PhonePe, Paytm) &middot; another debit or credit card &middot; net banking &middot; wallet'
+        f'</div></td></tr>'
+        if failed else ""
+    )
+    refund = (
+        "If money left your account for the failed attempt, your bank reverses it automatically, "
+        "normally within 5&ndash;7 working days.<br>"
+        if failed else ""
+    )
     return f"""\
 <!DOCTYPE html><html><head><meta charset="utf-8"></head>
 <body style="margin:0;padding:0;background-color:#F5F7FA;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:{BRAND_NAVY};">
@@ -1264,22 +1296,22 @@ def render_payment_link_html(order: dict, url: str) -> str:
         <div style="font-family:monospace;text-transform:uppercase;letter-spacing:2px;font-size:11px;margin-top:6px;color:rgba(255,255,255,0.6);">Order {esc(order.get('order_number'))}</div>
       </td></tr>
       <tr><td style="padding:34px 36px 8px;">
-        <h1 style="margin:0;font-family:Georgia,serif;font-weight:normal;font-size:23px;">Hi {who}, your order is waiting.</h1>
+        <h1 style="margin:0;font-family:Georgia,serif;font-weight:normal;font-size:23px;">{headline}</h1>
         <p style="margin:14px 0 0;font-size:15px;line-height:1.6;color:{BRAND_GREY};">
-          You started this order with us but the payment was not completed, so we have not
-          processed it.
+          {intro}
         </p>
       </td></tr>
+      {methods}
       <tr><td style="padding:18px 36px 0;">
         <table cellpadding="0" cellspacing="0" border="0" width="100%" style="border-top:1px solid #E5E7EB;">{rows}</table>
         <div style="border-top:1px solid #E5E7EB;margin-top:10px;padding-top:12px;font-family:Georgia,serif;font-size:20px;">Total &#8377;{total}</div>
       </td></tr>
       <tr><td style="padding:26px 36px 0;">
-        <a href="{url}" style="display:inline-block;background-color:{BRAND_NAVY};color:#FFFFFF;text-decoration:none;font-size:15px;font-weight:600;padding:14px 30px;">Complete payment</a>
+        <a href="{url}" style="display:inline-block;background-color:{BRAND_NAVY};color:#FFFFFF;text-decoration:none;font-size:15px;font-weight:600;padding:14px 30px;">{"Pay another way" if failed else "Complete payment"}</a>
       </td></tr>
       <tr><td style="padding:24px 36px 36px;">
         <div style="border-top:1px solid #E5E7EB;padding-top:20px;font-size:12px;line-height:1.7;color:{BRAND_GREY};">
-          If you would rather not go ahead, ignore this &mdash; nothing has been charged and the
+          {refund}If you would rather not go ahead, ignore this &mdash; nothing has been charged and the
           order will simply lapse.<br>
           We have not reserved stock, so if a title sells out before you pay we will let you know.<br>
           This link works for 7 days. Any questions, just reply to this email.
@@ -1300,7 +1332,8 @@ async def send_payment_link(order: dict, url: str) -> bool:
     import email_manager as em
     return await send_email(
         to=to,
-        subject=f"Your Oakbridge order is waiting \u2014 {order.get('order_number','')}",
+        subject=(f"Your payment didn\u2019t go through \u2014 try another way \u2014 {order.get('order_number','')}"
+                 if payment_failed(order) else f"Your Oakbridge order is waiting \u2014 {order.get('order_number','')}"),
         html=render_payment_link_html(order, url),
         kind="payment_link",
         ctx=em.order_ctx(order),
