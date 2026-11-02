@@ -1136,8 +1136,12 @@ def _send_raw(msg_bytes: bytes) -> str:
     return _ses().send_email(**kw)["MessageId"]
 
 
-def build_mime(*, st: dict, to: str, subject: str, html_doc: str, text_doc: str, unsub_post: str) -> bytes:
-    msg = MIMEMultipart("alternative")
+def build_mime(*, st: dict, to: str, subject: str, html_doc: str, text_doc: str, unsub_post: str,
+               attachments: Optional[list] = None) -> bytes:
+    """attachments: [(filename, mime, bytes)] (marketing_attachments.load).
+    Without them the message is exactly as before (multipart/alternative);
+    with them it is multipart/mixed = [alternative(text, html), files…]."""
+    msg = MIMEMultipart("mixed" if attachments else "alternative")
     msg["Subject"] = subject
     msg["From"] = formataddr((st["from_name"], st["from_email"]))
     msg["To"] = to
@@ -1147,8 +1151,14 @@ def build_mime(*, st: dict, to: str, subject: str, html_doc: str, text_doc: str,
     if unsub_post:
         msg["List-Unsubscribe"] = f"<{unsub_post}>, <mailto:{st['from_email']}?subject=unsubscribe>"
         msg["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
-    msg.attach(MIMEText(text_doc, "plain", "utf-8"))
-    msg.attach(MIMEText(html_doc, "html", "utf-8"))
+    body = MIMEMultipart("alternative") if attachments else msg
+    body.attach(MIMEText(text_doc, "plain", "utf-8"))
+    body.attach(MIMEText(html_doc, "html", "utf-8"))
+    if attachments:
+        import marketing_attach_core
+        msg.attach(body)
+        for part in marketing_attach_core.mime_parts(attachments):
+            msg.attach(part)
     return msg.as_bytes()
 
 
@@ -1552,6 +1562,19 @@ async def _run_campaign(cid: str) -> None:
                 rate = max(1.0, float((acct.get("SendQuota") or {}).get("MaxSendRate") or 1)) * 0.8
             except Exception:  # noqa: BLE001
                 log.warning("marketing: could not read SES quota; sending at 1/s", exc_info=True)
+        files = None
+        if camp["channel"] == "email" and camp.get("attachments"):
+            # Read once for the whole run. A missing file pauses the campaign:
+            # an email that says "see attached" with nothing attached is worse
+            # than a delay the admin can see and fix.
+            import marketing_attachments
+            try:
+                files = await marketing_attachments.load(camp)
+            except Exception as e:  # noqa: BLE001
+                await db.mk_campaigns.update_one({"id": cid, "status": "sending"}, {"$set": {
+                    "status": "paused", "paused_at": _iso(),
+                    "paused_reason": f"An attachment could not be read from storage ({str(e)[:120]}). Remove and re-attach it, then resume."}})
+                return
         while True:
             camp = await db.mk_campaigns.find_one({"id": cid}, {"_id": 0})
             if not camp or camp.get("status") != "sending":
@@ -1586,7 +1609,8 @@ async def _run_campaign(cid: str) -> None:
                             await db.mk_sends.update_one({"id": s["id"]}, {"$set": {"links": send_links}})
                         html_doc, text_doc = render_for(camp, contact, s["id"], st, links=send_links)
                         raw = build_mime(st=st, to=contact["email"], subject=core.personalise(camp["subject"], contact),
-                                         html_doc=html_doc, text_doc=text_doc, unsub_post=_links(s["id"])["unsub_post"])
+                                         html_doc=html_doc, text_doc=text_doc, unsub_post=_links(s["id"])["unsub_post"],
+                                         attachments=files)
                         mid = await asyncio.to_thread(_send_raw, raw)
                         await db.mk_sends.update_one({"id": s["id"]}, {"$set": {"status": "sent", "message_id": mid, "sent_at": _iso()}})
                         await db.mk_contacts.update_one({"id": contact["id"]}, {"$inc": {"stats.sent": 1, "since_engaged": 1}, "$set": {"last_sent_at": _iso()}})
@@ -3390,7 +3414,9 @@ async def adm_dup_campaign(cid: str, user: dict = Depends(require_admin)):
     c = await db.mk_campaigns.find_one({"id": cid}, {"_id": 0})
     if not c:
         raise HTTPException(status_code=404, detail="Campaign not found")
-    keep = {k: c.get(k) for k in ("channel", "subject", "preheader", "blocks", "links", "audience", "wa_template", "wa_language", "wa_variables")}
+    # attachments: the copy shares the stored files (removal only unlinks, see marketing_attachments).
+    keep = {k: c.get(k) for k in ("channel", "subject", "preheader", "blocks", "links", "audience", "wa_template", "wa_language",
+                                  "wa_variables", "attachments")}
     doc = {**keep, "id": str(uuid.uuid4()), "name": f"{c['name']} (copy)"[:120], "status": "draft", "created_at": _iso(),
            "created_by": user.get("email", ""), "stats": {}}
     await db.mk_campaigns.insert_one(dict(doc))
@@ -3457,8 +3483,15 @@ async def adm_test_campaign(cid: str, body: TestBody, user: dict = Depends(requi
         html_doc, text_doc = core.render_email(c.get("blocks") or [], brand={"name": "Oakbridge Publishing", "logo": st.get("logo"), "footer": st.get("footer")},
                                                contact=contact, link_for=lambda u: core.add_utm(u, cid), unsubscribe_url=f"{SITE}/unsubscribe",
                                                preheader=c.get("preheader") or "")
+        files = None
+        if c.get("attachments"):
+            import marketing_attachments
+            try:
+                files = await marketing_attachments.load(c)
+            except HTTPException as e:
+                raise HTTPException(status_code=409, detail=f"An attachment could not be read ({e.detail}) — remove and re-attach it.")
         raw = build_mime(st=st, to=body.to, subject=f"[TEST] {core.personalise(c.get('subject') or '(no subject)', contact)}",
-                         html_doc=html_doc, text_doc=text_doc, unsub_post="")
+                         html_doc=html_doc, text_doc=text_doc, unsub_post="", attachments=files)
         try:
             mid = await asyncio.to_thread(_send_raw, raw)
         except Exception as e:  # noqa: BLE001

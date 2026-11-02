@@ -66,7 +66,7 @@ check(/"website_order", actor=\{"email": "website"\},\s*doc_id=order\.get\("orde
 check(/async def record_website_sale[\s\S]*?except Exception:[\s\S]*?log\.exception/.test(wh), "never raises in the payment path");
 
 console.log("-- documents are private --");
-check(/\{"cv", "warehouse"\}/.test(feat) && /_PRIVATE_SEGMENTS = \{"cv", "warehouse"\}/.test(feat),
+check(/_PRIVATE_SEGMENTS = \{"cv", "warehouse"[,}]/.test(feat),
       "warehouse files go to the private bucket and are blocked from the public file proxy");
 check(/path = f"\{APP_NAME\}\/warehouse\//.test(wh), "stored under oakbridge/warehouse/");
 check(/"Cache-Control": "private, no-store"/.test(wh), "served without caching, only through authenticated routes");
@@ -142,7 +142,8 @@ check(/prev_status == "cancelled" and payload\.status != "cancelled"[\s\S]*?reta
 check(/"stock_taken": taken/.test(pay) && /if res\.modified_count == 1:\s*\n\s*taken\.append/.test(pay), "payment records exactly what came off");
 check(/data-testid=\{`order-restock-\$\{o\.id\}`\}/.test(code("frontend/src/pages/admin/AdminOrders.jsx")), "admin: Returned — put back in stock");
 check(/data-testid="wh-parcel-here"/.test(screen) && /data-testid="wh-parcel-gone"/.test(screen), "warehouse asked whether a cancelled parcel is still there");
-check(/"website_return", "opening"\)/.test(wh), "website order/return movements cannot be undone one by one");
+check(/"website_return", "opening"[,)]/.test(wh) && /"amazon_order", "amazon_cancel"\)/.test(wh),
+      "website and Amazon order movements cannot be undone one by one");
 
 // Admin SCRUD on documents.
 const fnOf = (name) => (wh.match(new RegExp(`async def ${name}\\([\\s\\S]*?\\n(?=\\n\\S)`)) || [""])[0];

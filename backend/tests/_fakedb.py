@@ -1,7 +1,7 @@
 """A tiny in-memory stand-in for the Motor collection methods jobs.py and
 dbutil.py use, so their logic is tested without MongoDB. Supports only what
 those modules call: equality, $or/$and, $lt/$lte/$gt/$gte/$in/$nin/$ne/$exists/$regex,
-$set/$inc/$unset/$setOnInsert/$pull/$addToSet, array paths, sort, limit, projection, unique (sparse) indexes."""
+$set/$inc/$unset/$setOnInsert/$pull/$push/$addToSet, array paths, sort, limit, projection, unique (sparse) indexes."""
 import copy
 
 
@@ -158,7 +158,11 @@ class Coll:
         for k in (upd.get("$unset") or {}):
             d.pop(k, None)
         for k, v in (upd.get("$pull") or {}).items():
-            d[k] = [x for x in d.get(k) or [] if x != v]
+            # Mongo: a condition dict pulls the sub-documents it matches.
+            d[k] = [x for x in d.get(k) or []
+                    if not ((isinstance(v, dict) and isinstance(x, dict) and _match(x, v)) or x == v)]
+        for k, v in (upd.get("$push") or {}).items():
+            d[k] = list(d.get(k) or []) + (list(v["$each"]) if isinstance(v, dict) and "$each" in v else [v])
         for k, v in (upd.get("$addToSet") or {}).items():
             cur = list(d.get(k) or [])
             for x in (v["$each"] if isinstance(v, dict) and "$each" in v else [v]):

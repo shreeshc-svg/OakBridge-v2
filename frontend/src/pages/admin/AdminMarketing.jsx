@@ -14,6 +14,7 @@ import { LineChart, BarChart, Funnel, Donut, Kpi, pct, inr } from "../../compone
 import { StepsTable, GrowthInsights, OfficeNetwork } from "../../components/marketing/GrowthInsights";
 import { AIInsightCard, NextActions, SubjectCoach, AISwitch } from "../../components/marketing/AIInsights";
 import { GROWTH_PERIODS, growthPeriod, growthPeriodLabel } from "../../lib/dateRange";
+import CampaignAttachments from "../../components/marketing/CampaignAttachments";
 
 /**
  * Admin → Marketing (backend/marketing.py).
@@ -607,6 +608,11 @@ function CampaignEditor({ c, setC, reload }) {
                         <BlockEditor blocks={blocks} setBlocks={setBlocks} />
                         <div className="mt-3"><VariablesHelp /></div>
                         <button type="button" className="mt-3 underline text-xs" onClick={saveAsTemplate} data-testid="mk-save-as-template">Save this email as a template</button>
+                    </Panel>
+                )}
+                {isEmail && (
+                    <Panel title="Attachments" right={<span className="text-xs text-[#6B7280]">{(c.attachments || []).length} file(s)</span>}>
+                        <CampaignAttachments c={c} onChange={(attachments) => patch({ attachments })} />
                     </Panel>
                 )}
                 <Panel title="Audience">

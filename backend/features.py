@@ -574,7 +574,7 @@ async def validate_coupon(payload: CouponValidateRequest):
 # "warehouse": printer bills and Tally invoices — they carry bank details and
 # supplier terms, and are served only through authenticated endpoints in
 # warehouse.py.
-_PRIVATE_SEGMENTS = {"cv", "warehouse"}
+_PRIVATE_SEGMENTS = {"cv", "warehouse", "mk-attach"}   # mk-attach: marketing attachments leave only inside emails
 
 
 @public_router.get("/files/{path:path}")

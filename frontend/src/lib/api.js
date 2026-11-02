@@ -812,6 +812,14 @@ export const mkNewTemplate = (body) => api.post("/admin/marketing/templates", bo
 export const mkSaveTemplate = (id, body) => api.patch(`/admin/marketing/templates/${encodeURIComponent(id)}`, body).then((r) => r.data);
 export const mkDeleteTemplate = (id) => api.delete(`/admin/marketing/templates/${encodeURIComponent(id)}`).then((r) => r.data);
 export const mkUseTemplate = (id, name) => api.post(`/admin/marketing/templates/${encodeURIComponent(id)}/use`, { name }).then((r) => r.data);
+// Campaign attachments (backend/marketing_attachments.py): real files on every email.
+export const mkAddAttachment = (cid, file) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return api.post(`/admin/marketing/campaigns/${cid}/attachments`, fd, { timeout: 180000 }).then((r) => r.data.attachments || []);
+};
+export const mkRemoveAttachment = (cid, aid) =>
+    api.post(`/admin/marketing/campaigns/${cid}/attachments/${aid}/remove`).then((r) => r.data.attachments || []);
 export const mkUploadEmailImage = (file) => {
     const fd = new FormData();
     fd.append("file", file);
