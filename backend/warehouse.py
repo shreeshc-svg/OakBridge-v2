@@ -211,29 +211,6 @@ async def record_website_sale(order: dict, lines: list) -> None:
         log.exception("warehouse: could not record website order %s", order.get("order_number"))
 
 
-async def record_amazon_order(amazon_order_id: str, lines: list, *, cancelled: bool = False) -> None:
-    """An Amazon Easy Ship order (amazon_easyship.py) -> movement per book.
-
-    Like a website order: website stock was already taken by the caller, so
-    only the warehouse count moves (touch_stock=False). cancelled=True puts
-    the copies back as "amazon_cancel". System-made, so neither reason is in
-    OUT_REASONS / IN_REASONS (staff cannot type them) and neither can be
-    undone by hand. Never raises (runs after stock has already changed)."""
-    try:
-        if (await get_state())["mode"] == "off":
-            return
-        lines = [(b, q) for b, q in lines if b and q > 0]
-        skip = await _not_tracked(b for b, _ in lines)
-        for bid, qty in lines:
-            if bid in skip:
-                continue
-            await _apply(bid, int(qty) if cancelled else -int(qty), "amazon_cancel" if cancelled else "amazon_order",
-                         actor={"email": "amazon"}, doc_id=amazon_order_id, touch_stock=False,
-                         note="Amazon order cancelled — copies back" if cancelled else "Amazon Easy Ship order")
-    except Exception:  # noqa: BLE001
-        log.exception("warehouse: could not record Amazon order %s", amazon_order_id)
-
-
 async def record_fill(order: dict, book_id: str, qty: int) -> None:
     """Copies given to a waiting order (order_stock.fill_waiting_orders).
 
@@ -1163,22 +1140,13 @@ async def _inventory_rows() -> tuple[list, int, dict]:
     last = {r["_id"]: r async for r in db.stock_movements.aggregate([
         {"$match": {"undone": {"$ne": True}}}, {"$sort": {"at": -1}},
         {"$group": {"_id": "$book_id", "at": {"$first": "$at"}, "reason": {"$first": "$reason"}, "n": {"$sum": 1}}}])}
-    try:
-        import amazon_spapi
-        amz = await amazon_spapi.by_book()
-    except Exception:  # noqa: BLE001 — Amazon numbers are extra; never break the page
-        amz = {}
     rows = []
     for b in books:
         wh = b.get("wh_stock")
         lm = last.get(b["id"]) or {}
-        az = amz.get(b["id"]) or {}
         rows.append({**b, "wh_stock": int(wh) if wh is not None else None, "stock": int(b.get("stock") or 0),
                      "owed": int(owed.get(b["id"], 0)), "diff": (int(wh) - int(b.get("stock") or 0)) if wh is not None else None,
-                     "last_at": lm.get("at"), "last_reason": lm.get("reason"), "moves": int(lm.get("n") or 0),
-                     "amz_available": az.get("available"), "amz_inbound": az.get("inbound"),
-                     "amz_reserved": az.get("reserved"), "amz_total": az.get("total"),
-                     "amz_stocked": az.get("stocked")})
+                     "last_at": lm.get("at"), "last_reason": lm.get("reason"), "moves": int(lm.get("n") or 0)})
     return rows, await _low_stock_threshold(), state
 
 
@@ -1689,8 +1657,7 @@ async def adm_undo_move(mv_id: str, user: dict = Depends(require_admin)):
     mv = await db.stock_movements.find_one({"id": mv_id}, {"_id": 0})
     # Website order/return movements follow the order's status (order_stock.py);
     # undoing one here would leave the ledger disagreeing with the order.
-    if not mv or mv.get("undone") or mv.get("reason") in ("website_order", "website_return", "opening",
-                                                                "amazon_order", "amazon_cancel"):
+    if not mv or mv.get("undone") or mv.get("reason") in ("website_order", "website_return", "opening"):
         raise HTTPException(status_code=409, detail="This movement cannot be undone here.")
     if _now() - datetime.fromisoformat(mv["at"]) > timedelta(hours=UNDO_HOURS):
         raise HTTPException(status_code=409, detail=f"Undo is only possible within {UNDO_HOURS} hours.")

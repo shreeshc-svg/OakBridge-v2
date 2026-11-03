@@ -177,22 +177,6 @@ export const saveBlob = (blob, filename) => {
 export const adminWhInventory = () => api.get("/admin/warehouse/inventory").then((r) => r.data);
 export const adminWhSetCount = (bookId, count, note) =>
     api.post(`/admin/warehouse/inventory/${bookId}/count`, { count, note }).then((r) => r.data);
-// Amazon (Seller Central FBA) — read-only stock sync (backend/amazon_spapi.py).
-const AMZ = "/admin/warehouse/amazon";
-export const amzStatus = () => api.get(`${AMZ}/status`).then((r) => r.data);
-export const amzSync = () => api.post(`${AMZ}/sync`, null, { timeout: 180000 }).then((r) => r.data);
-export const amzSkus = (unmatched = false) => api.get(`${AMZ}/skus`, { params: unmatched ? { unmatched: true } : {} }).then((r) => r.data.rows || []);
-export const amzLink = (sku, bookId, ignore = false) => api.post(`${AMZ}/link`, { sku, book_id: bookId || null, ignore }).then((r) => r.data);
-// Amazon Easy Ship (backend/amazon_easyship.py): our shelf offered on Amazon.
-const ES = `${AMZ}/easyship`;
-export const esStatus = () => api.get(`${ES}/status`).then((r) => r.data);
-export const esPreview = () => api.get(`${ES}/preview`).then((r) => r.data);
-export const esOrders = () => api.get(`${ES}/orders`).then((r) => r.data.rows || []);
-export const esRefreshListings = () => api.post(`${ES}/listings/refresh`, null, { timeout: 300000 }).then((r) => r.data);
-export const esRun = () => api.post(`${ES}/run`, null, { timeout: 300000 }).then((r) => r.data);
-export const esSaveSettings = (body) => api.put(`${ES}/settings`, body).then((r) => r.data);
-export const esSkuPush = (sku, push) => api.put(`${ES}/sku/${encodeURIComponent(sku)}`, { push }).then((r) => r.data);
-export const amzSaveSettings = (low_at) => api.put(`${AMZ}/settings`, { low_at }).then((r) => r.data);
 // Files to share: Excel for founders/reports, a vendor catalogue PDF.
 export const adminWhInventoryXlsx = () =>
     api.get("/admin/warehouse/inventory/export.xlsx", { responseType: "blob", timeout: 120000 }).then((r) => r.data);

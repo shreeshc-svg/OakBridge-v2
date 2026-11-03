@@ -2,10 +2,8 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Search, AlertTriangle, PackageX, Download, FileText, X, GitCompare } from "lucide-react";
 import { adminWhInventory, adminWhSetCount, adminWhInvMove, adminWhInventoryXlsx, adminWhBrochure, saveBlob, fetchCategories,
-    amzStatus, amzSync, amzSkus, amzLink, amzSaveSettings,
     formatApiError, formatINR, mediaUrl } from "../../lib/api";
 import ExportButton from "./ExportButton";
-import AmazonEasyShip from "./AmazonEasyShip";
 
 /**
  * Admin → Warehouse → Inventory (Oct 2026): the WAREHOUSE's counts, with the
@@ -20,8 +18,7 @@ const IN = [["printer", "Arrived from printer"], ["return", "Customer return (go
 const OUT = [["damaged", "Damaged"], ["sample", "Free copy / sample"], ["author_copy", "Author copy"], ["sale_offline", "Offline / dealer sale"],
     ["amazon_fba", "Sent to Amazon FBA"], ["amazon_vendor_po", "Amazon Vendor PO"]];
 const REASON = Object.fromEntries([...IN, ...OUT, ["correction_in", "Correction +"], ["correction_out", "Correction −"],
-    ["website_order", "Website order"], ["opening", "Opening count"],
-    ["amazon_order", "Amazon order (Easy Ship)"], ["amazon_cancel", "Amazon order cancelled"]]);
+    ["website_order", "Website order"], ["opening", "Opening count"]]);
 const when = (iso) => (iso ? new Date(iso).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : "—");
 
 export default function WarehouseInventory({ onHistory }) {
@@ -29,9 +26,6 @@ export default function WarehouseInventory({ onHistory }) {
     const [q, setQ] = useState("");
     const [view, setView] = useState("all");
     const [open, setOpen] = useState(null);
-    const [amz, setAmz] = useState(null);   // Amazon connection status + low-at-Amazon level
-    const loadAmz = useCallback(() => amzStatus().then(setAmz).catch(() => setAmz(null)), []);
-    useEffect(() => { loadAmz(); }, [loadAmz]);
     const load = useCallback(() => adminWhInventory().then(setD).catch((e) => { toast.error(formatApiError(e)); setD({ rows: [], threshold: 10 }); }), []);
     useEffect(() => { load(); }, [load]);
 
@@ -46,9 +40,8 @@ export default function WarehouseInventory({ onHistory }) {
         if (view === "low") a = a.filter((b) => wh(b) > 0 && wh(b) <= d.threshold);
         if (view === "diff") a = a.filter((b) => b.diff);
         if (view === "uncounted") a = a.filter((b) => b.wh_stock == null);
-        if (view === "amz_low") a = a.filter((b) => amzLow(b, amz));
         return [...a].sort((x, y) => wh(x) - wh(y));
-    }, [d, q, view, amz]);
+    }, [d, q, view]);
 
     if (!d) return <p className="text-sm text-[#4B5563] mt-6">Loading…</p>;
     const all = d.rows;
@@ -58,9 +51,6 @@ export default function WarehouseInventory({ onHistory }) {
     const low = all.filter((b) => (b.wh_stock ?? 0) > 0 && b.wh_stock <= d.threshold).length;
     const diffs = all.filter((b) => b.diff).length;
     const uncounted = all.filter((b) => b.wh_stock == null).length;
-    const hasAmz = all.some((b) => b.amz_total != null);
-    const amzUnits = all.reduce((n, b) => n + (b.amz_available || 0), 0);
-    const amzLowN = all.filter((b) => amzLow(b, amz)).length;
     return (
         <div className="mt-6 space-y-5" data-testid="wh-inventory">
             <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-3">
@@ -78,17 +68,13 @@ export default function WarehouseInventory({ onHistory }) {
                 (₹2.39 Cr) so it can never overflow; the exact figure is in the
                 tooltip and in the Excel export. The last three filter the
                 table: click to filter, click again (or ✕) to clear. */}
-            <AmazonPanel amz={amz} onChanged={() => { loadAmz(); load(); }} />
-            <div className={`grid grid-cols-2 sm:grid-cols-3 ${hasAmz ? "xl:grid-cols-4 2xl:grid-cols-8" : "xl:grid-cols-6"} gap-3`} data-testid="wh-inv-tiles">
+            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3" data-testid="wh-inv-tiles">
                 <StatTile label="Titles" value={num(all.length)} />
                 <StatTile label="Units on shelf" value={num(units)} />
                 <StatTile label="Shelf value" value={compactINR(value)} title={`${formatINR(value)} at selling price`} hint="at selling price" />
                 <StatTile label="Out / below 0" value={num(out)} icon={PackageX} tone="text-[#CC0033]" active={view === "out"} onClick={() => setView(view === "out" ? "all" : "out")} />
                 <StatTile label={`Low (≤ ${d.threshold})`} value={num(low)} icon={AlertTriangle} tone="text-[#B45309]" active={view === "low"} onClick={() => setView(view === "low" ? "all" : "low")} />
                 <StatTile label="≠ Website" value={num(diffs)} icon={GitCompare} tone={diffs ? "text-[#CC0033]" : ""} active={view === "diff"} onClick={() => setView(view === "diff" ? "all" : "diff")} />
-                {hasAmz && <StatTile label="At Amazon (FBA)" value={num(amzUnits)} hint="available to sell" />}
-                {hasAmz && <StatTile label={`Low at Amazon (≤ ${amz?.low_at ?? 5})`} value={num(amzLowN)} icon={AlertTriangle} tone={amzLowN ? "text-[#B45309]" : ""}
-                    active={view === "amz_low"} onClick={() => setView(view === "amz_low" ? "all" : "amz_low")} />}
             </div>
             <div className="flex flex-wrap items-center gap-3">
                 <div className="relative">
@@ -110,9 +96,7 @@ export default function WarehouseInventory({ onHistory }) {
                     <thead><tr className="text-left text-[#4B5563] border-b border-[#E5E7EB] align-bottom">
                         <th className="px-3 py-2">Book</th><th className="px-3 py-2">Category</th>
                         <th className="px-3 py-2 text-right whitespace-nowrap">Warehouse</th><th className="px-3 py-2 text-right whitespace-nowrap">Website</th>
-                        <th className="px-3 py-2 text-right whitespace-nowrap">Owed</th>
-                        {hasAmz && <th className="px-3 py-2 text-right whitespace-nowrap">At Amazon</th>}
-                        <th className="px-3 py-2 whitespace-nowrap">Last movement</th><th className="px-3 py-2" />
+                        <th className="px-3 py-2 text-right whitespace-nowrap">Owed</th><th className="px-3 py-2 whitespace-nowrap">Last movement</th><th className="px-3 py-2" />
                     </tr></thead>
                     <tbody>
                         {rows.map((b) => (
@@ -131,21 +115,16 @@ export default function WarehouseInventory({ onHistory }) {
                                     <td className={`px-3 py-2 text-right font-mono ${b.wh_stock == null ? "text-[#9CA3AF]" : b.wh_stock < 0 ? "text-[#CC0033]" : b.wh_stock <= d.threshold ? "text-[#B45309]" : "text-[#002B5C]"}`}>{b.wh_stock ?? "—"}</td>
                                     <td className="px-3 py-2 text-right font-mono">{b.stock}{b.diff ? <span className="block text-[10px] text-[#CC0033]">{b.diff > 0 ? "+" : ""}{b.diff} vs website</span> : null}</td>
                                     <td className="px-3 py-2 text-right font-mono">{b.owed || "—"}</td>
-                                    {hasAmz && (
-                                        <td className={`px-3 py-2 text-right font-mono ${amzLow(b, amz) ? "text-[#B45309]" : ""}`}>
-                                            {b.amz_total == null ? <span className="text-[#9CA3AF]">—</span> : !b.amz_stocked ? <span className="text-[11px] text-[#9CA3AF]" title="Listed on Amazon but never sent to FBA">not at FBA</span> : <>{num(b.amz_available)}{b.amz_inbound ? <span className="block text-[10px] text-[#6B7280]">+{num(b.amz_inbound)} inbound</span> : null}</>}
-                                        </td>
-                                    )}
                                     <td className="px-3 py-2 text-xs text-[#4B5563] whitespace-nowrap">{b.last_at ? <>{when(b.last_at)}<span className="block">{REASON[b.last_reason] || b.last_reason}</span></> : "—"}</td>
                                     <td className="px-3 py-2 text-right whitespace-nowrap">
                                         <button type="button" className="text-xs border border-[#002B5C] px-2 py-1 mr-2" onClick={() => setOpen(open === b.id ? null : b.id)} data-testid="wh-inv-edit">{open === b.id ? "Close" : "Edit"}</button>
                                         {onHistory && <button type="button" className="text-xs underline" onClick={() => onHistory(b.isbn || b.title)}>History</button>}
                                     </td>
                                 </tr>
-                                {open === b.id && <tr className="bg-[#F9FAFB] border-b border-[#E5E7EB]"><td colSpan={hasAmz ? 8 : 7} className="px-3 py-3"><EditPanel b={b} onDone={() => { setOpen(null); load(); }} /></td></tr>}
+                                {open === b.id && <tr className="bg-[#F9FAFB] border-b border-[#E5E7EB]"><td colSpan={7} className="px-3 py-3"><EditPanel b={b} onDone={() => { setOpen(null); load(); }} /></td></tr>}
                             </React.Fragment>
                         ))}
-                        {!rows.length && <tr><td colSpan={hasAmz ? 8 : 7} className="px-3 py-8 text-center text-[#4B5563]">No matching books.</td></tr>}
+                        {!rows.length && <tr><td colSpan={7} className="px-3 py-8 text-center text-[#4B5563]">No matching books.</td></tr>}
                     </tbody>
                 </table>
             </div>
@@ -266,7 +245,7 @@ function BrochureButton() {
     );
 }
 
-const VIEW_LABEL = { out: "Out / below 0", low: "Low stock", diff: "≠ Website", uncounted: "Never counted", amz_low: "Low at Amazon" };
+const VIEW_LABEL = { out: "Out / below 0", low: "Low stock", diff: "≠ Website", uncounted: "Never counted" };
 const num = (n) => Number(n || 0).toLocaleString("en-IN");
 // ₹2,38,82,935 -> "₹2.39 Cr"; ₹4,52,300 -> "₹4.52 L"; smaller amounts in full.
 const compactINR = (n) => {
@@ -297,95 +276,5 @@ function StatTile({ label, value, icon: Icon = null, tone = "", hint = "", title
             className={`${box} focus:outline-none focus-visible:ring-2 focus-visible:ring-[#002B5C] ${active ? "border-[#002B5C] bg-[#F5F7FA]" : "border-[#E5E7EB] hover:border-[#002B5C]"}`}>
             {body}
         </button>
-    );
-}
-
-/**
- * Amazon (Seller Central, FBA) connection — read-only (backend/amazon_spapi.py).
- * Status, "Sync now", the low-at-Amazon level, and the Amazon SKUs that could
- * not be linked to a book by ISBN, for staff to link by hand.
- */
-const IGNORE = "__ignore__";
-// Low at Amazon only for books that have actually held FBA stock: a listing
-// never sent to Amazon's warehouse is 0 forever and is not "running low".
-function amzLow(b, amz) {
-    return !!b.amz_stocked && b.amz_available != null && b.amz_available <= (amz?.low_at ?? 5);
-}
-function AmazonPanel({ amz, onChanged }) {
-    const [busy, setBusy] = useState(false);
-    const [show, setShow] = useState(false);
-    const [rows, setRows] = useState(null);
-    const [books, setBooks] = useState([]);
-    if (!amz) return null;
-    const sync = async () => {
-        setBusy(true);
-        try {
-            const r = await amzSync();
-            toast.success(`Amazon stock synced: ${r.skus} SKUs, ${r.matched} linked to books${r.unmatched ? `, ${r.unmatched} to link` : ""}${r.ignored ? `, ${r.ignored} hidden` : ""}.`);
-            onChanged();
-            if (show) setRows(await amzSkus(true));
-        } catch (e) { toast.error(formatApiError(e)); } finally { setBusy(false); }
-    };
-    const openLinks = async () => {
-        setShow(!show);
-        if (!show) {
-            setRows(await amzSkus(true).catch(() => []));
-            if (!books.length) adminWhInventory().then((d) => setBooks(d.rows || [])).catch(() => {});
-        }
-    };
-    const link = async (sku, bookId) => {
-        const ignore = bookId === IGNORE;
-        try {
-            await amzLink(sku, ignore ? null : bookId, ignore);
-            setRows((r) => r.filter((x) => x.sku !== sku)); onChanged();
-            toast.success(ignore ? "Hidden — this Amazon listing won't be asked about again." : "Linked.");
-        }
-        catch (e) { toast.error(formatApiError(e)); }
-    };
-    const ls = amz.last_sync;
-    return (
-        <div className="border border-[#E5E7EB] bg-white p-4 text-sm" data-testid="wh-amazon">
-            <div className="flex flex-wrap items-center gap-3">
-                <b className="text-[#002B5C]">Amazon FBA</b>
-                {!amz.configured ? (
-                    <span className="text-xs text-[#6B7280]">Not connected — add the SPAPI_* keys in Render.</span>
-                ) : (
-                    <>
-                        <span className="text-xs text-[#4B5563]">
-                            {ls ? `Last sync ${when(ls.at)} · ${ls.skus} SKUs` : "Not synced yet"}
-                            {amz.unmatched ? <> · <button type="button" className="underline text-[#B45309]" onClick={openLinks}>{amz.unmatched} SKU(s) to link</button></> : null}
-                        </span>
-                        {amz.last_error && <span className="text-xs text-[#CC0033]">Last error: {amz.last_error}</span>}
-                        {amz.sync_stale && <span className="text-xs text-[#CC0033]">Automatic sync is not running — add the SPAPI_* keys to the worker service in Render too.</span>}
-                        <label className="ml-auto flex items-center gap-1 text-xs text-[#4B5563]">Warn at Amazon ≤
-                            <input type="number" min={0} defaultValue={amz.low_at} className="w-14 border border-[#E5E7EB] px-1 py-0.5"
-                                onBlur={(e) => amzSaveSettings(Number(e.target.value) || 0).then(onChanged).catch((er) => toast.error(formatApiError(er)))} />
-                        </label>
-                        <button type="button" disabled={busy} onClick={sync} className="h-8 border border-[#002B5C] text-[#002B5C] px-3 text-xs disabled:opacity-50">{busy ? "Syncing…" : "Sync now"}</button>
-                    </>
-                )}
-            </div>
-            <p className="text-[11px] text-[#6B7280] mt-1">FBA (read-only): stock held in Amazon's warehouses; it never changes your shelf, your website stock or anything on Amazon. Synced every 6 hours.</p>
-            {amz.configured && <AmazonEasyShip onChanged={onChanged} />}
-            {show && rows && (
-                <div className="mt-3 border-t border-[#E5E7EB] pt-3 space-y-2">
-                    {!rows.length ? <p className="text-xs text-[#6B7280]">Every Amazon SKU is linked to a book.</p> : rows.map((r) => (
-                        <div key={r.sku} className="flex flex-wrap items-center gap-2">
-                            <span className="font-mono text-xs w-40 truncate" title={r.sku}>{r.sku}</span>
-                            <span className="text-xs text-[#4B5563] flex-1 min-w-[12rem] truncate" title={r.title}>{r.title || r.asin} · {r.available} available</span>
-                            {r.suggest && (
-                                <button type="button" onClick={() => link(r.sku, r.suggest.id)} title={`ISBN ${r.suggest.isbn} — check it is the same edition`}
-                                    className="border border-[#002B5C] text-[#002B5C] px-2 py-1 text-xs max-w-[16rem] truncate">Link: {r.suggest.title}</button>
-                            )}
-                            <select defaultValue="" onChange={(e) => e.target.value && link(r.sku, e.target.value)} className="border border-[#E5E7EB] px-2 py-1 text-xs max-w-[18rem]">
-                                <option value="">Link to a book…</option>
-                                <option value={IGNORE}>Not on our site (old edition / other) — stop asking</option>
-                                {books.map((b) => <option key={b.id} value={b.id}>{b.title} ({b.isbn})</option>)}
-                            </select>
-                        </div>
-                    ))}
-                </div>
-            )}
-        </div>
     );
 }

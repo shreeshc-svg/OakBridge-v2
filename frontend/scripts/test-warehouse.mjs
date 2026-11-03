@@ -142,8 +142,7 @@ check(/prev_status == "cancelled" and payload\.status != "cancelled"[\s\S]*?reta
 check(/"stock_taken": taken/.test(pay) && /if res\.modified_count == 1:\s*\n\s*taken\.append/.test(pay), "payment records exactly what came off");
 check(/data-testid=\{`order-restock-\$\{o\.id\}`\}/.test(code("frontend/src/pages/admin/AdminOrders.jsx")), "admin: Returned — put back in stock");
 check(/data-testid="wh-parcel-here"/.test(screen) && /data-testid="wh-parcel-gone"/.test(screen), "warehouse asked whether a cancelled parcel is still there");
-check(/"website_return", "opening"[,)]/.test(wh) && /"amazon_order", "amazon_cancel"\)/.test(wh),
-      "website and Amazon order movements cannot be undone one by one");
+check(/"website_return", "opening"\)/.test(wh), "website order/return movements cannot be undone one by one");
 
 // Admin SCRUD on documents.
 const fnOf = (name) => (wh.match(new RegExp(`async def ${name}\\([\\s\\S]*?\\n(?=\\n\\S)`)) || [""])[0];
