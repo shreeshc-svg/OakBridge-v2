@@ -2079,6 +2079,13 @@ async def admin_write_off_order(
             await db.orders.update_one({"id": order_id}, {
                 "$set": {"payment_link_sent_at": now, "last_chance_sent_at": now},
                 "$inc": {"payment_link_count": 1}})
+            # The history entry above was written before sending; correct its
+            # "notified" so the order's own history doesn't say we never told them.
+            await db.orders.update_one(
+                {"id": order_id},
+                {"$set": {"status_history.$[h].notified": True}},
+                array_filters=[{"h.status": "written_off", "h.at": now}],
+            )
 
     fresh = await db.orders.find_one({"id": order_id}, {"_id": 0})
     return {"ok": True, "written_off": bool(payload.written_off), "order": fresh, "emailed": emailed}
