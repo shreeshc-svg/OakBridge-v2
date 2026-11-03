@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Search, AlertTriangle, PackageX, Download, FileText, X, GitCompare } from "lucide-react";
+import { Search, AlertTriangle, PackageX, Download, FileText, X, GitCompare, CalendarClock, Printer } from "lucide-react";
 import { adminWhInventory, adminWhSetCount, adminWhInvMove, adminWhInventoryXlsx, adminWhBrochure, saveBlob, fetchCategories,
     formatApiError, formatINR, mediaUrl } from "../../lib/api";
 import ExportButton from "./ExportButton";
+import { preorderState, formatLaunchDate, formatLaunchTimes } from "../../lib/preorder";
 
 /**
  * Admin → Warehouse → Inventory (Oct 2026): the WAREHOUSE's counts, with the
@@ -36,19 +37,27 @@ export default function WarehouseInventory({ onHistory }) {
         let a = d.rows.filter((b) => !t || [b.title, b.author, b.category].some((f) => (f || "").toLowerCase().includes(t))
             || (digits.length >= 4 && String(b.isbn || "").replace(/[^0-9Xx]/g, "").includes(digits)));
         const wh = (b) => (b.wh_stock == null ? 0 : b.wh_stock);
-        if (view === "out") a = a.filter((b) => wh(b) <= 0);
-        if (view === "low") a = a.filter((b) => wh(b) > 0 && wh(b) <= d.threshold);
+        if (view === "out") a = a.filter((b) => isOut(b));
+        if (view === "low") a = a.filter((b) => isLow(b, d.threshold));
         if (view === "diff") a = a.filter((b) => b.diff);
         if (view === "uncounted") a = a.filter((b) => b.wh_stock == null);
-        return [...a].sort((x, y) => wh(x) - wh(y));
+        if (["preorder", "pod", "launched_empty"].includes(view)) a = a.filter((b) => kindOf(b) === view);
+        // Problems first (launched with no copies, then the emptiest real
+        // books); pre-orders / POD, which are empty by design, after them.
+        const rank = (b) => ({ launched_empty: 0, book: 1, pod: 2, preorder: 2 }[kindOf(b)] ?? 1);
+        return [...a].sort((x, y) => rank(x) - rank(y) || wh(x) - wh(y));
     }, [d, q, view]);
 
     if (!d) return <p className="text-sm text-[#4B5563] mt-6">Loading…</p>;
     const all = d.rows;
     const units = all.reduce((n, b) => n + Math.max(0, b.wh_stock || 0), 0);
     const value = all.reduce((n, b) => n + Math.max(0, b.wh_stock || 0) * (Number(b.price) || 0), 0);
-    const out = all.filter((b) => (b.wh_stock ?? 0) <= 0).length;
-    const low = all.filter((b) => (b.wh_stock ?? 0) > 0 && b.wh_stock <= d.threshold).length;
+    const out = all.filter((b) => isOut(b)).length;
+    const low = all.filter((b) => isLow(b, d.threshold)).length;
+    const pre = all.filter((b) => kindOf(b) === "preorder");
+    const preOwed = pre.reduce((n, b) => n + (b.owed || 0), 0);
+    const pods = all.filter((b) => kindOf(b) === "pod").length;
+    const launchedEmpty = all.filter((b) => kindOf(b) === "launched_empty").length;
     const diffs = all.filter((b) => b.diff).length;
     const uncounted = all.filter((b) => b.wh_stock == null).length;
     return (
@@ -75,6 +84,20 @@ export default function WarehouseInventory({ onHistory }) {
                 <StatTile label="Out / below 0" value={num(out)} icon={PackageX} tone="text-[#CC0033]" active={view === "out"} onClick={() => setView(view === "out" ? "all" : "out")} />
                 <StatTile label={`Low (≤ ${d.threshold})`} value={num(low)} icon={AlertTriangle} tone="text-[#B45309]" active={view === "low"} onClick={() => setView(view === "low" ? "all" : "low")} />
                 <StatTile label="≠ Website" value={num(diffs)} icon={GitCompare} tone={diffs ? "text-[#CC0033]" : ""} active={view === "diff"} onClick={() => setView(view === "diff" ? "all" : "diff")} />
+            </div>
+            {/* Books with no copies BY DESIGN are counted here, not in Out /
+                Low / ≠ Website above — so those three show only real problems.
+                The red one is the exception: a pre-order whose launch has
+                passed with nothing on the shelf, unbuyable on the site. */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3" data-testid="wh-inv-bydesign">
+                <StatTile label="Launched, no copies" value={num(launchedEmpty)} icon={AlertTriangle} tone={launchedEmpty ? "text-[#CC0033]" : ""}
+                    title="Pre-order launch has passed and there are no copies — the site shows it out of stock. Add stock or tick Print on demand (Admin → Books)."
+                    active={view === "launched_empty"} onClick={() => setView(view === "launched_empty" ? "all" : "launched_empty")} />
+                <StatTile label={`Pre-orders · ${num(preOwed)} cop${preOwed === 1 ? "y" : "ies"} owed`} value={num(pre.length)} icon={CalendarClock}
+                    title="Not printed yet. Copies owed = paid pre-orders waiting; arriving copies go to them first."
+                    active={view === "preorder"} onClick={() => setView(view === "preorder" ? "all" : "preorder")} />
+                <StatTile label="Print on demand" value={num(pods)} icon={Printer} title="No copies kept: printed per order"
+                    active={view === "pod"} onClick={() => setView(view === "pod" ? "all" : "pod")} />
             </div>
             <div className="flex flex-wrap items-center gap-3">
                 <div className="relative">
@@ -107,12 +130,20 @@ export default function WarehouseInventory({ onHistory }) {
                                             {b.cover_image && <img src={mediaUrl(b.cover_image)} alt="" className="w-8 h-11 object-cover border border-[#E5E7EB]" />}
                                             <div className="min-w-0">
                                                 <div className="text-[#002B5C] truncate sm:max-w-[280px]">{b.title}</div>
-                                                <div className="text-[11px] text-[#4B5563] font-mono">{b.isbn}{b.pod ? " · print on demand" : ""}{b.coming_soon ? " · pre-order" : ""}</div>
+                                                <div className="text-[11px] text-[#4B5563] font-mono">{b.isbn}</div>
+                                                <KindTag b={b} />
                                             </div>
                                         </div>
                                     </td>
                                     <td className="px-3 py-2 text-[#4B5563] whitespace-nowrap">{b.category}</td>
-                                    <td className={`px-3 py-2 text-right font-mono ${b.wh_stock == null ? "text-[#9CA3AF]" : b.wh_stock < 0 ? "text-[#CC0033]" : b.wh_stock <= d.threshold ? "text-[#B45309]" : "text-[#002B5C]"}`}>{b.wh_stock ?? "—"}</td>
+                                    {byDesign(b) && (b.wh_stock ?? 0) <= 0 ? (
+                                        // Empty by design: a −2 here is 2 copies owed, not a fault.
+                                        <td className="px-3 py-2 text-right text-[11px] text-[#6B7280] whitespace-nowrap">
+                                            {kindOf(b) === "preorder" ? "awaiting print" : "printed to order"}
+                                        </td>
+                                    ) : (
+                                        <td className={`px-3 py-2 text-right font-mono ${b.wh_stock == null ? "text-[#9CA3AF]" : b.wh_stock < 0 ? "text-[#CC0033]" : b.wh_stock <= d.threshold ? "text-[#B45309]" : "text-[#002B5C]"}`}>{b.wh_stock ?? "—"}</td>
+                                    )}
                                     <td className="px-3 py-2 text-right font-mono">{b.stock}{b.diff ? <span className="block text-[10px] text-[#CC0033]">{b.diff > 0 ? "+" : ""}{b.diff} vs website</span> : null}</td>
                                     <td className="px-3 py-2 text-right font-mono">{b.owed || "—"}</td>
                                     <td className="px-3 py-2 text-xs text-[#4B5563] whitespace-nowrap">{b.last_at ? <>{when(b.last_at)}<span className="block">{REASON[b.last_reason] || b.last_reason}</span></> : "—"}</td>
@@ -245,7 +276,42 @@ function BrochureButton() {
     );
 }
 
-const VIEW_LABEL = { out: "Out / below 0", low: "Low stock", diff: "≠ Website", uncounted: "Never counted" };
+const VIEW_LABEL = { out: "Out / below 0", low: "Low stock", diff: "≠ Website", uncounted: "Never counted",
+    preorder: "Pre-orders", pod: "Print on demand", launched_empty: "Launched, no copies" };
+
+/* What a row IS (backend warehouse_core.inventory_kind): book | preorder |
+   pod | launched_empty. Older API responses without `kind` read as books. */
+const kindOf = (b) => b.kind || "book";
+const byDesign = (b) => ["preorder", "pod"].includes(kindOf(b));
+// Out / Low judge only ordinary books: a pre-order or POD title is empty on
+// purpose, and "launched, no copies" has its own red tile.
+const isOut = (b) => kindOf(b) === "book" && (b.wh_stock ?? 0) <= 0;
+const isLow = (b, t) => kindOf(b) === "book" && (b.wh_stock ?? 0) > 0 && b.wh_stock <= t;
+
+function KindTag({ b }) {
+    const k = kindOf(b);
+    if (k === "preorder") {
+        const { at, timed } = preorderState(b);
+        // IST only here (the GMT half is for international customers).
+        const time = at && timed ? `, ${formatLaunchTimes(at).split(" · ")[0]}` : "";
+        return (
+            <div className="mt-0.5 text-[11px] text-[#B4750F]" data-testid="wh-inv-kind">
+                Pre-order{at ? ` · launches ${formatLaunchDate(at)}${time}` : ""}
+                {b.owed ? ` · ${b.owed} cop${b.owed === 1 ? "y" : "ies"} owed` : ""}
+            </div>
+        );
+    }
+    if (k === "launched_empty") {
+        return (
+            <div className="mt-0.5 text-[11px] text-[#CC0033]" data-testid="wh-inv-kind">
+                Launched, no copies — not buyable on the site. Add stock, or tick Print on demand in Admin → Books.
+                {b.owed ? ` ${b.owed} cop${b.owed === 1 ? "y" : "ies"} owed to paid orders.` : ""}
+            </div>
+        );
+    }
+    if (k === "pod") return <div className="mt-0.5 text-[11px] text-[#4B5563]" data-testid="wh-inv-kind">Print on demand</div>;
+    return null;
+}
 const num = (n) => Number(n || 0).toLocaleString("en-IN");
 // ₹2,38,82,935 -> "₹2.39 Cr"; ₹4,52,300 -> "₹4.52 L"; smaller amounts in full.
 const compactINR = (n) => {

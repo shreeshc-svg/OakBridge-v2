@@ -24,13 +24,19 @@ INVENTORY_HEADER = ["Title", "Author", "ISBN", "Category", "Price (Rs)", "MRP (R
 
 
 def status_of(r: dict, threshold: int) -> str:
-    if r.get("coming_soon"):
+    """Same groups as the Inventory screen (warehouse_core.inventory_kind)."""
+    kind = r.get("kind")
+    if kind == "preorder":
         return "Pre-order"
+    if kind == "launched_empty":
+        return "Launched, no copies"
+    if kind == "pod":
+        return "Print on demand"
     wh = r.get("wh_stock")
     if wh is None:
         return "Never counted"
     if wh <= 0:
-        return "Print on demand" if r.get("pod") else "Out of stock"
+        return "Out of stock"
     return "Low" if wh <= threshold else "In stock"
 
 
@@ -66,7 +72,9 @@ def inventory_xlsx(rows: list, threshold: int, mode: str, cat_names: dict) -> by
         (f"Low (≤ {threshold})", st.count("Low")),
         ("Out of stock", st.count("Out of stock")),
         ("Print on demand (no copies, sold to order)", st.count("Print on demand")),
-        ("Pre-order", st.count("Pre-order")),
+        ("Pre-order (no copies yet, by design)", st.count("Pre-order")),
+        ("Launched, no copies — needs stock or print on demand", st.count("Launched, no copies")),
+        ("Copies owed to paid pre-orders", sum(int(r.get("owed") or 0) for r in rows if r.get("kind") == "preorder")),
         ("Never counted", st.count("Never counted")),
         ("Different from website stock", sum(1 for r in rows if r.get("diff"))),
         ("Copies owed to waiting orders", sum(int(r.get("owed") or 0) for r in rows)),

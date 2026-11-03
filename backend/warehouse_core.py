@@ -943,3 +943,45 @@ def line_corrections(moves: list, lines: list, sign: int) -> dict:
         if d:
             out[bid] = d
     return out
+
+
+# --------------------------------------------- inventory: what each row is ---
+# Admin → Warehouse → Inventory used to judge every book by its count alone,
+# so a pre-order (no copies yet, and below zero once paid for: the copies are
+# OWED to those customers) sat in "Out / below 0" next to books that had
+# really run out, and in "≠ Website" because −2 on the shelf is not 0 on the
+# site. These two decide what a row IS and whether it really disagrees.
+INV_KINDS = ("book", "preorder", "pod", "launched_empty")
+
+
+def inventory_kind(book: dict, now) -> str:
+    """book            an ordinary title — judged by its count
+    preorder        ticked AND launching in the future (the storefront's rule,
+                    launch_time.parse_launch_at): no copies by design
+    pod             print on demand with no copies: printed per order
+    launched_empty  ticked as a pre-order, but the launch has passed (or no
+                    launch date was set) and there are no copies — the
+                    storefront shows it out of stock and nobody can buy it.
+                    This is the one that needs a person: add stock or tick POD."""
+    from launch_time import parse_launch_at
+    stock = int(book.get("stock") or 0)
+    if book.get("coming_soon"):
+        at = parse_launch_at(book.get("launch_at"))
+        if at and at > now:
+            return "preorder"
+        if stock <= 0:
+            return "pod" if book.get("pod") else "launched_empty"
+        return "book"
+    if book.get("pod") and stock <= 0:
+        return "pod"
+    return "book"
+
+
+def owed_diff(wh, owed: int, stock: int):
+    """Warehouse vs website, allowing for copies owed to paid orders that are
+    still waiting (pre-orders, backorders): those came off the warehouse count
+    at payment but never off website stock. The same rule as the go-live
+    check (warehouse.go_live_checks real_diff). None = never counted."""
+    if wh is None:
+        return None
+    return int(wh) + int(owed or 0) - int(stock or 0)

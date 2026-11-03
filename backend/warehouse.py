@@ -1129,7 +1129,7 @@ async def adm_overview():
 # movement out, and a wrong movement is undone in Movements (24 h).
 INV_FIELDS = {"_id": 0, "id": 1, "title": 1, "author": 1, "isbn": 1, "category": 1, "price": 1, "cover_image": 1,
               "stock": 1, "wh_stock": 1, "coming_soon": 1, "pod": 1, "original_price": 1, "edition": 1, "binding": 1,
-              "pages": 1, "publication_year": 1, "enabled": 1}
+              "pages": 1, "publication_year": 1, "enabled": 1, "launch_at": 1}
 
 
 async def _inventory_rows() -> tuple[list, int, dict]:
@@ -1141,11 +1141,16 @@ async def _inventory_rows() -> tuple[list, int, dict]:
         {"$match": {"undone": {"$ne": True}}}, {"$sort": {"at": -1}},
         {"$group": {"_id": "$book_id", "at": {"$first": "$at"}, "reason": {"$first": "$reason"}, "n": {"$sum": 1}}}])}
     rows = []
+    now = _now()
     for b in books:
         wh = b.get("wh_stock")
         lm = last.get(b["id"]) or {}
+        o = int(owed.get(b["id"], 0))
+        # kind: book | preorder | pod | launched_empty (warehouse_core.inventory_kind);
+        # diff allows for owed copies, so a paid pre-order is not "≠ website".
         rows.append({**b, "wh_stock": int(wh) if wh is not None else None, "stock": int(b.get("stock") or 0),
-                     "owed": int(owed.get(b["id"], 0)), "diff": (int(wh) - int(b.get("stock") or 0)) if wh is not None else None,
+                     "owed": o, "diff": core.owed_diff(wh, o, b.get("stock")) or None if wh is not None else None,
+                     "kind": core.inventory_kind(b, now),
                      "last_at": lm.get("at"), "last_reason": lm.get("reason"), "moves": int(lm.get("n") or 0)})
     return rows, await _low_stock_threshold(), state
 
@@ -1159,15 +1164,17 @@ async def adm_inventory():
 @wh_admin_router.get("/inventory/export.csv")
 async def adm_inventory_export(user: dict = Depends(require_admin)):
     from csv_export import csv_response
-    rows, _, state = await _inventory_rows()
+    from inventory_reports import status_of
+    rows, threshold, state = await _inventory_rows()
     await audit_log(db, "WAREHOUSE_INVENTORY_EXPORT", email=user.get("email", ""), role=user.get("role", ""),
                     meta={"rows": len(rows)})
     return csv_response(
         f"warehouse-inventory-{_now():%Y-%m-%d}.csv",
         ["Title", "Author", "ISBN", "Category", "Price", "Warehouse count", "Website stock", "Owed to orders",
-         "Difference", "Last movement", "Last reason", "Movements"],
+         "Difference", "Status", "Last movement", "Last reason", "Movements"],
         ([r.get("title", ""), r.get("author", ""), r.get("isbn", ""), r.get("category", ""), r.get("price", ""),
           "" if r["wh_stock"] is None else r["wh_stock"], r["stock"], r["owed"], "" if r["diff"] is None else r["diff"],
+          status_of(r, threshold),
           (r.get("last_at") or "")[:16], r.get("last_reason") or "", r["moves"]] for r in rows))
 
 
