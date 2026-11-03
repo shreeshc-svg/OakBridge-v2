@@ -40,7 +40,7 @@ export default function WarehouseInventory({ onHistory }) {
         if (view === "out") a = a.filter((b) => isOut(b));
         if (view === "low") a = a.filter((b) => isLow(b, d.threshold));
         if (view === "diff") a = a.filter((b) => b.diff);
-        if (view === "uncounted") a = a.filter((b) => b.wh_stock == null);
+        if (view === "uncounted") a = a.filter((b) => needsCount(b));
         if (["preorder", "pod", "launched_empty"].includes(view)) a = a.filter((b) => kindOf(b) === view);
         // Problems first (launched with no copies, then the emptiest real
         // books); pre-orders / POD, which are empty by design, after them.
@@ -59,7 +59,7 @@ export default function WarehouseInventory({ onHistory }) {
     const pods = all.filter((b) => kindOf(b) === "pod").length;
     const launchedEmpty = all.filter((b) => kindOf(b) === "launched_empty").length;
     const diffs = all.filter((b) => b.diff).length;
-    const uncounted = all.filter((b) => b.wh_stock == null).length;
+    const uncounted = all.filter((b) => needsCount(b)).length;
     return (
         <div className="mt-6 space-y-5" data-testid="wh-inventory">
             <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-3">
@@ -105,7 +105,13 @@ export default function WarehouseInventory({ onHistory }) {
                     <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search title, author, ISBN, category" data-testid="wh-inv-search"
                         className="w-full sm:w-80 border border-[#E5E7EB] bg-white pl-9 pr-3 py-2 text-sm outline-none focus:border-[#002B5C]" />
                 </div>
-                {uncounted > 0 && <button type="button" onClick={() => setView(view === "uncounted" ? "all" : "uncounted")} className="text-xs underline text-[#B45309]">{uncounted} never counted</button>}
+                {uncounted > 0 && (
+                    <button type="button" onClick={() => setView(view === "uncounted" ? "all" : "uncounted")} data-testid="wh-inv-never"
+                        title="Added after the trial started, so the opening count missed them. Count the shelf, then Edit → Set count (0 if none)."
+                        className="inline-flex items-center gap-1 border border-[#B45309] text-[#B45309] bg-[#FFFBEB] px-2 py-1 text-xs font-medium">
+                        <AlertTriangle size={12} aria-hidden="true" />{uncounted} never counted — set a count
+                    </button>
+                )}
                 {view !== "all" && (
                     <button type="button" onClick={() => setView("all")}
                         className="inline-flex items-center gap-1 text-xs bg-[#002B5C] text-white px-2 py-1">
@@ -287,6 +293,8 @@ const byDesign = (b) => ["preorder", "pod"].includes(kindOf(b));
 // purpose, and "launched, no copies" has its own red tile.
 const isOut = (b) => kindOf(b) === "book" && (b.wh_stock ?? 0) <= 0;
 const isLow = (b, t) => kindOf(b) === "book" && (b.wh_stock ?? 0) > 0 && b.wh_stock <= t;
+// Same rule as the go-live check: no count at all, and not empty by design.
+const needsCount = (b) => b.wh_stock == null && !byDesign(b);
 
 function KindTag({ b }) {
     const k = kindOf(b);

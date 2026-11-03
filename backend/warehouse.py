@@ -1815,7 +1815,16 @@ async def go_live_checks() -> dict:
     # rest is a real mismatch.
     owed = await order_stock.owed_by_book(db, since=state.get("started_at")) if state.get("started_at") else {}
     real_diff = [d for d in ov.get("differences") or [] if int(d.get("wh_stock") or 0) + owed.get(d["id"], 0) != int(d.get("stock") or 0)]
-    never = await db.books.count_documents({"product_type": {"$nin": list(NOT_COUNTED)}, "wh_stock": {"$exists": False}})
+    # "Never counted" = a book the warehouse has no number for at all —
+    # almost always a title added AFTER the trial started (the opening count
+    # only covered books that existed then). Books with no copies BY DESIGN
+    # (a live pre-order, print on demand at 0) have nothing on a shelf to
+    # count, so they don't block Go live; everything else needs one count.
+    never_books = [b async for b in db.books.find(
+        {"product_type": {"$nin": list(NOT_COUNTED)}, "wh_stock": {"$exists": False}},
+        {"_id": 0, "id": 1, "title": 1, "stock": 1, "coming_soon": 1, "launch_at": 1, "pod": 1})
+        if core.inventory_kind(b, now) not in ("preorder", "pod")]
+    never = len(never_books)
     printer = await db.stock_movements.count_documents({"reason": "printer", "undone": {"$ne": True}, "at": {"$gte": since}})
     reset_days = sorted({str(m.get("at"))[:10] async for m in db.stock_movements.find(
         {"note": {"$regex": "^Reset from the stock sheet"}, "at": {"$gte": since}}, {"_id": 0, "at": 1})})
@@ -1831,8 +1840,10 @@ async def go_live_checks() -> dict:
          "label": "The trial is running", "detail": f"Mode: {state['mode']}", "fix": "Start the trial first."},
         {"key": "counted", "level": "must", "ok": never == 0,
          "label": "Every book has a warehouse count",
-         "detail": f"{never} book(s) never counted" if never else "All books counted",
-         "fix": "Admin → Warehouse → Inventory → 'never counted' → set each count."},
+         "detail": (f"{never} book(s) have no warehouse count yet: " + ", ".join((b.get("title") or "")[:30] for b in never_books[:3])
+                    + ("…" if never > 3 else "")) if never else "All books counted",
+         "fix": "These were added after the trial started, so the opening count missed them. Count the copies on the shelf, "
+                "then Inventory → click 'never counted' → Edit → type the number in 'Set count' → Save (0 if none)."},
         {"key": "match", "level": "must", "ok": not real_diff,
          "label": "Warehouse and website counts match (allowing for copies owed to waiting orders)",
          "detail": (f"{len(real_diff)} book(s) differ: " + ", ".join((d.get("title") or "")[:30] for d in real_diff[:3])

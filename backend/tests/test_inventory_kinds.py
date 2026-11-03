@@ -61,5 +61,10 @@ check('const isOut = (b) => kindOf(b) === "book"' in ui and 'const isLow = (b, t
       "Out / Low count ordinary books only")
 check('data-testid="wh-inv-bydesign"' in ui and "Launched, no copies" in ui, "separate tiles: launched-no-copies, pre-orders, POD")
 
+gl = wh.split("async def go_live_checks")[1].split("\n@")[0]
+check('core.inventory_kind(b, now) not in ("preorder", "pod")' in gl, "go-live 'never counted' skips books empty by design")
+check("never_books[:3]" in gl, "go-live check names the uncounted books")
+check("const needsCount = (b) => b.wh_stock == null && !byDesign(b);" in ui, "Inventory 'never counted' uses the same rule")
+
 print("\nall passed" if not failed else f"\n{failed} FAILED")
 sys.exit(1 if failed else 0)
