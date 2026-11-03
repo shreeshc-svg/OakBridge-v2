@@ -715,6 +715,7 @@ export const mkSettings = () => api.get("/admin/marketing/settings").then((r) =>
 export const mkSaveSettings = (body) => api.put("/admin/marketing/settings", body).then((r) => r.data);
 export const mkVerify = (emails, autofix = true, ses = true) =>
     api.post("/admin/marketing/verify", { emails, autofix, ses }, { timeout: 120000 }).then((r) => r.data);
+export const mkValidateEstimate = () => api.get("/admin/marketing/validate-pending").then((r) => r.data);
 export const mkValidatePending = () => api.post("/admin/marketing/validate-pending").then((r) => r.data);
 export const mkBulkContacts = (body) => api.post("/admin/marketing/contacts/bulk", body, { timeout: 300000 }).then((r) => r.data);
 export const mkBulkDeleteLists = (ids) => api.post("/admin/marketing/lists/bulk-delete", { ids }).then((r) => r.data);

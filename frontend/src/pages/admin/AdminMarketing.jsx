@@ -6,7 +6,7 @@ import {
     mkDeleteContact, mkLists, mkCreateList, mkCampaigns, mkNewCampaign, mkCampaign, mkSaveCampaign, mkDuplicate,
     mkAiGrowth, mkAiCampaign, mkAiDeliverability, mkListMembers, mkExportList, mkActivity,
     mkAudience, mkPreview, mkTemplates, mkNewTemplate, mkSaveTemplate, mkDeleteTemplate, mkUseTemplate, mkTemplatePreview, mkUploadEmailImage, mkExportCampaign, mkExportContacts, mkCleanup, mkGrowthFunnel, mkPartners, mkNewPartner, mkSavePartner, mkAutomations, mkSaveAutomations, mkAutomationsPreview, MERCHANT_FEED_URL, mkTestSend, mkSend, mkCampaignAction, mkReport, mkDismissAlert, mkSuppressionSync,
-    mkBulkContacts, mkBulkDeleteLists, mkBulkDeleteCampaigns, mkRenameCampaign, mkLearn, mkDisposableRefresh, mkSystemHealth, nlOverview, nlSave, nlDraftNow, nlApprove, nlSkip, fetchBooks, fetchCategories, mediaUrl, formatApiError,
+    mkValidateEstimate, mkValidatePending, mkBulkContacts, mkBulkDeleteLists, mkBulkDeleteCampaigns, mkRenameCampaign, mkLearn, mkDisposableRefresh, mkSystemHealth, nlOverview, nlSave, nlDraftNow, nlApprove, nlSkip, fetchBooks, fetchCategories, mediaUrl, formatApiError,
 } from "../../lib/api";
 import { useAuth } from "../../context/AuthContext";
 import { isSuperadmin, canDelete } from "../../lib/rbac";
@@ -276,6 +276,28 @@ function SesUsage({ u }) {
                 : u.near_limit ? <span className="text-[#B4750F]"> — over 80% used.</span> : null}
             {u.last_stop && u.used < u.cap && <span className="text-[#CC0033]"> — last run stopped: {u.last_stop.why}</span>}
         </p>
+    );
+}
+
+/* The ONLY way saved contacts get paid SES checks outside a campaign send
+   (backend adm_validate_pending): shows how many and the cost, then asks. */
+function PaidCheckNow() {
+    const [busy, setBusy] = useState(false);
+    const run = async () => {
+        setBusy(true);
+        try {
+            const e = await mkValidateEstimate();
+            if (!e.will_check) { toast.info(e.waiting ? "Monthly budget used up — nothing can be checked this month." : "Every saved address is already checked."); return; }
+            if (!window.confirm(`Check ${e.will_check} unverified address(es) with Amazon SES now?\n\nCost: up to ₹${e.est_inr} from this month's budget (${e.usage.left} checks left).${e.waiting > e.will_check ? `\n${e.waiting - e.will_check} more wait for next month's budget.` : ""}`)) return;
+            await mkValidatePending();
+            toast.success("Checking in the background — the Contacts page updates as it goes.");
+        } catch (er) { toast.error(formatApiError(er)); } finally { setBusy(false); }
+    };
+    return (
+        <button type="button" onClick={run} disabled={busy} data-testid="mk-ses-check-now"
+            className="h-9 border border-[#002B5C] text-[#002B5C] px-3 text-xs disabled:opacity-50">
+            {busy ? "Working…" : "Check unverified addresses now"}
+        </button>
     );
 }
 
@@ -2208,12 +2230,13 @@ function Settings() {
                     {F("max_bounce", "Auto-pause when bounces exceed (0.02 = 2%; max 0.04 — AWS reviews your account at 5%)", { type: "number", step: "0.005", max: "0.04" })}
                     <div className="border-t border-[#E5E7EB] pt-2 space-y-2">
                         <label className="flex items-center gap-2"><input type="checkbox" checked={!!s.ses_validation} disabled={!su} onChange={(e) => setS({ ...s, ses_validation: e.target.checked })} data-testid="mk-ses-validation" />
-                            Check every new address with Amazon SES Email Validation before mailing it (≈ $0.01 per address)</label>
+                            Allow Amazon SES mailbox checks (paid, ≈ $0.01 per address) — they run only when you press “Check unverified addresses now”, tick them on an import, or confirm them when sending a campaign. Nothing is checked automatically.</label>
                         <div className="grid grid-cols-2 gap-2">
                             {F("ses_budget_inr", "Monthly budget for mailbox checks, ₹", { type: "number", step: "50", min: "0" })}
                             {F("usd_inr", "USD → ₹ rate (for estimates)", { type: "number", step: "0.5" })}
                         </div>
                         <SesUsage u={s.ses_usage} />
+                        {s.ses_validation && <PaidCheckNow />}
                         {s.waiting_checks > 0 && <p className="text-xs text-[#6B7280]">{s.waiting_checks} contacts not checked yet — they're checked in the background, or when a campaign is sent to them.</p>}
                         <div className="text-sm font-medium text-[#002B5C] pt-1">Risky addresses — what campaigns do with them</div>
                         {["role", "catch_all", "unconfirmed"].map((kk) => (

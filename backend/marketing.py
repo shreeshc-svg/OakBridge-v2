@@ -899,12 +899,16 @@ def _status_update(v: dict) -> dict:
 _validating = False
 
 
-async def validate_pending(max_n: int = 5000) -> dict:
-    """Background pass over saved contacts: website contacts that arrived
-    without any check ('unknown') get the free checks, and — with SES
-    validation on — every not-yet-proven address gets its SES mailbox check
-    (within the budget). Campaigns don't depend on it — sending checks its own
-    recipients first — it just spreads the work and keeps the Contacts page current."""
+async def validate_pending(max_n: int = 5000, *, paid: bool = False) -> dict:
+    """Pass over saved contacts. Contacts that arrived without any check
+    ('unknown') get the FREE checks.
+
+    Paid Amazon SES mailbox checks run ONLY when paid=True, i.e. an admin
+    pressed "Check unverified addresses now" (adm_validate_pending) after
+    seeing the estimate. Until Nov 2026 the every-minute tick and every
+    import / sign-up ran them automatically over every not-yet-proven address,
+    and that quietly spent the month's budget. Campaigns still check their own
+    recipients at Send, with the cost shown in the confirmation first."""
     global _validating
     if _validating:
         return {"running": True}
@@ -914,14 +918,17 @@ async def validate_pending(max_n: int = 5000) -> dict:
     try:
         st = await get_settings()
         use = await ses_usage()
-        if st.get("ses_validation") and use["supported"] and use["used"] < use["cap"]:
+        live = paid and bool(st.get("ses_validation")) and use["supported"] and use["used"] < use["cap"]
+        if live:
             flt = {"email_status": {"$in": ["unknown", "valid", "risky"]}, "ses_checked": {"$ne": True}}
         else:
             flt = {"email_status": "unknown"}
         contacts = await db.mk_contacts.find(flt, {"_id": 0, "id": 1, "email": 1, "name": 1}).limit(max_n).to_list(max_n)
         for i in range(0, len(contacts), 100):
             chunk = contacts[i:i + 100]
-            res = await verify_emails([c["email"] for c in chunk], autofix=False, ses="live", names=[c.get("name", "") for c in chunk])
+            # "cache": earlier SES verdicts are reused (free); no new paid check.
+            res = await verify_emails([c["email"] for c in chunk], autofix=False, ses="live" if live else "cache",
+                                      names=[c.get("name", "") for c in chunk])
             await dbutil.bulk_set(db.mk_contacts, [(c["id"], _status_update(v)) for c, v in zip(chunk, res)])
             done += len(chunk)
             if _SES_STOP.get("at", "") >= started:
@@ -983,9 +990,10 @@ async def job_dead_alert(job: dict, error: str) -> None:
     await raise_alert("job", msg, key=f"job:{job.get('kind')}")
 
 
-def kick_validation() -> None:
-    """Check waiting addresses soon (after an import / sync / re-verify / sign-up)."""
-    dispatch("mk_validate", dedupe="all")
+def kick_validation(paid: bool = False) -> None:
+    """Check waiting addresses soon (after an import / sync / re-verify / sign-up):
+    free checks only. paid=True only from the admin's "Check now" button."""
+    dispatch("mk_validate", {"paid": paid}, dedupe="paid" if paid else "all")
 
 
 # ------------------------------------------------------------- contacts ---
@@ -1094,7 +1102,9 @@ async def _newsletter_signup(email: str, source: str = "newsletter") -> None:
         if st["double_opt_in"]:
             # Check the address the moment it arrives: a bot or a typo'd
             # sign-up would otherwise cost us a bounce on the confirmation email.
-            v = (await verify_emails([email], autofix=False, ses="live", ignore_erased=True))[0]
+            # Free checks only (Nov 2026): a paid SES check per sign-up spent the
+            # budget unasked. Paid checks run from "Check now" or at campaign Send.
+            v = (await verify_emails([email], autofix=False, ses="cache", ignore_erased=True))[0]
             c = await upsert_contact(email, source=source or "newsletter", email_consent="pending", status=v["status"], readd_erased=True,
                                      reasons=v["reasons"], ses_checked=v.get("ses_checked") or None,
                                      extra={"risk_kind": v.get("risk_kind", ""), "ses_overall": v.get("ses_overall", ""), "score": v.get("score"),
@@ -2671,12 +2681,32 @@ async def adm_suppression_sync():
     return await sync_aws_suppression(force=True)
 
 
+async def _paid_check_estimate() -> dict:
+    use = await ses_usage()
+    n = await db.mk_contacts.count_documents({"email_status": {"$in": ["unknown", "valid", "risky"]}, "ses_checked": {"$ne": True},
+                                              "suppressed": {"$ne": True}})
+    n_run = min(n, use["left"])
+    return {"waiting": n, "will_check": n_run, "est_inr": round(n_run * use["per_check_inr"], 2), "usage": use}
+
+
+@admin_router.get("/validate-pending")
+async def adm_validate_estimate():
+    """What "Check unverified addresses now" would check and cost (nothing runs)."""
+    return await _paid_check_estimate()
+
+
 @admin_router.post("/validate-pending")
-async def adm_validate_pending():
-    """'Check now': run the mailbox checks for waiting contacts immediately
-    (the cron does the same every few minutes)."""
-    kick_validation()
-    return {"ok": True, "usage": await ses_usage()}
+async def adm_validate_pending(user: dict = Depends(require_admin)):
+    """'Check unverified addresses now': the ONLY way saved contacts get paid
+    SES mailbox checks outside a campaign send (within the monthly budget;
+    addresses checked before are never paid for twice)."""
+    est = await _paid_check_estimate()
+    if not est["usage"]["enabled"]:
+        raise HTTPException(status_code=409, detail="Amazon SES mailbox checks are switched off in Settings.")
+    kick_validation(paid=True)
+    await audit_log(db, "MARKETING_SES_CHECK_RUN", email=user.get("email", ""), role=user.get("role", ""),
+                    meta={"will_check": est["will_check"], "est_inr": est["est_inr"]})
+    return {"ok": True, **est}
 
 
 @admin_router.post("/reverify")
@@ -4148,7 +4178,7 @@ async def resume_on_startup() -> None:
 # Every handler is safe to run twice: a job can be retried after a crash.
 @_jobs.handler("mk_validate")
 async def _job_validate(p: dict) -> None:
-    await validate_pending()
+    await validate_pending(paid=bool((p or {}).get("paid")))
 
 
 @_jobs.handler("mk_prepare")
