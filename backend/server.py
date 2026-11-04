@@ -748,7 +748,9 @@ async def startup_event():
     await ensure_indexes()
     await ensure_feature_indexes()
     from hrm import ensure_indexes as hrm_indexes
+    from hrm_leave import ensure_indexes as hrm_leave_indexes
     await hrm_indexes()
+    await hrm_leave_indexes()
     try:
         # Real review figures for every reviewed book (stars are shown only
         # from these — extensions.refresh_review_stats).
@@ -2125,6 +2127,8 @@ from marketing_attachments import router as marketing_attachments_router  # noqa
 app.include_router(marketing_attachments_router)
 from hrm import router as hrm_router  # noqa: E402  (HRM: /api/hrm, own access rules — see hrm.py)
 app.include_router(hrm_router)
+from hrm_leave import router as hrm_leave_router  # noqa: E402  (HRM release 2: leave)
+app.include_router(hrm_leave_router)
 app.include_router(marketing_admin_router)
 app.include_router(marketing_tasks_router)
 from newsletter import router as newsletter_router  # noqa: E402  (also registers the nl_tick job)

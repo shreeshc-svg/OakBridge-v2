@@ -117,7 +117,9 @@ async def _invite(*a):
     return True
 
 db = DB()
-_mod("fastapi", APIRouter=_Router, HTTPException=HTTPException, Depends=lambda *a, **k: None)
+_mod("fastapi", APIRouter=_Router, HTTPException=HTTPException, Depends=lambda *a, **k: None,
+     File=lambda *a, **k: None, UploadFile=object)
+_mod("fastapi.responses", Response=lambda **k: k)
 _mod("pydantic", BaseModel=BaseModel)
 _mod("extensions", db=db, get_current_user=lambda: None, hash_password=lambda p: "hash")
 _mod("audit", audit_log=_anoop)
@@ -206,6 +208,49 @@ async def flow():
         check("Depends(require_hr" in sig, f"{fn} is HR-only")
 
 
+
+
+async def photos():
+    print("-- photos --")
+    import io
+    from PIL import Image
+    store = {}
+    feats = _mod("features", APP_NAME="oakbridge", put_object=lambda p, d, t: store.__setitem__(p, d),
+                 get_object=lambda p: (store[p], "image/jpeg"))
+    big = io.BytesIO()
+    im = Image.new("RGB", (1200, 800), (200, 10, 10))
+    exif = Image.Exif()
+    exif[0x8825] = {2: (28, 37, 0)}          # GPS — must not survive
+    im.save(big, "JPEG", exif=exif)
+
+    class Up:
+        def __init__(self, b):
+            self._b = io.BytesIO(b)
+
+        async def read(self, n=-1):
+            return self._b.read(n)
+    _mod("uploads_guard", read_limited=lambda f, lim, label: f.read(), require_image=lambda d, l: "jpg")
+    sys.modules["uploads_guard"].read_limited = lambda f, lim, label: f.read()
+    people = {p["name"]: p async for p in db.hr_employees.find({})}
+    zed, asha_ = people["Zed"], people["Asha"]
+    ZED = {"id": zed["user_id"], "email": "zed@oakbridge.in", "role": "customer"}
+    r = await hrm.hrm_photo_upload(zed["id"], Up(big.getvalue()), ZED)
+    path = (await db.hr_employees.find_one({"id": zed["id"]}))["photo_path"]
+    out = Image.open(io.BytesIO(store[path]))
+    check(r["ok"] and out.size == (hrm.PHOTO_PX, hrm.PHOTO_PX), "employee adds their own photo; square, small")
+    check(not out.getexif().get(0x8825), "location data stripped")
+    check("/hr-photos/" in path and '"hr-photos"' in open(os.path.join(os.path.dirname(HERE), "features.py"), encoding="utf-8").read().split("_PRIVATE_SEGMENTS = ")[1].split("\n")[0],
+          "stored privately (never served by /api/files)")
+    await expect(hrm.hrm_photo_upload(people["Founder"]["id"], Up(big.getvalue()), ZED), 403, "can't change someone else's photo")
+    FOUNDER = {"id": "u-f", "email": "founder@oakbridge.in", "role": "customer"}
+    got = await hrm.hrm_photo(zed["id"], FOUNDER)
+    check(got["media_type"] == "image/jpeg", "HR sees the photo")
+    await expect(hrm.hrm_photo(zed["id"], {"id": "u-s", "email": "x@gmail.com", "role": "customer"}), 403 if False else 404,
+                 "outsiders can't fetch a photo")
+    view = (await hrm.hrm_people(False, FOUNDER))["rows"]
+    check(all("photo_path" not in v for v in view) and any(v.get("photo_at") for v in view), "lists carry photo_at, never the storage path")
+
 asyncio.run(flow())
+asyncio.run(photos())
 print("\nall passed" if not failed else f"\n{failed} FAILED")
 sys.exit(1 if failed else 0)

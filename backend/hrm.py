@@ -31,7 +31,8 @@ import uuid
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.responses import Response
 from pydantic import BaseModel
 
 import hr_core as core
@@ -44,7 +45,9 @@ router = APIRouter(prefix="/api/hrm", tags=["hrm"])
 SETTINGS_KEY = "hr_settings"
 INVITE_DAYS = 7
 PUBLIC = ("id", "emp_code", "name", "work_email", "phone", "designation", "department", "location", "manager_id",
-          "joined_on", "confirmed_on", "status", "hr_access", "gender", "user_id", "invited_at", "exited_on")
+          "joined_on", "confirmed_on", "status", "hr_access", "gender", "user_id", "invited_at", "exited_on", "photo_at")
+PHOTO_MAX = 8 * 1024 * 1024
+PHOTO_PX = 480
 
 
 def _now() -> datetime:
@@ -252,6 +255,68 @@ async def hrm_invite(pid: str, user: dict = Depends(require_hr)):
         log.exception("hrm: invite email failed for %s", pid)
     await _audit(user, "HRM_LOGIN_INVITED", {"person": pid, "account_created": created, "emailed": sent})
     return {"ok": True, "account_created": created, "emailed": sent}
+
+
+# ---------------------------------------------------------------- photos ---
+# A face for the People list (Nov 2026, asked for by HR). Private: stored
+# under the "hr-photos" segment that /api/files never serves, and only
+# returned here to someone allowed to see that person. Re-encoded to a small
+# JPEG, which also drops any location / camera data the phone put in it.
+def _shrink_photo(data: bytes) -> bytes:
+    from io import BytesIO
+    from PIL import Image, ImageOps
+    im = ImageOps.exif_transpose(Image.open(BytesIO(data)))
+    im = im.convert("RGB")
+    w, h = im.size
+    side = min(w, h)                     # centre square crop
+    im = im.crop(((w - side) // 2, (h - side) // 2, (w - side) // 2 + side, (h - side) // 2 + side))
+    im.thumbnail((PHOTO_PX, PHOTO_PX))
+    out = BytesIO()
+    im.save(out, "JPEG", quality=85, optimize=True)
+    return out.getvalue()
+
+
+@router.post("/people/{pid}/photo")
+async def hrm_photo_upload(pid: str, file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+    import asyncio
+    import uploads_guard
+    from features import APP_NAME, put_object
+    people, me, acc = await _ctx(user)
+    if pid not in people or not (acc["hr"] or (me and me["id"] == pid and me.get("status") == "active")):
+        raise HTTPException(status_code=403, detail="Only HR or the person themselves can change this photo.")
+    data = await uploads_guard.read_limited(file, PHOTO_MAX, "Photo")
+    uploads_guard.require_image(data, "Photo")
+    try:
+        jpg = await asyncio.to_thread(_shrink_photo, data)
+    except Exception:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail="That image couldn't be read — use a JPEG or PNG.")
+    path = f"{APP_NAME}/hr-photos/{pid}-{uuid.uuid4().hex[:8]}.jpg"
+    await asyncio.to_thread(put_object, path, jpg, "image/jpeg")
+    await db.hr_employees.update_one({"id": pid}, {"$set": {"photo_path": path, "photo_at": _now().isoformat()}})
+    await _audit(user, "HRM_PHOTO_SET", {"person": pid})
+    return {"ok": True, "photo_at": _now().isoformat()}
+
+
+@router.post("/people/{pid}/photo/remove")
+async def hrm_photo_remove(pid: str, user: dict = Depends(get_current_user)):
+    people, me, acc = await _ctx(user)
+    if pid not in people or not (acc["hr"] or (me and me["id"] == pid)):
+        raise HTTPException(status_code=403, detail="Only HR or the person themselves can remove this photo.")
+    await db.hr_employees.update_one({"id": pid}, {"$unset": {"photo_path": "", "photo_at": ""}})
+    await _audit(user, "HRM_PHOTO_REMOVED", {"person": pid})
+    return {"ok": True}
+
+
+@router.get("/people/{pid}/photo")
+async def hrm_photo(pid: str, user: dict = Depends(get_current_user)):
+    import asyncio
+    from features import get_object
+    people, me, acc = await _ctx(user)
+    p = people.get(pid)
+    if not p or not _member(me, acc) or not core.can_see(acc, pid) or not p.get("photo_path"):
+        raise HTTPException(status_code=404, detail="Not found")
+    data, _ = await asyncio.to_thread(get_object, p["photo_path"])
+    return Response(content=data, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=3600"})
 
 
 # -------------------------------------------------------------- calendar ---

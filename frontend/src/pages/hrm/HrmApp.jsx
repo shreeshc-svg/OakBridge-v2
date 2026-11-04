@@ -1,12 +1,14 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { CalendarDays, Home, Settings2, Users, Plus, X, Send, Search } from "lucide-react";
+import { CalendarDays, CalendarCheck, Home, Settings2, Users, Plus, X, Send, Search, Camera } from "lucide-react";
 import {
-    hrmMe, hrmPeople, hrmAddPerson, hrmEditPerson, hrmInvite, hrmCalendar, hrmSaveCalendar, hrmSettings, hrmSaveSettings,
-    formatApiError,
+    hrmMe, hrmPeople, hrmAddPerson, hrmEditPerson, hrmInvite, hrmCalendar, hrmSettings, hrmSaveSettings,
+    hrmPhotoBlob, hrmUploadPhoto, hrmRemovePhoto, leaveSummary, leaveTeam, leaveApprovals, formatApiError,
 } from "../../lib/api";
 import NoIndex from "../../components/NoIndex";
+import HrmCalendar from "./HrmCalendar";
+import LeaveTab, { BalanceCards, Approvals } from "./HrmLeave";
 
 /**
  * Oakbridge HRM — release 1 (Nov 2026): people, logins, leave year, calendar.
@@ -28,7 +30,6 @@ const weeklyOffText = (w) => {
     if ((w.saturdays || []).length) parts.push(`${w.saturdays.map((n) => ORD[n]).join(" & ")} Saturday`);
     return parts.join(" + ") || "none";
 };
-const fyShift = (fy, by) => { const y = Number(fy.slice(0, 4)) + by; return `${y}-${String(y + 1).slice(-2)}`; };
 
 export default function HrmApp() {
     const [me, setMe] = useState(null);
@@ -51,7 +52,7 @@ export default function HrmApp() {
     if (!me) return <div className="py-32 text-center font-mono text-xs text-[#4B5563]">Loading…</div>;
 
     const role = me.hr ? "HR / Founder" : me.manager ? "Manager" : "Employee";
-    const tabs = [["home", "Home", Home], ...(me.hr || me.manager ? [["people", me.hr ? "People" : "My team", Users]] : []),
+    const tabs = [["home", "Home", Home], ["leave", "Leave", CalendarCheck], ...(me.hr || me.manager ? [["people", me.hr ? "People" : "My team", Users]] : []),
         ["calendar", "Calendar", CalendarDays], ...(me.hr ? [["settings", "Settings", Settings2]] : [])];
 
     return (
@@ -73,9 +74,10 @@ export default function HrmApp() {
                 </nav>
             </header>
             <main className="max-w-5xl mx-auto px-4 py-6">
-                {tab === "home" && <HomeTab me={me} />}
+                {tab === "home" && <HomeTab me={me} go={setTab} />}
+                {tab === "leave" && <LeaveTab me={me} />}
                 {tab === "people" && <PeopleTab hr={me.hr} />}
-                {tab === "calendar" && <CalendarTab hr={me.hr} />}
+                {tab === "calendar" && <HrmCalendar hr={me.hr} manager={me.manager} />}
                 {tab === "settings" && me.hr && <SettingsTab />}
             </main>
         </div>
@@ -83,38 +85,175 @@ export default function HrmApp() {
 }
 
 /* ------------------------------------------------------------------ home --- */
-function HomeTab({ me }) {
+/* Two dashboards (Nov 2026): everyone sees THEIR leave first (what's left,
+   what's coming, what's waiting); HR / founders additionally get the company
+   at a glance — who's off today and this week, approvals waiting, people on
+   probation, logins not sent. Managers get their team's slice. */
+const isoToday = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+const plusDays = (iso, n) => { const d = new Date(`${iso}T00:00:00`); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+
+function HomeTab({ me, go }) {
     const [cal, setCal] = useState(null);
-    useEffect(() => { hrmCalendar().then(setCal).catch(() => {}); }, []);
+    const [s, setS] = useState(null);
+    const [off, setOff] = useState(null);
+    const [people, setPeople] = useState(null);
+    const [waiting, setWaiting] = useState(null);
+    const today = isoToday();
+    useEffect(() => {
+        hrmCalendar().then(setCal).catch(() => {});
+        if (me.me) leaveSummary().then(setS).catch(() => {});
+        if (me.hr || me.manager) {
+            leaveTeam(today, plusDays(today, 6)).then((r) => setOff(r.rows || [])).catch(() => setOff([]));
+            leaveApprovals().then(setWaiting).catch(() => setWaiting([]));
+        }
+        if (me.hr) hrmPeople().then(setPeople).catch(() => setPeople([]));
+    }, [me, today]);
     const p = me.me;
-    const today = new Date().toISOString().slice(0, 10);
-    const upcoming = (cal?.rows || []).filter((r) => r.date >= today).slice(0, 5);
+    const upcoming = (cal?.rows || []).filter((r) => r.date >= today).slice(0, 4);
+    const mine = (s?.requests || []).filter((r) => r.type !== "COMP_EARN" && (r.status === "pending" || (r.status === "approved" && r.end >= today)))
+        .sort((x, y) => x.start.localeCompare(y.start)).slice(0, 4);
+    const offToday = (off || []).filter((r) => r.start <= today && today <= r.end && r.status === "approved");
     return (
-        <div className="grid gap-4 md:grid-cols-2">
-            <Card title={p ? `Hi ${p.name.split(" ")[0]}` : "Super admin"}>
-                {p ? (
-                    <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                        <Field k="Designation" v={p.designation} /><Field k="Department" v={p.department} />
-                        <Field k="Reports to" v={me.manager_name} /><Field k="Joined" v={fmt(p.joined_on)} />
-                        <Field k="Status" v={p.confirmed_on ? `Confirmed ${fmt(p.confirmed_on)}` : "On probation"} />
-                        {(me.hr || me.manager) && <Field k={me.hr ? "People" : "Your team"} v={String(me.team_size)} />}
-                    </dl>
-                ) : <p className="text-sm text-[#4B5563]">You see everything as a site super admin. Add yourself under People to get your own leave and goals.</p>}
-                <p className="mt-4 text-xs text-[#6B7280]">Leave, goals and hiring arrive in the next releases.</p>
-            </Card>
-            <Card title={`Upcoming holidays · ${cal?.fy || ""}`}>
-                {!cal ? <p className="text-sm text-[#6B7280]">Loading…</p> : upcoming.length ? (
-                    <ul className="divide-y divide-[#F3F4F6] text-sm">
-                        {upcoming.map((r) => (
-                            <li key={r.date} className="py-2 flex justify-between gap-3">
-                                <span>{r.name}{r.kind === "optional" && <span className="ml-2 text-[10px] uppercase tracking-wider text-[#B4750F]">optional</span>}</span>
-                                <span className="text-[#4B5563] whitespace-nowrap">{fmt(r.date)}</span>
-                            </li>
-                        ))}
-                    </ul>
-                ) : <p className="text-sm text-[#6B7280]">No more holidays listed this year.</p>}
-                {cal && <p className="mt-3 text-xs text-[#6B7280]">Weekly off: {weeklyOffText(cal.weekly_off)}.</p>}
-            </Card>
+        <div className="space-y-5" data-testid="hrm-home">
+            <section className="bg-white border border-[#E5E7EB] p-4 flex flex-wrap items-center gap-4">
+                {p ? <SelfPhoto p={p} /> : null}
+                <div className="flex-1 min-w-[200px]">
+                    <div className="font-serif text-2xl text-[#002B5C]">{p ? `Hi ${p.name.split(" ")[0]}` : "Welcome"}</div>
+                    <div className="text-sm text-[#4B5563]">
+                        {p ? [p.designation, p.department, p.emp_code && `Emp ID ${p.emp_code}`].filter(Boolean).join(" · ") : "Site super admin — you see everything. Add yourself under People to get your own leave."}
+                    </div>
+                    {p && <div className="text-xs text-[#6B7280] mt-0.5">Reports to {me.manager_name || "—"} · joined {fmt(p.joined_on)} · {p.confirmed_on ? `confirmed ${fmt(p.confirmed_on)}` : <span className="text-[#B4750F]">on probation</span>}</div>}
+                </div>
+                {p && <button type="button" onClick={() => go("leave")} className="bg-[#002B5C] text-white px-4 py-2 text-sm" data-testid="hrm-home-apply">Apply for leave</button>}
+            </section>
+
+            {me.hr && (
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2" data-testid="hrm-hr-kpis">
+                    <Kpi label="People" value={people ? people.length : "…"} onClick={() => go("people")} />
+                    <Kpi label="Off today" value={off ? offToday.length : "…"} onClick={() => go("calendar")} />
+                    <Kpi label="Waiting approval" value={waiting ? waiting.length : "…"} tone={waiting?.length ? "text-[#B4750F]" : ""} onClick={() => go("leave")} />
+                    <Kpi label="On probation" value={people ? people.filter((x) => !x.confirmed_on).length : "…"} onClick={() => go("people")} />
+                    <Kpi label="No login yet" value={people ? people.filter((x) => !x.user_id).length : "…"} tone={people?.some((x) => !x.user_id) ? "text-[#B4750F]" : ""} onClick={() => go("people")} />
+                </div>
+            )}
+
+            {p && (
+                <section>
+                    <h2 className="font-serif text-xl text-[#002B5C] mb-2">Your leave · {s?.fy || ""}</h2>
+                    {s ? <BalanceCards s={s} /> : <p className="text-sm text-[#6B7280]">Loading…</p>}
+                </section>
+            )}
+
+            <div className="grid gap-4 md:grid-cols-2">
+                {(me.hr || me.manager) && (
+                    <Card title={`Waiting for you${waiting?.length ? ` (${waiting.length})` : ""}`}>
+                        <Approvals hr={me.hr} compact onChange={() => leaveApprovals().then(setWaiting).catch(() => {})} />
+                    </Card>
+                )}
+                {(me.hr || me.manager) && (
+                    <Card title={me.hr ? "Who's off this week" : "Your team this week"}>
+                        {!off ? <p className="text-sm text-[#6B7280]">Loading…</p> : off.length ? (
+                            <ul className="divide-y divide-[#F3F4F6] text-sm">
+                                {off.slice(0, 8).map((r) => (
+                                    <li key={r.id} className="py-1.5 flex justify-between gap-2">
+                                        <span>{r.name} <span className="text-[#6B7280]">· {r.label}{r.status === "pending" ? " (pending)" : ""}</span></span>
+                                        <span className="text-[#4B5563] whitespace-nowrap">{r.start === r.end ? fmt(r.start) : `${fmt(r.start)} – ${fmt(r.end)}`}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                        ) : <p className="text-sm text-[#6B7280]">Everyone's in.</p>}
+                    </Card>
+                )}
+                {p && (
+                    <Card title="Your upcoming leave">
+                        {!s ? <p className="text-sm text-[#6B7280]">Loading…</p> : mine.length ? (
+                            <ul className="divide-y divide-[#F3F4F6] text-sm">
+                                {mine.map((r) => (
+                                    <li key={r.id} className="py-1.5 flex justify-between gap-2">
+                                        <span>{(s.types || {})[r.type] || r.type} · {r.days} day(s)</span>
+                                        <span className={r.status === "pending" ? "text-[#B4750F]" : "text-[#15803D]"}>{r.start === r.end ? fmt(r.start) : `${fmt(r.start)} – ${fmt(r.end)}`} · {r.status}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                        ) : <p className="text-sm text-[#6B7280]">Nothing planned.</p>}
+                    </Card>
+                )}
+                <Card title={`Upcoming holidays · ${cal?.fy || ""}`}>
+                    {!cal ? <p className="text-sm text-[#6B7280]">Loading…</p> : upcoming.length ? (
+                        <ul className="divide-y divide-[#F3F4F6] text-sm">
+                            {upcoming.map((r) => (
+                                <li key={r.date} className="py-1.5 flex justify-between gap-3">
+                                    <span>{r.name}{r.kind === "optional" && <span className="ml-2 text-[10px] uppercase tracking-wider text-[#B4750F]">optional</span>}</span>
+                                    <span className="text-[#4B5563] whitespace-nowrap">{fmt(r.date)}</span>
+                                </li>
+                            ))}
+                        </ul>
+                    ) : <p className="text-sm text-[#6B7280]">No more holidays listed this year.</p>}
+                    {cal && <button type="button" onClick={() => go("calendar")} className="mt-2 text-xs underline text-[#4B5563]">Open the calendar · weekly off: {weeklyOffText(cal.weekly_off)}</button>}
+                </Card>
+            </div>
+        </div>
+    );
+}
+
+function Kpi({ label, value, tone = "", onClick }) {
+    return (
+        <button type="button" onClick={onClick} className="text-left bg-white border border-[#E5E7EB] hover:border-[#002B5C] p-3">
+            <div className="text-[10px] uppercase tracking-wider text-[#6B7280]">{label}</div>
+            <div className={`font-serif text-3xl leading-tight ${tone || "text-[#002B5C]"}`}>{value}</div>
+        </button>
+    );
+}
+
+/* ---------------------------------------------------------------- photos --- */
+/* The photo endpoint needs the sign-in token, so it is fetched as a blob
+   (a plain <img src> sends no Authorization header). */
+export function Avatar({ p, size = 36, bust = "" }) {
+    const [url, setUrl] = useState("");
+    useEffect(() => {
+        let gone = false;
+        let u = "";
+        if (p?.photo_at) hrmPhotoBlob(p.id).then((b) => { if (!gone) { u = URL.createObjectURL(b); setUrl(u); } }).catch(() => {});
+        else setUrl("");
+        return () => { gone = true; if (u) URL.revokeObjectURL(u); };
+    }, [p?.id, p?.photo_at, bust]);
+    const initials = (p?.name || "?").split(" ").filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+    return url
+        ? <img src={url} alt={p.name} width={size} height={size} className="object-cover border border-[#E5E7EB] shrink-0" style={{ width: size, height: size }} />
+        : <span className="inline-flex items-center justify-center bg-[#E8EEF6] text-[#002B5C] font-medium shrink-0" style={{ width: size, height: size, fontSize: size / 2.8 }} aria-hidden="true">{initials}</span>;
+}
+
+function PhotoPicker({ p, onChanged }) {
+    const pick = useRef(null);
+    const [busy, setBusy] = useState(false);
+    const up = async (file) => {
+        if (!file) return;
+        if (!/^image\//.test(file.type)) { toast.error("Choose a photo (JPEG or PNG)."); return; }
+        setBusy(true);
+        try { const r = await hrmUploadPhoto(p.id, file); toast.success("Photo saved."); onChanged(r.photo_at); }
+        catch (e) { toast.error(formatApiError(e)); } finally { setBusy(false); }
+    };
+    const remove = async () => {
+        if (!window.confirm("Remove this photo?")) return;
+        try { await hrmRemovePhoto(p.id); onChanged(null); } catch (e) { toast.error(formatApiError(e)); }
+    };
+    return (
+        <span className="inline-flex items-center gap-2 text-xs">
+            <button type="button" disabled={busy} onClick={() => pick.current?.click()} className="inline-flex items-center gap-1 underline disabled:opacity-50">
+                <Camera size={12} />{busy ? "Uploading…" : p.photo_at ? "Change photo" : "Add photo"}
+            </button>
+            {p.photo_at && <button type="button" onClick={remove} className="underline text-[#CC0033]">Remove</button>}
+            <input ref={pick} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={(e) => { up(e.target.files?.[0]); e.target.value = ""; }} />
+        </span>
+    );
+}
+
+function SelfPhoto({ p }) {
+    const [cur, setCur] = useState(p);
+    return (
+        <div className="flex flex-col items-center gap-1">
+            <Avatar p={cur} size={72} />
+            <PhotoPicker p={cur} onChanged={(at) => setCur({ ...cur, photo_at: at })} />
         </div>
     );
 }
@@ -162,16 +301,22 @@ function PeopleTab({ hr }) {
             <div className="bg-white border border-[#E5E7EB] overflow-x-auto">
                 <table className="w-full text-sm">
                     <thead><tr className="text-left text-[#4B5563] border-b border-[#E5E7EB]">
-                        <th className="px-3 py-2">Name</th><th className="px-3 py-2">Department</th><th className="px-3 py-2">Reports to</th>
+                        <th className="px-3 py-2">Name</th><th className="px-3 py-2 whitespace-nowrap">Emp ID</th><th className="px-3 py-2">Department</th><th className="px-3 py-2">Reports to</th>
                         <th className="px-3 py-2 whitespace-nowrap">Joined</th><th className="px-3 py-2">Status</th>{hr && <th className="px-3 py-2" />}
                     </tr></thead>
                     <tbody>
                         {shown.map((r) => (
                             <tr key={r.id} className="border-b border-[#F3F4F6] align-top">
                                 <td className="px-3 py-2">
-                                    <div className="text-[#002B5C]">{r.name}{r.hr_access && <span className="ml-2 text-[10px] uppercase tracking-wider text-[#B4750F]">HR</span>}</div>
-                                    <div className="text-[11px] text-[#6B7280]">{[r.designation, r.work_email].filter(Boolean).join(" · ")}</div>
+                                    <div className="flex items-center gap-2.5">
+                                        <Avatar p={r} />
+                                        <div className="min-w-0">
+                                            <div className="text-[#002B5C]">{r.name}{r.hr_access && <span className="ml-2 text-[10px] uppercase tracking-wider text-[#B4750F]">HR</span>}</div>
+                                            <div className="text-[11px] text-[#6B7280]">{[r.designation, r.work_email].filter(Boolean).join(" · ")}</div>
+                                        </div>
+                                    </div>
                                 </td>
+                                <td className="px-3 py-2 font-mono text-xs text-[#4B5563]">{r.emp_code || "—"}</td>
                                 <td className="px-3 py-2 text-[#4B5563]">{r.department || "—"}</td>
                                 <td className="px-3 py-2 text-[#4B5563]">{r.manager_name || "—"}</td>
                                 <td className="px-3 py-2 whitespace-nowrap">{fmt(r.joined_on)}</td>
@@ -191,7 +336,7 @@ function PeopleTab({ hr }) {
                                 )}
                             </tr>
                         ))}
-                        {!shown.length && <tr><td colSpan={hr ? 6 : 5} className="px-3 py-8 text-center text-[#6B7280]">{rows.length ? "No one matches." : hr ? "No one yet — add your first person." : "No one in your team yet."}</td></tr>}
+                        {!shown.length && <tr><td colSpan={hr ? 7 : 6} className="px-3 py-8 text-center text-[#6B7280]">{rows.length ? "No one matches." : hr ? "No one yet — add your first person." : "No one in your team yet."}</td></tr>}
                     </tbody>
                 </table>
             </div>
@@ -228,7 +373,10 @@ function PersonForm({ person, people, onClose, onSaved }) {
     return (
         <form onSubmit={save} className="bg-white border border-[#002B5C] p-4" data-testid="hrm-person-form">
             <div className="flex items-center justify-between mb-3">
-                <h2 className="font-serif text-xl text-[#002B5C]">{person ? `Edit ${person.name}` : "Add a person"}</h2>
+                <div className="flex items-center gap-3">
+                    {person && <PersonPhoto person={person} />}
+                    <h2 className="font-serif text-xl text-[#002B5C]">{person ? `Edit ${person.name}` : "Add a person"}</h2>
+                </div>
                 <button type="button" onClick={onClose} aria-label="Close"><X size={18} /></button>
             </div>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-sm">
@@ -271,69 +419,17 @@ function PersonForm({ person, people, onClose, onSaved }) {
     );
 }
 
-/* -------------------------------------------------------------- calendar --- */
-function CalendarTab({ hr }) {
-    const [cal, setCal] = useState(null);
-    const [fy, setFy] = useState("");
-    const [rows, setRows] = useState([]);
-    const [dirty, setDirty] = useState(false);
-    const [busy, setBusy] = useState(false);
-    const load = useCallback((y) => hrmCalendar(y).then((c) => { setCal(c); setFy(c.fy); setRows(c.rows); setDirty(false); })
-        .catch((e) => toast.error(formatApiError(e))), []);
-    useEffect(() => { load(); }, [load]);
-    if (!cal) return <p className="text-sm text-[#6B7280]">Loading…</p>;
-    const upd = (i, k, v) => { setRows(rows.map((r, j) => (j === i ? { ...r, [k]: v } : r))); setDirty(true); };
-    const save = async () => {
-        setBusy(true);
-        try { const r = await hrmSaveCalendar(fy, rows.filter((x) => x.date && x.name)); setRows(r.rows); setDirty(false); toast.success("Calendar saved."); load(fy); }
-        catch (e) { toast.error(formatApiError(e)); } finally { setBusy(false); }
-    };
-    const go = (by) => { if (dirty && !window.confirm("Discard unsaved changes?")) return; load(fyShift(fy, by)); };
+function PersonPhoto({ person }) {
+    const [cur, setCur] = useState(person);
     return (
-        <div className="space-y-4">
-            <div className="flex flex-wrap items-center gap-3">
-                <button type="button" onClick={() => go(-1)} className="border border-[#E5E7EB] bg-white px-2 py-1 text-sm" aria-label="Previous year">‹</button>
-                <h2 className="font-serif text-2xl text-[#002B5C]">FY {fy}</h2>
-                <button type="button" onClick={() => go(1)} className="border border-[#E5E7EB] bg-white px-2 py-1 text-sm" aria-label="Next year">›</button>
-                <span className="text-sm text-[#4B5563]">{fmt(cal.start)} – {fmt(cal.end)} · {cal.working_days} working days · weekly off: {weeklyOffText(cal.weekly_off)}</span>
-            </div>
-            <div className="bg-white border border-[#E5E7EB]">
-                {rows.length === 0 && <p className="px-4 py-6 text-sm text-[#6B7280]">No holidays listed for {fy} yet.</p>}
-                <ul className="divide-y divide-[#F3F4F6]">
-                    {rows.map((r, i) => (
-                        <li key={i} className="px-4 py-2 flex flex-wrap items-center gap-3 text-sm">
-                            {hr ? (
-                                <>
-                                    <input type="date" value={r.date} min={cal.start} max={cal.end} onChange={(e) => upd(i, "date", e.target.value)} className="border border-[#E5E7EB] px-2 py-1" aria-label="Date" />
-                                    <input value={r.name} onChange={(e) => upd(i, "name", e.target.value)} placeholder="Holiday name" className="flex-1 min-w-[160px] border border-[#E5E7EB] px-2 py-1" aria-label="Name" />
-                                    <select value={r.kind} onChange={(e) => upd(i, "kind", e.target.value)} className="border border-[#E5E7EB] px-2 py-1" aria-label="Kind">
-                                        <option value="national">Company holiday</option><option value="optional">Optional holiday</option>
-                                    </select>
-                                    <button type="button" onClick={() => { setRows(rows.filter((_, j) => j !== i)); setDirty(true); }} aria-label="Remove" className="text-[#CC0033]"><X size={16} /></button>
-                                </>
-                            ) : (
-                                <>
-                                    <span className="w-28 text-[#4B5563]">{fmt(r.date)}</span>
-                                    <span className="flex-1">{r.name}</span>
-                                    {r.kind === "optional" && <span className="text-[10px] uppercase tracking-wider text-[#B4750F]">optional</span>}
-                                </>
-                            )}
-                        </li>
-                    ))}
-                </ul>
-            </div>
-            {hr && (
-                <div className="flex flex-wrap items-center gap-3">
-                    <button type="button" onClick={() => { setRows([...rows, { date: "", name: "", kind: "national" }]); setDirty(true); }}
-                        className="inline-flex items-center gap-1.5 border border-[#002B5C] text-[#002B5C] px-3 py-2 text-sm"><Plus size={14} />Add holiday</button>
-                    <button type="button" disabled={!dirty || busy} onClick={save} className="bg-[#002B5C] text-white px-4 py-2 text-sm disabled:opacity-50">{busy ? "Saving…" : "Save calendar"}</button>
-                    <span className="text-xs text-[#6B7280]">Optional holidays: each person may take 1 per year (from release 2).</span>
-                </div>
-            )}
+        <div className="flex items-center gap-2">
+            <Avatar p={cur} size={48} />
+            <PhotoPicker p={cur} onChanged={(at) => setCur({ ...cur, photo_at: at })} />
         </div>
     );
 }
 
+/* -------------------------------------------------------------- calendar --- */
 /* -------------------------------------------------------------- settings --- */
 function SettingsTab() {
     const [w, setW] = useState(null);
@@ -375,6 +471,3 @@ function Card({ title, children }) {
     );
 }
 
-function Field({ k, v }) {
-    return (<div><dt className="text-[11px] uppercase tracking-wider text-[#6B7280]">{k}</dt><dd className="text-[#002B5C]">{v || "—"}</dd></div>);
-}

@@ -131,6 +131,24 @@ export const hrmCalendar = (fy) => api.get("/hrm/calendar", { params: fy ? { fy 
 export const hrmSaveCalendar = (fy, rows) => api.put(`/hrm/calendar/${fy}`, { rows }).then((r) => r.data);
 export const hrmSettings = () => api.get("/hrm/settings").then((r) => r.data);
 export const hrmSaveSettings = (body) => api.put("/hrm/settings", body).then((r) => r.data);
+export const hrmPhotoBlob = (id) => api.get(`/hrm/people/${id}/photo`, { responseType: "blob" }).then((r) => r.data);
+export const hrmUploadPhoto = (id, file) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return api.post(`/hrm/people/${id}/photo`, fd, { timeout: 60000 }).then((r) => r.data);
+};
+export const hrmRemovePhoto = (id) => api.post(`/hrm/people/${id}/photo/remove`).then((r) => r.data);
+// HRM leave (backend/hrm_leave.py)
+const HL = "/hrm/leave";
+export const leaveSummary = (empId, fy) => api.get(`${HL}/summary`, { params: { ...(empId ? { emp_id: empId } : {}), ...(fy ? { fy } : {}) } }).then((r) => r.data);
+export const leaveApply = (body) => api.post(`${HL}/requests`, body).then((r) => r.data);
+export const leaveCancel = (id) => api.post(`${HL}/requests/${id}/cancel`).then((r) => r.data);
+export const leaveApprovals = () => api.get(`${HL}/approvals`).then((r) => r.data.rows || []);
+export const leaveDecide = (id, body) => api.post(`${HL}/requests/${id}/decide`, body).then((r) => r.data);
+export const leaveTeam = (start, end) => api.get(`${HL}/team`, { params: { start, end } }).then((r) => r.data);
+export const leaveAdjustments = (empId) => api.get(`${HL}/adjustments`, { params: empId ? { emp_id: empId } : {} }).then((r) => r.data.rows || []);
+export const leaveAdjust = (body) => api.post(`${HL}/adjustments`, body).then((r) => r.data);
+export const leaveExport = (month) => api.get(`${HL}/export.csv`, { params: { month }, responseType: "blob" }).then((r) => r.data);
 export const whLookup = (code, id = "") => api.get("/warehouse/lookup", { params: id ? { id } : { code } }).then((r) => r.data);
 export const whBooks = (opts = {}) => api.get("/warehouse/books", { params: opts.all ? { all: true } : {} }).then((r) => r.data);
 export const whUploadDoc = (direction, file, practice) => {
