@@ -53,7 +53,13 @@ PUBLIC_TTLS = [
 ]
 # Writes after which public data may have changed. Deliberately broad: admin
 # writes are rare, and refilling the cache is cheap; a missed bump is not.
-BUMP_PATHS = re.compile(r"^/api/(admin/|payments/|webhooks/|tasks/|warehouse/|orders(/|$)|books/[^/]+/reviews$|legal|settings)")
+#
+# EXCEPT /api/admin/marketing/… (Nov 2026): contacts, lists, campaigns (the
+# editor saves as you type), newsletter, growth, email manager — none of it is
+# in any cached storefront response (PUBLIC_TTLS), yet every save emptied the
+# whole storefront cache and wrote the shared version to MongoDB. Promotions
+# live under /api/admin/coupons/, so they still bump.
+BUMP_PATHS = re.compile(r"^/api/(admin/(?!marketing/)|payments/|webhooks/|tasks/|warehouse/|orders(/|$)|books/[^/]+/reviews$|legal|settings)")
 
 ENTRY_BYTES_MAX = 1_000_000
 TOTAL_BYTES_MAX = 40_000_000

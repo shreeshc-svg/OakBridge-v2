@@ -283,21 +283,40 @@ async def _opportunities() -> list:
     return out[:6]
 
 
-async def _results(key: str) -> Optional[dict]:
-    """What the last campaign made from this suggestion brought in."""
-    c = await db.mk_campaigns.find_one({"ai_action": key, "deleted": {"$ne": True}, "started_at": {"$exists": True}},
-                                       {"_id": 0, "id": 1, "name": 1, "stats": 1, "started_at": 1}, sort=[("started_at", -1)])
-    if not c:
-        return None
-    s = c.get("stats") or {}
-    return {"campaign_id": c["id"], "sent": s.get("sent", 0), "opened": s.get("opened", 0), "paid": s.get("paid", 0),
-            "revenue": round(float(s.get("revenue") or 0)), "started_at": c.get("started_at")}
+# "Do this next" scans every mailable contact, two years of paid orders and the
+# recent sends — on EVERY dashboard open, then one campaign query per card.
+# The suggestions move on a scale of hours (orders, new releases), so the
+# list is kept for NEXT_TTL seconds per process. Creating a campaign from a
+# card always recomputes fresh (the /create endpoint below), so no audience is
+# ever built from the cached copy; the cache is dropped right after, so the
+# card's new "last result" shows on the next open. ?fresh=true forces a recompute.
+NEXT_TTL = 300
+_next_cache: dict = {"at": 0.0, "acts": None}
+
+
+async def _results_many(keys: list) -> dict:
+    """_results for every card in ONE query (newest started campaign per key)."""
+    out: dict = {}
+    async for c in db.mk_campaigns.find(
+            {"ai_action": {"$in": keys}, "deleted": {"$ne": True}, "started_at": {"$exists": True}},
+            {"_id": 0, "id": 1, "ai_action": 1, "stats": 1, "started_at": 1}).sort("started_at", -1):
+        k = c.get("ai_action")
+        if k in out:
+            continue
+        s = c.get("stats") or {}
+        out[k] = {"campaign_id": c["id"], "sent": s.get("sent", 0), "opened": s.get("opened", 0), "paid": s.get("paid", 0),
+                  "revenue": round(float(s.get("revenue") or 0)), "started_at": c.get("started_at")}
+    return out
 
 
 @admin_router.get("/next-actions")
-async def ai_next_actions():
-    acts = await _opportunities()
-    return {"actions": [{k: v for k, v in a.items() if k != "contact_ids"} | {"last": await _results(a["key"])} for a in acts]}
+async def ai_next_actions(fresh: bool = False):
+    import time as _time
+    if fresh or _next_cache["acts"] is None or _time.monotonic() - _next_cache["at"] > NEXT_TTL:
+        _next_cache.update(acts=await _opportunities(), at=_time.monotonic())
+    acts = _next_cache["acts"]
+    last = await _results_many([a["key"] for a in acts])
+    return {"actions": [{k: v for k, v in a.items() if k != "contact_ids"} | {"last": last.get(a["key"])} for a in acts]}
 
 
 @admin_router.post("/next-actions/{key}/create")
@@ -323,6 +342,7 @@ async def ai_create_from_action(key: str, user: dict = Depends(require_admin)):
     await db.mk_campaigns.insert_one(dict(doc))
     await audit_log(db, "MARKETING_AI_ACTION_DRAFT", email=user.get("email", ""), role=user.get("role", ""),
                     meta={"action": key, "list": lst["id"], "campaign": doc["id"], "audience": act["audience"]})
+    _next_cache["acts"] = None   # next open recomputes (see NEXT_TTL)
     return {"campaign_id": doc["id"], "list_id": lst["id"], "audience": act["audience"]}
 
 

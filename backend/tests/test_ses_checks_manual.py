@@ -27,6 +27,7 @@ def check(cond, label):
 
 vp = SRC.split("async def validate_pending")[1].split("\nasync def ")[0]
 check("paid: bool = False" in vp, "validate_pending is free unless paid=True")
+check("if not paid:\n            return {\"running\": True}" in vp, "a paid run waits for a busy free pass instead of being dropped")
 check('live = paid and bool(st.get("ses_validation"))' in vp, "paid checks need paid=True AND the Settings switch")
 check('ses="live" if live else "cache"' in vp, "the free pass asks SES nothing new")
 kv = SRC.split("def kick_validation")[1].split("\ndef ")[0].split("\nasync def ")[0]

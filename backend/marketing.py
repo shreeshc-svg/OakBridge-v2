@@ -236,6 +236,9 @@ async def _ensure_indexes() -> None:
     await _unique_index(db.mk_proven, "email_norm")
     await _unique_index(db.mk_webhook_seen, "id")
     await _index(db.mk_webhook_seen, "at", expireAfterSeconds=7 * 86400)
+    # Campaign → Activity reads the audit log by campaign. This used to be
+    # created inside that endpoint, i.e. a database round-trip on every view.
+    await _index(db.audit_events, "meta.campaign")
 
 
 # ------------------------------------------------------- domain lookups ---
@@ -911,7 +914,17 @@ async def validate_pending(max_n: int = 5000, *, paid: bool = False) -> dict:
     recipients at Send, with the cost shown in the confirmation first."""
     global _validating
     if _validating:
-        return {"running": True}
+        if not paid:
+            return {"running": True}
+        # The free pass runs every minute; an admin's paid "Check now" that
+        # arrives while it is busy must WAIT for it, not be silently dropped
+        # (it used to return here and the button did nothing).
+        for _ in range(900):
+            await asyncio.sleep(1)
+            if not _validating:
+                break
+        else:
+            return {"running": True}
     _validating = True
     started = _iso()
     done = 0
@@ -3847,10 +3860,7 @@ async def adm_campaign_activity(cid: str):
         raise HTTPException(status_code=404, detail="Campaign not found")
     ev = [{"at": c.get("created_at"), "who": c.get("created_by") or "", "what": "Created",
            "detail": f"from template “{c['template_name']}”" if c.get("template_name") else (c.get("note") or "")[:160]}]
-    try:
-        await db.audit_events.create_index("meta.campaign")
-    except Exception:  # noqa: BLE001
-        pass
+    await _ensure_indexes()   # once per process (meta.campaign index among them); free after that
     async for a in db.audit_events.find({"meta.campaign": cid}, {"_id": 0}).sort("at", 1).limit(500):
         m = a.get("meta") or {}
         detail = ""

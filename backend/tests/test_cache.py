@@ -82,6 +82,11 @@ async def main():
     check(not C.should_bump("GET", "/api/admin/books", 200) and not C.should_bump("POST", "/api/admin/books", 500), "reads / failed writes don't bump")
     check(not C.should_bump("POST", "/api/cart", 200), "cart writes don't thrash the cache")
     check(C.should_bump("POST", "/api/warehouse/scan", 200), "warehouse phone-screen stock moves clear the cache")
+    check(not C.should_bump("PATCH", "/api/admin/marketing/campaigns/x", 200)
+          and not C.should_bump("POST", "/api/admin/marketing/contacts/bulk", 200),
+          "marketing saves (campaign autosave, contacts) don't empty the storefront cache")
+    check(C.should_bump("PUT", "/api/admin/coupons/promotions/x", 200) and C.should_bump("PUT", "/api/admin/marketingx", 200)
+          and C.should_bump("POST", "/api/admin/books", 200), "everything else under /api/admin still bumps")
 
     print("-- hit / miss --")
     app = FakeApp()
