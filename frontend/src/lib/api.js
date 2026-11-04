@@ -121,6 +121,16 @@ export const syncInventoryFromSheet = () =>
 
 // Warehouse system (backend/warehouse.py). Phone screen …
 export const whState = () => api.get("/warehouse/state").then((r) => r.data);
+// HRM (backend/hrm.py) — access decided on the server from employee records.
+export const hrmMe = () => api.get("/hrm/me").then((r) => r.data);
+export const hrmPeople = (includeExited = false) => api.get("/hrm/people", { params: includeExited ? { include_exited: true } : {} }).then((r) => r.data.rows || []);
+export const hrmAddPerson = (body) => api.post("/hrm/people", body).then((r) => r.data);
+export const hrmEditPerson = (id, body) => api.patch(`/hrm/people/${id}`, body).then((r) => r.data);
+export const hrmInvite = (id) => api.post(`/hrm/people/${id}/invite`).then((r) => r.data);
+export const hrmCalendar = (fy) => api.get("/hrm/calendar", { params: fy ? { fy } : {} }).then((r) => r.data);
+export const hrmSaveCalendar = (fy, rows) => api.put(`/hrm/calendar/${fy}`, { rows }).then((r) => r.data);
+export const hrmSettings = () => api.get("/hrm/settings").then((r) => r.data);
+export const hrmSaveSettings = (body) => api.put("/hrm/settings", body).then((r) => r.data);
 export const whLookup = (code, id = "") => api.get("/warehouse/lookup", { params: id ? { id } : { code } }).then((r) => r.data);
 export const whBooks = (opts = {}) => api.get("/warehouse/books", { params: opts.all ? { all: true } : {} }).then((r) => r.data);
 export const whUploadDoc = (direction, file, practice) => {

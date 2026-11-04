@@ -61,6 +61,7 @@ const AdminWhatsApp = lazy(() => import("@/pages/admin/AdminWhatsApp"));
 const AdminMarketing = lazy(() => import("@/pages/admin/AdminMarketing"));
 const AdminEmails = lazy(() => import("@/pages/admin/AdminEmails"));
 const WarehouseApp = lazy(() => import("@/pages/warehouse/WarehouseApp"));
+const HrmApp = lazy(() => import("@/pages/hrm/HrmApp"));
 const AdminSubmissions = lazy(() => import("@/pages/admin/AdminSubmissions"));
 const AdminSpam = lazy(() => import("@/pages/admin/AdminSpam"));
 const AdminAudit = lazy(() => import("@/pages/admin/AdminAudit"));
@@ -243,6 +244,16 @@ function App() {
                             </Route>
                             {/* The warehouse phone screen: outside the shop layout and the
                                 admin shell — one person, one phone, big buttons. */}
+                            {/* HRM: any signed-in account — the server decides what each
+                                person sees from the employee records (backend/hrm.py). */}
+                            <Route
+                                path="/hrm"
+                                element={
+                                    <ProtectedRoute>
+                                        {lazyPage(HrmApp)}
+                                    </ProtectedRoute>
+                                }
+                            />
                             <Route
                                 path="/warehouse"
                                 element={

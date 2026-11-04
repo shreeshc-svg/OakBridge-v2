@@ -747,6 +747,8 @@ async def startup_event():
     await seed_coupons()
     await ensure_indexes()
     await ensure_feature_indexes()
+    from hrm import ensure_indexes as hrm_indexes
+    await hrm_indexes()
     try:
         # Real review figures for every reviewed book (stars are shown only
         # from these — extensions.refresh_review_stats).
@@ -2121,6 +2123,8 @@ app.include_router(marketing_public_router)
 # and answer "Unknown action". FastAPI matches routes in registration order.
 from marketing_attachments import router as marketing_attachments_router  # noqa: E402
 app.include_router(marketing_attachments_router)
+from hrm import router as hrm_router  # noqa: E402  (HRM: /api/hrm, own access rules — see hrm.py)
+app.include_router(hrm_router)
 app.include_router(marketing_admin_router)
 app.include_router(marketing_tasks_router)
 from newsletter import router as newsletter_router  # noqa: E402  (also registers the nl_tick job)

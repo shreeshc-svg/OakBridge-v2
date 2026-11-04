@@ -1914,6 +1914,49 @@ def render_password_reset_html(name: str, reset_url: str) -> str:
 """
 
 
+def render_hrm_invite_html(name: str, set_url: str, hrm_url: str, days: int) -> str:
+    """HRM login for a colleague (hrm.hrm_invite). set_url empty = they already
+    have an Oakbridge account and just sign in with it."""
+    esc = lambda v: _html.escape(str(v or ""))
+    who = esc((name or "there").split(" ")[0])
+    step = (f'<a href="{esc(set_url)}" style="display:inline-block;background-color:{BRAND_NAVY};color:#FFFFFF;text-decoration:none;'
+            f'font-size:15px;font-weight:600;padding:14px 30px;">Set your password</a>'
+            f'<div style="font-size:12px;color:{BRAND_GREY};margin-top:10px;">This link works for {int(days)} days. '
+            f'Then sign in at <a href="{esc(hrm_url)}">{esc(hrm_url)}</a> with this email address.</div>'
+            if set_url else
+            f'<a href="{esc(hrm_url)}" style="display:inline-block;background-color:{BRAND_NAVY};color:#FFFFFF;text-decoration:none;'
+            f'font-size:15px;font-weight:600;padding:14px 30px;">Open the HRM</a>'
+            f'<div style="font-size:12px;color:{BRAND_GREY};margin-top:10px;">Sign in with your existing Oakbridge account (this email address).</div>')
+    return f"""\
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background-color:#F5F7FA;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:{BRAND_NAVY};">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#F5F7FA;padding:40px 16px;">
+  <tr><td align="center">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="560" style="max-width:560px;background-color:#FFFFFF;border:1px solid #E5E7EB;">
+      <tr><td style="background-color:{BRAND_NAVY};padding:28px 36px;color:#FFFFFF;">
+        <div style="font-family:Georgia,serif;font-size:22px;">Oakbridge <span style="color:{BRAND_AMBER};">Publishing</span></div>
+        <div style="font-family:monospace;text-transform:uppercase;letter-spacing:2px;font-size:11px;margin-top:6px;color:rgba(255,255,255,0.6);">HRM &middot; your login</div>
+      </td></tr>
+      <tr><td style="padding:34px 36px 8px;">
+        <h1 style="margin:0;font-family:Georgia,serif;font-weight:normal;font-size:23px;">Hi {who}, welcome to the Oakbridge HRM.</h1>
+        <p style="margin:14px 0 0;font-size:15px;line-height:1.6;color:{BRAND_GREY};">
+          This is where you will apply for leave, see your balance, your goals and the holiday calendar.
+        </p>
+      </td></tr>
+      <tr><td style="padding:22px 36px 36px;">{step}</td></tr>
+    </table>
+  </td></tr>
+</table>
+</body></html>
+"""
+
+
+async def send_hrm_invite(to: str, name: str, set_url: str, hrm_url: str, days: int) -> bool:
+    if not to:
+        return False
+    return await send_email(to=to, subject="Your Oakbridge HRM login", html=render_hrm_invite_html(name, set_url, hrm_url, days))
+
+
 async def send_password_reset(to: str, name: str, reset_url: str) -> bool:
     """Email a password-reset link. Best-effort."""
     if not to:
