@@ -45,7 +45,7 @@ router = APIRouter(prefix="/api/hrm", tags=["hrm"])
 SETTINGS_KEY = "hr_settings"
 INVITE_DAYS = 7
 PUBLIC = ("id", "emp_code", "name", "work_email", "phone", "designation", "department", "location", "manager_id",
-          "joined_on", "confirmed_on", "status", "hr_access", "gender", "user_id", "invited_at", "exited_on", "photo_at")
+          "joined_on", "confirmed_on", "status", "hr_access", "gender", "user_id", "invited_at", "exited_on", "photo_at", "weekly_off")
 PHOTO_MAX = 8 * 1024 * 1024
 PHOTO_PX = 480
 
@@ -111,7 +111,9 @@ async def hrm_me(user: dict = Depends(get_current_user)):
     visible = active if acc["ids"] is None else (acc["ids"] & active)
     return {"me": _view(me) if me else None, "hr": acc["hr"], "manager": acc["manager"],
             "team_size": len(visible - ({me["id"]} if me else set())),
-            "manager_name": (people.get((me or {}).get("manager_id")) or {}).get("name", "")}
+            "manager_name": (people.get((me or {}).get("manager_id")) or {}).get("name", ""),
+            # Super admins alone set per-person weekly offs and exact leave balances.
+            "superadmin": rbac.is_superadmin(user.get("role"))}
 
 
 # ---------------------------------------------------------------- people ---
@@ -148,6 +150,18 @@ class PersonBody(BaseModel):
     confirmed_on: Optional[str] = None
     hr_access: Optional[bool] = None
     gender: Optional[str] = None
+    weekly_off: Optional[dict] = None   # super admin only; {} = follow the company
+
+
+def _weekly_off_guard(body: "PersonBody", user: dict) -> None:
+    if "weekly_off" in body.model_fields_set and not rbac.is_superadmin(user.get("role")):
+        raise HTTPException(status_code=403, detail="Only a super admin can set someone's weekly off.")
+
+
+async def require_superadmin_hrm(user: dict = Depends(get_current_user)) -> dict:
+    if not rbac.is_superadmin(user.get("role")):
+        raise HTTPException(status_code=403, detail="Only a super admin can do this.")
+    return user
 
 
 def _check_manager(people: dict, pid: str, mid: Optional[str]) -> None:
@@ -161,6 +175,7 @@ def _check_manager(people: dict, pid: str, mid: Optional[str]) -> None:
 
 @router.post("/people")
 async def hrm_add(body: PersonBody, user: dict = Depends(require_hr)):
+    _weekly_off_guard(body, user)
     raw = {k: v for k, v in body.model_dump().items() if v is not None}
     try:
         doc = core.clean_person(raw)
@@ -187,7 +202,10 @@ async def hrm_edit(pid: str, body: PersonBody, user: dict = Depends(require_hr))
     people = await _people()
     if pid not in people:
         raise HTTPException(status_code=404, detail="Not found")
+    _weekly_off_guard(body, user)
     raw = {k: v for k, v in body.model_dump().items() if v is not None}
+    if "weekly_off" in body.model_fields_set and not body.weekly_off:
+        raw["weekly_off"] = None          # explicit: back to the company weekly off
     if "manager_id" in body.model_fields_set and body.manager_id in (None, ""):
         raw["manager_id"] = ""    # explicit clear
     try:
@@ -210,6 +228,30 @@ async def hrm_edit(pid: str, body: PersonBody, user: dict = Depends(require_hr))
     await db.hr_employees.update_one({"id": pid}, {"$set": upd})
     await _audit(user, "HRM_PERSON_EDITED", {"person": pid, "fields": sorted(k for k in upd if k not in ("updated_at", "updated_by"))})
     return _view({**people[pid], **upd})
+
+
+class ConfirmBody(BaseModel):
+    ids: Optional[list] = None      # None = everyone active without a confirmation date
+
+
+@router.post("/people/confirm")
+async def hrm_confirm(body: ConfirmBody, user: dict = Depends(require_hr)):
+    """Mark people as confirmed (not on probation) in one go — for setting up
+    an existing team. Their confirmation date becomes their joining date, so
+    earned leave counts from when they joined. Only fills EMPTY dates; a date
+    HR already typed is never overwritten."""
+    q = {"status": "active", "confirmed_on": {"$in": [None, ""]}}
+    if body.ids:
+        q["id"] = {"$in": [str(x)[:80] for x in body.ids]}
+    done = []
+    async for p in db.hr_employees.find(q, {"_id": 0, "id": 1, "joined_on": 1, "name": 1}):
+        if p.get("joined_on"):
+            await db.hr_employees.update_one({"id": p["id"], "confirmed_on": {"$in": [None, ""]}},
+                                             {"$set": {"confirmed_on": p["joined_on"], "updated_at": _now().isoformat(),
+                                                       "updated_by": user.get("email", "")}})
+            done.append(p["id"])
+    await _audit(user, "HRM_PEOPLE_CONFIRMED", {"count": len(done)})
+    return {"ok": True, "confirmed": len(done)}
 
 
 # ---------------------------------------------------------------- logins ---

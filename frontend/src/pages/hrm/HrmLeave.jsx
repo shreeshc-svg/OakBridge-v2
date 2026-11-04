@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Check, X, Download } from "lucide-react";
 import {
-    leaveSummary, leaveApply, leaveCancel, leaveApprovals, leaveDecide, leaveAdjust, leaveAdjustments, leaveExport,
+    leaveSummary, leaveApply, leaveCancel, leaveApprovals, leaveDecide, leaveAdjust, leaveAdjustments, leaveExport, leaveSetBalance,
     hrmPeople, saveBlob, formatApiError,
 } from "../../lib/api";
 
@@ -69,7 +69,7 @@ export default function LeaveTab({ me }) {
                 </>
             )}
             {(me.hr || me.manager) && <Approvals hr={me.hr} onChange={load} />}
-            {me.hr && <HrTools />}
+            {me.hr && <HrTools superadmin={me.superadmin} />}
         </div>
     );
 }
@@ -216,7 +216,39 @@ export function Approvals({ hr, onChange, compact = false }) {
     );
 }
 
-function HrTools() {
+function SetBalance({ people }) {
+    const [f, setF] = useState({ emp_id: "", type: "EL", to: "", note: "" });
+    const [cur, setCur] = useState(null);
+    useEffect(() => { setCur(null); if (f.emp_id) leaveSummary(f.emp_id).then(setCur).catch(() => {}); }, [f.emp_id]);
+    const now = cur ? { CL: cur.balances.CL.available, SL: cur.balances.SL.available, EL: cur.balances.EL.available,
+        OPT: cur.balances.OPT.available, COMP: cur.balances.COMP.available }[f.type] : null;
+    const save = async (e) => {
+        e.preventDefault();
+        if (!window.confirm(`Set ${LABEL[f.type]} left to ${f.to} (now ${n(now ?? 0)})?`)) return;
+        try { const r = await leaveSetBalance({ ...f, to: Number(f.to) }); toast.success("Balance set."); setCur({ ...cur, balances: r.balances }); setF({ ...f, to: "", note: "" }); }
+        catch (er) { toast.error(formatApiError(er)); }
+    };
+    const inp = "mt-1 w-full border border-[#E5E7EB] px-2 py-1.5 text-sm bg-white";
+    return (
+        <form onSubmit={save} className="bg-white border border-[#002B5C] p-4 text-sm lg:col-span-2" data-testid="hrm-set-balance">
+            <h2 className="font-serif text-xl text-[#002B5C]">Set a balance <span className="text-xs font-sans text-[#6B7280]">(super admin)</span></h2>
+            <p className="text-xs text-[#6B7280] mt-1">Set exactly how many days someone has LEFT — to match the paper register, zero it, or grant extra. Recorded with your reason. Per-person weekly offs are in People → Edit; special days off for a team or person in Calendar.</p>
+            <div className="grid sm:grid-cols-4 gap-2 mt-3">
+                <label className="sm:col-span-2">Person<select required value={f.emp_id} onChange={(e) => setF({ ...f, emp_id: e.target.value })} className={inp}>
+                    <option value="">Choose…</option>{people.map((p) => <option key={p.id} value={p.id}>{p.name}{p.emp_code ? ` (${p.emp_code})` : ""}</option>)}
+                </select></label>
+                <label>Leave<select value={f.type} onChange={(e) => setF({ ...f, type: e.target.value })} className={inp}>
+                    <option value="EL">Earned</option><option value="CL">Casual</option><option value="SL">Sick</option><option value="OPT">Optional holiday</option><option value="COMP">Comp-off</option>
+                </select></label>
+                <label>Set left to {now !== null && <span className="text-[11px] text-[#6B7280]">(now {n(now)})</span>}<input required type="number" min="0" step={f.type === "COMP" ? "1" : "0.5"} value={f.to} onChange={(e) => setF({ ...f, to: e.target.value })} className={inp} /></label>
+                <label className="sm:col-span-4">Reason<input required minLength={5} value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} className={inp} /></label>
+            </div>
+            <button type="submit" className="mt-3 bg-[#002B5C] text-white px-4 py-2">Set balance</button>
+        </form>
+    );
+}
+
+function HrTools({ superadmin }) {
     const [people, setPeople] = useState([]);
     const [f, setF] = useState({ emp_id: "", fy: "", type: "EL", days: "", note: "" });
     const [rows, setRows] = useState([]);
@@ -235,6 +267,7 @@ function HrTools() {
     const inp = "mt-1 w-full border border-[#E5E7EB] px-2 py-1.5 text-sm bg-white";
     return (
         <div className="grid gap-4 lg:grid-cols-2">
+            {superadmin && <SetBalance people={people} />}
             <form onSubmit={add} className="bg-white border border-[#E5E7EB] p-4 text-sm" data-testid="hrm-adjust">
                 <h2 className="font-serif text-xl text-[#002B5C]">Opening balances &amp; corrections</h2>
                 <p className="text-xs text-[#6B7280] mt-1">When starting: add each person's EL carried in (+), and CL / SL already taken this year (−). Every entry is kept with its reason.</p>

@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { CalendarDays, CalendarCheck, Home, Settings2, Users, Plus, X, Send, Search, Camera } from "lucide-react";
 import {
-    hrmMe, hrmPeople, hrmAddPerson, hrmEditPerson, hrmInvite, hrmCalendar, hrmSettings, hrmSaveSettings,
+    hrmMe, hrmPeople, hrmAddPerson, hrmEditPerson, hrmInvite, hrmConfirmAll, hrmCalendar, hrmSettings, hrmSaveSettings,
     hrmPhotoBlob, hrmUploadPhoto, hrmRemovePhoto, leaveSummary, leaveTeam, leaveApprovals, formatApiError,
 } from "../../lib/api";
 import NoIndex from "../../components/NoIndex";
@@ -76,7 +76,7 @@ export default function HrmApp() {
             <main className="max-w-5xl mx-auto px-4 py-6">
                 {tab === "home" && <HomeTab me={me} go={setTab} />}
                 {tab === "leave" && <LeaveTab me={me} />}
-                {tab === "people" && <PeopleTab hr={me.hr} />}
+                {tab === "people" && <PeopleTab hr={me.hr} superadmin={me.superadmin} />}
                 {tab === "calendar" && <HrmCalendar hr={me.hr} manager={me.manager} />}
                 {tab === "settings" && me.hr && <SettingsTab />}
             </main>
@@ -262,7 +262,7 @@ function SelfPhoto({ p }) {
 const EMPTY = { name: "", work_email: "", phone: "", emp_code: "", designation: "", department: "", location: "",
     manager_id: "", joined_on: "", confirmed_on: "", gender: "", hr_access: false };
 
-function PeopleTab({ hr }) {
+function PeopleTab({ hr, superadmin }) {
     const [rows, setRows] = useState(null);
     const [q, setQ] = useState("");
     const [edit, setEdit] = useState(null);   // null | "new" | person
@@ -282,9 +282,20 @@ function PeopleTab({ hr }) {
             load();
         } catch (e) { toast.error(formatApiError(e)); }
     };
+    const unconfirmed = (rows || []).filter((r) => r.status === "active" && !r.confirmed_on);
+    const confirmAll = async () => {
+        if (!window.confirm(`Mark ${unconfirmed.length} person(s) as confirmed (not on probation)?\n\nTheir confirmation date becomes their joining date, so earned leave counts from when they joined. Anyone really on probation: untick them afterwards in Edit.`)) return;
+        try { const r = await hrmConfirmAll(); toast.success(`${r.confirmed} marked confirmed.`); load(); } catch (e) { toast.error(formatApiError(e)); }
+    };
     if (!rows) return <p className="text-sm text-[#6B7280]">Loading…</p>;
     return (
         <div className="space-y-4">
+            {hr && unconfirmed.length > 0 && (
+                <div className="flex flex-wrap items-center gap-3 border border-[#E7B64B] bg-[#FFFBEB] px-3 py-2 text-sm" data-testid="hrm-confirm-all">
+                    <span className="flex-1">{unconfirmed.length} person(s) show as <b>on probation</b> because no confirmation date is set — so they get no paid leave.</span>
+                    <button type="button" onClick={confirmAll} className="bg-[#002B5C] text-white px-3 py-1.5 text-sm">Mark all confirmed</button>
+                </div>
+            )}
             <div className="flex flex-wrap items-center gap-3">
                 <div className="relative flex-1 min-w-[220px]">
                     <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#6B7280]" aria-hidden="true" />
@@ -297,7 +308,7 @@ function PeopleTab({ hr }) {
                         className="inline-flex items-center gap-1.5 bg-[#002B5C] text-white px-3 py-2 text-sm"><Plus size={14} />Add person</button>
                 )}
             </div>
-            {edit && <PersonForm person={edit === "new" ? null : edit} people={rows} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); load(); }} />}
+            {edit && <PersonForm person={edit === "new" ? null : edit} people={rows} superadmin={superadmin} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); load(); }} />}
             <div className="bg-white border border-[#E5E7EB] overflow-x-auto">
                 <table className="w-full text-sm">
                     <thead><tr className="text-left text-[#4B5563] border-b border-[#E5E7EB]">
@@ -345,8 +356,13 @@ function PeopleTab({ hr }) {
     );
 }
 
-function PersonForm({ person, people, onClose, onSaved }) {
+function PersonForm({ person, people, superadmin, onClose, onSaved }) {
     const [f, setF] = useState(() => ({ ...EMPTY, ...(person || {}), manager_id: person?.manager_id || "" }));
+    // Confirmed is the normal case: new people default to confirmed, and a
+    // confirmed person with no date is confirmed from their joining date.
+    const [confirmed, setConfirmed] = useState(person ? !!person.confirmed_on : true);
+    // Super admin only: this person's own weekly off (null = the company's).
+    const [ownOff, setOwnOff] = useState(person?.weekly_off || null);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState("");
     const set = (k) => (e) => { setError(""); setF({ ...f, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value }); };
@@ -354,13 +370,14 @@ function PersonForm({ person, people, onClose, onSaved }) {
     // Checked here as well as on the server, so the problem shows next to the
     // field instead of only in a corner pop-up (the date boxes follow the
     // BROWSER's order — mm/dd/yyyy on many laptops — which is easy to misread).
-    const dateError = f.joined_on && f.confirmed_on && f.confirmed_on < f.joined_on
+    const dateError = confirmed && f.joined_on && f.confirmed_on && f.confirmed_on < f.joined_on
         ? `Confirmed on (${fmt(f.confirmed_on)}) is before Joined on (${fmt(f.joined_on)}).` : "";
     const save = async (e) => {
         e.preventDefault();
         if (dateError) { setError(dateError); return; }
         setBusy(true);
-        const body = Object.fromEntries(Object.keys(EMPTY).map((k) => [k, f[k]]));
+        const body = { ...Object.fromEntries(Object.keys(EMPTY).map((k) => [k, f[k]])), ...(superadmin ? { weekly_off: ownOff || {} } : {}),
+            confirmed_on: confirmed ? (f.confirmed_on || f.joined_on) : "" };
         try {
             if (person) await hrmEditPerson(person.id, body); else await hrmAddPerson(body);
             toast.success(person ? "Saved." : `${f.name} added. Use “Send login” when they should get access.`);
@@ -400,9 +417,32 @@ function PersonForm({ person, people, onClose, onSaved }) {
                     </select>
                 </label>
                 <label>Joined on *<input required type="date" value={f.joined_on || ""} onChange={set("joined_on")} className={inp} />{said(f.joined_on)}</label>
-                <label>Confirmed on <span className="text-[11px] text-[#6B7280]">(blank = on probation, no leave yet)</span>
-                    <input type="date" value={f.confirmed_on || ""} onChange={set("confirmed_on")} className={`${inp} ${dateError ? "border-[#CC0033]" : ""}`} />{said(f.confirmed_on)}
-                </label>
+<div>
+                    <label className="flex items-center gap-2 mt-5"><input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} data-testid="hrm-confirmed" />Confirmed employee <span className="text-[11px] text-[#6B7280]">(untick = on probation, no paid leave)</span></label>
+                    {confirmed && (
+                        <label className="block mt-1 text-xs">Confirmed on <span className="text-[#6B7280]">(blank = from joining date)</span>
+                            <input type="date" value={f.confirmed_on || ""} onChange={set("confirmed_on")} className={`${inp} ${dateError ? "border-[#CC0033]" : ""}`} />{said(f.confirmed_on)}
+                        </label>
+                    )}
+                </div>
+                {superadmin && (
+                    <fieldset className="sm:col-span-2 lg:col-span-3 border border-[#E5E7EB] p-3" data-testid="hrm-own-weekly-off">
+                        <legend className="px-1 text-xs text-[#4B5563]">Weekly off for this person <span className="text-[#6B7280]">(super admin)</span></legend>
+                        <label className="flex items-center gap-2"><input type="checkbox" checked={!ownOff} onChange={(e) => setOwnOff(e.target.checked ? null : { weekdays: [6], saturdays: [] })} />Same as the company</label>
+                        {ownOff && (
+                            <div className="mt-2 flex flex-wrap gap-3 text-xs">
+                                {DAY_NAMES.map((d, i) => (
+                                    <label key={d} className="flex items-center gap-1"><input type="checkbox" checked={ownOff.weekdays.includes(i)}
+                                        onChange={() => setOwnOff({ ...ownOff, weekdays: ownOff.weekdays.includes(i) ? ownOff.weekdays.filter((x) => x !== i) : [...ownOff.weekdays, i] })} />{d}</label>
+                                ))}
+                                {[1, 2, 3, 4, 5].map((k) => (
+                                    <label key={k} className="flex items-center gap-1"><input type="checkbox" checked={ownOff.saturdays.includes(k)}
+                                        onChange={() => setOwnOff({ ...ownOff, saturdays: ownOff.saturdays.includes(k) ? ownOff.saturdays.filter((x) => x !== k) : [...ownOff.saturdays, k] })} />{ORD[k]} Sat</label>
+                                ))}
+                            </div>
+                        )}
+                    </fieldset>
+                )}
                 <label className="flex items-start gap-2 sm:col-span-2 lg:col-span-3 mt-1">
                     <input type="checkbox" checked={!!f.hr_access} onChange={set("hr_access")} className="mt-1" />
                     <span>HR / Founder access <span className="block text-[11px] text-[#6B7280]">Sees everyone and can change people, the calendar and settings.</span></span>

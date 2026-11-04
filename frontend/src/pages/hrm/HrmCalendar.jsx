@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ChevronLeft, ChevronRight, Plus, Trash2 } from "lucide-react";
-import { hrmCalendar, hrmSaveCalendar, leaveTeam, formatApiError } from "../../lib/api";
+import { hrmCalendar, hrmSaveCalendar, hrmPeople, leaveTeam, formatApiError } from "../../lib/api";
 
 /**
  * HRM → Calendar (Nov 2026): a real month calendar for the leave year.
@@ -31,6 +31,8 @@ export default function HrmCalendar({ hr, manager }) {
     const [cal, setCal] = useState(null);
     const [leave, setLeave] = useState([]);
     const [sel, setSel] = useState(iso(today));
+    const [people, setPeople] = useState([]);
+    useEffect(() => { if (hr) hrmPeople().then(setPeople).catch(() => {}); }, [hr]);
     const fy = fyOf(month);
 
     const load = useCallback(() => hrmCalendar(fy).then(setCal).catch((e) => toast.error(formatApiError(e))), [fy]);
@@ -83,6 +85,7 @@ export default function HrmCalendar({ hr, manager }) {
                         const off = weeklyOffReason(d, cal.weekly_off);
                         const lv = onLeave(ds);
                         const base = h?.kind === "national" ? "bg-[#002B5C] text-white" : h?.kind === "optional" ? "bg-[#FDF3D9] text-[#7A4E00] border-[#E7B64B]"
+                            : h?.kind === "special" ? "bg-[#EDE9FE] text-[#5B21B6]"
                             : off ? "bg-[#F3F4F6] text-[#9CA3AF]" : "bg-white text-[#002B5C]";
                         return (
                             <button key={ds} type="button" onClick={() => setSel(ds)} aria-pressed={sel === ds}
@@ -102,6 +105,7 @@ export default function HrmCalendar({ hr, manager }) {
                 <div className="mt-3 flex flex-wrap gap-4 text-[11px] text-[#4B5563]">
                     <Key className="bg-[#002B5C]" label="Company holiday" />
                     <Key className="bg-[#FDF3D9] border border-[#E7B64B]" label="Optional (pick 1 a year)" />
+                    <Key className="bg-[#EDE9FE]" label="Special day off" />
                     <Key className="bg-[#F3F4F6]" label="Weekly off" />
                     {(hr || manager) && <span><span className="text-[#15803D]">●</span> people on leave</span>}
                     <span><span className="inline-block w-3 h-3 align-middle outline outline-2 outline-[#15803D] mr-1" />today</span>
@@ -114,7 +118,8 @@ export default function HrmCalendar({ hr, manager }) {
                     <div className="font-serif text-2xl text-[#002B5C]">{selD.toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}</div>
                     <p className="mt-2 text-sm">
                         {selHol ? (
-                            <><b>{selHol.name}</b> — {selHol.kind === "optional" ? "optional holiday: anyone may take it as their 1 optional holiday this year." : "company holiday: office closed."}</>
+                            <><b>{selHol.name}</b> — {selHol.kind === "optional" ? "optional holiday: anyone may take it as their 1 optional holiday this year."
+                                : selHol.kind === "special" ? `special day off for ${appliesText(selHol, people)}.` : "company holiday: office closed."}</>
                         ) : selOff ? <>{selOff} — nobody works.</> : <>Working day.</>}
                     </p>
                     {(hr || manager) && (
@@ -127,7 +132,7 @@ export default function HrmCalendar({ hr, manager }) {
                             ) : <p className="text-sm text-[#6B7280]">Nobody.</p>}
                         </div>
                     )}
-                    {hr && inYear && <DayEditor key={sel} date={sel} holiday={selHol} rows={cal.rows} onSave={save} />}
+                    {hr && inYear && <DayEditor key={sel} date={sel} holiday={selHol} rows={cal.rows} people={people} onSave={save} />}
                 </section>
                 <section className="bg-white border border-[#E5E7EB] p-4">
                     <div className="text-[11px] uppercase tracking-wider text-[#6B7280]">This month</div>
@@ -148,10 +153,22 @@ export default function HrmCalendar({ hr, manager }) {
     );
 }
 
-function DayEditor({ date, holiday, rows, onSave }) {
+export function appliesText(h, people = []) {
+    const ap = h.applies_to || { all: true };
+    if (ap.all) return "everyone";
+    const names = Object.fromEntries(people.map((p) => [p.id, p.name]));
+    return [...(ap.departments || []), ...(ap.people || []).map((id) => names[id] || "one person")].join(", ") || "everyone";
+}
+
+function DayEditor({ date, holiday, rows, people, onSave }) {
     const [name, setName] = useState(holiday?.name || "");
     const [kind, setKind] = useState(holiday?.kind || "national");
+    const [deps, setDeps] = useState(holiday?.applies_to?.departments || []);
+    const [ppl, setPpl] = useState(holiday?.applies_to?.people || []);
+    const allDeps = [...new Set(people.map((p) => p.department).filter(Boolean))].sort();
     const others = rows.filter((r) => r.date !== date);
+    const toggle = (list, set, v) => set(list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
+    const row = () => ({ date, name: name.trim(), kind, ...(kind === "special" ? { applies_to: deps.length || ppl.length ? { departments: deps, people: ppl } : { all: true } } : {}) });
     return (
         <div className="mt-4 border-t border-[#E5E7EB] pt-3 space-y-2" data-testid="hrm-day-editor">
             <div className="text-[11px] uppercase tracking-wider text-[#6B7280]">{holiday ? "Edit holiday" : "Make this a holiday"}</div>
@@ -159,9 +176,27 @@ function DayEditor({ date, holiday, rows, onSave }) {
             <select value={kind} onChange={(e) => setKind(e.target.value)} className="w-full border border-[#E5E7EB] px-2 py-1.5 text-sm" aria-label="Kind">
                 <option value="national">Company holiday (office closed)</option>
                 <option value="optional">Optional holiday (pick 1 a year)</option>
+                <option value="special">Special day off (everyone, a team or a person)</option>
             </select>
+            {kind === "special" && (
+                <div className="border border-[#E5E7EB] p-2 text-xs space-y-2" data-testid="hrm-special-scope">
+                    <div className="text-[#4B5563]">Who gets this day off? Nothing ticked = everyone.</div>
+                    {allDeps.length > 0 && (
+                        <div className="flex flex-wrap gap-2">{allDeps.map((d) => (
+                            <label key={d} className="flex items-center gap-1"><input type="checkbox" checked={deps.includes(d)} onChange={() => toggle(deps, setDeps, d)} />{d}</label>
+                        ))}</div>
+                    )}
+                    <select value="" onChange={(e) => e.target.value && toggle(ppl, setPpl, e.target.value)} className="w-full border border-[#E5E7EB] px-2 py-1" aria-label="Add a person">
+                        <option value="">+ Add a person…</option>
+                        {people.filter((p) => !ppl.includes(p.id)).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </select>
+                    {ppl.length > 0 && <div className="flex flex-wrap gap-1">{ppl.map((id) => (
+                        <button key={id} type="button" onClick={() => toggle(ppl, setPpl, id)} className="border border-[#E5E7EB] px-1.5">{(people.find((p) => p.id === id) || {}).name || id} ✕</button>
+                    ))}</div>}
+                </div>
+            )}
             <div className="flex gap-2">
-                <button type="button" disabled={!name.trim()} onClick={() => onSave([...others, { date, name: name.trim(), kind }])}
+                <button type="button" disabled={!name.trim()} onClick={() => onSave([...others, row()])}
                     className="inline-flex items-center gap-1 bg-[#002B5C] text-white px-3 py-1.5 text-sm disabled:opacity-50"><Plus size={14} />{holiday ? "Save" : "Add"}</button>
                 {holiday && (
                     <button type="button" onClick={() => window.confirm(`Remove ${holiday.name}?`) && onSave(others)}

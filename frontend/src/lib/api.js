@@ -126,6 +126,7 @@ export const hrmMe = () => api.get("/hrm/me").then((r) => r.data);
 export const hrmPeople = (includeExited = false) => api.get("/hrm/people", { params: includeExited ? { include_exited: true } : {} }).then((r) => r.data.rows || []);
 export const hrmAddPerson = (body) => api.post("/hrm/people", body).then((r) => r.data);
 export const hrmEditPerson = (id, body) => api.patch(`/hrm/people/${id}`, body).then((r) => r.data);
+export const hrmConfirmAll = (ids) => api.post("/hrm/people/confirm", { ids: ids || null }).then((r) => r.data);
 export const hrmInvite = (id) => api.post(`/hrm/people/${id}/invite`).then((r) => r.data);
 export const hrmCalendar = (fy) => api.get("/hrm/calendar", { params: fy ? { fy } : {} }).then((r) => r.data);
 export const hrmSaveCalendar = (fy, rows) => api.put(`/hrm/calendar/${fy}`, { rows }).then((r) => r.data);
@@ -148,6 +149,7 @@ export const leaveDecide = (id, body) => api.post(`${HL}/requests/${id}/decide`,
 export const leaveTeam = (start, end) => api.get(`${HL}/team`, { params: { start, end } }).then((r) => r.data);
 export const leaveAdjustments = (empId) => api.get(`${HL}/adjustments`, { params: empId ? { emp_id: empId } : {} }).then((r) => r.data.rows || []);
 export const leaveAdjust = (body) => api.post(`${HL}/adjustments`, body).then((r) => r.data);
+export const leaveSetBalance = (body) => api.post(`${HL}/set-balance`, body).then((r) => r.data);
 export const leaveExport = (month) => api.get(`${HL}/export.csv`, { params: { month }, responseType: "blob" }).then((r) => r.data);
 export const whLookup = (code, id = "") => api.get("/warehouse/lookup", { params: id ? { id } : { code } }).then((r) => r.data);
 export const whBooks = (opts = {}) => api.get("/warehouse/books", { params: opts.all ? { all: true } : {} }).then((r) => r.data);

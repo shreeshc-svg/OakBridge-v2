@@ -28,6 +28,11 @@ const leave = read("src/pages/hrm/HrmLeave.jsx");
 check(leave.includes("export function BalanceCards") && hrm.includes("<BalanceCards s={s} />"), "home shows the person's remaining leave");
 check(hrm.includes('data-testid="hrm-hr-kpis"') && /me\.hr && \(/.test(hrm), "HR / founders get a different home (company at a glance)");
 check(hrm.includes("Emp ID") && hrm.includes("r.emp_code"), "employee ID shown in People");
+check(hrm.includes("useState(person ? !!person.confirmed_on : true)") && hrm.includes("confirmed ? (f.confirmed_on || f.joined_on)"),
+      "new people default to confirmed; confirmed without a date = from joining");
+check(hrm.includes('data-testid="hrm-confirm-all"'), "one click to confirm everyone without a date");
+check(hrm.includes('data-testid="hrm-own-weekly-off"') && read("src/pages/hrm/HrmLeave.jsx").includes('data-testid="hrm-set-balance"'),
+      "super admin: per-person weekly off + set exact balances");
 check(hrm.includes("hrmPhotoBlob") && hrm.includes("URL.createObjectURL"), "photos fetched with the sign-in token (not a public URL)");
 const api = read("src/lib/api.js");
 check(["hrmPhotoBlob", "hrmUploadPhoto", "leaveSummary", "leaveApply", "leaveDecide", "leaveExport"].every((f) => api.includes(`export const ${f} =`)), "leave + photo api");

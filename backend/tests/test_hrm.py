@@ -174,6 +174,16 @@ async def flow():
     linked = await db.hr_employees.find_one({"id": a["id"]})
     check(linked["user_id"] == "u-asha", "first sign-in links the account to the employee record")
 
+    print("-- API: confirm everyone --")
+    await db.hr_employees.update_one({"id": z["id"]}, {"$set": {"confirmed_on": None}})
+    await db.hr_employees.update_one({"id": m["id"]}, {"$set": {"confirmed_on": "2022-06-01"}})
+    r = await hrm.hrm_confirm(hrm.ConfirmBody(ids=None), SUPER)
+    zz, mm = await db.hr_employees.find_one({"id": z["id"]}), await db.hr_employees.find_one({"id": m["id"]})
+    check(zz["confirmed_on"] == zz["joined_on"] and mm["confirmed_on"] == "2022-06-01",
+          "'Mark all confirmed' fills empty dates from joining; never overwrites a typed date")
+    check("Depends(require_hr" in open(os.path.join(os.path.dirname(HERE), "hrm.py"), encoding="utf-8").read().split("async def hrm_confirm(")[1].split(")")[0],
+          "confirm-all is HR only")
+
     print("-- API: logins --")
     r = await hrm.hrm_invite(z["id"], SUPER)
     zu = await db.users.find_one({"email": "zed@oakbridge.in"})

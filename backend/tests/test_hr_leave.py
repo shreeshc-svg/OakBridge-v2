@@ -259,6 +259,49 @@ async def flow():
     check({x["name"] for x in team["rows"]} == {"Asha"}, "manager's who-is-off shows only their team")
     await expect(HL.leave_team(None, None, A), 403, "employees don't get the team view")
 
+
+
+async def offs():
+    print("-- super admin: every kind of off --")
+    import hr_core as C
+    rows = C.clean_holidays([{"date": "2026-12-04", "name": "Book fair", "kind": "special", "applies_to": {"departments": ["Warehouse"]}},
+                             {"date": "2026-12-07", "name": "Office shift", "kind": "special"}])
+    check(rows[0]["applies_to"] == {"departments": ["Warehouse"], "people": []} and rows[1]["applies_to"] == {"all": True},
+          "special day off: for a team, or everyone")
+    check(C.days_off_for(rows, {"id": "x", "department": "Warehouse"}) == ["2026-12-04", "2026-12-07"]
+          and C.days_off_for(rows, {"id": "y", "department": "Editorial"}) == ["2026-12-07"], "applies only to that team")
+    mon = {"weekdays": [0], "saturdays": []}
+    check(C.weekly_off_for({"weekly_off": mon}, C.DEFAULT_WEEKLY_OFF) == mon and C.weekly_off_for({}, C.DEFAULT_WEEKLY_OFF) == C.DEFAULT_WEEKLY_OFF,
+          "a person's own weekly off, else the company's")
+    SUPER = {"id": "us", "email": "boss@o.in", "role": "superadmin"}
+    F = {"id": "uf", "email": "f@o.in", "role": "customer"}
+    import hrm as H
+    await expect(H.hrm_edit("a", H.PersonBody(weekly_off=mon), F), 403, "HR (not super admin) can't set someone's weekly off")
+    await H.hrm_edit("a", H.PersonBody(weekly_off=mon), SUPER)
+    await db.hr_holidays.update_one({"fy": FY}, {"$push": {"rows": {"date": "2026-12-14", "name": "Team day", "kind": "special",
+                                                                     "applies_to": {"people": ["a"]}}}})
+    A = {"id": "ua", "email": "a@o.in", "role": "customer"}
+    r = await HL.leave_apply(HL.LeaveBody(type="EL", start="2026-12-12", end="2026-12-19"), A)
+    # Sat 12 (2nd Sat — a working day for her now), Sun 13 works, Mon 14 own off + her special day, Tue–Sat 15–19
+    check(r["days"] == 7, "her leave counts her own weekly off (Monday) and her special day off — 7 days, not 6")
+    await HL.leave_cancel(r["id"], A)
+    await H.hrm_edit("a", H.PersonBody(weekly_off={}), SUPER)
+    check((await db.hr_employees.find_one({"id": "a"})).get("weekly_off") is None, "{} = back to the company weekly off")
+    res = await HL.leave_set_balance(HL.SetBalanceBody(emp_id="a", type="EL", to=4, note="paper register"), SUPER)
+    check(res["balances"]["EL"]["available"] == 4, "EL set to exactly 4 (adjustment of the difference)")
+    res = await HL.leave_set_balance(HL.SetBalanceBody(emp_id="a", type="CL", to=0, note="used on paper"), SUPER)
+    check(res["balances"]["CL"]["available"] == 0, "CL zeroed")
+    res = await HL.leave_set_balance(HL.SetBalanceBody(emp_id="a", type="COMP", to=2, note="weekend shifts"), SUPER)
+    check(res["balances"]["COMP"]["available"] == 2, "comp-off granted: 2")
+    res = await HL.leave_set_balance(HL.SetBalanceBody(emp_id="a", type="COMP", to=1, note="one was wrong"), SUPER)
+    check(res["balances"]["COMP"]["available"] == 1, "comp-off voided back to 1")
+    adj = [x async for x in db.hr_leave_adjust.find({"emp_id": "a"})]
+    check(all(x["note"].startswith("Set to") for x in adj), "every reset is recorded with its reason")
+    src = open(os.path.join(os.path.dirname(HERE), "hrm_leave.py"), encoding="utf-8").read()
+    check("async def leave_set_balance(body: SetBalanceBody, user: dict = Depends(require_superadmin_hrm))" in src,
+          "set-balance is super admin only")
+
 asyncio.run(flow())
+asyncio.run(offs())
 print("\nall passed" if not failed else f"\n{failed} FAILED")
 sys.exit(1 if failed else 0)

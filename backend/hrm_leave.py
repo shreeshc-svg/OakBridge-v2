@@ -31,7 +31,7 @@ import hr_core
 import hr_leave_core as core
 from audit import audit_log
 from extensions import db, get_current_user
-from hrm import _ctx, _member, get_settings, require_hr
+from hrm import _ctx, _member, get_settings, require_hr, require_superadmin_hrm
 
 log = logging.getLogger("oakbridge.hrm.leave")
 router = APIRouter(prefix="/api/hrm/leave", tags=["hrm"])
@@ -47,12 +47,15 @@ def _today() -> date:
     return (_now() + timedelta(hours=5, minutes=30)).date()
 
 
-async def _calendar(fy: str) -> tuple[list, list, dict]:
+async def _calendar(fy: str, emp: Optional[dict] = None) -> tuple[list, list, dict]:
+    """(days off, optional holidays, weekly off) for THIS person: company
+    holidays + special days off that apply to them, and their own weekly off
+    if a super admin set one (hr_core.days_off_for / weekly_off_for)."""
     doc = await db.hr_holidays.find_one({"fy": fy}, {"_id": 0}) or {}
     rows = doc.get("rows") or []
     st = await get_settings()
-    return ([r["date"] for r in rows if r["kind"] == "national"], [r["date"] for r in rows if r["kind"] == "optional"],
-            st["weekly_off"])
+    return (hr_core.days_off_for(rows, emp), [r["date"] for r in rows if r["kind"] == "optional"],
+            hr_core.weekly_off_for(emp, st["weekly_off"]))
 
 
 async def _all_requests(emp_id: Optional[str] = None) -> list:
@@ -103,7 +106,9 @@ async def leave_summary(emp_id: Optional[str] = None, fy: Optional[str] = None, 
     _, optional, _ = await _calendar(fy)
     rows = sorted((r for r in reqs if hr_core.fiscal_year(core.d(r["start"])) == fy or r["status"] == "pending"),
                   key=lambda r: r["start"], reverse=True)
-    return {"emp": {"id": pid, "name": emp.get("name"), "confirmed_on": emp.get("confirmed_on"), "gender": emp.get("gender")},
+    st = await get_settings()
+    return {"emp": {"id": pid, "name": emp.get("name"), "confirmed_on": emp.get("confirmed_on"), "gender": emp.get("gender"),
+                    "weekly_off": hr_core.weekly_off_for(emp, st["weekly_off"]), "own_weekly_off": bool(emp.get("weekly_off"))},
             "fy": fy, "balances": core.balances(emp, fy, _today(), reqs, adjs), "requests": rows,
             "optional_days": optional, "types": {k: v["label"] for k, v in core.TYPES.items()},
             "comp_credits": [{"worked_on": c["worked_on"].isoformat(), "expires": c["expires"].isoformat()}
@@ -140,7 +145,7 @@ async def leave_apply(body: LeaveBody, user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=400, detail="Choose the date(s).")
     try:
         fy = hr_core.fiscal_year(core.d(start))
-        national, optional, weekly = await _calendar(fy)
+        national, optional, weekly = await _calendar(fy, emp)
         req = {"type": body.type, "start": start, "end": body.end or start, "reason": (body.reason or "").strip()[:500],
                "child_birth": body.child_birth, "expected_delivery": body.expected_delivery, "worked_on": body.worked_on}
         st = await db.integrations.find_one({"key": "hr_settings"}, {"_id": 0, "mat_min_days": 1}) or {}
@@ -313,6 +318,61 @@ async def leave_adjust(body: AdjustBody, user: dict = Depends(require_hr)):
     await audit_log(db, "HRM_LEAVE_ADJUSTED", email=user.get("email", ""), role=user.get("role", ""),
                     meta={"person": body.emp_id, "fy": body.fy, "type": body.type, "days": body.days})
     return doc
+
+
+class SetBalanceBody(BaseModel):
+    emp_id: str
+    type: str
+    to: float
+    note: str
+    fy: Optional[str] = None
+
+
+@router.post("/set-balance")
+async def leave_set_balance(body: SetBalanceBody, user: dict = Depends(require_superadmin_hrm)):
+    """Super admin: set what is LEFT of a leave type to an exact number (to
+    match the paper register, zero it out, grant extra). Recorded as an
+    adjustment of the difference, so the history still adds up. Comp-off is
+    set by granting or voiding comp-off days (granted ones last 2 months)."""
+    if body.type not in ("CL", "SL", "EL", "OPT", "COMP"):
+        raise HTTPException(status_code=400, detail="Choose CL, SL, EL, optional holiday or comp-off.")
+    if not 0 <= body.to <= 60 or (body.to * 2) != int(body.to * 2):
+        raise HTTPException(status_code=400, detail="Set a whole or half number between 0 and 60.")
+    if len((body.note or "").strip()) < 5:
+        raise HTTPException(status_code=400, detail="Say why (at least 5 characters) — it's in the record.")
+    emp = await db.hr_employees.find_one({"id": body.emp_id}, {"_id": 0})
+    if not emp:
+        raise HTTPException(status_code=404, detail="Not found")
+    fy = body.fy or hr_core.fiscal_year(_today())
+    reqs, adjs = await _all_requests(body.emp_id), await _adjustments(body.emp_id)
+    now = _now().isoformat()
+    note = f"Set to {body.to:g} by super admin: {body.note.strip()}"[:300]
+    if body.type == "COMP":
+        if body.to != int(body.to):
+            raise HTTPException(status_code=400, detail="Comp-off is whole days.")
+        avail = core.comp_available(reqs, body.emp_id, _today())
+        diff = int(body.to) - len(avail)
+        if diff > 0:
+            for _ in range(diff):
+                await db.hr_leave.insert_one({"id": str(uuid.uuid4()), "emp_id": body.emp_id, "type": "COMP_EARN", "status": "approved",
+                                              "worked_on": _today().isoformat(), "start": _today().isoformat(), "end": _today().isoformat(),
+                                              "days": 0, "granted": True, "reason": note, "applied_at": now,
+                                              "applied_by": user.get("email", ""), "decided_by": user.get("email", ""), "decided_at": now,
+                                              "flags": [], "history": []})
+        for c in sorted(avail, key=lambda c: c["expires"])[:max(0, -diff)]:
+            await db.hr_leave.update_one({"id": c["id"]}, {"$set": {"status": "voided", "voided_by": user.get("email", ""), "voided_at": now,
+                                                                    "decision_note": note}})
+    else:
+        b = core.balances(emp, fy, _today(), reqs, adjs)[body.type]
+        cur = b["available"] if body.type == "EL" else b["entitled"] - b["used"] - b["pending"]
+        diff = round(body.to - cur, 1)
+        if diff:
+            await db.hr_leave_adjust.insert_one({"id": str(uuid.uuid4()), "emp_id": body.emp_id, "fy": fy, "type": body.type,
+                                                 "days": float(diff), "note": note, "by": user.get("email", ""), "at": now})
+    await audit_log(db, "HRM_LEAVE_BALANCE_SET", email=user.get("email", ""), role=user.get("role", ""),
+                    meta={"person": body.emp_id, "type": body.type, "to": body.to, "fy": fy})
+    after = core.balances(emp, fy, _today(), await _all_requests(body.emp_id), await _adjustments(body.emp_id))
+    return {"ok": True, "balances": after}
 
 
 # ---------------------------------------------------------- payroll export ---

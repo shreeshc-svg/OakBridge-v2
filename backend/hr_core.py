@@ -26,7 +26,7 @@ from typing import Iterable, Optional
 FY_START_MONTH = 4                     # April
 DEFAULT_WEEKLY_OFF = {"weekdays": [6], "saturdays": [2]}   # Sunday (Mon=0) + 2nd Saturday
 STATUSES = ("active", "exited")
-HOLIDAY_KINDS = ("national", "optional")
+HOLIDAY_KINDS = ("national", "optional", "special")   # special: a one-off day off for everyone / some teams / some people
 MAX_TEXT = 120
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
@@ -98,8 +98,38 @@ def clean_holidays(rows: list) -> list:
         if not name:
             continue
         kind = (r or {}).get("kind") if (r or {}).get("kind") in HOLIDAY_KINDS else "national"
-        out[d.isoformat()] = {"date": d.isoformat(), "name": name, "kind": kind}
+        row = {"date": d.isoformat(), "name": name, "kind": kind}
+        if kind == "special":
+            ap = (r or {}).get("applies_to") or {}
+            deps = sorted({str(x).strip()[:MAX_TEXT] for x in ap.get("departments") or [] if str(x).strip()})
+            ppl = sorted({str(x).strip()[:80] for x in ap.get("people") or [] if str(x).strip()})
+            row["applies_to"] = {"departments": deps, "people": ppl} if (deps or ppl) else {"all": True}
+        out[d.isoformat()] = row
     return [out[k] for k in sorted(out)]
+
+
+def special_applies(row: dict, emp: Optional[dict]) -> bool:
+    ap = row.get("applies_to") or {"all": True}
+    if ap.get("all"):
+        return True
+    if not emp:
+        return False
+    return emp.get("id") in (ap.get("people") or []) or (emp.get("department") or "") in (ap.get("departments") or [])
+
+
+def days_off_for(rows: list, emp: Optional[dict]) -> list:
+    """Holiday dates that are a day off for THIS person: company holidays, and
+    special days off that apply to them (everyone / their department / them).
+    Optional holidays are working days unless they chose one."""
+    return [r["date"] for r in rows or [] if r.get("kind") == "national"
+            or (r.get("kind") == "special" and special_applies(r, emp))]
+
+
+def weekly_off_for(emp: Optional[dict], company: Optional[dict]) -> dict:
+    """A person's own weekly off (set by a super admin, e.g. warehouse works
+    Saturdays, or someone whose day off is Monday), else the company's."""
+    own = (emp or {}).get("weekly_off")
+    return clean_weekly_off(own) if own else clean_weekly_off(company)
 
 
 # ----------------------------------------------------------------- people ---
@@ -138,6 +168,9 @@ def clean_person(raw: dict, *, partial: bool = False) -> dict:
         out["manager_id"] = str(raw.get("manager_id") or "").strip()[:80] or None
     if "hr_access" in raw:
         out["hr_access"] = bool(raw.get("hr_access"))
+    if "weekly_off" in raw:   # per-person weekly off; None / {} = follow the company (super admin only — hrm.py)
+        w = raw.get("weekly_off")
+        out["weekly_off"] = clean_weekly_off(w) if w else None
     if "gender" in raw:   # only to offer maternity / paternity leave (release 2)
         g = txt("gender").lower()
         out["gender"] = g if g in ("female", "male", "other") else ""
