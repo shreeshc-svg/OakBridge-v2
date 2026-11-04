@@ -80,11 +80,15 @@ NOT_COUNTED = ("hamper", "pack")
 COURIER_DEDUCT = {"dealer_order": "sale_offline", "author_copy": "author_copy", "free_copy": "sample"}
 COURIER_KINDS = set(COURIER_DEDUCT) | {"website_order", "skip"}
 IN_REASONS = {"printer", "return", "correction_in", "opening"}
-OUT_REASONS = {"damaged", "sample", "author_copy", "sale_offline", "correction_out", "amazon_fba", "amazon_vendor_po"}
+OUT_REASONS = {"damaged", "sample", "author_copy", "sale_offline", "correction_out", "amazon_fba", "amazon_vendor_po", "office"}
 # Cartons can go to a dealer, an author, Amazon's FBA warehouse (our own stock,
 # moved to Amazon) or Amazon Retail against a Vendor Central purchase order
 # (a sale). Kept apart so reports never mix Amazon with dealer sales.
-CARTON_KINDS = ("sale_offline", "author_copy", "amazon_fba", "amazon_vendor_po")
+# "office" (Nov 2026): copies the office asks for (for meetings, events,
+# authors visiting, the display shelf). Still company copies, but no longer in
+# the warehouse, so they leave its count like any carton — and are reported
+# apart from sales.
+CARTON_KINDS = ("sale_offline", "author_copy", "amazon_fba", "amazon_vendor_po", "office")
 
 
 def _now() -> datetime:
@@ -536,13 +540,20 @@ async def wh_state(_: dict = Depends(require_warehouse)):
 
 
 @wh_router.get("/lookup")
-async def wh_lookup(code: str, _: dict = Depends(require_warehouse)):
-    """Barcode / typed ISBN -> book with both counts and its last movements."""
-    isbn = core.norm_isbn(code)
-    books = await db.books.find({}, {"_id": 0, "id": 1, "isbn": 1}).to_list(5000)
-    hit = next((b for b in books if core.norm_isbn(b.get("isbn")) == isbn), None)
-    if not hit:
-        raise HTTPException(status_code=404, detail=f"No book with ISBN {isbn or code}")
+async def wh_lookup(code: str = "", id: str = "", _: dict = Depends(require_warehouse)):
+    """Barcode / typed ISBN -> book with both counts and its last movements.
+    id= : the book picked from the search box (title / author / ISBN), so a
+    book with no ISBN on file can still be found."""
+    if id:
+        hit = await db.books.find_one({"id": id[:80]}, {"_id": 0, "id": 1})
+        if not hit:
+            raise HTTPException(status_code=404, detail="Book not found")
+    else:
+        isbn = core.norm_isbn(code)
+        books = await db.books.find({}, {"_id": 0, "id": 1, "isbn": 1}).to_list(5000)
+        hit = next((b for b in books if core.norm_isbn(b.get("isbn")) == isbn), None)
+        if not hit:
+            raise HTTPException(status_code=404, detail=f"No book with ISBN {isbn or code}")
     book = await db.books.find_one(
         {"id": hit["id"]},
         {"_id": 0, "id": 1, "title": 1, "isbn": 1, "author": 1, "stock": 1, "wh_stock": 1,
@@ -562,7 +573,9 @@ async def wh_books(all: bool = False, _: dict = Depends(require_warehouse)):
     """
     flt = {} if all else {"product_type": {"$nin": ["hamper", "pack"]}}
     return await db.books.find(
-        flt, {"_id": 0, "id": 1, "title": 1, "isbn": 1, "author": 1, "wh_stock": 1, "stock": 1, "product_type": 1},
+        flt, {"_id": 0, "id": 1, "title": 1, "isbn": 1, "author": 1, "wh_stock": 1, "stock": 1, "product_type": 1,
+              # searched too (frontend lib/bookSearch.js): "2nd edition", "constitution law"
+              "edition": 1, "category": 1, "binding": 1, "publication_year": 1},
     ).sort("title", 1).to_list(5000)
 
 
@@ -712,7 +725,7 @@ class ConfirmBody(BaseModel):
     parcels: Optional[list[ConfirmParcel]] = None
     doc_number: Optional[str] = None
     party_name: Optional[str] = None
-    party_kind: Optional[str] = None   # out: sale_offline | author_copy
+    party_kind: Optional[str] = None   # out: one of CARTON_KINDS
     allow_duplicate: bool = False
     # "Yes, this really is a second carton/bill" after the same-party,
     # same-books warning. Narrower than allow_duplicate: it never overrides a
@@ -1038,7 +1051,8 @@ async def wh_reopen(doc_id: str, user: dict = Depends(require_warehouse)):
 
 
 class MoveBody(BaseModel):
-    code: str
+    code: str = ""
+    book_id: Optional[str] = None   # a book picked from the search box (may have no ISBN)
     qty: int
     reason: str
     note: Optional[str] = None
@@ -1052,11 +1066,16 @@ async def wh_move(body: MoveBody, user: dict = Depends(require_warehouse)):
         raise HTTPException(status_code=400, detail="Unknown reason")
     if body.qty <= 0 or body.qty > 100000:
         raise HTTPException(status_code=400, detail="Enter a quantity above 0.")
-    isbn = core.norm_isbn(body.code)
-    books = await db.books.find({}, {"_id": 0, "id": 1, "isbn": 1, "title": 1}).to_list(5000)
-    hit = next((b for b in books if core.norm_isbn(b.get("isbn")) == isbn), None)
-    if not hit:
-        raise HTTPException(status_code=404, detail=f"No book with ISBN {isbn or body.code}")
+    if body.book_id:
+        hit = await db.books.find_one({"id": body.book_id[:80]}, {"_id": 0, "id": 1, "isbn": 1, "title": 1})
+        if not hit:
+            raise HTTPException(status_code=404, detail="Book not found")
+    else:
+        isbn = core.norm_isbn(body.code)
+        books = await db.books.find({}, {"_id": 0, "id": 1, "isbn": 1, "title": 1}).to_list(5000)
+        hit = next((b for b in books if core.norm_isbn(b.get("isbn")) == isbn), None)
+        if not hit:
+            raise HTTPException(status_code=404, detail=f"No book with ISBN {isbn or body.code}")
     if body.practice:
         return {"ok": True, "practice": True, "book": hit}
     sign = 1 if body.reason in IN_REASONS else -1
@@ -1412,7 +1431,7 @@ async def adm_create_doc(
 class DocDetailsBody(BaseModel):
     doc_number: Optional[str] = None
     party_name: Optional[str] = None
-    party_kind: Optional[str] = None   # out: sale_offline | author_copy
+    party_kind: Optional[str] = None   # out: one of CARTON_KINDS
     note: Optional[str] = None
 
 

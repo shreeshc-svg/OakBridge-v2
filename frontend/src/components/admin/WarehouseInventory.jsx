@@ -17,7 +17,7 @@ import { preorderState, formatLaunchDate, formatLaunchTimes } from "../../lib/pr
  */
 const IN = [["printer", "Arrived from printer"], ["return", "Customer return (good copy)"]];
 const OUT = [["damaged", "Damaged"], ["sample", "Free copy / sample"], ["author_copy", "Author copy"], ["sale_offline", "Offline / dealer sale"],
-    ["amazon_fba", "Sent to Amazon FBA"], ["amazon_vendor_po", "Amazon Vendor PO"]];
+    ["amazon_fba", "Sent to Amazon FBA"], ["amazon_vendor_po", "Amazon Vendor PO"], ["office", "Sent to office"]];
 const REASON = Object.fromEntries([...IN, ...OUT, ["correction_in", "Correction +"], ["correction_out", "Correction −"],
     ["website_order", "Website order"], ["opening", "Opening count"]]);
 const when = (iso) => (iso ? new Date(iso).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : "—");

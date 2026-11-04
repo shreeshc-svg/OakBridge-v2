@@ -18,6 +18,7 @@ import {
 } from "../../lib/api";
 import { useAuth } from "../../context/AuthContext";
 import NoIndex from "../../components/NoIndex";
+import { searchBooks } from "../../lib/bookSearch";
 
 /**
  * The warehouse phone screen (/warehouse).
@@ -37,7 +38,7 @@ const BTN = "px-4 py-3 text-base font-medium disabled:opacity-50";
 
 const IN_REASONS = [["return", "Return (good copy)"], ["correction_in", "Correction: add"]];
 const OUT_REASONS = [["damaged", "Damaged"], ["sample", "Sample / gift"], ["author_copy", "Author copy"],
-    ["sale_offline", "Bulk / shop order"], ["amazon_fba", "Sent to Amazon FBA"], ["amazon_vendor_po", "Amazon Vendor PO"],
+    ["sale_offline", "Bulk / shop order"], ["office", "Sent to office"], ["amazon_fba", "Sent to Amazon FBA"], ["amazon_vendor_po", "Amazon Vendor PO"],
     ["correction_out", "Correction: remove"]];
 
 export default function WarehouseApp() {
@@ -447,11 +448,12 @@ function DocFlow({ direction, practice, onDone, initialDoc = null }) {
                     <input value={head.party_name} onChange={(e) => setHead({ ...head, party_name: e.target.value })}
                         className="mt-1 w-full border px-3 py-2 text-base" /></label>
                 {isOut && (
-                    // Amazon cartons kept apart from dealer sales (warehouse.py CARTON_KINDS).
-                    <div className="grid grid-cols-2 gap-2">
-                        {[["sale_offline", "Sale / shop"], ["author_copy", "Author copy"], ["amazon_fba", "To Amazon FBA"], ["amazon_vendor_po", "Amazon Vendor PO"]].map(([v, l]) => (
+                    // Where the carton goes (warehouse.py CARTON_KINDS): Amazon and
+                    // office copies are kept apart from dealer sales in reports.
+                    <div className="grid grid-cols-2 gap-2" data-testid="wh-carton-kind">
+                        {[["sale_offline", "Sale / shop"], ["author_copy", "Author copy"], ["amazon_fba", "To Amazon FBA"], ["amazon_vendor_po", "Amazon Vendor PO"], ["office", "To our office"]].map(([v, l]) => (
                             <button key={v} type="button" onClick={() => setHead({ ...head, party_kind: v })}
-                                className={`${BTN} border-2 ${head.party_kind === v ? "border-[#002B5C] bg-[#002B5C] text-white" : "border-[#E5E7EB] bg-white"}`}>
+                                className={`${BTN} border-2 ${v === "office" ? "col-span-2" : ""} ${head.party_kind === v ? "border-[#002B5C] bg-[#002B5C] text-white" : "border-[#E5E7EB] bg-white"}`}>
                                 {l}
                             </button>
                         ))}
@@ -547,20 +549,13 @@ function DocFlow({ direction, practice, onDone, initialDoc = null }) {
  * are matched anywhere and in any order ("tiger sacred"); digits also match
  * the ISBN. The ★ suggestions the reader found are offered first.
  */
-const foldText = (s) => String(s || "").toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, " ").trim();
-
-function BookPicker({ books, candidates = [], value, onPick, placeholder = "Type part of the title…", testid }) {
+function BookPicker({ books, candidates = [], value, onPick, placeholder = "Title, author or ISBN…", testid }) {
     const [q, setQ] = useState("");
     const [open, setOpen] = useState(false);
     const byId = useMemo(() => Object.fromEntries(books.map((b) => [b.id, b])), [books]);
     const results = useMemo(() => {
-        const words = foldText(q).split(" ").filter(Boolean);
-        const digits = q.replace(/[^0-9Xx]/g, "");
-        if (!words.length) return candidates.map((c) => byId[c.book_id]).filter(Boolean);
-        return books.filter((b) => {
-            const hay = foldText(`${b.title} ${b.author || ""}`);
-            return words.every((w) => hay.includes(w)) || (digits.length >= 4 && isbnOf(b.isbn).includes(digits.toUpperCase()));
-        }).slice(0, 8);
+        if (!q.trim()) return candidates.map((c) => byId[c.book_id]).filter(Boolean);
+        return searchBooks(books, q, 12);
     }, [q, books, candidates, byId]);
     const pick = (id) => { onPick(id); setQ(""); setOpen(false); };
     const star = new Set(candidates.map((c) => c.book_id));
@@ -568,17 +563,19 @@ function BookPicker({ books, candidates = [], value, onPick, placeholder = "Type
         <div className="mt-1" data-testid={testid}>
             <input value={q} onChange={(e) => { setQ(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)}
                 placeholder={value && byId[value] ? `Change: ${placeholder}` : placeholder}
-                className="w-full border-2 px-2 py-2 text-base bg-white" aria-label="Find a book by title or ISBN" />
+                className="w-full border-2 px-2 py-2 text-base bg-white" aria-label="Find a book by title, author or ISBN" />
             {open && (results.length > 0 || q) && (
                 <div className="border border-t-0 bg-white divide-y max-h-72 overflow-y-auto">
                     {results.map((b) => (
                         <button key={b.id} type="button" onClick={() => pick(b.id)}
                             className={`block w-full text-left px-2 py-2 ${b.id === value ? "bg-[#EEF2F7]" : ""}`}>
                             <span className="text-base text-[#002B5C]">{star.has(b.id) ? "★ " : ""}{b.title}</span>
-                            <span className="block text-[11px] text-[#4B5563]">{[b.author, b.isbn].filter(Boolean).join(" · ")}</span>
+                            <span className="block text-[11px] text-[#4B5563]">
+                                {[b.author, b.edition && `${b.edition} ed.`, b.isbn, b.wh_stock != null && `${b.wh_stock} in warehouse`].filter(Boolean).join(" · ")}
+                            </span>
                         </button>
                     ))}
-                    {q && !results.length && <div className="px-2 py-2 text-sm text-[#B4750F]">No book with those words — try fewer, or the ISBN.</div>}
+                    {q && !results.length && <div className="px-2 py-2 text-sm text-[#B4750F]">No book found — try fewer words, the author, or the last digits of the ISBN.</div>}
                     {value && <button type="button" onClick={() => pick("")} className="block w-full text-left px-2 py-2 text-sm text-[#CC0033]">Not a book / skip this line</button>}
                 </div>
             )}
@@ -931,13 +928,15 @@ function SingleMove({ practice }) {
     const [note, setNote] = useState("");
     const [busy, setBusy] = useState(false);
 
-    const look = async (code) => {
-        try { setFound(await whLookup(code)); } catch (e) { setFound(null); toast.error(formatApiError(e)); }
+    const [books, setBooks] = useState([]);
+    useEffect(() => { whBooks().then(setBooks).catch(() => {}); }, []);
+    const look = async (code, id = "") => {
+        try { setFound(await whLookup(code, id)); } catch (e) { setFound(null); toast.error(formatApiError(e)); }
     };
     const save = async () => {
         setBusy(true);
         try {
-            const res = await whMove({ code: found.book.isbn, qty: Number(qty), reason, note, practice });
+            const res = await whMove({ code: found.book.isbn || "", book_id: found.book.id, qty: Number(qty), reason, note, practice });
             toast.success(practice ? "Practice — not saved to stock." : "Saved.");
             warnBelowZero(res?.below_zero);
             setFound(null); setQty(1); setNote("");
@@ -949,6 +948,7 @@ function SingleMove({ practice }) {
         <div className="space-y-3">
             <h1 className="font-serif text-2xl text-[#002B5C]">One book in or out</h1>
             <ScanBox onCode={look} />
+            <FindBook books={books} onPick={(id) => look("", id)} />
             {found && (
                 <div className="bg-white border-2 border-[#002B5C] p-4 space-y-3">
                     <div className="text-lg font-semibold text-[#002B5C]">{found.book.title}</div>
@@ -978,16 +978,29 @@ function SingleMove({ practice }) {
     );
 }
 
+/* No barcode to hand: find the book by title, author, ISBN digits, edition… */
+function FindBook({ books, onPick }) {
+    return (
+        <div>
+            <div className="text-xs text-[#4B5563]">…or search by title, author or ISBN</div>
+            <BookPicker books={books} value="" onPick={(id) => id && onPick(id)} placeholder="e.g. constitution shukla, or 46875" testid="wh-find-book" />
+        </div>
+    );
+}
+
 /* --------------------------------------------------------- check stock --- */
 function CheckStock() {
     const [found, setFound] = useState(null);
-    const look = async (code) => {
-        try { setFound(await whLookup(code)); } catch (e) { setFound(null); toast.error(formatApiError(e)); }
+    const [books, setBooks] = useState([]);
+    useEffect(() => { whBooks().then(setBooks).catch(() => {}); }, []);
+    const look = async (code, id = "") => {
+        try { setFound(await whLookup(code, id)); } catch (e) { setFound(null); toast.error(formatApiError(e)); }
     };
     return (
         <div className="space-y-3">
             <h1 className="font-serif text-2xl text-[#002B5C]">Check stock</h1>
             <ScanBox onCode={look} />
+            <FindBook books={books} onPick={(id) => look("", id)} />
             {found && (
                 <div className="bg-white border border-[#E5E7EB] p-4">
                     <div className="text-lg font-semibold text-[#002B5C]">{found.book.title}</div>
