@@ -203,19 +203,28 @@ function PeopleTab({ hr }) {
 function PersonForm({ person, people, onClose, onSaved }) {
     const [f, setF] = useState(() => ({ ...EMPTY, ...(person || {}), manager_id: person?.manager_id || "" }));
     const [busy, setBusy] = useState(false);
-    const set = (k) => (e) => setF({ ...f, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value });
+    const [error, setError] = useState("");
+    const set = (k) => (e) => { setError(""); setF({ ...f, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value }); };
     const managers = people.filter((p) => p.status === "active" && p.id !== person?.id);
+    // Checked here as well as on the server, so the problem shows next to the
+    // field instead of only in a corner pop-up (the date boxes follow the
+    // BROWSER's order — mm/dd/yyyy on many laptops — which is easy to misread).
+    const dateError = f.joined_on && f.confirmed_on && f.confirmed_on < f.joined_on
+        ? `Confirmed on (${fmt(f.confirmed_on)}) is before Joined on (${fmt(f.joined_on)}).` : "";
     const save = async (e) => {
         e.preventDefault();
+        if (dateError) { setError(dateError); return; }
         setBusy(true);
         const body = Object.fromEntries(Object.keys(EMPTY).map((k) => [k, f[k]]));
         try {
             if (person) await hrmEditPerson(person.id, body); else await hrmAddPerson(body);
             toast.success(person ? "Saved." : `${f.name} added. Use “Send login” when they should get access.`);
             onSaved();
-        } catch (er) { toast.error(formatApiError(er)); } finally { setBusy(false); }
+        } catch (er) { const m = formatApiError(er); setError(m); toast.error(m); } finally { setBusy(false); }
     };
     const inp = "mt-1 w-full border border-[#E5E7EB] px-2 py-1.5 text-sm bg-white";
+    // The date in words under each date box: "= 6 Jan 2026" — no day/month mix-ups.
+    const said = (d) => (d ? <span className="block mt-0.5 text-[11px] text-[#15803D]" data-testid="hrm-date-words">= {fmt(d)}</span> : null);
     return (
         <form onSubmit={save} className="bg-white border border-[#002B5C] p-4" data-testid="hrm-person-form">
             <div className="flex items-center justify-between mb-3">
@@ -242,13 +251,18 @@ function PersonForm({ person, people, onClose, onSaved }) {
                         <option value="">Not set</option><option value="female">Female</option><option value="male">Male</option><option value="other">Other</option>
                     </select>
                 </label>
-                <label>Joined on *<input required type="date" value={f.joined_on || ""} onChange={set("joined_on")} className={inp} /></label>
-                <label>Confirmed on <span className="text-[11px] text-[#6B7280]">(blank = on probation, no leave yet)</span><input type="date" value={f.confirmed_on || ""} onChange={set("confirmed_on")} className={inp} /></label>
+                <label>Joined on *<input required type="date" value={f.joined_on || ""} onChange={set("joined_on")} className={inp} />{said(f.joined_on)}</label>
+                <label>Confirmed on <span className="text-[11px] text-[#6B7280]">(blank = on probation, no leave yet)</span>
+                    <input type="date" value={f.confirmed_on || ""} onChange={set("confirmed_on")} className={`${inp} ${dateError ? "border-[#CC0033]" : ""}`} />{said(f.confirmed_on)}
+                </label>
                 <label className="flex items-start gap-2 sm:col-span-2 lg:col-span-3 mt-1">
                     <input type="checkbox" checked={!!f.hr_access} onChange={set("hr_access")} className="mt-1" />
                     <span>HR / Founder access <span className="block text-[11px] text-[#6B7280]">Sees everyone and can change people, the calendar and settings.</span></span>
                 </label>
             </div>
+            {(error || dateError) && (
+                <p role="alert" className="mt-4 border border-[#CC0033] bg-[#FEF2F2] text-[#CC0033] px-3 py-2 text-sm" data-testid="hrm-form-error">{error || dateError}</p>
+            )}
             <div className="mt-4 flex justify-end gap-2">
                 <button type="button" onClick={onClose} className="px-3 py-2 text-sm">Cancel</button>
                 <button type="submit" disabled={busy} className="bg-[#002B5C] text-white px-4 py-2 text-sm disabled:opacity-50">{busy ? "Saving…" : "Save"}</button>
