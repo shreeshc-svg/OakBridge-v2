@@ -352,11 +352,11 @@ async def hrm_photo_remove(pid: str, user: dict = Depends(get_current_user)):
 @router.get("/people/{pid}/photo")
 async def hrm_photo(pid: str, user: dict = Depends(get_current_user)):
     import asyncio
-    from features import get_object
     people, me, acc = await _ctx(user)
     p = people.get(pid)
     if not p or not _member(me, acc) or not core.can_see(acc, pid) or not p.get("photo_path"):
         raise HTTPException(status_code=404, detail="Not found")
+    from features import get_object
     data, _ = await asyncio.to_thread(get_object, p["photo_path"])
     return Response(content=data, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=3600"})
 
@@ -399,6 +399,12 @@ async def hrm_calendar(fy: Optional[str] = None, user: dict = Depends(get_curren
         raise HTTPException(status_code=400, detail=str(e))
     doc = await db.hr_holidays.find_one({"fy": fy}, {"_id": 0}) or {}
     rows = doc.get("rows") or []
+    if not acc["hr"]:
+        # Employees and managers see a special day off as "for you" / "for a
+        # team" — never WHICH other people it was given to.
+        rows = [{**r, "applies_to": {"departments": (r.get("applies_to") or {}).get("departments") or [],
+                                     "all": bool((r.get("applies_to") or {}).get("all"))},
+                 "for_me": core.special_applies(r, me)} if r.get("kind") == "special" else r for r in rows]
     st = await get_settings()
     national = [r["date"] for r in rows if r["kind"] == "national"]
     return {"fy": fy, "start": start.isoformat(), "end": end.isoformat(), "rows": rows, "weekly_off": st["weekly_off"],

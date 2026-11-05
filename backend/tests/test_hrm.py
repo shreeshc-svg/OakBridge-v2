@@ -211,6 +211,21 @@ async def flow():
           "anyone in the HRM reads the calendar")
     check(cal["working_days"] == c.working_days(date(2026, 4, 1), date(2027, 3, 31), ["2026-08-15"]),
           "working days exclude national holidays, not optional ones")
+    await hrm.hrm_put_calendar("2026-27", hrm.CalendarBody(rows=[{"date": "2026-12-04", "name": "Team day", "kind": "special",
+                                                                  "applies_to": {"people": [z["id"]]}}]), SUPER)
+    seen = (await hrm.hrm_calendar("2026-27", MEERA))["rows"][0]
+    check("people" not in seen["applies_to"] and seen["for_me"] is False,
+          "a special day off never shows employees WHO else got it (only 'for you' or not)")
+    check((await hrm.hrm_calendar("2026-27", FOUNDER))["rows"][0]["applies_to"]["people"] == [z["id"]], "HR still sees who it's for")
+
+    print("-- every employee endpoint returns only their own information --")
+    zu = await db.users.find_one({"email": "zed@oakbridge.in"})
+    ASHA2 = {"id": zu["id"], "email": "zed@oakbridge.in", "role": "customer"}
+    rows = (await hrm.hrm_people(False, ASHA2))["rows"]
+    check([r["name"] for r in rows] == ["Zed"], "employee list = themselves")
+    for other in (f["id"], m["id"]):
+        await expect(hrm.hrm_person(other, ASHA2), 404, "employee can't open another employee")
+        await expect(hrm.hrm_photo(other, ASHA2), 404, "employee can't load another employee's photo")
     # Writes take Depends(require_hr) — enforced by FastAPI, checked above via require_hr directly.
     src = open(os.path.join(os.path.dirname(HERE), "hrm.py"), encoding="utf-8").read()
     for fn in ("hrm_add", "hrm_edit", "hrm_invite", "hrm_put_settings", "hrm_put_calendar"):

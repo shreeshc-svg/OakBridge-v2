@@ -156,6 +156,8 @@ export default function HrmCalendar({ hr, manager }) {
 export function appliesText(h, people = []) {
     const ap = h.applies_to || { all: true };
     if (ap.all) return "everyone";
+    if (h.for_me !== undefined && !(ap.departments || []).length) return h.for_me ? "you" : "some colleagues";
+    if (h.for_me) return `you (${(ap.departments || []).join(", ") || "you"})`;
     const names = Object.fromEntries(people.map((p) => [p.id, p.name]));
     return [...(ap.departments || []), ...(ap.people || []).map((id) => names[id] || "one person")].join(", ") || "everyone";
 }
