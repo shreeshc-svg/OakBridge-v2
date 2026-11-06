@@ -4165,6 +4165,11 @@ async def periodic() -> dict:
     dispatch("mk_disposable", dedupe=hour)    # weekly
     dispatch("mk_lapse", dedupe=hour)
     dispatch("mk_auto", dedupe=hour)          # abandoned-checkout + review emails (growth.py), when switched on
+    try:
+        import hrm_goals
+        hrm_goals.schedule_tick()             # HRM: quarterly check-in / April goal-setting reminders (once a quarter)
+    except Exception:  # noqa: BLE001
+        log.warning("hrm: goals reminder tick failed", exc_info=True)
     return {"ok": True, "started": started}
 
 

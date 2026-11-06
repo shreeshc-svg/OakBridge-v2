@@ -1,14 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { CalendarDays, CalendarCheck, Home, Settings2, Users, Plus, X, Send, Search, Camera } from "lucide-react";
+import { CalendarDays, CalendarCheck, Home, Settings2, Users, Plus, X, Send, Search, Camera, Target } from "lucide-react";
 import {
     hrmMe, hrmPeople, hrmAddPerson, hrmEditPerson, hrmInvite, hrmConfirmAll, hrmCalendar, hrmSettings, hrmSaveSettings,
-    hrmPhotoBlob, hrmUploadPhoto, hrmRemovePhoto, leaveSummary, leaveTeam, leaveApprovals, formatApiError,
+    hrmPhotoBlob, hrmUploadPhoto, hrmRemovePhoto, leaveSummary, leaveTeam, leaveApprovals, goalsPlan, formatApiError,
 } from "../../lib/api";
 import NoIndex from "../../components/NoIndex";
 import HrmCalendar from "./HrmCalendar";
 import LeaveTab, { BalanceCards, Approvals } from "./HrmLeave";
+import GoalsTab from "./HrmGoals";
 
 /**
  * Oakbridge HRM — release 1 (Nov 2026): people, logins, leave year, calendar.
@@ -52,7 +53,7 @@ export default function HrmApp() {
     if (!me) return <div className="py-32 text-center font-mono text-xs text-[#4B5563]">Loading…</div>;
 
     const role = me.hr ? "HR / Founder" : me.manager ? "Manager" : "Employee";
-    const tabs = [["home", "Home", Home], ["leave", "Leave", CalendarCheck], ...(me.hr || me.manager ? [["people", me.hr ? "People" : "My team", Users]] : []),
+    const tabs = [["home", "Home", Home], ["leave", "Leave", CalendarCheck], ["goals", "Goals", Target], ...(me.hr || me.manager ? [["people", me.hr ? "People" : "My team", Users]] : []),
         ["calendar", "Calendar", CalendarDays], ...(me.hr ? [["settings", "Settings", Settings2]] : [])];
 
     return (
@@ -76,6 +77,7 @@ export default function HrmApp() {
             <main className="max-w-5xl mx-auto px-4 py-6">
                 {tab === "home" && <HomeTab me={me} go={setTab} />}
                 {tab === "leave" && <LeaveTab me={me} />}
+                {tab === "goals" && <GoalsTab me={me} />}
                 {tab === "people" && <PeopleTab hr={me.hr} superadmin={me.superadmin} />}
                 {tab === "calendar" && <HrmCalendar hr={me.hr} manager={me.manager} />}
                 {tab === "settings" && me.hr && <SettingsTab />}
@@ -98,10 +100,12 @@ function HomeTab({ me, go }) {
     const [off, setOff] = useState(null);
     const [people, setPeople] = useState(null);
     const [waiting, setWaiting] = useState(null);
+    const [goals, setGoals] = useState(null);
     const today = isoToday();
     useEffect(() => {
         hrmCalendar().then(setCal).catch(() => {});
         if (me.me) leaveSummary().then(setS).catch(() => {});
+        if (me.me) goalsPlan().then(setGoals).catch(() => {});
         if (me.hr || me.manager) {
             leaveTeam(today, plusDays(today, 6)).then((r) => setOff(r.rows || [])).catch(() => setOff([]));
             leaveApprovals().then(setWaiting).catch(() => setWaiting([]));
@@ -162,6 +166,21 @@ function HomeTab({ me, go }) {
                                 ))}
                             </ul>
                         ) : <p className="text-sm text-[#6B7280]">Everyone's in.</p>}
+                    </Card>
+                )}
+                {p && goals && (
+                    <Card title={`Your goals · ${goals.fy}`}>
+                        {goals.goals?.length ? (
+                            <div className="text-sm">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex-1 h-2 bg-[#F3F4F6]"><div className="h-2 bg-[#002B5C]" style={{ width: `${goals.overall || 0}%` }} /></div>
+                                    <b className="text-[#002B5C]">{goals.overall ?? 0}%</b>
+                                </div>
+                                <p className="mt-1 text-xs text-[#6B7280]">{goals.goals.length} goal(s) · {{ draft: "draft", submitted: "waiting for approval", returned: "sent back for changes", approved: "approved" }[goals.status]}
+                                    {goals.open_quarters?.some((q) => !goals.checkins?.[q]?.self) && goals.status === "approved" ? ` · ${goals.open_quarters.find((q) => !goals.checkins?.[q]?.self)} check-in due` : ""}</p>
+                            </div>
+                        ) : <p className="text-sm text-[#6B7280]">No goals set for {goals.fy} yet.</p>}
+                        <button type="button" onClick={() => go("goals")} className="mt-2 text-xs underline text-[#4B5563]">Open goals</button>
                     </Card>
                 )}
                 {p && (

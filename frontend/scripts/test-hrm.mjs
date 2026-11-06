@@ -34,7 +34,15 @@ check(hrm.includes('data-testid="hrm-confirm-all"'), "one click to confirm every
 check(hrm.includes('data-testid="hrm-own-weekly-off"') && read("src/pages/hrm/HrmLeave.jsx").includes('data-testid="hrm-set-balance"'),
       "super admin: per-person weekly off + set exact balances");
 check(hrm.includes("hrmPhotoBlob") && hrm.includes("URL.createObjectURL"), "photos fetched with the sign-in token (not a public URL)");
+const goals = read("src/pages/hrm/HrmGoals.jsx");
+check(hrm.includes('["goals", "Goals", Target]') && hrm.includes("<GoalsTab me={me} />"), "Goals tab for everyone");
+check(goals.includes('data-testid="hrm-goal-editor"') && goals.includes("must be 100%") && goals.includes('data-testid="hrm-quarters"'),
+      "goal editor with 100% weights; four quarter panels");
+check(goals.includes("p.can.checkin") && goals.includes("p.can.review") && goals.includes("p.can.rate"), "actions follow what the server allows");
+check(goals.includes("ye?.pending") && goals.includes("Release ${fy} ratings"), "rating hidden until HR releases it");
 const api = read("src/lib/api.js");
+check(["goalsPlan", "goalsSaveDraft", "goalsSubmit", "goalsDecide", "goalsCheckin", "goalsReview", "goalsRate", "goalsTeam", "goalsRelease"]
+    .every((f) => api.includes(`export const ${f} =`)), "goals api");
 check(["hrmPhotoBlob", "hrmUploadPhoto", "leaveSummary", "leaveApply", "leaveDecide", "leaveExport"].every((f) => api.includes(`export const ${f} =`)), "leave + photo api");
 check(["hrmMe", "hrmPeople", "hrmAddPerson", "hrmEditPerson", "hrmInvite", "hrmCalendar", "hrmSaveCalendar", "hrmSettings", "hrmSaveSettings"]
     .every((f) => api.includes(`export const ${f} =`)), "api functions");

@@ -139,6 +139,18 @@ export const hrmUploadPhoto = (id, file) => {
     return api.post(`/hrm/people/${id}/photo`, fd, { timeout: 60000 }).then((r) => r.data);
 };
 export const hrmRemovePhoto = (id) => api.post(`/hrm/people/${id}/photo/remove`).then((r) => r.data);
+// HRM goals (backend/hrm_goals.py)
+const HG = "/hrm/goals";
+export const goalsPlan = (empId, fy) => api.get(`${HG}/plan`, { params: { ...(empId ? { emp_id: empId } : {}), ...(fy ? { fy } : {}) } }).then((r) => r.data);
+export const goalsSaveDraft = (fy, goals) => api.put(`${HG}/plan`, { fy, goals }).then((r) => r.data);
+export const goalsSubmit = (fy) => api.post(`${HG}/plan/submit`, { fy }).then((r) => r.data);
+export const goalsDecide = (id, body) => api.post(`${HG}/plan/${id}/decide`, body).then((r) => r.data);
+export const goalsReopen = (id) => api.post(`${HG}/plan/${id}/reopen`).then((r) => r.data);
+export const goalsCheckin = (id, body) => api.post(`${HG}/plan/${id}/checkin`, body).then((r) => r.data);
+export const goalsReview = (id, body) => api.post(`${HG}/plan/${id}/review`, body).then((r) => r.data);
+export const goalsRate = (id, body) => api.post(`${HG}/plan/${id}/rating`, body).then((r) => r.data);
+export const goalsTeam = (fy) => api.get(`${HG}/team`, { params: fy ? { fy } : {} }).then((r) => r.data);
+export const goalsRelease = (fy) => api.post(`${HG}/release`, { fy }).then((r) => r.data);
 // HRM leave (backend/hrm_leave.py)
 const HL = "/hrm/leave";
 export const leaveSummary = (empId, fy) => api.get(`${HL}/summary`, { params: { ...(empId ? { emp_id: empId } : {}), ...(fy ? { fy } : {}) } }).then((r) => r.data);
