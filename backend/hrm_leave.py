@@ -81,6 +81,18 @@ async def _mail(to: str, subject: str, lines: list, link: str = "") -> None:
         log.exception("hrm leave: mail failed")
 
 
+def _hr_emails(people: dict, skip: str = "") -> list:
+    """Everyone with HR / founder access (active), except `skip` (the person
+    whose leave it is — HR never gets mailed to approve their own leave)."""
+    return [p["work_email"] for p in people.values()
+            if p.get("hr_access") and p.get("status") == "active" and p.get("work_email") and p["id"] != skip]
+
+
+async def _mail_many(tos: list, subject: str, lines: list, link: str = "") -> None:
+    for to in dict.fromkeys(t for t in tos if t):
+        await _mail(to, subject, lines, link)
+
+
 def _span(r: dict) -> str:
     s, e = core.d(r["start"]), core.d(r["end"])
     f = lambda x: x.strftime("%d %b %Y")  # noqa: E731
@@ -167,10 +179,16 @@ async def leave_apply(body: LeaveBody, user: dict = Depends(get_current_user)):
     await db.hr_leave.insert_one(dict(doc))
     await audit_log(db, "HRM_LEAVE_APPLIED", email=user.get("email", ""), role=user.get("role", ""),
                     meta={"request": doc["id"], "person": pid, "type": body.type, "days": doc["days"]})
-    to = (people.get(approver) or {}).get("work_email") if approver else ""
-    await _mail(to, f"Leave request: {emp['name']} — {LABEL.get(body.type)}",
-                [f"{emp['name']} asked for {LABEL.get(body.type)}: {_span(doc)} ({doc['days']} day(s)).",
-                 f"Reason: {doc['reason'] or '—'}"], "Review it in the HRM")
+    # Who hears about it (Nov 2026): the approver — the reporting manager, or
+    # HR when there is no manager — and the employee gets a receipt.
+    what = f"{LABEL.get(body.type)}: {_span(doc)} ({doc['days']} day(s))" if body.type != "COMP_EARN" else \
+        f"{LABEL.get(body.type)}: working {_span(doc)}"
+    approvers = [(people.get(approver) or {}).get("work_email")] if approver else _hr_emails(people, pid)
+    await _mail_many(approvers, f"Leave request: {emp['name']} — {LABEL.get(body.type)}",
+                     [f"{emp['name']} asked for {what}.", f"Reason: {doc['reason'] or '—'}"], "Review it in the HRM")
+    await _mail(emp.get("work_email", ""), f"Leave request received — {LABEL.get(body.type)}",
+                [f"Your request for {what} is with {(people.get(approver) or {}).get('name') or 'HR'} for approval.",
+                 "You'll get an email when it's decided."])
     return doc
 
 
@@ -192,6 +210,15 @@ async def leave_cancel(rid: str, user: dict = Depends(get_current_user)):
         "$set": {"status": "cancelled", "cancelled_at": _now().isoformat(), "cancelled_by": user.get("email", "")},
         "$push": {"history": {"at": _now().isoformat(), "by": user.get("email", ""), "what": "cancelled"}}})
     await audit_log(db, "HRM_LEAVE_CANCELLED", email=user.get("email", ""), role=user.get("role", ""), meta={"request": rid})
+    emp = people.get(r["emp_id"]) or {}
+    if r["status"] == "approved" or r.get("stage") == "manager":
+        # Whoever approved / was about to approve shouldn't plan around leave that's gone.
+        mgr = (people.get(r.get("approver_id")) or {}).get("work_email")
+        await _mail_many([mgr] if mgr else _hr_emails(people, r["emp_id"]), f"Leave withdrawn: {emp.get('name')} — {LABEL.get(r['type'])}",
+                         [f"{emp.get('name')}'s {LABEL.get(r['type'])} {_span(r)} was withdrawn by {user.get('email', '')}."])
+    if not own:
+        await _mail(emp.get("work_email", ""), f"Your leave was cancelled by HR — {LABEL.get(r['type'])}",
+                    [f"{LABEL.get(r['type'])}: {_span(r)} was cancelled by {user.get('email', '')}."])
     return {"ok": True}
 
 
@@ -258,6 +285,17 @@ async def leave_decide(rid: str, body: DecideBody, user: dict = Depends(get_curr
         await _mail(emp.get("work_email", ""), f"Your leave was {upd['status']} — {LABEL.get(r['type'])}",
                     [f"{LABEL.get(r['type'])}: {_span(r)} — {upd['status']} by {user.get('email', '')}.",
                      f"Note: {step['note']}" if step["note"] else ""])
+        if r.get("needs_hr") or upd["status"] == "approved" and r["type"] in ("MAT", "BER", "LOP"):
+            # HR keeps track of the long / unpaid ones even when a manager closed them.
+            await _mail_many(_hr_emails(people, r["emp_id"]), f"FYI: {emp.get('name')} — {LABEL.get(r['type'])} {upd['status']}",
+                             [f"{LABEL.get(r['type'])}: {_span(r)} ({upd.get('days', r['days'])} day(s)) — {upd['status']} by {user.get('email', '')}."])
+    elif upd.get("stage") == "hr":
+        # Manager said yes; HR has the final word — tell HR it's waiting, and the employee where it is.
+        await _mail_many(_hr_emails(people, r["emp_id"]), f"Leave needs HR approval: {emp.get('name')} — {LABEL.get(r['type'])}",
+                         [f"{emp.get('name')}: {LABEL.get(r['type'])}, {_span(r)} ({r['days']} day(s)). Their manager approved; it needs HR's OK.",
+                          *[f"⚠ {f}" for f in r.get("flags") or []]], "Review it in the HRM")
+        await _mail(emp.get("work_email", ""), f"Your leave is with HR — {LABEL.get(r['type'])}",
+                    [f"{LABEL.get(r['type'])}: {_span(r)} — your manager approved it; HR gives the final OK."])
     return {"ok": True, **upd}
 
 
