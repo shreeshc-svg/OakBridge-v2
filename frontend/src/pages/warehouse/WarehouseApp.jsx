@@ -418,6 +418,20 @@ function DocFlow({ direction, practice, onDone, initialDoc = null }) {
 
     return (
         <div className="space-y-4 pb-28">
+            {doc.duplicate_info && !practice && (
+                // Already added: nothing for him to check or press (backend archived this copy).
+                <div className="bg-white border-2 border-[#15803D] p-4 space-y-3" data-testid="wh-already-added">
+                    <div className="text-lg font-semibold text-[#15803D]">✓ Nothing to do — already added</div>
+                    <div className="text-base text-[#002B5C]">
+                        {isOut ? "Invoice" : "Bill"} {doc.duplicate_info.doc_number || ""}{doc.duplicate_info.party_name ? ` from ${doc.duplicate_info.party_name}` : ""} was
+                        {doc.duplicate_info.at ? ` added on ${new Date(doc.duplicate_info.at).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}` : " added before"}
+                        {doc.duplicate_info.by ? ` by ${doc.duplicate_info.by}` : ""}. This photo has been put aside.
+                    </div>
+                    <div className="text-sm text-[#4B5563]">{isOut && doc.duplicate_info.status === "sent_back" ? "It was sent back — use “Pack again” on the home screen." : "If it really is a second delivery, tell the office — they can bring it back."}</div>
+                    <button type="button" onClick={onDone} className={`w-full ${BTN} text-white bg-[#002B5C]`} data-testid="wh-already-added-home">Back to home</button>
+                </div>
+            )}
+            {doc.duplicate_info && !practice ? null : <>
             {doc.review_note && (
                 <div className="border-2 border-[#F59E0B] bg-white p-3 text-[#B4750F] font-medium" data-testid="wh-review-note">
                     ↩️ The office sent this back: {doc.review_note}
@@ -430,7 +444,9 @@ function DocFlow({ direction, practice, onDone, initialDoc = null }) {
             )}
             {doc.duplicate_of && (
                 <div className="border-2 border-[#CC0033] bg-white p-3 text-[#CC0033] font-medium">
-                    ⚠️ This {isOut ? "invoice" : "bill"} is already done (packed, waiting for approval, or sent back — use “Pack again” on the home screen for that one). It will not be added twice; ask your manager if it really is a second delivery.
+                    {isOut
+                        ? <>⚠️ This invoice is already done (packed, waiting for approval, or sent back — use “Pack again” on the home screen for that one). It will not be counted twice; ask your manager if it really is a second carton.</>
+                        : <>⚠️ This bill (same number, same printer) was already booked in — its copies are already in stock. Don't sync it again: press back. If it really is a second delivery on the same bill, ask your manager.</>}
                 </div>
             )}
             {!doc.duplicate_of && doc.similar_to && (
@@ -466,7 +482,14 @@ function DocFlow({ direction, practice, onDone, initialDoc = null }) {
                 <div className="space-y-2">
                     <div className="text-sm font-medium text-[#002B5C]">Scan each book as it goes into the carton</div>
                     <ScanBox onCode={onScan} />
-                    <div className="text-lg font-medium" data-testid="wh-packed-progress">{packedUnits} of {units} copies packed</div>
+                    <div className="flex items-center gap-3">
+                        <div className="text-lg font-medium flex-1" data-testid="wh-packed-progress">{packedUnits} of {units} copies packed</div>
+                        {packedUnits < units && (
+                            // One tap when he packed straight from the invoice without scanning each copy.
+                            <button type="button" onClick={() => setLines(lines.map((l) => (l.include && l.book_id ? { ...l, packed: l.qty } : l)))}
+                                className="border-2 border-[#15803D] text-[#15803D] px-3 py-2 text-sm font-medium" data-testid="wh-all-packed">Everything packed</button>
+                        )}
+                    </div>
                 </div>
             )}
 
@@ -529,11 +552,15 @@ function DocFlow({ direction, practice, onDone, initialDoc = null }) {
 
             <button type="button" onClick={report} className="text-sm underline text-[#4B5563]">Something wrong? Report it</button>
 
+            </>}
             <div className="fixed bottom-0 left-0 right-0 bg-white border-t p-3">
-                <button type="button" disabled={busy} onClick={confirm} data-testid="wh-confirm"
-                    className={`w-full ${BTN} text-lg text-white ${practice ? "bg-[#B4750F]" : "bg-[#15803D]"}`}>
-                    {busy ? "Saving…" : practice ? "Save practice (no stock change)" : isOut ? `Packed — remove ${packedUnits} from stock` : `Sync — add ${units} to stock`}
-                </button>
+                {/* A bill already booked in can't be synced again (the server
+                    refuses it): say so on the button instead of offering a
+                    green "Sync" that only fails when pressed. */}
+                {!(doc.duplicate_info && !practice) && <button type="button" disabled={busy || (!!doc.duplicate_of && !practice)} onClick={confirm} data-testid="wh-confirm"
+                    className={`w-full ${BTN} text-lg text-white disabled:opacity-60 ${doc.duplicate_of && !practice ? "bg-[#6B7280]" : practice ? "bg-[#B4750F]" : "bg-[#15803D]"}`}>
+                    {busy ? "Saving…" : doc.duplicate_of && !practice ? "Already added — nothing to sync" : practice ? "Save practice (no stock change)" : isOut ? `Packed — remove ${packedUnits} from stock` : `Sync — add ${units} to stock`}
+                </button>}
             </div>
         </div>
     );

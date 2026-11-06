@@ -700,6 +700,19 @@ async def _create_doc(direction: str, practice: bool, file: Optional[UploadFile]
         doc["party_kind"] = "sale_offline"
     if direction == "courier" and "parcels" not in doc:
         doc["parcels"] = []
+    if doc.get("duplicate_of") and not practice and direction in ("in", "out"):
+        # Already added (same photo, or same number from the same party): stop
+        # HERE rather than make him read and check every line only to be told
+        # at the end. The copy is archived at once — the office can restore it
+        # (Admin → Warehouse → Bills & invoices → Archived) if it really is a
+        # second delivery — and the phone shows one plain line.
+        prior = await db.warehouse_docs.find_one(
+            {"id": doc["duplicate_of"]},
+            {"_id": 0, "doc_number": 1, "party_name": 1, "confirmed_at": 1, "confirmed_by": 1, "created_by": 1, "status": 1}) or {}
+        doc.update(archived=True, archived_at=_now().isoformat(), archived_by="auto: already added",
+                   duplicate_info={"doc_number": prior.get("doc_number", ""), "party_name": prior.get("party_name", ""),
+                                   "at": prior.get("confirmed_at") or "", "by": prior.get("confirmed_by") or prior.get("created_by", ""),
+                                   "status": prior.get("status", "")})
     await db.warehouse_docs.insert_one(dict(doc))
     doc.pop("read_text", None)        # kept for diagnosis in Admin, not sent to the phone
     return doc
@@ -930,6 +943,34 @@ async def _lines_view(doc: dict) -> list:
                     "packed": int(ln.get("qty") or 0),
                     "invoiced": ln.get("invoiced") if ln.get("invoiced") is not None else r.get("qty")})
     return out
+
+
+STALE_DRAFT_DAYS = 2
+
+
+async def tidy_stale_drafts(days: int = STALE_DRAFT_DAYS) -> int:
+    """Drafts HE started and never finished (bad photo, retaken, interrupted)
+    are archived after `days` days, so his screens and the go-live checklist
+    show only real work. Nothing was ever synced from a draft, so no stock
+    moves; the office can restore any of them from Archived. Office-made jobs
+    (from_office) are never touched — they wait for him on purpose."""
+    cut = (_now() - timedelta(days=days)).isoformat()
+    res = await db.warehouse_docs.update_many(
+        {"status": "draft", "archived": {"$ne": True}, "from_office": {"$ne": True}, "created_at": {"$lt": cut}},
+        {"$set": {"archived": True, "archived_at": _now().isoformat(), "archived_by": f"auto: unfinished {days}+ days"}})
+    if res.modified_count:
+        log.info("warehouse: archived %s stale drafts", res.modified_count)
+    return res.modified_count
+
+
+try:
+    import jobs as _jobs
+
+    @_jobs.handler("wh_tidy_drafts")
+    async def _job_tidy(p: dict) -> None:
+        await tidy_stale_drafts()
+except Exception:  # noqa: BLE001 — tests import without the job system
+    pass
 
 
 @wh_router.get("/inbox")

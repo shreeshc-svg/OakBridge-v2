@@ -307,8 +307,27 @@ async def reset_tests():
         check(e.status_code == 409, "refused once live (the warehouse IS the stock then)")
 
 
+async def tidy_tests():
+    print("-- less work for him: stale drafts tidied, duplicates stopped at the photo --")
+    from datetime import datetime, timedelta, timezone
+    old = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat()
+    new = datetime.now(timezone.utc).isoformat()
+    for i, (at, office, status) in enumerate([(old, False, "draft"), (new, False, "draft"), (old, True, "draft"), (old, False, "confirmed")]):
+        await db.warehouse_docs.insert_one({"id": f"t{i}", "status": status, "created_at": at, "from_office": office, "archived": False})
+    n = await wh.tidy_stale_drafts()
+    got = {d["id"]: d.get("archived") for d in db.warehouse_docs.docs if d["id"].startswith("t")}
+    check(n == 1 and got == {"t0": True, "t1": False, "t2": False, "t3": False},
+          "only HIS drafts older than 2 days are archived (office jobs and synced documents untouched)")
+    src = open(os.path.join(os.path.dirname(HERE), "warehouse.py"), encoding="utf-8").read()
+    check('archived_by="auto: already added"' in src and 'duplicate_info=' in src, "a duplicate is archived at upload with who/when it was added")
+    app = open(os.path.join(os.path.dirname(HERE), "..", "frontend", "src", "pages", "warehouse", "WarehouseApp.jsx"), encoding="utf-8").read()
+    check('data-testid="wh-already-added"' in app and 'data-testid="wh-all-packed"' in app,
+          "phone: one 'Nothing to do — already added' screen; one-tap 'Everything packed'")
+
+
 asyncio.run(main())
 asyncio.run(reset_tests())
+asyncio.run(tidy_tests())
 print()
 if failed:
     print(f"{failed} assertion(s) failed")
