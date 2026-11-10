@@ -94,6 +94,13 @@ async def _ctx(user: dict) -> tuple[dict, Optional[dict], dict]:
     return people, me, acc
 
 
+async def superadmin_emails() -> list:
+    """Fallback recipients when nobody in the HRM has HR access (or the only HR
+    person is the one asking): the site's super admins, so a request never
+    waits unseen."""
+    return [u["email"] async for u in db.users.find({"role": {"$in": list(rbac.SUPERADMIN_ROLES)}}, {"_id": 0, "email": 1}) if u.get("email")]
+
+
 async def require_hr(user: dict = Depends(get_current_user)) -> dict:
     _, _, acc = await _ctx(user)
     if not acc["hr"]:
@@ -303,7 +310,7 @@ async def hrm_invite(pid: str, user: dict = Depends(require_hr)):
         await db.users.update_one({"id": acct["id"]}, {"$set": {
             "reset_token_hash": hashlib.sha256(raw.encode()).hexdigest(),
             "reset_expires_at": (_now() + timedelta(days=INVITE_DAYS)).isoformat()}})
-        set_url = f"{site}/reset-password?token={raw}"
+        set_url = f"{site}/reset-password?token={raw}&next=/hrm"   # after setting it they sign in straight into the HRM
     await db.hr_employees.update_one({"id": pid}, {"$set": {"user_id": acct["id"], "invited_at": _now().isoformat()}})
     sent = False
     try:

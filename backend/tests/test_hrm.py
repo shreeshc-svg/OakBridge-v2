@@ -123,7 +123,7 @@ _mod("fastapi.responses", Response=lambda **k: k)
 _mod("pydantic", BaseModel=BaseModel)
 _mod("extensions", db=db, get_current_user=lambda: None, hash_password=lambda p: "hash")
 _mod("audit", audit_log=_anoop)
-_mod("rbac", is_superadmin=lambda r: r in ("superadmin", "admin"))
+_mod("rbac", is_superadmin=lambda r: r in ("superadmin", "admin"), SUPERADMIN_ROLES=frozenset({"superadmin", "admin"}))
 _mod("emailer", send_hrm_invite=_invite)
 import hrm  # noqa: E402
 

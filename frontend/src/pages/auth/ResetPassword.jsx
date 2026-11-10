@@ -23,7 +23,10 @@ export default function ResetPassword() {
         try {
             await resetPassword(token, password);
             toast.success("Password updated — please sign in.");
-            nav("/login", { replace: true });
+            // ?next=/hrm from an HRM invite: sign in and land in the HRM. Only
+            // a path on this site is accepted (never another domain).
+            const next = sp.get("next") || "";
+            nav(/^\/[a-z0-9/_-]*$/i.test(next) && !next.startsWith("//") ? `/login?next=${encodeURIComponent(next)}` : "/login", { replace: true });
         } catch (err) {
             setError(formatApiError(err));
         } finally {

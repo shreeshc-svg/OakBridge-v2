@@ -64,6 +64,15 @@ async def _mail(to: str, subject: str, lines: list) -> None:
         log.exception("hrm goals: mail failed")
 
 
+async def _approvers(emp: dict, people: dict) -> list:
+    """_approver_email, falling back to the site's super admins if empty."""
+    out = [t for t in _approver_email(emp, people) if t]
+    if not out:
+        from hrm import superadmin_emails
+        out = await superadmin_emails()
+    return out
+
+
 def _approver_email(emp: dict, people: dict) -> list:
     a = approver_for(emp, people)
     if a:
@@ -185,7 +194,7 @@ async def goals_submit(body: SubmitBody, user: dict = Depends(get_current_user))
     except core.Refused as e:
         raise HTTPException(status_code=400, detail=str(e))
     saved = await _save(plan, {"status": "submitted", "submitted_at": _now().isoformat()}, user, "submitted", plan["status"])
-    for to in _approver_email(me, people):
+    for to in await _approvers(me, people):
         await _mail(to, f"Goals to approve: {me['name']} ({fy})", [f"{me['name']} has submitted {len(plan['goals'])} goals for {fy}."])
     return _out(saved, True, False, await _released(fy), _today())
 
@@ -227,7 +236,7 @@ async def goals_reopen(plan_id: str, user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=400, detail="Only approved goals can be reopened.")
     saved = await _save(plan, {"status": "draft"}, user, "reopened", "approved")
     if owner:
-        for to in _approver_email(emp, people):
+        for to in await _approvers(emp, people):
             await _mail(to, f"Goals reopened: {emp.get('name')} ({plan['fy']})", [f"{emp.get('name')} reopened their goals to change them; they'll need your approval again."])
     else:
         await _mail(emp.get("work_email"), f"Your {plan['fy']} goals were reopened", [f"{user.get('email', '')} reopened your goals for changes. Update and submit them again."])
@@ -257,7 +266,7 @@ async def goals_checkin(plan_id: str, body: CheckinBody, user: dict = Depends(ge
     ck = {**(plan.get("checkins") or {})}
     ck[body.q] = {**(ck.get(body.q) or {}), "self": entry}
     saved = await _save(plan, {"checkins": ck}, user, f"checkin {body.q}", "approved")
-    for to in _approver_email(emp, people):
+    for to in await _approvers(emp, people):
         await _mail(to, f"Check-in to review: {emp.get('name')} — {body.q} {plan['fy']}",
                     [f"{emp.get('name')} checked in for {body.q}: overall {core.overall(plan['goals'], prog)}%."])
     return _out(saved, owner, decide, await _released(plan["fy"]), _today())

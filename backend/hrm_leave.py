@@ -89,7 +89,13 @@ def _hr_emails(people: dict, skip: str = "") -> list:
 
 
 async def _mail_many(tos: list, subject: str, lines: list, link: str = "") -> None:
-    for to in dict.fromkeys(t for t in tos if t):
+    tos = [t for t in tos if t]
+    if not tos:
+        # Nobody with HR access to tell (e.g. the only HR person is the one on
+        # leave): the site's super admins get it instead of nobody.
+        from hrm import superadmin_emails
+        tos = await superadmin_emails()
+    for to in dict.fromkeys(tos):
         await _mail(to, subject, lines, link)
 
 

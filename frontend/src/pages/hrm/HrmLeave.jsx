@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Check, X, Download } from "lucide-react";
+import { Ring } from "./HrmBits";
 import {
     leaveSummary, leaveApply, leaveCancel, leaveApprovals, leaveDecide, leaveAdjust, leaveAdjustments, leaveExport, leaveSetBalance,
     hrmPeople, saveBlob, formatApiError,
@@ -27,29 +28,40 @@ const LABEL = { CL: "Casual", SL: "Sick", EL: "Earned", MAT: "Maternity", PAT: "
     COMP: "Comp-off", LOP: "Loss of pay", COMP_EARN: "Comp-off earned" };
 
 /* Balance tiles — also on the Home dashboard. */
+/* Balance cards — also on Home. A ring per leave type shows what's LEFT of
+   the year's allowance, each type in its own colour so they read at a glance. */
+const KIND = [
+    ["CL", "Casual", "#0EA5A4"], ["SL", "Sick", "#E11D48"], ["EL", "Earned", "#D97706"],
+    ["OPT", "Optional holiday", "#7C3AED"], ["COMP", "Comp-off", "#0284C7"],
+];
 export function BalanceCards({ s }) {
     if (!s) return null;
     const b = s.balances;
     const confirmed = !!s.emp.confirmed_on;
-    const tiles = [
-        ["Casual", b.CL.available, `of ${n(b.CL.entitled)}`],
-        ["Sick", b.SL.available, `of ${n(b.SL.entitled)}`],
-        ["Earned", Math.floor(b.EL.available), `${n(b.EL.carried)} carried + ${n(b.EL.earned)} earned`],
-        ["Optional holiday", b.OPT.available, "1 a year"],
-        ["Comp-off", b.COMP.available, "valid 2 months"],
-        ["Loss of pay", b.LOP.used, `used of ${b.LOP.cap} a year`],
-    ];
+    const of = { CL: b.CL.entitled, SL: b.SL.entitled, EL: Math.max(b.EL.available, b.EL.carried + b.EL.earned + (b.EL.adjusted || 0)), OPT: b.OPT.entitled, COMP: b.COMP.available };
+    const left = { CL: b.CL.available, SL: b.SL.available, EL: Math.max(0, b.EL.available), OPT: b.OPT.available, COMP: b.COMP.available };
+    const sub = { CL: `of ${n(of.CL)} this year`, SL: `of ${n(of.SL)} this year`, EL: `${n(b.EL.carried)} carried + ${n(b.EL.earned)} earned`,
+        OPT: "1 a year, from the list", COMP: b.COMP.available ? "use within 2 months" : "earned by working a day off" };
     return (
         <div>
-            {!confirmed && <p className="mb-2 text-sm text-[#B4750F]">On probation: paid leave starts once you're confirmed. Until then time off is loss of pay (bereavement excepted).</p>}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2" data-testid="hrm-balances">
-                {tiles.map(([l, v, sub]) => (
-                    <div key={l} className="bg-white border border-[#E5E7EB] p-3">
-                        <div className="text-[10px] uppercase tracking-wider text-[#6B7280] truncate">{l}</div>
-                        <div className={`font-serif text-3xl leading-tight ${l === "Loss of pay" ? "text-[#4B5563]" : "text-[#002B5C]"}`}>{n(v)}</div>
-                        <div className="text-[11px] text-[#6B7280] truncate">{l === "Loss of pay" ? sub : `left · ${sub}`}</div>
+            {!confirmed && (
+                <div className="mb-3 border-l-4 border-[#F5B841] bg-[#FFFBEB] px-3 py-2 text-sm text-[#92400E]">
+                    You're on probation — paid leave starts once you're confirmed. Until then time off is loss of pay (bereavement excepted).
+                </div>
+            )}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3" data-testid="hrm-balances">
+                {KIND.map(([k, label, color]) => (
+                    <div key={k} className="bg-white border border-[#E5E7EB] p-3 flex flex-col items-center text-center hover:shadow-sm transition-shadow">
+                        <Ring value={left[k]} max={of[k] || (left[k] ? left[k] : 1)} color={color} size={76} label={n(k === "EL" ? Math.floor(left[k] * 2) / 2 : left[k])} />
+                        <div className="mt-1.5 text-sm font-medium text-[#002B5C]">{label}</div>
+                        <div className="text-[11px] text-[#6B7280] leading-tight">{sub[k]}</div>
                     </div>
                 ))}
+                <div className="bg-[#F9FAFB] border border-[#E5E7EB] p-3 flex flex-col items-center justify-center text-center">
+                    <div className="font-serif text-3xl text-[#4B5563]">{n(b.LOP.used)}</div>
+                    <div className="text-sm font-medium text-[#4B5563]">Loss of pay</div>
+                    <div className="text-[11px] text-[#6B7280] leading-tight">days used · HR approves past {b.LOP.cap}</div>
+                </div>
             </div>
         </div>
     );
@@ -59,17 +71,30 @@ export default function LeaveTab({ me }) {
     const [s, setS] = useState(null);
     const load = useCallback(() => (me.me ? leaveSummary().then(setS).catch((e) => toast.error(formatApiError(e))) : Promise.resolve()), [me]);
     useEffect(() => { load(); }, [load]);
+    // Three views instead of one long page: your own leave, what you approve,
+    // and (HR) the setup tools — each person sees only the views they use.
+    const views = [...(me.me ? [["mine", "My leave"]] : []), ...((me.hr || me.manager) ? [["approve", "Approvals"]] : []),
+        ...(me.hr ? [["tools", "HR tools"]] : [])];
+    const [view, setView] = useState(views[0]?.[0] || "mine");
     return (
         <div className="space-y-6">
-            {me.me && (
+            {views.length > 1 && (
+                <div className="inline-flex border border-[#E5E7EB] bg-white" role="tablist" data-testid="hrm-leave-views">
+                    {views.map(([k, l]) => (
+                        <button key={k} type="button" role="tab" aria-selected={view === k} onClick={() => setView(k)}
+                            className={`px-4 py-2 text-sm ${view === k ? "bg-[#002B5C] text-white" : "text-[#002B5C] hover:bg-[#F5F7FA]"}`}>{l}</button>
+                    ))}
+                </div>
+            )}
+            {view === "mine" && me.me && (
                 <>
                     <BalanceCards s={s} />
                     {s && <ApplyForm s={s} onDone={load} />}
                     {s && <MyRequests rows={s.requests} onChange={load} />}
                 </>
             )}
-            {(me.hr || me.manager) && <Approvals hr={me.hr} onChange={load} />}
-            {me.hr && <HrTools superadmin={me.superadmin} />}
+            {view === "approve" && (me.hr || me.manager) && <Approvals hr={me.hr} onChange={load} />}
+            {view === "tools" && me.hr && <HrTools superadmin={me.superadmin} />}
         </div>
     );
 }

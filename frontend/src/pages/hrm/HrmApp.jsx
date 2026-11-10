@@ -1,16 +1,18 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { CalendarDays, CalendarCheck, Home, Settings2, Users, Plus, X, Send, Search, Camera, Target, Briefcase } from "lucide-react";
+import { CalendarDays, CalendarCheck, Home, Settings2, Users, Plus, X, Send, Search, Target, Briefcase } from "lucide-react";
 import {
-    hrmMe, hrmPeople, hrmAddPerson, hrmEditPerson, hrmInvite, hrmConfirmAll, hrmCalendar, hrmSettings, hrmSaveSettings,
-    hrmPhotoBlob, hrmUploadPhoto, hrmRemovePhoto, leaveSummary, leaveTeam, leaveApprovals, goalsPlan, formatApiError,
+    hrmMe, hrmPeople, hrmAddPerson, hrmEditPerson, hrmInvite, hrmConfirmAll, hrmSettings, hrmSaveSettings,
+    formatApiError,
 } from "../../lib/api";
 import NoIndex from "../../components/NoIndex";
 import HrmCalendar from "./HrmCalendar";
-import LeaveTab, { BalanceCards, Approvals } from "./HrmLeave";
+import LeaveTab from "./HrmLeave";
 import GoalsTab from "./HrmGoals";
 import HiringTab, { LifecyclePanel, ChecklistSettings } from "./HrmHiring";
+import HomeTab from "./HrmHome";
+import { Avatar, PhotoPicker } from "./HrmBits";
 
 /**
  * Oakbridge HRM — release 1 (Nov 2026): people, logins, leave year, calendar.
@@ -85,197 +87,6 @@ export default function HrmApp() {
                 {tab === "calendar" && <HrmCalendar hr={me.hr} manager={me.manager} />}
                 {tab === "settings" && me.hr && <><SettingsTab /><ChecklistSettings /></>}
             </main>
-        </div>
-    );
-}
-
-/* ------------------------------------------------------------------ home --- */
-/* Two dashboards (Nov 2026): everyone sees THEIR leave first (what's left,
-   what's coming, what's waiting); HR / founders additionally get the company
-   at a glance — who's off today and this week, approvals waiting, people on
-   probation, logins not sent. Managers get their team's slice. */
-const isoToday = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
-const plusDays = (iso, n) => { const d = new Date(`${iso}T00:00:00`); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
-
-function HomeTab({ me, go }) {
-    const [cal, setCal] = useState(null);
-    const [s, setS] = useState(null);
-    const [off, setOff] = useState(null);
-    const [people, setPeople] = useState(null);
-    const [waiting, setWaiting] = useState(null);
-    const [goals, setGoals] = useState(null);
-    const today = isoToday();
-    useEffect(() => {
-        hrmCalendar().then(setCal).catch(() => {});
-        if (me.me) leaveSummary().then(setS).catch(() => {});
-        if (me.me) goalsPlan().then(setGoals).catch(() => {});
-        if (me.hr || me.manager) {
-            leaveTeam(today, plusDays(today, 6)).then((r) => setOff(r.rows || [])).catch(() => setOff([]));
-            leaveApprovals().then(setWaiting).catch(() => setWaiting([]));
-        }
-        if (me.hr) hrmPeople().then(setPeople).catch(() => setPeople([]));
-    }, [me, today]);
-    const p = me.me;
-    const upcoming = (cal?.rows || []).filter((r) => r.date >= today).slice(0, 4);
-    const mine = (s?.requests || []).filter((r) => r.type !== "COMP_EARN" && (r.status === "pending" || (r.status === "approved" && r.end >= today)))
-        .sort((x, y) => x.start.localeCompare(y.start)).slice(0, 4);
-    const offToday = (off || []).filter((r) => r.start <= today && today <= r.end && r.status === "approved");
-    return (
-        <div className="space-y-5" data-testid="hrm-home">
-            <section className="bg-white border border-[#E5E7EB] p-4 flex flex-wrap items-center gap-4">
-                {p ? <SelfPhoto p={p} /> : null}
-                <div className="flex-1 min-w-[200px]">
-                    <div className="font-serif text-2xl text-[#002B5C]">{p ? `Hi ${p.name.split(" ")[0]}` : "Welcome"}</div>
-                    <div className="text-sm text-[#4B5563]">
-                        {p ? [p.designation, p.department, p.emp_code && `Emp ID ${p.emp_code}`].filter(Boolean).join(" · ") : "Site super admin — you see everything. Add yourself under People to get your own leave."}
-                    </div>
-                    {p && <div className="text-xs text-[#6B7280] mt-0.5">Reports to {me.manager_name || "—"} · joined {fmt(p.joined_on)} · {p.confirmed_on ? `confirmed ${fmt(p.confirmed_on)}` : <span className="text-[#B4750F]">on probation</span>}</div>}
-                </div>
-                {p && <button type="button" onClick={() => go("leave")} className="bg-[#002B5C] text-white px-4 py-2 text-sm" data-testid="hrm-home-apply">Apply for leave</button>}
-            </section>
-
-            {me.hr && (
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2" data-testid="hrm-hr-kpis">
-                    <Kpi label="People" value={people ? people.length : "…"} onClick={() => go("people")} />
-                    <Kpi label="Off today" value={off ? offToday.length : "…"} onClick={() => go("calendar")} />
-                    <Kpi label="Waiting approval" value={waiting ? waiting.length : "…"} tone={waiting?.length ? "text-[#B4750F]" : ""} onClick={() => go("leave")} />
-                    <Kpi label="On probation" value={people ? people.filter((x) => !x.confirmed_on).length : "…"} onClick={() => go("people")} />
-                    <Kpi label="No login yet" value={people ? people.filter((x) => !x.user_id).length : "…"} tone={people?.some((x) => !x.user_id) ? "text-[#B4750F]" : ""} onClick={() => go("people")} />
-                </div>
-            )}
-
-            {p && (
-                <section>
-                    <h2 className="font-serif text-xl text-[#002B5C] mb-2">Your leave · {s?.fy || ""}</h2>
-                    {s ? <BalanceCards s={s} /> : <p className="text-sm text-[#6B7280]">Loading…</p>}
-                </section>
-            )}
-
-            <div className="grid gap-4 md:grid-cols-2">
-                {(me.hr || me.manager) && (
-                    <Card title={`Waiting for you${waiting?.length ? ` (${waiting.length})` : ""}`}>
-                        <Approvals hr={me.hr} compact onChange={() => leaveApprovals().then(setWaiting).catch(() => {})} />
-                    </Card>
-                )}
-                {(me.hr || me.manager) && (
-                    <Card title={me.hr ? "Who's off this week" : "Your team this week"}>
-                        {!off ? <p className="text-sm text-[#6B7280]">Loading…</p> : off.length ? (
-                            <ul className="divide-y divide-[#F3F4F6] text-sm">
-                                {off.slice(0, 8).map((r) => (
-                                    <li key={r.id} className="py-1.5 flex justify-between gap-2">
-                                        <span>{r.name} <span className="text-[#6B7280]">· {r.label}{r.status === "pending" ? " (pending)" : ""}</span></span>
-                                        <span className="text-[#4B5563] whitespace-nowrap">{r.start === r.end ? fmt(r.start) : `${fmt(r.start)} – ${fmt(r.end)}`}</span>
-                                    </li>
-                                ))}
-                            </ul>
-                        ) : <p className="text-sm text-[#6B7280]">Everyone's in.</p>}
-                    </Card>
-                )}
-                {p && goals && (
-                    <Card title={`Your goals · ${goals.fy}`}>
-                        {goals.goals?.length ? (
-                            <div className="text-sm">
-                                <div className="flex items-center gap-3">
-                                    <div className="flex-1 h-2 bg-[#F3F4F6]"><div className="h-2 bg-[#002B5C]" style={{ width: `${goals.overall || 0}%` }} /></div>
-                                    <b className="text-[#002B5C]">{goals.overall ?? 0}%</b>
-                                </div>
-                                <p className="mt-1 text-xs text-[#6B7280]">{goals.goals.length} goal(s) · {{ draft: "draft", submitted: "waiting for approval", returned: "sent back for changes", approved: "approved" }[goals.status]}
-                                    {goals.open_quarters?.some((q) => !goals.checkins?.[q]?.self) && goals.status === "approved" ? ` · ${goals.open_quarters.find((q) => !goals.checkins?.[q]?.self)} check-in due` : ""}</p>
-                            </div>
-                        ) : <p className="text-sm text-[#6B7280]">No goals set for {goals.fy} yet.</p>}
-                        <button type="button" onClick={() => go("goals")} className="mt-2 text-xs underline text-[#4B5563]">Open goals</button>
-                    </Card>
-                )}
-                {p && (
-                    <Card title="Your upcoming leave">
-                        {!s ? <p className="text-sm text-[#6B7280]">Loading…</p> : mine.length ? (
-                            <ul className="divide-y divide-[#F3F4F6] text-sm">
-                                {mine.map((r) => (
-                                    <li key={r.id} className="py-1.5 flex justify-between gap-2">
-                                        <span>{(s.types || {})[r.type] || r.type} · {r.days} day(s)</span>
-                                        <span className={r.status === "pending" ? "text-[#B4750F]" : "text-[#15803D]"}>{r.start === r.end ? fmt(r.start) : `${fmt(r.start)} – ${fmt(r.end)}`} · {r.status}</span>
-                                    </li>
-                                ))}
-                            </ul>
-                        ) : <p className="text-sm text-[#6B7280]">Nothing planned.</p>}
-                    </Card>
-                )}
-                <Card title={`Upcoming holidays · ${cal?.fy || ""}`}>
-                    {!cal ? <p className="text-sm text-[#6B7280]">Loading…</p> : upcoming.length ? (
-                        <ul className="divide-y divide-[#F3F4F6] text-sm">
-                            {upcoming.map((r) => (
-                                <li key={r.date} className="py-1.5 flex justify-between gap-3">
-                                    <span>{r.name}{r.kind === "optional" && <span className="ml-2 text-[10px] uppercase tracking-wider text-[#B4750F]">optional</span>}</span>
-                                    <span className="text-[#4B5563] whitespace-nowrap">{fmt(r.date)}</span>
-                                </li>
-                            ))}
-                        </ul>
-                    ) : <p className="text-sm text-[#6B7280]">No more holidays listed this year.</p>}
-                    {cal && <button type="button" onClick={() => go("calendar")} className="mt-2 text-xs underline text-[#4B5563]">Open the calendar · weekly off: {weeklyOffText(cal.weekly_off)}</button>}
-                </Card>
-            </div>
-        </div>
-    );
-}
-
-function Kpi({ label, value, tone = "", onClick }) {
-    return (
-        <button type="button" onClick={onClick} className="text-left bg-white border border-[#E5E7EB] hover:border-[#002B5C] p-3">
-            <div className="text-[10px] uppercase tracking-wider text-[#6B7280]">{label}</div>
-            <div className={`font-serif text-3xl leading-tight ${tone || "text-[#002B5C]"}`}>{value}</div>
-        </button>
-    );
-}
-
-/* ---------------------------------------------------------------- photos --- */
-/* The photo endpoint needs the sign-in token, so it is fetched as a blob
-   (a plain <img src> sends no Authorization header). */
-export function Avatar({ p, size = 36, bust = "" }) {
-    const [url, setUrl] = useState("");
-    useEffect(() => {
-        let gone = false;
-        let u = "";
-        if (p?.photo_at) hrmPhotoBlob(p.id).then((b) => { if (!gone) { u = URL.createObjectURL(b); setUrl(u); } }).catch(() => {});
-        else setUrl("");
-        return () => { gone = true; if (u) URL.revokeObjectURL(u); };
-    }, [p?.id, p?.photo_at, bust]);
-    const initials = (p?.name || "?").split(" ").filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
-    return url
-        ? <img src={url} alt={p.name} width={size} height={size} className="object-cover border border-[#E5E7EB] shrink-0" style={{ width: size, height: size }} />
-        : <span className="inline-flex items-center justify-center bg-[#E8EEF6] text-[#002B5C] font-medium shrink-0" style={{ width: size, height: size, fontSize: size / 2.8 }} aria-hidden="true">{initials}</span>;
-}
-
-function PhotoPicker({ p, onChanged }) {
-    const pick = useRef(null);
-    const [busy, setBusy] = useState(false);
-    const up = async (file) => {
-        if (!file) return;
-        if (!/^image\//.test(file.type)) { toast.error("Choose a photo (JPEG or PNG)."); return; }
-        setBusy(true);
-        try { const r = await hrmUploadPhoto(p.id, file); toast.success("Photo saved."); onChanged(r.photo_at); }
-        catch (e) { toast.error(formatApiError(e)); } finally { setBusy(false); }
-    };
-    const remove = async () => {
-        if (!window.confirm("Remove this photo?")) return;
-        try { await hrmRemovePhoto(p.id); onChanged(null); } catch (e) { toast.error(formatApiError(e)); }
-    };
-    return (
-        <span className="inline-flex items-center gap-2 text-xs">
-            <button type="button" disabled={busy} onClick={() => pick.current?.click()} className="inline-flex items-center gap-1 underline disabled:opacity-50">
-                <Camera size={12} />{busy ? "Uploading…" : p.photo_at ? "Change photo" : "Add photo"}
-            </button>
-            {p.photo_at && <button type="button" onClick={remove} className="underline text-[#CC0033]">Remove</button>}
-            <input ref={pick} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={(e) => { up(e.target.files?.[0]); e.target.value = ""; }} />
-        </span>
-    );
-}
-
-function SelfPhoto({ p }) {
-    const [cur, setCur] = useState(p);
-    return (
-        <div className="flex flex-col items-center gap-1">
-            <Avatar p={cur} size={72} />
-            <PhotoPicker p={cur} onChanged={(at) => setCur({ ...cur, photo_at: at })} />
         </div>
     );
 }

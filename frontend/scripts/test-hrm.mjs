@@ -25,15 +25,21 @@ const cal = read("src/pages/hrm/HrmCalendar.jsx");
 check(cal.includes('data-testid="hrm-day-info"') && cal.includes('role="grid"') && cal.includes("DayEditor"), "month calendar: click a day for its info; HR edits holidays on the day");
 check(/weeklyOffReason/.test(cal) && cal.includes("(d.getDay() + 6) % 7"), "weekly offs computed Mon=0 like the server");
 const leave = read("src/pages/hrm/HrmLeave.jsx");
-check(leave.includes("export function BalanceCards") && hrm.includes("<BalanceCards s={s} />"), "home shows the person's remaining leave");
-check(hrm.includes('data-testid="hrm-hr-kpis"') && /me\.hr && \(/.test(hrm), "HR / founders get a different home (company at a glance)");
+const home = read("src/pages/hrm/HrmHome.jsx");
+const bits = read("src/pages/hrm/HrmBits.jsx");
+check(leave.includes("export function BalanceCards") && home.includes("<BalanceCards s={s} />") && leave.includes("<Ring "), "home shows remaining leave as rings, one colour per type");
+check(home.includes('data-testid="hrm-hr-kpis"') && /me\.hr && \(/.test(home), "HR / founders get a different home (company at a glance)");
+check(home.includes('data-testid="hrm-next-holiday"') && home.includes("Coming up") && home.includes("greet()"), "employee home: greeting, next-holiday countdown, coming-up timeline");
+check(leave.includes('data-testid="hrm-leave-views"') && leave.includes('["tools", "HR tools"]'), "Leave split into My leave / Approvals / HR tools");
 check(hrm.includes("Emp ID") && hrm.includes("r.emp_code"), "employee ID shown in People");
 check(hrm.includes("useState(person ? !!person.confirmed_on : true)") && hrm.includes("confirmed ? (f.confirmed_on || f.joined_on)"),
       "new people default to confirmed; confirmed without a date = from joining");
 check(hrm.includes('data-testid="hrm-confirm-all"'), "one click to confirm everyone without a date");
 check(hrm.includes('data-testid="hrm-own-weekly-off"') && read("src/pages/hrm/HrmLeave.jsx").includes('data-testid="hrm-set-balance"'),
       "super admin: per-person weekly off + set exact balances");
-check(hrm.includes("hrmPhotoBlob") && hrm.includes("URL.createObjectURL"), "photos fetched with the sign-in token (not a public URL)");
+check(bits.includes("hrmPhotoBlob") && bits.includes("URL.createObjectURL"), "photos fetched with the sign-in token (not a public URL)");
+const reset = read("src/pages/auth/ResetPassword.jsx"), login = read("src/pages/auth/Login.jsx");
+check(reset.includes('sp.get("next")') && login.includes("/^\\/(?!\\/)/.test(nextParam)"), "invite -> set password -> sign in lands in the HRM; ?next only accepts a path on this site");
 const goals = read("src/pages/hrm/HrmGoals.jsx");
 check(hrm.includes('["goals", "Goals", Target]') && hrm.includes("<GoalsTab me={me} />"), "Goals tab for everyone");
 check(goals.includes('data-testid="hrm-goal-editor"') && goals.includes("must be 100%") && goals.includes('data-testid="hrm-quarters"'),

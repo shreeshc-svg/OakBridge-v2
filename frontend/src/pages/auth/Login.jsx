@@ -18,7 +18,9 @@ export default function Login() {
     // `next`/`expired` are set by the 401 handler in lib/api.js; router state is
     // used by the in-app checkout gate. Either can send us back where we were.
     const expired = sp.get("expired") === "1";
-    const from = sp.get("next") || loc.state?.from?.pathname || "/account";
+    // ?next= must be a path on this site ("/hrm"), never "//other.site" or a URL.
+    const nextParam = sp.get("next") || "";
+    const from = (/^\/(?!\/)/.test(nextParam) ? nextParam : "") || loc.state?.from?.pathname || "/account";
 
     const onSubmit = async (e) => {
         e.preventDefault();
