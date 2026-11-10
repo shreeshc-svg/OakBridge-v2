@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from "react";
-import { CalendarCheck, CalendarDays, Target, Users, Briefcase, PartyPopper, ChevronRight } from "lucide-react";
+import { CalendarCheck, CalendarDays, Target, Users, Briefcase, PartyPopper, ChevronRight, Award } from "lucide-react";
 import { hrmCalendar, hrmPeople, leaveSummary, leaveTeam, leaveApprovals, goalsPlan } from "../../lib/api";
 import { BalanceCards, Approvals } from "./HrmLeave";
 import { Avatar, PhotoPicker, Ring } from "./HrmBits";
+import { useMyAppraisal } from "./HrmAppraisal";
 
 /**
  * HRM Home (Nov 2026 refresh). Built around what an employee opens it for:
@@ -25,6 +26,7 @@ export default function HomeTab({ me, go }) {
     const [off, setOff] = useState(null);
     const [people, setPeople] = useState(null);
     const [waiting, setWaiting] = useState(null);
+    const appr = useMyAppraisal(!!me.me);       // "self-review open" / "result ready" banner
     const today = iso(new Date());
     useEffect(() => {
         hrmCalendar().then(setCal).catch(() => {});
@@ -85,6 +87,16 @@ export default function HomeTab({ me, go }) {
                     {me.hiring && <Action icon={Briefcase} label="Hiring" onClick={() => go("hiring")} />}
                 </div>
             </section>
+
+            {appr && (
+                <button type="button" onClick={() => go("appraisal")} data-testid="hrm-home-appraisal"
+                    className="w-full text-left flex items-center gap-3 px-4 py-3 border border-[#F5B841] bg-[#FFFBEB] hover:bg-[#FEF3C7]">
+                    <Award size={22} className="text-[#B4750F] shrink-0" aria-hidden="true" />
+                    <span className="flex-1"><span className="font-medium text-[#002B5C]">{appr.text}</span>
+                        {appr.due && <span className="block text-xs text-[#6B7280]">Please submit by {new Date(`${appr.due}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "long" })}</span>}</span>
+                    <ChevronRight size={18} className="text-[#002B5C]" aria-hidden="true" />
+                </button>
+            )}
 
             {/* ---------- HR at a glance ---------- */}
             {me.hr && (

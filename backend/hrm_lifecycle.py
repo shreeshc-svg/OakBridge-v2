@@ -441,7 +441,10 @@ async def purge_old_applications(today: Optional[date] = None) -> int:
 
 
 async def daily() -> dict:
-    return {"exits": await finalize_exits(), "purged": await purge_old_applications()}
+    # Appraisals: on the effective date the new designation lands on the
+    # employee record (hrm_appraisal.apply_due — idempotent via applied_at).
+    from hrm_appraisal import apply_due
+    return {"exits": await finalize_exits(), "purged": await purge_old_applications(), "appraisals": await apply_due()}
 
 
 try:

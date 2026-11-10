@@ -165,6 +165,24 @@ export const goalsReview = (id, body) => api.post(`${HG}/plan/${id}/review`, bod
 export const goalsRate = (id, body) => api.post(`${HG}/plan/${id}/rating`, body).then((r) => r.data);
 export const goalsTeam = (fy) => api.get(`${HG}/team`, { params: fy ? { fy } : {} }).then((r) => r.data);
 export const goalsRelease = (fy) => api.post(`${HG}/release`, { fy }).then((r) => r.data);
+// HRM annual appraisal (backend/hrm_appraisal.py) — CTC only ever comes back
+// for HR, or for the employee themselves after release.
+const HA = "/hrm/appraisal";
+const fyp = (fy) => ({ params: fy ? { fy } : {} });
+export const appraisalCycle = (fy) => api.get(`${HA}/cycle`, fyp(fy)).then((r) => r.data);
+export const appraisalStart = (body) => api.post(`${HA}/cycle`, body).then((r) => r.data);
+export const appraisalRemind = (fy) => api.post(`${HA}/cycle/remind`, { fy }).then((r) => r.data);
+export const appraisalAdd = (fy, empId) => api.post(`${HA}/cycle/add`, { fy, emp_id: empId }).then((r) => r.data);
+export const appraisalMine = (fy) => api.get(`${HA}/mine`, fyp(fy)).then((r) => r.data);
+export const appraisalTeam = (fy) => api.get(`${HA}/team`, fyp(fy)).then((r) => r.data);
+export const appraisalGet = (id) => api.get(`${HA}/${id}`).then((r) => r.data);
+export const appraisalSaveSelf = (id, body) => api.put(`${HA}/${id}/self`, body).then((r) => r.data);
+export const appraisalSaveManager = (id, body) => api.put(`${HA}/${id}/manager`, body).then((r) => r.data);
+export const appraisalSaveHr = (id, body) => api.put(`${HA}/${id}/hr`, body).then((r) => r.data);
+export const appraisalRelease = (id) => api.post(`${HA}/${id}/release`).then((r) => r.data);
+export const appraisalReopen = (id, body) => api.post(`${HA}/${id}/reopen`, body).then((r) => r.data);
+export const appraisalAck = (id, body) => api.post(`${HA}/${id}/ack`, body).then((r) => r.data);
+export const appraisalLetter = (id) => api.get(`${HA}/${id}/letter.pdf`, { responseType: "blob", timeout: 60000 }).then((r) => r.data);
 // HRM leave (backend/hrm_leave.py)
 const HL = "/hrm/leave";
 export const leaveSummary = (empId, fy) => api.get(`${HL}/summary`, { params: { ...(empId ? { emp_id: empId } : {}), ...(fy ? { fy } : {}) } }).then((r) => r.data);

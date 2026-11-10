@@ -71,6 +71,16 @@ check(["goalsPlan", "goalsSaveDraft", "goalsSubmit", "goalsDecide", "goalsChecki
 check(["hrmPhotoBlob", "hrmUploadPhoto", "leaveSummary", "leaveApply", "leaveDecide", "leaveExport"].every((f) => api.includes(`export const ${f} =`)), "leave + photo api");
 check(["hrmMe", "hrmPeople", "hrmAddPerson", "hrmEditPerson", "hrmInvite", "hrmCalendar", "hrmSaveCalendar", "hrmSettings", "hrmSaveSettings"]
     .every((f) => api.includes(`export const ${f} =`)), "api functions");
+const appr = read("src/pages/hrm/HrmAppraisal.jsx");
+check(hrm.includes('["appraisal", "Appraisal", Award]') && hrm.includes("<AppraisalTab me={me} />"), "Appraisal tab for everyone");
+check(["appraisalCycle", "appraisalStart", "appraisalMine", "appraisalTeam", "appraisalGet", "appraisalSaveSelf", "appraisalSaveManager",
+    "appraisalSaveHr", "appraisalRelease", "appraisalReopen", "appraisalAck", "appraisalLetter"].every((f) => api.includes(`export const ${f} =`)), "appraisal api");
+check(appr.includes("a.can.self") && appr.includes("a.can.manager") && appr.includes('a.role === "hr"'), "appraisal actions follow what the server allows");
+check(appr.includes("Math.floor((c * (1000 + p10) + 500) / 1000)"), "revised-CTC preview: whole-number maths, half up, same as the server");
+check(appr.includes('role="radiogroup"') && appr.includes("{scale[n]}"), "ratings picked as words, not numbers");
+check(!/window\.prompt/.test(appr) && appr.includes('data-testid="hrm-appraisal-ack"'), "acknowledge / disagree inline, no prompt()");
+check(!/ctc/i.test(appr.split("function ManagerForm")[1].split("function ManagerView")[0]), "the manager's form never touches CTC");
+check(home.includes('data-testid="hrm-home-appraisal"') && home.includes("useMyAppraisal(!!me.me)"), "home banner when the self-review is open / result ready");
 
 console.log(failed ? `\n${failed} assertion(s) failed` : "\nall assertions passed");
 process.exit(failed ? 1 : 0);

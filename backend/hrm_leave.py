@@ -450,6 +450,10 @@ async def leave_export(month: str, user: dict = Depends(require_hr)):
     for r in await _all_requests():
         if r["type"] == "LOP" and r["status"] == "approved":
             lop[r["emp_id"]] = lop.get(r["emp_id"], 0) + core.days_in_month(r, month)
+    # Appraisals taking effect this month (increment %, revised CTC) — the
+    # revised CTC is decrypted only here, for HR, and the export is audited.
+    from hrm_appraisal import payroll_rows
+    revs = await payroll_rows(month)
     rows = []
     for p in sorted(people.values(), key=lambda p: p.get("name", "")):
         joined = (p.get("joined_on") or "")[:7] == month
@@ -459,11 +463,12 @@ async def leave_export(month: str, user: dict = Depends(require_hr)):
         enc = ((p.get("exit") or {}).get("encashment") or {}) if leaving else {}
         rows.append([p.get("emp_code", ""), p.get("name", ""), p.get("work_email", ""), lop.get(p["id"], 0),
                      p.get("joined_on", "") if joined else "", p.get("exited_on", "") if leaving else "",
-                     enc.get("days", "") if leaving else ""])
+                     enc.get("days", "") if leaving else "",
+                     f"{revs[p['id']][0]:g}" if p["id"] in revs else "", revs[p["id"]][1] if p["id"] in revs else ""])
     await audit_log(db, "HRM_PAYROLL_EXPORT", email=user.get("email", ""), role=user.get("role", ""), meta={"month": month})
     return csv_response(f"razorpayx-leave-{month}.csv",
                         ["Employee code", "Name", "Work email", "Loss of pay days", "Joined this month", "Last working day",
-                         "Earned leave to encash (days)"], rows)
+                         "Earned leave to encash (days)", "Increment % (appraisal)", "Revised annual CTC (Rs)"], rows)
 
 
 async def ensure_indexes() -> None:

@@ -26,3 +26,4 @@ reportlab
 boto3>=1.34
 pypdfium2
 pillow
+cryptography
