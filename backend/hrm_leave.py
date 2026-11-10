@@ -122,13 +122,18 @@ async def leave_summary(emp_id: Optional[str] = None, fy: Optional[str] = None, 
     reqs, adjs = await _all_requests(pid), await _adjustments(pid)
     emp = people[pid]
     _, optional, _ = await _calendar(fy)
+    # Names too, so the picker reads "Raksha Bandhan — 28 Aug 2026", not a
+    # bare date (optional_days stays for older screens).
+    cal = await db.hr_holidays.find_one({"fy": fy}, {"_id": 0, "rows": 1}) or {}
+    optional_list = sorted(({"date": r["date"], "name": r.get("name", "")} for r in cal.get("rows") or [] if r.get("kind") == "optional"),
+                           key=lambda r: r["date"])
     rows = sorted((r for r in reqs if hr_core.fiscal_year(core.d(r["start"])) == fy or r["status"] == "pending"),
                   key=lambda r: r["start"], reverse=True)
     st = await get_settings()
     return {"emp": {"id": pid, "name": emp.get("name"), "confirmed_on": emp.get("confirmed_on"), "gender": emp.get("gender"),
                     "weekly_off": hr_core.weekly_off_for(emp, st["weekly_off"]), "own_weekly_off": bool(emp.get("weekly_off"))},
             "fy": fy, "balances": core.balances(emp, fy, _today(), reqs, adjs), "requests": rows,
-            "optional_days": optional, "types": {k: v["label"] for k, v in core.TYPES.items()},
+            "optional_days": optional, "optional_list": optional_list, "types": {k: v["label"] for k, v in core.TYPES.items()},
             "comp_credits": [{"worked_on": c["worked_on"].isoformat(), "expires": c["expires"].isoformat()}
                              for c in core.comp_available(reqs, pid, _today())]}
 

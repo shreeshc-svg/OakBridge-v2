@@ -141,18 +141,35 @@ function ApplyForm({ s, onDone }) {
     };
     const inp = "mt-1 w-full border border-[#E5E7EB] px-2 py-1.5 text-sm bg-white";
     const single = f.type === "OPT" || f.type === "COMP_EARN";
+    // Optional holiday: the list comes from HR's calendar for this year. An
+    // empty list used to show an empty "Choose…" box with no explanation.
+    const optList = s.optional_list || (s.optional_days || []).map((d) => ({ date: d, name: "" }));
+    const optNone = !optList.length;
+    const optUsed = (s.balances?.OPT?.available ?? 1) <= 0;
+    const optBlocked = f.type === "OPT" && (optNone || optUsed);
+    const todayIso = new Date().toLocaleDateString("en-CA");
     return (
         <form onSubmit={submit} className="bg-white border border-[#E5E7EB] p-4" data-testid="hrm-apply">
             <h2 className="font-serif text-xl text-[#002B5C] mb-3">Apply for leave</h2>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 text-sm">
                 <label className="lg:col-span-2">Type<select value={f.type} onChange={set("type")} className={inp}>{types.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
                 {f.type === "OPT" ? (
-                    <label className="lg:col-span-2">Which optional holiday
-                        <select required value={f.start} onChange={set("start")} className={inp}>
-                            <option value="">Choose…</option>
-                            {s.optional_days.map((d) => <option key={d} value={d}>{fmt(d)}</option>)}
-                        </select>
-                    </label>
+                    optNone ? (
+                        <p className="lg:col-span-2 self-end border border-[#E7B64B] bg-[#FFFBEB] px-3 py-2 text-sm" data-testid="hrm-no-optional">
+                            No optional holidays are set for FY {s.fy} yet. HR adds them in <b>Calendar</b> (click the day → kind “Optional holiday”).
+                        </p>
+                    ) : optUsed ? (
+                        <p className="lg:col-span-2 self-end border border-[#E5E7EB] bg-[#F5F7FA] px-3 py-2 text-sm" data-testid="hrm-optional-used">
+                            You've already {s.balances.OPT.pending ? "applied for" : "taken"} your optional holiday for FY {s.fy} (1 a year).
+                        </p>
+                    ) : (
+                        <label className="lg:col-span-2">Which optional holiday
+                            <select required value={f.start} onChange={set("start")} className={inp}>
+                                <option value="">Choose…</option>
+                                {optList.map((o) => <option key={o.date} value={o.date}>{o.name ? `${o.name} — ` : ""}{fmt(o.date)}{o.date < todayIso ? " (passed)" : ""}</option>)}
+                            </select>
+                        </label>
+                    )
                 ) : (
                     <>
                         <label>{f.type === "COMP_EARN" ? "Day you'll work" : "From"}<input required type="date" value={f.start} onChange={set("start")} className={inp} /><Words d={f.start} /></label>
@@ -178,7 +195,7 @@ function ApplyForm({ s, onDone }) {
             )}
             {err && <p role="alert" className="mt-3 border border-[#CC0033] bg-[#FEF2F2] text-[#CC0033] px-3 py-2 text-sm">{err}</p>}
             <div className="mt-3 flex items-center gap-3">
-                <button type="submit" disabled={busy || (pv && !pv.ok)} className="bg-[#002B5C] text-white px-4 py-2 text-sm disabled:opacity-50">{busy ? "Sending…" : "Apply"}</button>
+                <button type="submit" disabled={busy || optBlocked || (pv && !pv.ok)} className="bg-[#002B5C] text-white px-4 py-2 text-sm disabled:opacity-50">{busy ? "Sending…" : "Apply"}</button>
                 <span className="text-xs text-[#6B7280]">Weekly offs and holidays aren't counted (loss of pay and maternity count every day).</span>
             </div>
         </form>

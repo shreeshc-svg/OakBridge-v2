@@ -71,6 +71,8 @@ check(["goalsPlan", "goalsSaveDraft", "goalsSubmit", "goalsDecide", "goalsChecki
 check(["hrmPhotoBlob", "hrmUploadPhoto", "leaveSummary", "leaveApply", "leaveDecide", "leaveExport"].every((f) => api.includes(`export const ${f} =`)), "leave + photo api");
 check(["hrmMe", "hrmPeople", "hrmAddPerson", "hrmEditPerson", "hrmInvite", "hrmCalendar", "hrmSaveCalendar", "hrmSettings", "hrmSaveSettings"]
     .every((f) => api.includes(`export const ${f} =`)), "api functions");
+check(leave.includes('data-testid="hrm-no-optional"') && leave.includes("optBlocked") && leave.includes("o.name ?"),
+      "optional holiday: named options; explains an empty list / used quota instead of an empty dropdown");
 const appr = read("src/pages/hrm/HrmAppraisal.jsx");
 check(hrm.includes('["appraisal", "Appraisal", Award]') && hrm.includes("<AppraisalTab me={me} />"), "Appraisal tab for everyone");
 check(["appraisalCycle", "appraisalStart", "appraisalMine", "appraisalTeam", "appraisalGet", "appraisalSaveSelf", "appraisalSaveManager",
