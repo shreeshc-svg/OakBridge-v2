@@ -94,8 +94,9 @@ export default function HrmCalendar({ hr, manager }) {
                                 <span className="text-sm font-medium">{d.getDate()}</span>
                                 {h && <span className="block text-[10px] leading-tight mt-0.5 line-clamp-2">{h.name}</span>}
                                 {lv.length > 0 && (
-                                    <span className="absolute bottom-1 right-1 inline-flex items-center gap-0.5 text-[10px] font-medium text-[#15803D] bg-white/90 px-1">
-                                        ● {lv.length}
+                                    <span className="absolute bottom-1 right-1 inline-flex items-center gap-1 text-[10px] font-medium bg-white/90 px-1">
+                                        {lv.some((x) => x.type !== "WFH") && <span className="text-[#15803D]">● {lv.filter((x) => x.type !== "WFH").length}</span>}
+                                        {lv.some((x) => x.type === "WFH") && <span className="text-[#1E6FB8]">⌂ {lv.filter((x) => x.type === "WFH").length}</span>}
                                     </span>
                                 )}
                             </button>
@@ -108,6 +109,7 @@ export default function HrmCalendar({ hr, manager }) {
                     <Key className="bg-[#EDE9FE]" label="Special day off" />
                     <Key className="bg-[#F3F4F6]" label="Weekly off" />
                     {(hr || manager) && <span><span className="text-[#15803D]">●</span> people on leave</span>}
+                    {(hr || manager) && <span><span className="text-[#1E6FB8]">⌂</span> working from home</span>}
                     <span><span className="inline-block w-3 h-3 align-middle outline outline-2 outline-[#15803D] mr-1" />today</span>
                 </div>
             </section>
@@ -124,7 +126,7 @@ export default function HrmCalendar({ hr, manager }) {
                     </p>
                     {(hr || manager) && (
                         <div className="mt-3">
-                            <div className="text-[11px] uppercase tracking-wider text-[#6B7280]">On leave</div>
+                            <div className="text-[11px] uppercase tracking-wider text-[#6B7280]">On leave / working from home</div>
                             {onLeave(sel).length ? (
                                 <ul className="mt-1 text-sm space-y-1">
                                     {onLeave(sel).map((r) => <li key={r.id}>{r.name} <span className="text-[#6B7280]">· {r.label}{r.status === "pending" ? " (waiting approval)" : ""}</span></li>)}

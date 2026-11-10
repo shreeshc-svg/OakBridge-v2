@@ -47,6 +47,11 @@ TYPES: dict = {
     "OPT": {"label": "Optional holiday", "count": "single", "needs_confirmed": True, "per_year": 1},
     "COMP": {"label": "Comp-off", "count": "working", "needs_confirmed": True},
     "LOP": {"label": "Loss of pay", "count": "calendar", "needs_confirmed": False},
+    # Not leave (Nov 2026): a working day spent at home. No balance, no limit,
+    # open to everyone incl. probation; approved by the reporting manager (HR
+    # if none) exactly like leave. It still blocks leave on the same day (and
+    # vice versa) via overlaps(). Never counted as "off" anywhere.
+    "WFH": {"label": "Work from home", "count": "working", "needs_confirmed": False, "not_leave": True},
 }
 LOP_CAP = 10
 EL_PER_MONTH = 0.5
@@ -198,6 +203,10 @@ class Refused(ValueError):
     pass
 
 
+def LABEL_OF(r: dict) -> str:
+    return "work from home" if r.get("type") == "WFH" else "leave"
+
+
 def overlaps(requests: list, emp_id: str, start: date, end: date, ignore_id: str = "") -> Optional[dict]:
     for r in requests:
         if r["emp_id"] == emp_id and r["status"] in ACTIVE and r["id"] != ignore_id and r["type"] != "COMP_EARN":
@@ -235,12 +244,13 @@ def check_request(emp: dict, req: dict, today: date, requests: list, adjustments
         raise Refused("You're on probation, so this leave isn't available yet — apply as Loss of pay instead.")
     if t.get("gender") and emp.get("gender") != t["gender"]:
         raise Refused(f"{t['label']} needs HR to record the matching details on your profile first.")
-    if overlaps(requests, emp["id"], start, end, req.get("id", "")):
-        raise Refused("You already have leave on some of these days.")
+    other = overlaps(requests, emp["id"], start, end, req.get("id", ""))
+    if other:
+        raise Refused(f"You already have {LABEL_OF(other)} on some of these days — cancel that first if it's changed.")
 
     days = count_days(lt, start, end, hol, weekly_off)
     if days <= 0:
-        raise Refused("Those dates are all weekly offs / holidays — no leave needed.")
+        raise Refused("Those dates are all weekly offs / holidays — no request needed.")
     notice = (start - today).days
 
     if lt == "CL" and notice < t["notice_days"]:

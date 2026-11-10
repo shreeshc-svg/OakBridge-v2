@@ -17,7 +17,7 @@ const days = (a, b) => Math.round((new Date(`${b}T00:00:00`) - new Date(`${a}T00
 const fmt = (s) => new Date(`${s}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
 const greet = () => { const h = new Date().getHours(); return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening"; };
 const LTYPE = { CL: "Casual leave", SL: "Sick leave", EL: "Earned leave", MAT: "Maternity", PAT: "Paternity", BER: "Bereavement",
-    OPT: "Optional holiday", COMP: "Comp-off", LOP: "Loss of pay" };
+    OPT: "Optional holiday", COMP: "Comp-off", LOP: "Loss of pay", WFH: "Work from home" };
 
 export default function HomeTab({ me, go }) {
     const [cal, setCal] = useState(null);
@@ -49,7 +49,8 @@ export default function HomeTab({ me, go }) {
         ...(cal?.rows || []).filter((h) => h.date >= today && h.date <= plus(today, 60) && (h.kind !== "special" || h.for_me !== false))
             .map((h) => ({ date: h.date, title: h.name, sub: h.kind === "optional" ? "optional holiday — take it as your 1 a year" : h.kind === "special" ? "special day off" : "office closed", tone: h.kind === "optional" ? "violet" : "navy" })),
     ].sort((a, b) => a.date.localeCompare(b.date)).slice(0, 6);
-    const offToday = (off || []).filter((r) => r.start <= today && today <= r.end && r.status === "approved");
+    // Work from home is a working day: listed for the week, never counted as "off".
+    const offToday = (off || []).filter((r) => r.type !== "WFH" && r.start <= today && today <= r.end && r.status === "approved");
 
     return (
         <div className="space-y-6" data-testid="hrm-home">

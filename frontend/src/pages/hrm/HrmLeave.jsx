@@ -26,7 +26,7 @@ const FLAG = {
 };
 const STATUS = { pending: "text-[#B4750F]", approved: "text-[#15803D]", rejected: "text-[#CC0033]", cancelled: "text-[#6B7280]" };
 const LABEL = { CL: "Casual", SL: "Sick", EL: "Earned", MAT: "Maternity", PAT: "Paternity", BER: "Bereavement", OPT: "Optional holiday",
-    COMP: "Comp-off", LOP: "Loss of pay", COMP_EARN: "Comp-off earned" };
+    COMP: "Comp-off", LOP: "Loss of pay", COMP_EARN: "Comp-off earned", WFH: "Work from home" };
 
 /* Balance tiles — also on the Home dashboard. */
 /* Balance cards — also on Home. A ring per leave type shows what's LEFT of
@@ -109,6 +109,7 @@ function ApplyForm({ s, onDone }) {
         ...(confirmed && g === "male" ? [["PAT", "Paternity leave"]] : []),
         ...(g === "female" ? [["MAT", "Maternity leave"]] : []),
         ["BER", "Bereavement leave"], ["LOP", "Loss of pay (unpaid)"],
+        ["WFH", "Work from home (not leave)"],
     ];
     const blank = { type: types[0][0], start: "", end: "", reason: "", child_birth: "", expected_delivery: "" };
     const [f, setF] = useState(blank);
@@ -136,7 +137,7 @@ function ApplyForm({ s, onDone }) {
         const body = bodyOf(f);
         try {
             const r = await leaveApply(body);
-            toast.success(f.type === "COMP_EARN" ? "Sent to your manager for approval." : `Applied: ${r.days} day(s). Your manager has been emailed.`);
+            toast.success(f.type === "COMP_EARN" || f.type === "WFH" ? "Sent to your manager for approval." : `Applied: ${r.days} day(s). Your manager has been emailed.`);
             setF(blank); onDone();
         } catch (er) { setErr(formatApiError(er)); } finally { setBusy(false); }
     };
@@ -151,7 +152,7 @@ function ApplyForm({ s, onDone }) {
     const todayIso = new Date().toLocaleDateString("en-CA");
     return (
         <form onSubmit={submit} className="bg-white border border-[#E5E7EB] p-4" data-testid="hrm-apply">
-            <h2 className="font-serif text-xl text-[#002B5C] mb-3">Apply for leave</h2>
+            <h2 className="font-serif text-xl text-[#002B5C] mb-3">Apply for leave or work from home</h2>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 text-sm">
                 <label className="lg:col-span-2">Type<select value={f.type} onChange={set("type")} className={inp}>{types.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
                 {f.type === "OPT" ? (
@@ -186,6 +187,8 @@ function ApplyForm({ s, onDone }) {
                     <p className="mt-3 border-l-4 border-[#15803D] bg-[#F0FDF4] px-3 py-2 text-sm text-[#14532D]" data-testid="hrm-apply-preview">
                         {f.type === "COMP_EARN"
                             ? <>Asks {pv.approver} to approve a comp-off for working that day.</>
+                            : f.type === "WFH"
+                            ? <>Asks <b>{pv.approver}</b> to approve <b>{pv.days} working day{pv.days === 1 ? "" : "s"}</b> from home. Not leave — no balance is used.</>
                             : <>This will use <b>{pv.days} day{pv.days === 1 ? "" : "s"}</b> of {(LABEL[f.type] || f.type).toLowerCase()}
                                 {pv.left_after != null && f.type !== "LOP" && <> ({n(pv.left_after)} left after)</>}
                                 {f.type === "LOP" && pv.left_after != null && <> — unpaid; {n(pv.left_after)} of the yearly 10 left before HR must approve</>}

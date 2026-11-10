@@ -73,6 +73,8 @@ check(["hrmMe", "hrmPeople", "hrmAddPerson", "hrmEditPerson", "hrmInvite", "hrmC
     .every((f) => api.includes(`export const ${f} =`)), "api functions");
 check(leave.includes('data-testid="hrm-no-optional"') && leave.includes("optBlocked") && leave.includes("o.name ?"),
       "optional holiday: named options; explains an empty list / used quota instead of an empty dropdown");
+check(leave.includes('["WFH", "Work from home (not leave)"]') && leave.includes('f.type === "WFH"') && home.includes('r.type !== "WFH" && r.start <= today'),
+      "work from home: requested like leave, never counted as 'off today'");
 const appr = read("src/pages/hrm/HrmAppraisal.jsx");
 check(hrm.includes('["appraisal", "Appraisal", Award]') && hrm.includes("<AppraisalTab me={me} />"), "Appraisal tab for everyone");
 check(["appraisalCycle", "appraisalStart", "appraisalMine", "appraisalTeam", "appraisalGet", "appraisalSaveSelf", "appraisalSaveManager",

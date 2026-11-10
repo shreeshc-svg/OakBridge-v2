@@ -67,6 +67,14 @@ check("probation" in refused(chk, NEW, "EL", "2026-11-20"), "on probation: EL re
 check(chk(NEW, "LOP", "2026-11-20")["days"] == 1, "on probation: LOP allowed")
 check(L.balances(NEW, FY, TODAY, [], [])["CL"]["entitled"] == 0, "no CL until confirmed")
 
+print("-- work from home --")
+w = chk(NEW, "WFH", "2026-11-09", "2026-11-13")
+check(w["days"] == 4 and not w["needs_hr"], "WFH: open on probation, counts working days only (Deepavali skipped), manager approves")
+check(L.balances(E, FY, TODAY, [req(E, "WFH", "2026-11-20")], [])["CL"]["available"] == 6, "WFH uses no leave balance")
+check("work from home" in refused(chk, E, "CL", "2026-11-20", reqs=[req(E, "WFH", "2026-11-20")]), "leave on a WFH day is refused (cancel the WFH first)")
+check("leave" in refused(chk, E, "WFH", "2026-11-20", reqs=[req(E, "CL", "2026-11-20")]), "WFH on a leave day is refused")
+check("no request needed" in refused(chk, E, "WFH", "2026-11-08"), "WFH on a Sunday: nothing to ask")
+
 print("-- casual leave --")
 check(chk(E, "CL", "2026-11-05")["flags"] == ["short_notice"], "CL at short notice is allowed, flagged for the manager (5 days recommended)")
 check(chk(E, "CL", "2026-11-07")["days"] == 1, "CL with 5 days' notice")
