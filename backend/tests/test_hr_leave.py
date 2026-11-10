@@ -68,7 +68,7 @@ check(chk(NEW, "LOP", "2026-11-20")["days"] == 1, "on probation: LOP allowed")
 check(L.balances(NEW, FY, TODAY, [], [])["CL"]["entitled"] == 0, "no CL until confirmed")
 
 print("-- casual leave --")
-check("5 days" in refused(chk, E, "CL", "2026-11-05"), "CL needs 5 days' notice")
+check(chk(E, "CL", "2026-11-05")["flags"] == ["short_notice"], "CL at short notice is allowed, flagged for the manager (5 days recommended)")
 check(chk(E, "CL", "2026-11-07")["days"] == 1, "CL with 5 days' notice")
 six = [req(E, "CL", d_) for d_ in ("2026-04-06", "2026-04-07", "2026-04-08", "2026-04-09", "2026-04-10", "2026-04-13")]
 check("Not enough casual" in refused(chk, E, "CL", "2026-11-20", reqs=six), "only 6 CL a year; told to use LOP")
@@ -221,7 +221,7 @@ async def flow():
     pv = await HL.leave_apply(LB(type="CL", start="2026-11-09", end="2026-11-10", preview=True), A)
     check(pv["days"] == 1 and pv["left_after"] == 5 and pv["approver"] == "Meera" and not await db.hr_leave.find_one({"emp_id": "a"}),
           "preview: 'uses 1 day, 5 left after, goes to Meera' — nothing saved")
-    await expect(HL.leave_apply(LB(type="CL", start="2026-11-03", preview=True), A), 400, "preview shows the same refusal as applying")
+    await expect(HL.leave_apply(LB(type="OPT", start="2026-11-03", preview=True), A), 400, "preview shows the same refusal as applying")
     r = await HL.leave_apply(LB(type="CL", start="2026-11-09", end="2026-11-10", reason="family"), A)
     check(r["status"] == "pending" and r["stage"] == "manager" and r["approver_id"] == "m" and r["days"] == 1,
           "Asha applies: 1 working day (9 Nov is Deepavali), waits for her manager")

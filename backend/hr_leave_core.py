@@ -5,7 +5,7 @@ POLICY → CODE (each rule names the line it comes from)
   Leave year 1 Apr – 31 Mar ................................ hr_core.fiscal_year
   "All confirmed employees will be eligible"; decided: no
    leave until confirmed (probation = loss of pay only) ..... check_request
-  CL 6/yr, 5 days' prior notice, not carried forward ........ TYPES["CL"]
+  CL 6/yr, 5 days' notice recommended (short notice flagged), not carried forward ........ TYPES["CL"]
   SL 6/yr, no notice, >3 days at a stretch needs a medical
    certificate (the manager ticks "seen" — no file is kept),
    must be reported by the end of the first day ............. TYPES["SL"], flags
@@ -244,7 +244,10 @@ def check_request(emp: dict, req: dict, today: date, requests: list, adjustments
     notice = (start - today).days
 
     if lt == "CL" and notice < t["notice_days"]:
-        raise Refused("Casual leave needs at least 5 days' notice. For an emergency use Earned leave or Loss of pay; if you're unwell, Sick leave.")
+        # Policy (confirmed Nov 2026): 5 days' notice is RECOMMENDED, not
+        # mandatory. Short notice is allowed and flagged so the manager sees
+        # it — the manager can still reject.
+        flags.append("short_notice")
     if lt == "SL":
         if days > t["cert_after"]:
             flags.append("medical_certificate_needed")

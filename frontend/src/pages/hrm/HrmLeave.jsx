@@ -17,6 +17,7 @@ const span = (r) => (r.start === r.end ? fmt(r.start) : `${fmt(r.start)} – ${f
 const n = (x) => (Number.isInteger(x) ? String(x) : (Math.round(x * 2) / 2).toFixed(1));
 const FLAG = {
     medical_certificate_needed: "Medical certificate needed (over 3 days)",
+    short_notice: "Less than the recommended 5 days' notice — your manager may still approve",
     reported_after_first_day: "Reported after the first day of absence",
     over_lop_cap: "Over the 10-day loss-of-pay limit — HR must approve",
     applied_less_than_a_month_ahead: "Applied less than a month ahead",
@@ -103,7 +104,7 @@ function ApplyForm({ s, onDone }) {
     const confirmed = !!s.emp.confirmed_on;
     const g = s.emp.gender;
     const types = [
-        ...(confirmed ? [["CL", "Casual leave (5 days' notice)"], ["SL", "Sick leave"], ["EL", "Earned leave"], ["OPT", "Optional holiday"],
+        ...(confirmed ? [["CL", "Casual leave (5 days' notice recommended)"], ["SL", "Sick leave"], ["EL", "Earned leave"], ["OPT", "Optional holiday"],
             ["COMP", "Use a comp-off"], ["COMP_EARN", "Comp-off: I'm working a day off"]] : []),
         ...(confirmed && g === "male" ? [["PAT", "Paternity leave"]] : []),
         ...(g === "female" ? [["MAT", "Maternity leave"]] : []),
