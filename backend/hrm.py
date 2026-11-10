@@ -87,11 +87,36 @@ async def _me(user: dict, people: dict) -> Optional[dict]:
     return me
 
 
+def hrm_superadmin(user: dict, me: Optional[dict]) -> bool:
+    """A site super admin gets HR powers in the HRM ONLY when they have no
+    employee record of their own (the account that sets the HRM up). Once
+    they are an employee, their record decides — exactly like everyone else:
+    HR access ticked = HR; not ticked = employee (and manager of their team).
+    (Nov 2026: unticking HR access on a super admin's record had no effect.)"""
+    if not rbac.is_superadmin(user.get("role")):
+        return False
+    return me is None or (me.get("status") == "active" and bool(me.get("hr_access")))
+
+
 async def _ctx(user: dict) -> tuple[dict, Optional[dict], dict]:
     people = await _people()
     me = await _me(user, people)
-    acc = core.access_of(me, people, superadmin=rbac.is_superadmin(user.get("role")))
+    acc = core.access_of(me, people, superadmin=hrm_superadmin(user, me))
     return people, me, acc
+
+
+async def hr_left_without(people: dict, losing_id: str) -> bool:
+    """Would taking HR away from `losing_id` (unticking, or their exit) leave
+    nobody able to run the HRM? Counts other active people with HR access and
+    super admin accounts that are NOT employees (those keep HR powers)."""
+    if any(p.get("hr_access") and p.get("status") == "active" and pid != losing_id for pid, p in people.items()):
+        return False
+    linked = {p.get("user_id") for p in people.values() if p.get("user_id")}
+    emails = {p.get("work_email") for p in people.values() if p.get("work_email")}
+    async for u in db.users.find({"role": {"$in": list(rbac.SUPERADMIN_ROLES)}}, {"_id": 0, "id": 1, "email": 1}):
+        if u["id"] not in linked and (u.get("email") or "").lower() not in emails:
+            return False
+    return True
 
 
 async def superadmin_emails() -> list:
@@ -114,6 +139,19 @@ def _member(me: Optional[dict], acc: dict) -> bool:
     return acc["hr"] or bool(me and me.get("status") == "active")
 
 
+# What a MANAGER sees about their team: enough to work together, nothing
+# personal or administrative (no phone, gender, login state, personal weekly
+# off, HR flag). HR sees the full record; everyone sees their own.
+TEAM_FIELDS = ("id", "emp_code", "name", "work_email", "designation", "department", "location", "manager_id",
+               "joined_on", "confirmed_on", "status", "exited_on", "photo_at")
+
+
+def _view_for(p: dict, me: Optional[dict], acc: dict) -> dict:
+    if acc["hr"] or (me and me["id"] == p["id"]):
+        return _view(p)
+    return {k: p.get(k) for k in TEAM_FIELDS}
+
+
 def _view(p: dict) -> dict:
     return {k: p.get(k) for k in PUBLIC}
 
@@ -134,7 +172,7 @@ async def hrm_me(user: dict = Depends(get_current_user)):
             "team_size": len(visible - ({me["id"]} if me else set())),
             "manager_name": (people.get((me or {}).get("manager_id")) or {}).get("name", ""),
             # Super admins alone set per-person weekly offs and exact leave balances.
-            "superadmin": rbac.is_superadmin(user.get("role")),
+            "superadmin": hrm_superadmin(user, me),
             # Hiring tab: HR, or anyone who is hiring manager for a candidate.
             "hiring": acc["hr"] or bool(me and await db.job_applications.find_one({"hiring_manager_id": me["id"]}, {"_id": 1}))}
 
@@ -148,16 +186,16 @@ async def hrm_people(include_exited: bool = False, user: dict = Depends(get_curr
     rows = [p for p in people.values() if core.can_see(acc, p["id"]) and (include_exited or p.get("status") == "active")]
     names = {p["id"]: p.get("name", "") for p in people.values()}
     rows.sort(key=lambda p: (p.get("department") or "", p.get("name") or ""))
-    return {"rows": [{**_view(p), "manager_name": names.get(p.get("manager_id"), "")} for p in rows]}
+    return {"rows": [{**_view_for(p, me, acc), "manager_name": names.get(p.get("manager_id"), "")} for p in rows]}
 
 
 @router.get("/people/{pid}")
 async def hrm_person(pid: str, user: dict = Depends(get_current_user)):
-    people, _, acc = await _ctx(user)
-    if pid not in people or not core.can_see(acc, pid):
+    people, me, acc = await _ctx(user)
+    if pid not in people or not _member(me, acc) or not core.can_see(acc, pid):
         raise HTTPException(status_code=404, detail="Not found")   # 404, not 403: don't confirm who exists
     p = people[pid]
-    return {**_view(p), "manager_name": (people.get(p.get("manager_id")) or {}).get("name", "")}
+    return {**_view_for(p, me, acc), "manager_name": (people.get(p.get("manager_id")) or {}).get("name", "")}
 
 
 class PersonBody(BaseModel):
@@ -176,14 +214,17 @@ class PersonBody(BaseModel):
     weekly_off: Optional[dict] = None   # super admin only; {} = follow the company
 
 
-def _weekly_off_guard(body: "PersonBody", user: dict) -> None:
-    if "weekly_off" in body.model_fields_set and not rbac.is_superadmin(user.get("role")):
-        raise HTTPException(status_code=403, detail="Only a super admin can set someone's weekly off.")
+async def _weekly_off_guard(body: "PersonBody", user: dict) -> None:
+    if "weekly_off" in body.model_fields_set:
+        people = await _people()
+        if not hrm_superadmin(user, await _me(user, people)):
+            raise HTTPException(status_code=403, detail="Only a super admin with HR access can set someone's weekly off.")
 
 
 async def require_superadmin_hrm(user: dict = Depends(get_current_user)) -> dict:
-    if not rbac.is_superadmin(user.get("role")):
-        raise HTTPException(status_code=403, detail="Only a super admin can do this.")
+    people = await _people()
+    if not hrm_superadmin(user, await _me(user, people)):
+        raise HTTPException(status_code=403, detail="Only a super admin with HR access can do this.")
     return user
 
 
@@ -198,7 +239,7 @@ def _check_manager(people: dict, pid: str, mid: Optional[str]) -> None:
 
 @router.post("/people")
 async def hrm_add(body: PersonBody, user: dict = Depends(require_hr)):
-    _weekly_off_guard(body, user)
+    await _weekly_off_guard(body, user)
     raw = {k: v for k, v in body.model_dump().items() if v is not None}
     try:
         doc = core.clean_person(raw)
@@ -225,7 +266,7 @@ async def hrm_edit(pid: str, body: PersonBody, user: dict = Depends(require_hr))
     people = await _people()
     if pid not in people:
         raise HTTPException(status_code=404, detail="Not found")
-    _weekly_off_guard(body, user)
+    await _weekly_off_guard(body, user)
     raw = {k: v for k, v in body.model_dump().items() if v is not None}
     if "weekly_off" in body.model_fields_set and not body.weekly_off:
         raw["weekly_off"] = None          # explicit: back to the company weekly off
@@ -247,6 +288,8 @@ async def hrm_edit(pid: str, body: PersonBody, user: dict = Depends(require_hr))
         raise HTTPException(status_code=400, detail="Confirmation can't be before joining.")
     if not upd:
         return _view(people[pid])
+    if upd.get("hr_access") is False and people[pid].get("hr_access") and await hr_left_without(people, pid):
+        raise HTTPException(status_code=409, detail="That would leave nobody able to run the HRM — give someone else HR access first.")
     upd.update(updated_at=_now().isoformat(), updated_by=user.get("email", ""))
     await db.hr_employees.update_one({"id": pid}, {"$set": upd})
     await _audit(user, "HRM_PERSON_EDITED", {"person": pid, "fields": sorted(k for k in upd if k not in ("updated_at", "updated_by"))})

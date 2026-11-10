@@ -350,6 +350,10 @@ async def people_exit(pid: str, body: ExitBody, user: dict = Depends(require_hr)
     me_user = await db.users.find_one({"id": user["id"]}, {"_id": 0, "id": 1})
     if p.get("user_id") and me_user and p["user_id"] == me_user["id"]:
         raise HTTPException(status_code=400, detail="You can't record your own exit — ask another HR person or a super admin.")
+    if p.get("hr_access"):
+        import hrm
+        if await hrm.hr_left_without(await hrm._people(), pid):
+            raise HTTPException(status_code=409, detail="They're the last person with HR access — give someone else HR access first.")
     st = await _settings()
     enc = core.encashment(p, last, await _el_available(p, last))
     ex = {"last_day": last.isoformat(), "reason": body.reason, "reason_label": core.EXIT_REASONS[body.reason],

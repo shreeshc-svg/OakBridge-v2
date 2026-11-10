@@ -275,7 +275,47 @@ async def photos():
     view = (await hrm.hrm_people(False, FOUNDER))["rows"]
     check(all("photo_path" not in v for v in view) and any(v.get("photo_at") for v in view), "lists carry photo_at, never the storage path")
 
+
+
+async def superadmin_rules():
+    print("-- super admins follow their own employee record --")
+    db2 = db
+    await db2.users.insert_one({"id": "u-rohan", "email": "rohan@oakbridge.in", "role": "superadmin"})
+    await db2.hr_employees.insert_one({"id": "rk", "name": "Rohan", "work_email": "rohan@oakbridge.in", "status": "active",
+                                       "user_id": "u-rohan", "joined_on": "2026-06-01", "hr_access": False, "manager_id": None})
+    await db2.hr_employees.insert_one({"id": "hr1", "name": "HR One", "work_email": "hr1@oakbridge.in", "status": "active",
+                                       "joined_on": "2020-01-01", "hr_access": True, "phone": "999", "gender": "female"})
+    R = {"id": "u-rohan", "email": "rohan@oakbridge.in", "role": "superadmin"}
+    me = await hrm.hrm_me(R)
+    check(not me["hr"] and not me["superadmin"], "super admin WITH a record and HR access unticked = an employee in the HRM")
+    check([r["name"] for r in (await hrm.hrm_people(False, R))["rows"]] == ["Rohan"], "…sees only himself")
+    await expect(hrm.require_hr(R), 403, "…can't do HR actions")
+    await expect(hrm.require_superadmin_hrm(R), 403, "…nor the super-admin HR tools")
+    await expect(hrm.hrm_person("hr1", R), 404, "…nor open a colleague")
+    NOREC = {"id": "u-boot", "email": "setup@oakbridge.in", "role": "superadmin"}
+    check((await hrm.hrm_me(NOREC))["hr"], "super admin with NO employee record keeps HR powers (sets the HRM up)")
+    await db2.hr_employees.update_one({"id": "rk"}, {"$set": {"hr_access": True}})
+    check((await hrm.hrm_me(R))["superadmin"], "tick HR access -> super-admin HR tools come back")
+    print("-- never lock everyone out --")
+    for d in db2.users.docs:
+        if d.get("role") == "superadmin" and d["id"] != "u-rohan":
+            d["role"] = "customer"
+    for d in db2.hr_employees.docs:
+        if d["id"] not in ("rk",):
+            d["hr_access"] = False
+    await expect(hrm.hrm_edit("rk", hrm.PersonBody(hr_access=False), R), 409, "unticking the LAST HR person is refused")
+    await db2.hr_employees.update_one({"id": "hr1"}, {"$set": {"hr_access": True}})
+    await hrm.hrm_edit("rk", hrm.PersonBody(hr_access=False), R)
+    check((await db2.hr_employees.find_one({"id": "rk"}))["hr_access"] is False, "…allowed once someone else has HR access")
+    print("-- managers see work details only --")
+    await db2.hr_employees.update_one({"id": "hr1"}, {"$set": {"manager_id": "rk"}})
+    rows = {r["name"]: r for r in (await hrm.hrm_people(False, R))["rows"]}
+    t = rows["HR One"]
+    check("phone" not in t and "gender" not in t and "user_id" not in t and "invited_at" not in t and "hr_access" not in t,
+          "a manager's team list has no phone, gender, login state or HR flag")
+
 asyncio.run(flow())
 asyncio.run(photos())
+asyncio.run(superadmin_rules())
 print("\nall passed" if not failed else f"\n{failed} FAILED")
 sys.exit(1 if failed else 0)
