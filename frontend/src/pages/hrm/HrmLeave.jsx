@@ -113,13 +113,26 @@ function ApplyForm({ s, onDone }) {
     const [f, setF] = useState(blank);
     const [busy, setBusy] = useState(false);
     const [err, setErr] = useState("");
+    const [pv, setPv] = useState(null);       // server's answer to "what would this do?"
     const set = (k) => (e) => { setErr(""); setF({ ...f, [k]: e.target.value }); };
+    const bodyOf = (x) => ({ type: x.type, reason: x.reason, start: x.start, end: x.type === "OPT" ? x.start : x.end || x.start,
+        ...(x.type === "COMP_EARN" ? { worked_on: x.start } : {}), ...(x.type === "PAT" ? { child_birth: x.child_birth } : {}),
+        ...(x.type === "MAT" ? { expected_delivery: x.expected_delivery } : {}) });
+    // Ask the server (same rules as applying) once the dates are in, so the
+    // person sees what it will cost — or why not — BEFORE pressing Apply.
+    useEffect(() => {
+        setPv(null);
+        if (!f.start || (f.type === "PAT" && !f.child_birth) || (f.type === "MAT" && !f.expected_delivery)) return undefined;
+        const t = setTimeout(() => {
+            leaveApply({ ...bodyOf(f), preview: true }).then((r) => setPv({ ok: true, ...r })).catch((e) => setPv({ ok: false, msg: formatApiError(e) }));
+        }, 350);
+        return () => clearTimeout(t);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [f.type, f.start, f.end, f.child_birth, f.expected_delivery]);
     const submit = async (e) => {
         e.preventDefault();
         setBusy(true);
-        const body = { type: f.type, reason: f.reason, start: f.start, end: f.type === "OPT" ? f.start : f.end || f.start,
-            ...(f.type === "COMP_EARN" ? { worked_on: f.start } : {}), ...(f.type === "PAT" ? { child_birth: f.child_birth } : {}),
-            ...(f.type === "MAT" ? { expected_delivery: f.expected_delivery } : {}) };
+        const body = bodyOf(f);
         try {
             const r = await leaveApply(body);
             toast.success(f.type === "COMP_EARN" ? "Sent to your manager for approval." : `Applied: ${r.days} day(s). Your manager has been emailed.`);
@@ -150,9 +163,22 @@ function ApplyForm({ s, onDone }) {
                 {f.type === "MAT" && <label>Expected delivery<input required type="date" value={f.expected_delivery} onChange={set("expected_delivery")} className={inp} /><Words d={f.expected_delivery} /></label>}
                 <label className="sm:col-span-2 lg:col-span-4">Reason<input value={f.reason} onChange={set("reason")} maxLength={500} className={inp} placeholder="Optional" /></label>
             </div>
+            {pv && !err && (
+                pv.ok ? (
+                    <p className="mt-3 border-l-4 border-[#15803D] bg-[#F0FDF4] px-3 py-2 text-sm text-[#14532D]" data-testid="hrm-apply-preview">
+                        {f.type === "COMP_EARN"
+                            ? <>Asks {pv.approver} to approve a comp-off for working that day.</>
+                            : <>This will use <b>{pv.days} day{pv.days === 1 ? "" : "s"}</b> of {(LABEL[f.type] || f.type).toLowerCase()}
+                                {pv.left_after != null && f.type !== "LOP" && <> ({n(pv.left_after)} left after)</>}
+                                {f.type === "LOP" && pv.left_after != null && <> — unpaid; {n(pv.left_after)} of the yearly 10 left before HR must approve</>}
+                                . Goes to <b>{pv.approver}</b>{pv.needs_hr ? ", then HR" : ""}.</>}
+                        {(pv.flags || []).map((fl) => <span key={fl} className="block text-[#92400E] mt-0.5">⚠ {FLAG[fl] || fl}</span>)}
+                    </p>
+                ) : <p className="mt-3 border-l-4 border-[#CC0033] bg-[#FEF2F2] px-3 py-2 text-sm text-[#991B1B]" data-testid="hrm-apply-preview">{pv.msg}</p>
+            )}
             {err && <p role="alert" className="mt-3 border border-[#CC0033] bg-[#FEF2F2] text-[#CC0033] px-3 py-2 text-sm">{err}</p>}
             <div className="mt-3 flex items-center gap-3">
-                <button type="submit" disabled={busy} className="bg-[#002B5C] text-white px-4 py-2 text-sm disabled:opacity-50">{busy ? "Sending…" : "Apply"}</button>
+                <button type="submit" disabled={busy || (pv && !pv.ok)} className="bg-[#002B5C] text-white px-4 py-2 text-sm disabled:opacity-50">{busy ? "Sending…" : "Apply"}</button>
                 <span className="text-xs text-[#6B7280]">Weekly offs and holidays aren't counted (loss of pay and maternity count every day).</span>
             </div>
         </form>
@@ -194,24 +220,17 @@ export function Approvals({ hr, onChange, compact = false }) {
     const [rows, setRows] = useState(null);
     const load = useCallback(() => leaveApprovals().then(setRows).catch(() => setRows([])), []);
     useEffect(() => { load(); }, [load]);
-    const decide = async (r, approve) => {
-        let note = "";
-        let days;
-        if (!approve) { note = window.prompt("Reason for rejecting (they will see this):") || ""; if (!note) return; }
-        const cert = (r.flags || []).includes("medical_certificate_needed") && approve
-            ? window.confirm("Sick leave over 3 days: have you seen the medical certificate?") : undefined;
-        if (cert === false) return;
-        if (approve && hr && r.type === "BER") {
-            const v = window.prompt(`Bereavement days to grant (asked: ${r.days}):`, String(r.days));
-            if (v === null) return;
-            days = Number(v);
-        }
+    const [panel, setPanel] = useState(null);   // {id, approve}: the inline confirm under that request
+    const decide = async (r, body) => {
         try {
-            const res = await leaveDecide(r.id, { approve, note, cert_seen: cert || undefined, ...(days && days !== r.days ? { days } : {}) });
-            toast.success(res.stage === "hr" ? "Approved — now with HR for the final OK." : approve ? "Approved." : "Rejected.");
-            load(); onChange?.();
+            const res = await leaveDecide(r.id, body);
+            toast.success(res.stage === "hr" ? "Approved — now with HR for the final OK." : body.approve ? "Approved." : "Rejected.");
+            setPanel(null); load(); onChange?.();
         } catch (e) { toast.error(formatApiError(e)); }
     };
+    // Approve straight away unless something must be confirmed first
+    // (certificate seen, bereavement days) — then the inline panel opens.
+    const approve = (r) => ((r.flags || []).includes("medical_certificate_needed") || (hr && r.type === "BER") ? setPanel({ id: r.id, approve: true }) : decide(r, { approve: true }));
     if (!rows) return null;
     if (compact && !rows.length) return <p className="text-sm text-[#6B7280]">Nothing waiting for you.</p>;
     return (
@@ -227,12 +246,13 @@ export function Approvals({ hr, onChange, compact = false }) {
                                 <span className="text-[#4B5563]">{r.type === "COMP_EARN" ? `working ${fmt(r.worked_on)}` : `${span(r)} · ${r.days} day(s)`}</span>
                                 {r.stage === "hr" && <span className="text-[10px] uppercase tracking-wider text-[#B4750F]">HR step</span>}
                                 <span className="ml-auto flex gap-2">
-                                    <button type="button" onClick={() => decide(r, true)} className="inline-flex items-center gap-1 bg-[#15803D] text-white px-2.5 py-1 text-xs"><Check size={12} />Approve</button>
-                                    <button type="button" onClick={() => decide(r, false)} className="inline-flex items-center gap-1 border border-[#CC0033] text-[#CC0033] px-2.5 py-1 text-xs"><X size={12} />Reject</button>
+                                    <button type="button" onClick={() => approve(r)} className="inline-flex items-center gap-1 bg-[#15803D] text-white px-2.5 py-1 text-xs"><Check size={12} />Approve</button>
+                                    <button type="button" onClick={() => setPanel({ id: r.id, approve: false })} className="inline-flex items-center gap-1 border border-[#CC0033] text-[#CC0033] px-2.5 py-1 text-xs"><X size={12} />Reject</button>
                                 </span>
                             </div>
                             {r.reason && <div className="text-xs text-[#6B7280] mt-0.5">“{r.reason}”</div>}
                             {(r.flags || []).map((fl) => <div key={fl} className="text-xs text-[#B4750F] mt-0.5">⚠ {FLAG[fl] || fl}</div>)}
+                            {panel?.id === r.id && <DecidePanel r={r} hr={hr} approve={panel.approve} onCancel={() => setPanel(null)} onSubmit={(body) => decide(r, body)} />}
                         </li>
                     ))}
                 </ul>
@@ -270,6 +290,34 @@ function SetBalance({ people }) {
             </div>
             <button type="submit" className="mt-3 bg-[#002B5C] text-white px-4 py-2">Set balance</button>
         </form>
+    );
+}
+
+/* Inline instead of browser pop-ups (much better on phones): the reason for a
+   rejection, "certificate seen" for long sick leave, days for bereavement. */
+function DecidePanel({ r, hr, approve, onCancel, onSubmit }) {
+    const [note, setNote] = useState("");
+    const [cert, setCert] = useState(false);
+    const [days, setDays] = useState(r.days);
+    const needCert = approve && (r.flags || []).includes("medical_certificate_needed");
+    const ber = approve && hr && r.type === "BER";
+    const ok = approve ? (!needCert || cert) && (!ber || (days >= 1 && days <= 30)) : note.trim().length >= 3;
+    return (
+        <div className={`mt-2 border-l-4 px-3 py-2 space-y-2 ${approve ? "border-[#15803D] bg-[#F0FDF4]" : "border-[#CC0033] bg-[#FEF2F2]"}`} data-testid="hrm-decide-panel">
+            {!approve && (
+                <label className="block text-xs">Why? <span className="text-[#6B7280]">(they'll see this)</span>
+                    <textarea autoFocus value={note} onChange={(e) => setNote(e.target.value)} rows={2} className="mt-1 w-full border border-[#E5E7EB] px-2 py-1 text-sm bg-white" />
+                </label>
+            )}
+            {needCert && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={cert} onChange={(e) => setCert(e.target.checked)} />I've seen the medical certificate</label>}
+            {ber && <label className="flex items-center gap-2 text-sm">Days to grant<input type="number" min={1} max={30} value={days} onChange={(e) => setDays(Number(e.target.value))} className="w-20 border border-[#E5E7EB] px-2 py-1 bg-white" /><span className="text-xs text-[#6B7280]">(asked {r.days})</span></label>}
+            {approve && <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (optional)" className="w-full border border-[#E5E7EB] px-2 py-1 text-sm bg-white" />}
+            <div className="flex gap-2">
+                <button type="button" disabled={!ok} onClick={() => onSubmit({ approve, note, ...(needCert ? { cert_seen: true } : {}), ...(ber && days !== r.days ? { days } : {}) })}
+                    className={`px-3 py-1 text-xs text-white disabled:opacity-50 ${approve ? "bg-[#15803D]" : "bg-[#CC0033]"}`}>{approve ? "Approve" : "Reject"}</button>
+                <button type="button" onClick={onCancel} className="px-3 py-1 text-xs">Cancel</button>
+            </div>
+        </div>
     );
 }
 

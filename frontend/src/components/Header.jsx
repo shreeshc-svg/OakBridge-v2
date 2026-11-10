@@ -7,6 +7,7 @@ import CartSheet from "./CartSheet";
 import SearchBox from "./SearchBox";
 import { fetchCollection } from "../lib/api";
 import { useBootState, useHydrated } from "../lib/boot";
+import { useHrmAccess } from "../lib/hrmAccess";
 import {
     useGiftingFlyout,
     GiftingTrigger,
@@ -43,6 +44,7 @@ const DEFAULT_NAV = [
 export default function Header() {
     const { count, setIsOpen } = useCart();
     const { isAuthenticated, isAdmin, user, logout } = useAuth();
+    const hasHrm = useHrmAccess(user);
     const [mobileOpen, setMobileOpen] = useState(false);
     const [searchOpen, setSearchOpen] = useState(false);
     /*
@@ -270,6 +272,16 @@ export default function Header() {
                                         >
                                             My Orders
                                         </Link>
+                                        {hasHrm && (
+                                            <Link
+                                                to="/hrm"
+                                                onClick={() => setAccountOpen(false)}
+                                                data-testid="header-hrm-link"
+                                                className="block px-4 py-2 text-sm hover:bg-[#F5F7FA] text-[#002B5C] font-medium"
+                                            >
+                                                My HRM
+                                            </Link>
+                                        )}
                                         {isAdmin && (
                                             <Link
                                                 to="/admin"
@@ -400,6 +412,15 @@ export default function Header() {
                                     >
                                         My Account
                                     </NavLink>
+                                    {hasHrm && (
+                                        <NavLink
+                                            to="/hrm"
+                                            onClick={() => setMobileOpen(false)}
+                                            className="text-base font-medium text-[#002B5C] py-1.5"
+                                        >
+                                            My HRM
+                                        </NavLink>
+                                    )}
                                     {isAdmin && (
                                         <NavLink
                                             to="/admin"

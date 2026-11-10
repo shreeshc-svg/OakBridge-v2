@@ -198,6 +198,8 @@ function PersonForm({ person, people, superadmin, onClose, onSaved }) {
     const [confirmed, setConfirmed] = useState(person ? !!person.confirmed_on : true);
     // Super admin only: this person's own weekly off (null = the company's).
     const [ownOff, setOwnOff] = useState(person?.weekly_off || null);
+    // Two tabs for an existing person: their details, and onboarding & exit.
+    const [tab, setTab] = useState("details");
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState("");
     const set = (k) => (e) => { setError(""); setF({ ...f, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value }); };
@@ -224,13 +226,23 @@ function PersonForm({ person, people, superadmin, onClose, onSaved }) {
     const said = (d) => (d ? <span className="block mt-0.5 text-[11px] text-[#15803D]" data-testid="hrm-date-words">= {fmt(d)}</span> : null);
     return (
         <>
+        {person && (
+            <div className="flex items-end gap-1 -mb-px" role="tablist" data-testid="hrm-person-tabs">
+                {[["details", "Details"], ["lifecycle", "Onboarding & exit"]].map(([k, l]) => (
+                    <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
+                        className={`px-4 py-2 text-sm border border-b-0 ${tab === k ? "bg-white border-[#002B5C] text-[#002B5C] font-medium" : "bg-[#F5F7FA] border-[#E5E7EB] text-[#4B5563]"}`}>{l}</button>
+                ))}
+                <button type="button" onClick={onClose} aria-label="Close" className="ml-auto mb-1"><X size={18} /></button>
+            </div>
+        )}
+        {tab === "details" && (
         <form onSubmit={save} className="bg-white border border-[#002B5C] p-4" data-testid="hrm-person-form">
             <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-3">
                     {person && <PersonPhoto person={person} />}
                     <h2 className="font-serif text-xl text-[#002B5C]">{person ? `Edit ${person.name}` : "Add a person"}</h2>
                 </div>
-                <button type="button" onClick={onClose} aria-label="Close"><X size={18} /></button>
+                {!person && <button type="button" onClick={onClose} aria-label="Close"><X size={18} /></button>}
             </div>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-sm">
                 <label>Full name *<input required value={f.name} onChange={set("name")} className={inp} /></label>
@@ -292,8 +304,14 @@ function PersonForm({ person, people, superadmin, onClose, onSaved }) {
                 <button type="submit" disabled={busy} className="bg-[#002B5C] text-white px-4 py-2 text-sm disabled:opacity-50">{busy ? "Saving…" : "Save"}</button>
             </div>
             </form>
+        )}
             {/* Outside the form on purpose: it has its own exit form, and forms can't nest. */}
-            {person && <div className="bg-white border border-t-0 border-[#002B5C] px-4 pb-4"><LifecyclePanel person={person} onChange={onSaved} /></div>}
+            {person && tab === "lifecycle" && (
+                <div className="bg-white border border-[#002B5C] px-4 pb-4">
+                    <div className="pt-4 flex items-center gap-3"><Avatar p={person} size={40} /><h2 className="font-serif text-xl text-[#002B5C]">{person.name}</h2></div>
+                    <LifecyclePanel person={person} onChange={onSaved} />
+                </div>
+            )}
         </>
     );
 }

@@ -143,6 +143,7 @@ class LeaveBody(BaseModel):
     expected_delivery: Optional[str] = None
     worked_on: Optional[str] = None
     emp_id: Optional[str] = None      # HR applying on someone's behalf
+    preview: bool = False             # check only: "this will use 3 days (2 left after)" — nothing saved
 
 
 @router.post("/requests")
@@ -178,6 +179,17 @@ async def leave_apply(body: LeaveBody, user: dict = Depends(get_current_user)):
     except ValueError:
         raise HTTPException(status_code=400, detail="Dates must be valid.")
     approver = core.approver_for(emp, people)
+    if body.preview:
+        # The same checks as a real request, so what the form promises is what
+        # applying will do. Balance "left after" for the types that have one.
+        left = None
+        if body.type in ("CL", "SL", "EL", "OPT", "COMP"):
+            b = core.balances(emp, fy, _today(), await _all_requests(pid), await _adjustments(pid))[body.type]
+            left = max(0.0, b["available"] - res["days"])
+        elif body.type == "LOP":
+            left = max(0.0, core.LOP_CAP - core.used(await _all_requests(pid), pid, "LOP", fy) - res["days"])
+        return {"ok": True, "days": res["days"], "left_after": left, "flags": res["flags"], "needs_hr": res["needs_hr"],
+                "approver": (people.get(approver) or {}).get("name") or "HR"}
     doc = {"id": str(uuid.uuid4()), "emp_id": pid, "type": body.type,
            "start": core.d(req["start"]).isoformat(), "end": core.d(req["end"]).isoformat(),
            "days": res["days"], "reason": req["reason"], "flags": res["flags"], "needs_hr": res["needs_hr"],

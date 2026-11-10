@@ -3,6 +3,8 @@ import Breadcrumbs from "../components/Breadcrumbs";
 import { Link, useNavigate } from "react-router-dom";
 import { Package, LogOut, User } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import HrmShortcut from "../components/HrmShortcut";
+import { useHrmAccess } from "../lib/hrmAccess";
 import { fetchMyOrders, formatINR, verifyOtp, resendOtp, formatApiError } from "../lib/api";
 import { toast } from "sonner";
 
@@ -20,6 +22,7 @@ const customerStatus = (s) => CUSTOMER_STATUS[String(s || "").toLowerCase()] || 
 
 export default function Account() {
     const { user, logout, refresh } = useAuth();
+    const hasHrm = useHrmAccess(user);
     const nav = useNavigate();
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -130,6 +133,7 @@ export default function Account() {
                                 </div>
                             </div>
                         </div>
+                        {hasHrm && <HrmShortcut variant="light" className="mt-5 w-full" />}
                         <div className="mt-6 space-y-3 text-sm">
                             {user.role === "admin" && (
                                 <Link

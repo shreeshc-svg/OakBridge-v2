@@ -218,6 +218,10 @@ async def flow():
     A, M, F, Z = U("a"), U("m"), U("f"), U("z")
     LB = lambda **k: HL.LeaveBody(**k)  # noqa: E731
 
+    pv = await HL.leave_apply(LB(type="CL", start="2026-11-09", end="2026-11-10", preview=True), A)
+    check(pv["days"] == 1 and pv["left_after"] == 5 and pv["approver"] == "Meera" and not await db.hr_leave.find_one({"emp_id": "a"}),
+          "preview: 'uses 1 day, 5 left after, goes to Meera' — nothing saved")
+    await expect(HL.leave_apply(LB(type="CL", start="2026-11-03", preview=True), A), 400, "preview shows the same refusal as applying")
     r = await HL.leave_apply(LB(type="CL", start="2026-11-09", end="2026-11-10", reason="family"), A)
     check(r["status"] == "pending" and r["stage"] == "manager" and r["approver_id"] == "m" and r["days"] == 1,
           "Asha applies: 1 working day (9 Nov is Deepavali), waits for her manager")

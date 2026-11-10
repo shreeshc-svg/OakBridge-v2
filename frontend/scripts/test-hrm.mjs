@@ -53,6 +53,16 @@ check(hiring.includes("hiringCv(c.id)") && hiring.includes("URL.createObjectURL"
 check(hrm.includes("<LifecyclePanel person={person}") && hrm.includes("forms can't nest"), "onboarding / exit panel outside the person form");
 check(hiring.includes('data-testid="hrm-record-exit"') && hiring.includes("encashment"), "exit: last day, reason, EL encashment");
 check(hrm.includes("Leaving {fmt(r.exited_on)}"), "People shows who is leaving and when");
+check(!/window\.prompt/.test(leave) && !/window\.prompt/.test(goals) && leave.includes('data-testid="hrm-decide-panel"') && goals.includes('data-testid="hrm-goals-sendback"'),
+      "no browser pop-ups for reject reasons / certificate / bereavement days / sending goals back — inline panels");
+check(hrm.includes('data-testid="hrm-person-tabs"') && hrm.includes('["lifecycle", "Onboarding & exit"]'), "person editor split into Details / Onboarding & exit");
+check(leave.includes('data-testid="hrm-apply-preview"') && leave.includes("preview: true") && leave.includes("left after"), "apply shows 'uses N days (M left after)' before submitting");
+check(goals.includes("const [expanded, setExpanded] = useState(current)") && goals.includes('${expanded ? "block" : "hidden"} md:block'),
+      "goals on phones: current quarter open, others folded");
+const admin = read("src/pages/admin/AdminLayout.jsx"), header = read("src/components/Header.jsx"), account = read("src/pages/Account.jsx");
+check((admin.match(/<HrmShortcut /g) || []).length === 2 && header.includes('data-testid="header-hrm-link"') && account.includes("<HrmShortcut "),
+      "one-click 'My HRM' in the admin sidebar (desktop + phone), the account menu and My Account");
+check(read("src/lib/hrmAccess.js").includes("isPrerender()"), "HRM shortcut never rendered during prerender");
 const api = read("src/lib/api.js");
 check(["hiringList", "hiringEdit", "hiringFeedback", "hiringCv", "hiringJoin", "hrmLifecycle", "hrmChecklist", "hrmExit", "hrmExitCancel"]
     .every((f) => api.includes(`export const ${f} =`)), "hiring / lifecycle api");

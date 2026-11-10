@@ -142,31 +142,49 @@ function GoalList({ p }) {
 }
 
 function DecideBar({ p, onDone }) {
+    const [back, setBack] = useState(false);    // inline "what should change?" instead of a browser pop-up
+    const [note, setNote] = useState("");
     const act = async (approve) => {
-        let note = "";
-        if (!approve) { note = window.prompt("What should change? (they'll see this)") || ""; if (note.trim().length < 5) return; }
-        try { await goalsDecide(p.id, { approve, note }); toast.success(approve ? "Approved." : "Sent back."); onDone(); }
+        try { await goalsDecide(p.id, { approve, note: approve ? "" : note }); toast.success(approve ? "Approved." : "Sent back."); onDone(); }
         catch (e) { toast.error(formatApiError(e)); }
     };
     return (
         <>
             <button type="button" onClick={() => act(true)} className="bg-[#15803D] text-white px-4 py-2 text-sm">Approve goals</button>
-            <button type="button" onClick={() => act(false)} className="border border-[#CC0033] text-[#CC0033] px-3 py-2 text-sm">Send back</button>
+            <button type="button" onClick={() => setBack(!back)} className="border border-[#CC0033] text-[#CC0033] px-3 py-2 text-sm">Send back</button>
+            {back && (
+                <div className="basis-full border-l-4 border-[#CC0033] bg-[#FEF2F2] px-3 py-2 space-y-2" data-testid="hrm-goals-sendback">
+                    <label className="block text-xs">What should change? <span className="text-[#6B7280]">(they'll see this)</span>
+                        <textarea autoFocus value={note} onChange={(e) => setNote(e.target.value)} rows={2} className="mt-1 w-full border border-[#E5E7EB] px-2 py-1 text-sm bg-white" />
+                    </label>
+                    <div className="flex gap-2">
+                        <button type="button" disabled={note.trim().length < 5} onClick={() => act(false)} className="bg-[#CC0033] text-white px-3 py-1 text-xs disabled:opacity-50">Send back</button>
+                        <button type="button" onClick={() => setBack(false)} className="px-3 py-1 text-xs">Cancel</button>
+                    </div>
+                </div>
+            )}
         </>
     );
 }
 
+/* On a phone the four quarters fold: the CURRENT one (the latest still open,
+   else the latest with anything in it, else Q1) is open, the others are one
+   line each — tap to open. From tablet width up all four show side by side. */
 function Quarters({ p, onChange }) {
+    const withData = ["Q1", "Q2", "Q3", "Q4"].filter((q) => p.checkins?.[q]?.self || p.checkins?.[q]?.review);
+    const current = p.open_quarters?.[p.open_quarters.length - 1] || withData[withData.length - 1] || "Q1";
     return (
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4" data-testid="hrm-quarters">
-            {["Q1", "Q2", "Q3", "Q4"].map((q) => <Quarter key={q} q={q} p={p} onChange={onChange} />)}
+        <div className="grid gap-2 md:gap-3 md:grid-cols-2 xl:grid-cols-4" data-testid="hrm-quarters">
+            {["Q1", "Q2", "Q3", "Q4"].map((q) => <Quarter key={q} q={q} p={p} onChange={onChange} current={q === current} />)}
         </div>
     );
 }
 
-function Quarter({ q, p, onChange }) {
+function Quarter({ q, p, onChange, current }) {
     const c = p.checkins?.[q] || {};
     const open = p.open_quarters.includes(q);
+    const [expanded, setExpanded] = useState(current);
+    const summary = c.review ? "reviewed ✓" : c.self ? "checked in" : open ? (p.can.checkin ? "check-in open" : "open") : "—";
     const [prog, setProg] = useState(() => Object.fromEntries(p.goals.map((g) => [g.id, c.self?.progress?.[g.id] ?? latest(p, g.id) ?? 0])));
     const [note, setNote] = useState(c.self?.note || "");
     const [st, setSt] = useState(() => Object.fromEntries(p.goals.map((g) => [g.id, c.review?.status?.[g.id] || ""])));
@@ -181,11 +199,14 @@ function Quarter({ q, p, onChange }) {
     };
     const range = p.quarters?.[q] || [];
     return (
-        <div className={`border p-3 text-sm ${open ? "border-[#002B5C]" : "border-[#E5E7EB]"}`}>
-            <div className="flex items-baseline justify-between">
+        <div className={`border p-3 text-sm ${open ? "border-[#002B5C]" : "border-[#E5E7EB]"}`} data-testid={`hrm-quarter-${q}`}>
+            <button type="button" onClick={() => setExpanded(!expanded)} aria-expanded={expanded} className="w-full flex items-baseline justify-between gap-2 text-left md:cursor-default">
                 <b className="text-[#002B5C]">{q}</b>
-                <span className="text-[11px] text-[#6B7280]">{range.length ? `${new Date(range[0]).toLocaleDateString("en-IN", { month: "short" })}–${new Date(range[1]).toLocaleDateString("en-IN", { month: "short" })}` : ""}{open ? " · open" : ""}</span>
-            </div>
+                <span className="text-[11px] text-[#6B7280] flex-1 text-right">{range.length ? `${new Date(range[0]).toLocaleDateString("en-IN", { month: "short" })}–${new Date(range[1]).toLocaleDateString("en-IN", { month: "short" })}` : ""}{open ? " · open" : ""}
+                    <span className={`md:hidden ml-1 ${c.review ? "text-[#15803D]" : open ? "text-[#B4750F]" : ""}`}>· {summary}</span></span>
+                <span className="md:hidden text-[#6B7280]" aria-hidden="true">{expanded ? "▴" : "▾"}</span>
+            </button>
+            <div className={`${expanded ? "block" : "hidden"} md:block`}>
             {c.self ? (
                 <div className="mt-2 text-xs">
                     <div className="text-[#4B5563]">Self check-in: {p.goals.map((g) => `${c.self.progress[g.id]}%`).join(" · ")}</div>
@@ -224,6 +245,7 @@ function Quarter({ q, p, onChange }) {
                     <button type="button" onClick={sendReview} className="bg-[#15803D] text-white px-3 py-1 text-xs">{c.review ? "Update review" : "Save review"}</button>
                 </div>
             )}
+            </div>
         </div>
     );
 }

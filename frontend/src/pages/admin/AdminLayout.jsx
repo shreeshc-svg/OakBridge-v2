@@ -6,10 +6,13 @@ import { Toaster } from "../../components/ui/sonner";
 import { fetchSettings } from "../../lib/api";
 import { canPath, sectionForPath, SECTION_LABELS } from "../../lib/rbac";
 import NoIndex from "../../components/NoIndex";
+import HrmShortcut from "../../components/HrmShortcut";
+import { useHrmAccess } from "../../lib/hrmAccess";
 import { applyNavOrder } from "../../lib/adminNav";
 
 export default function AdminLayout() {
     const { user, logout } = useAuth();
+    const hasHrm = useHrmAccess(user);
     const nav = useNavigate();
     const loc = useLocation();
     const [navOpen, setNavOpen] = React.useState(false);
@@ -128,6 +131,7 @@ export default function AdminLayout() {
                             <div className="min-w-0">
                                 <div className="overline !text-white/50">Oakbridge · Admin</div>
                                 <h2 className="font-serif text-xl mt-1 truncate">{user?.name}</h2>
+                                {hasHrm && <HrmShortcut className="mt-3 w-full" onClick={() => setNavOpen(false)} />}
                             </div>
                             <button
                                 onClick={() => setNavOpen(false)}
@@ -147,6 +151,7 @@ export default function AdminLayout() {
             <aside className="hidden lg:block bg-[#002B5C] text-[#FFFFFF] p-6 lg:min-h-full">
                 <div className="overline !text-white/50">Oakbridge · Admin</div>
                 <h2 className="font-serif text-2xl mt-2">{user?.name}</h2>
+                {hasHrm && <HrmShortcut className="mt-4 w-full" />}
                 <div className="mt-8">{navList}</div>
                 {footerLinks}
             </aside>
