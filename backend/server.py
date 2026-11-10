@@ -2133,6 +2133,8 @@ from hrm_leave import router as hrm_leave_router  # noqa: E402  (HRM release 2: 
 app.include_router(hrm_leave_router)
 from hrm_goals import router as hrm_goals_router  # noqa: E402  (HRM release 3: goals)
 app.include_router(hrm_goals_router)
+from hrm_lifecycle import router as hrm_lifecycle_router  # noqa: E402  (HRM release 4: hiring, onboarding, exit)
+app.include_router(hrm_lifecycle_router)
 app.include_router(marketing_admin_router)
 app.include_router(marketing_tasks_router)
 from newsletter import router as newsletter_router  # noqa: E402  (also registers the nl_tick job)

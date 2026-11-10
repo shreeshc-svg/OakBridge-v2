@@ -43,6 +43,7 @@ import marketing  # noqa: E402  (registers the marketing job handlers)
 import newsletter  # noqa: E402,F401  (registers the newsletter job handler)
 import growth  # noqa: E402,F401  (registers the abandoned-checkout / review email job)
 import hrm_goals  # noqa: E402,F401  (registers the HRM quarterly goals reminder job)
+import hrm_lifecycle  # noqa: E402,F401  (registers the HRM daily job: finalise exits, purge old applications)
 import warehouse  # noqa: E402,F401  (registers the daily tidy of unfinished warehouse drafts)
 from extensions import db  # noqa: E402
 

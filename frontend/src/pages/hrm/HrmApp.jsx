@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { CalendarDays, CalendarCheck, Home, Settings2, Users, Plus, X, Send, Search, Camera, Target } from "lucide-react";
+import { CalendarDays, CalendarCheck, Home, Settings2, Users, Plus, X, Send, Search, Camera, Target, Briefcase } from "lucide-react";
 import {
     hrmMe, hrmPeople, hrmAddPerson, hrmEditPerson, hrmInvite, hrmConfirmAll, hrmCalendar, hrmSettings, hrmSaveSettings,
     hrmPhotoBlob, hrmUploadPhoto, hrmRemovePhoto, leaveSummary, leaveTeam, leaveApprovals, goalsPlan, formatApiError,
@@ -10,6 +10,7 @@ import NoIndex from "../../components/NoIndex";
 import HrmCalendar from "./HrmCalendar";
 import LeaveTab, { BalanceCards, Approvals } from "./HrmLeave";
 import GoalsTab from "./HrmGoals";
+import HiringTab, { LifecyclePanel, ChecklistSettings } from "./HrmHiring";
 
 /**
  * Oakbridge HRM — release 1 (Nov 2026): people, logins, leave year, calendar.
@@ -54,6 +55,7 @@ export default function HrmApp() {
 
     const role = me.hr ? "HR / Founder" : me.manager ? "Manager" : "Employee";
     const tabs = [["home", "Home", Home], ["leave", "Leave", CalendarCheck], ["goals", "Goals", Target], ...(me.hr || me.manager ? [["people", me.hr ? "People" : "My team", Users]] : []),
+        ...(me.hiring ? [["hiring", "Hiring", Briefcase]] : []),
         ["calendar", "Calendar", CalendarDays], ...(me.hr ? [["settings", "Settings", Settings2]] : [])];
 
     return (
@@ -78,9 +80,10 @@ export default function HrmApp() {
                 {tab === "home" && <HomeTab me={me} go={setTab} />}
                 {tab === "leave" && <LeaveTab me={me} />}
                 {tab === "goals" && <GoalsTab me={me} />}
+                {tab === "hiring" && me.hiring && <HiringTab />}
                 {tab === "people" && <PeopleTab hr={me.hr} superadmin={me.superadmin} />}
                 {tab === "calendar" && <HrmCalendar hr={me.hr} manager={me.manager} />}
-                {tab === "settings" && me.hr && <SettingsTab />}
+                {tab === "settings" && me.hr && <><SettingsTab /><ChecklistSettings /></>}
             </main>
         </div>
     );
@@ -351,7 +354,9 @@ function PeopleTab({ hr, superadmin }) {
                                 <td className="px-3 py-2 text-[#4B5563]">{r.manager_name || "—"}</td>
                                 <td className="px-3 py-2 whitespace-nowrap">{fmt(r.joined_on)}</td>
                                 <td className="px-3 py-2 text-xs">
-                                    {r.status === "exited" ? <span className="text-[#6B7280]">Left</span> : r.confirmed_on ? "Confirmed" : <span className="text-[#B4750F]">Probation</span>}
+                                    {r.status === "exited" ? <span className="text-[#6B7280]">Left {fmt(r.exited_on)}</span>
+                                        : r.exited_on ? <span className="text-[#CC0033]">Leaving {fmt(r.exited_on)}</span>
+                                            : r.confirmed_on ? "Confirmed" : <span className="text-[#B4750F]">Probation</span>}
                                     {hr && r.status === "active" && <div className="text-[11px] text-[#6B7280]">{r.user_id ? (r.invited_at ? "Login sent" : "Has a login") : "No login yet"}</div>}
                                 </td>
                                 {hr && (
@@ -407,6 +412,7 @@ function PersonForm({ person, people, superadmin, onClose, onSaved }) {
     // The date in words under each date box: "= 6 Jan 2026" — no day/month mix-ups.
     const said = (d) => (d ? <span className="block mt-0.5 text-[11px] text-[#15803D]" data-testid="hrm-date-words">= {fmt(d)}</span> : null);
     return (
+        <>
         <form onSubmit={save} className="bg-white border border-[#002B5C] p-4" data-testid="hrm-person-form">
             <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-3">
@@ -474,7 +480,10 @@ function PersonForm({ person, people, superadmin, onClose, onSaved }) {
                 <button type="button" onClick={onClose} className="px-3 py-2 text-sm">Cancel</button>
                 <button type="submit" disabled={busy} className="bg-[#002B5C] text-white px-4 py-2 text-sm disabled:opacity-50">{busy ? "Saving…" : "Save"}</button>
             </div>
-        </form>
+            </form>
+            {/* Outside the form on purpose: it has its own exit form, and forms can't nest. */}
+            {person && <div className="bg-white border border-t-0 border-[#002B5C] px-4 pb-4"><LifecyclePanel person={person} onChange={onSaved} /></div>}
+        </>
     );
 }
 

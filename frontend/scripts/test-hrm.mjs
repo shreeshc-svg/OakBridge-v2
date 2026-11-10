@@ -40,7 +40,16 @@ check(goals.includes('data-testid="hrm-goal-editor"') && goals.includes("must be
       "goal editor with 100% weights; four quarter panels");
 check(goals.includes("p.can.checkin") && goals.includes("p.can.review") && goals.includes("p.can.rate"), "actions follow what the server allows");
 check(goals.includes("ye?.pending") && goals.includes("Release ${fy} ratings"), "rating hidden until HR releases it");
+const hiring = read("src/pages/hrm/HrmHiring.jsx");
+check(hrm.includes('...(me.hiring ? [["hiring", "Hiring", Briefcase]] : [])'), "Hiring tab only for HR and assigned hiring managers");
+check(hiring.includes('data-testid="hrm-mark-joined"') && hiring.includes("hiringJoin(c.id, f)"), "Offer -> Mark as joined creates the employee");
+check(hiring.includes("hiringCv(c.id)") && hiring.includes("URL.createObjectURL"), "CVs open through the signed-in HRM, not a public link");
+check(hrm.includes("<LifecyclePanel person={person}") && hrm.includes("forms can't nest"), "onboarding / exit panel outside the person form");
+check(hiring.includes('data-testid="hrm-record-exit"') && hiring.includes("encashment"), "exit: last day, reason, EL encashment");
+check(hrm.includes("Leaving {fmt(r.exited_on)}"), "People shows who is leaving and when");
 const api = read("src/lib/api.js");
+check(["hiringList", "hiringEdit", "hiringFeedback", "hiringCv", "hiringJoin", "hrmLifecycle", "hrmChecklist", "hrmExit", "hrmExitCancel"]
+    .every((f) => api.includes(`export const ${f} =`)), "hiring / lifecycle api");
 check(["goalsPlan", "goalsSaveDraft", "goalsSubmit", "goalsDecide", "goalsCheckin", "goalsReview", "goalsRate", "goalsTeam", "goalsRelease"]
     .every((f) => api.includes(`export const ${f} =`)), "goals api");
 check(["hrmPhotoBlob", "hrmUploadPhoto", "leaveSummary", "leaveApply", "leaveDecide", "leaveExport"].every((f) => api.includes(`export const ${f} =`)), "leave + photo api");

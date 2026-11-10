@@ -152,6 +152,9 @@ async def leave_apply(body: LeaveBody, user: dict = Depends(get_current_user)):
     emp = people[pid]
     if emp.get("status") != "active":
         raise HTTPException(status_code=400, detail="This person has left.")
+    last = emp.get("exited_on")
+    if last and (body.end or body.start or body.worked_on or "") > last:
+        raise HTTPException(status_code=400, detail=f"That's after their last working day ({last}).")
     start = body.worked_on if body.type == "COMP_EARN" else body.start
     if not start:
         raise HTTPException(status_code=400, detail="Choose the date(s).")
@@ -432,13 +435,17 @@ async def leave_export(month: str, user: dict = Depends(require_hr)):
     rows = []
     for p in sorted(people.values(), key=lambda p: p.get("name", "")):
         joined = (p.get("joined_on") or "")[:7] == month
-        if p.get("status") != "active" and not lop.get(p["id"]):
+        leaving = (p.get("exited_on") or "")[:7] == month
+        if p.get("status") != "active" and not lop.get(p["id"]) and not leaving:
             continue
+        enc = ((p.get("exit") or {}).get("encashment") or {}) if leaving else {}
         rows.append([p.get("emp_code", ""), p.get("name", ""), p.get("work_email", ""), lop.get(p["id"], 0),
-                     p.get("joined_on", "") if joined else "", p.get("exited_on", "") or ""])
+                     p.get("joined_on", "") if joined else "", p.get("exited_on", "") if leaving else "",
+                     enc.get("days", "") if leaving else ""])
     await audit_log(db, "HRM_PAYROLL_EXPORT", email=user.get("email", ""), role=user.get("role", ""), meta={"month": month})
     return csv_response(f"razorpayx-leave-{month}.csv",
-                        ["Employee code", "Name", "Work email", "Loss of pay days", "Joined this month", "Exit date"], rows)
+                        ["Employee code", "Name", "Work email", "Loss of pay days", "Joined this month", "Last working day",
+                         "Earned leave to encash (days)"], rows)
 
 
 async def ensure_indexes() -> None:

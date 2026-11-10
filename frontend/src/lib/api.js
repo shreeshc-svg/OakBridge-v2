@@ -139,6 +139,20 @@ export const hrmUploadPhoto = (id, file) => {
     return api.post(`/hrm/people/${id}/photo`, fd, { timeout: 60000 }).then((r) => r.data);
 };
 export const hrmRemovePhoto = (id) => api.post(`/hrm/people/${id}/photo/remove`).then((r) => r.data);
+// HRM hiring / onboarding / exit (backend/hrm_lifecycle.py)
+export const hiringList = () => api.get("/hrm/hiring").then((r) => r.data);
+export const hiringAdd = (body) => api.post("/hrm/hiring", body).then((r) => r.data);
+export const hiringEdit = (id, body) => api.patch(`/hrm/hiring/${id}`, body).then((r) => r.data);
+export const hiringNote = (id, text) => api.post(`/hrm/hiring/${id}/note`, { text }).then((r) => r.data);
+export const hiringFeedback = (id, body) => api.post(`/hrm/hiring/${id}/feedback`, body).then((r) => r.data);
+export const hiringCv = (id) => api.get(`/hrm/hiring/${id}/cv`, { responseType: "blob" }).then((r) => r.data);
+export const hiringJoin = (id, body) => api.post(`/hrm/hiring/${id}/join`, body).then((r) => r.data);
+export const hrmLifecycle = (pid) => api.get(`/hrm/people/${pid}/lifecycle`).then((r) => r.data);
+export const hrmChecklist = (pid, body) => api.post(`/hrm/people/${pid}/checklist`, body).then((r) => r.data);
+export const hrmExit = (pid, body) => api.post(`/hrm/people/${pid}/exit`, body).then((r) => r.data);
+export const hrmExitCancel = (pid) => api.post(`/hrm/people/${pid}/exit/cancel`).then((r) => r.data);
+export const hrmLifecycleSettings = () => api.get("/hrm/lifecycle/settings").then((r) => r.data);
+export const hrmSaveLifecycleSettings = (body) => api.put("/hrm/lifecycle/settings", body).then((r) => r.data);
 // HRM goals (backend/hrm_goals.py)
 const HG = "/hrm/goals";
 export const goalsPlan = (empId, fy) => api.get(`${HG}/plan`, { params: { ...(empId ? { emp_id: empId } : {}), ...(fy ? { fy } : {}) } }).then((r) => r.data);

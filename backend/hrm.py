@@ -55,8 +55,22 @@ def _now() -> datetime:
 
 
 # ------------------------------------------------------------------ access ---
+def _today_ist() -> date:
+    return (_now() + timedelta(hours=5, minutes=30)).date()
+
+
 async def _people() -> dict:
-    return {p["id"]: p async for p in db.hr_employees.find({}, {"_id": 0})}
+    """Everyone, with a person whose last working day has passed treated as
+    left straight away (release 4) — even before the nightly job records it,
+    so a leaver never gets an extra day of access."""
+    import hr_lifecycle_core
+    today = _today_ist()
+    out = {}
+    async for p in db.hr_employees.find({}, {"_id": 0}):
+        if p.get("status") == "active" and hr_lifecycle_core.exit_effective(p, today):
+            p["status"] = "exited"
+        out[p["id"]] = p
+    return out
 
 
 async def _me(user: dict, people: dict) -> Optional[dict]:
@@ -113,7 +127,9 @@ async def hrm_me(user: dict = Depends(get_current_user)):
             "team_size": len(visible - ({me["id"]} if me else set())),
             "manager_name": (people.get((me or {}).get("manager_id")) or {}).get("name", ""),
             # Super admins alone set per-person weekly offs and exact leave balances.
-            "superadmin": rbac.is_superadmin(user.get("role"))}
+            "superadmin": rbac.is_superadmin(user.get("role")),
+            # Hiring tab: HR, or anyone who is hiring manager for a candidate.
+            "hiring": acc["hr"] or bool(me and await db.job_applications.find_one({"hiring_manager_id": me["id"]}, {"_id": 1}))}
 
 
 # ---------------------------------------------------------------- people ---
