@@ -347,27 +347,35 @@ async def people_exit(pid: str, body: ExitBody, user: dict = Depends(require_hr)
         raise HTTPException(status_code=400, detail="That's before they joined.")
     if last < _today() - timedelta(days=60):
         raise HTTPException(status_code=400, detail="Last day more than 60 days ago — check the date.")
+    ex, cancelled = await record_exit(p, last, body.reason, body.note or "", user)
+    return {"ok": True, "exit": ex, "leave_cancelled": cancelled}
+
+
+async def record_exit(p: dict, last: date, reason: str, note: str, user: dict, extra: Optional[dict] = None) -> tuple[dict, int]:
+    """The one way an exit is recorded — HR's "Record exit", an accepted
+    resignation and a termination (hrm_separation.py) all come here, so the
+    guards, checklist, EL encashment and leave clean-up are identical."""
     me_user = await db.users.find_one({"id": user["id"]}, {"_id": 0, "id": 1})
     if p.get("user_id") and me_user and p["user_id"] == me_user["id"]:
         raise HTTPException(status_code=400, detail="You can't record your own exit — ask another HR person or a super admin.")
     if p.get("hr_access"):
         import hrm
-        if await hrm.hr_left_without(await hrm._people(), pid):
+        if await hrm.hr_left_without(await hrm._people(), p["id"]):
             raise HTTPException(status_code=409, detail="They're the last person with HR access — give someone else HR access first.")
     st = await _settings()
     enc = core.encashment(p, last, await _el_available(p, last))
-    ex = {"last_day": last.isoformat(), "reason": body.reason, "reason_label": core.EXIT_REASONS[body.reason],
-          "note": (body.note or "").strip()[:1000], "by": user.get("email", ""), "at": _now().isoformat(), "encashment": enc}
+    ex = {"last_day": last.isoformat(), "reason": reason, "reason_label": core.EXIT_REASONS[reason],
+          "note": (note or "").strip()[:1000], "by": user.get("email", ""), "at": _now().isoformat(), "encashment": enc, **(extra or {})}
     upd = {"exited_on": last.isoformat(), "exit": ex}
     if not p.get("exit_checklist"):
         upd["exit_checklist"] = core.new_checklist(st["exit"])
-    await db.hr_employees.update_one({"id": pid}, {"$set": upd})
-    cancelled = await _cancel_leave_after(pid, last, user.get("email", ""))
-    await _audit(user, "HRM_EXIT_RECORDED", {"person": pid, "last_day": last.isoformat(), "reason": body.reason,
+    await db.hr_employees.update_one({"id": p["id"]}, {"$set": upd})
+    cancelled = await _cancel_leave_after(p["id"], last, user.get("email", ""))
+    await _audit(user, "HRM_EXIT_RECORDED", {"person": p["id"], "last_day": last.isoformat(), "reason": reason,
                                              "encash_days": enc["days"], "leave_cancelled": cancelled})
     if last < _today():
         await finalize_exits()
-    return {"ok": True, "exit": ex, "leave_cancelled": cancelled}
+    return ex, cancelled
 
 
 @router.post("/people/{pid}/exit/cancel")
@@ -444,7 +452,9 @@ async def daily() -> dict:
     # Appraisals: on the effective date the new designation lands on the
     # employee record (hrm_appraisal.apply_due — idempotent via applied_at).
     from hrm_appraisal import apply_due
-    return {"exits": await finalize_exits(), "purged": await purge_old_applications(), "appraisals": await apply_due()}
+    from hrm_separation import fnf_reminders
+    return {"exits": await finalize_exits(), "purged": await purge_old_applications(), "appraisals": await apply_due(),
+            "fnf_reminded": await fnf_reminders()}
 
 
 try:

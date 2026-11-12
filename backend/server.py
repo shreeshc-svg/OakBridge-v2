@@ -755,6 +755,8 @@ async def startup_event():
     await hrm_goals_indexes()
     from hrm_appraisal import ensure_indexes as hrm_appraisal_indexes
     await hrm_appraisal_indexes()
+    from hrm_separation import ensure_indexes as hrm_separation_indexes
+    await hrm_separation_indexes()
     try:
         # Real review figures for every reviewed book (stars are shown only
         # from these — extensions.refresh_review_stats).
@@ -2140,6 +2142,10 @@ app.include_router(hrm_lifecycle_router)
 import cart_reminders  # noqa: E402,F401  (registers the hourly cart-reminder job when jobs run in this process)
 from hrm_appraisal import router as hrm_appraisal_router  # noqa: E402  (HRM: annual appraisal — CTC encrypted, see hr_crypto.py)
 app.include_router(hrm_appraisal_router)
+from hrm_separation import router as hrm_separation_router  # noqa: E402  (HRM: resignation / termination / F&F)
+app.include_router(hrm_separation_router)
+from hrm_recognition import router as hrm_recognition_router  # noqa: E402  (HRM: appreciation, awards, rewards)
+app.include_router(hrm_recognition_router)
 app.include_router(marketing_admin_router)
 app.include_router(marketing_tasks_router)
 from newsletter import router as newsletter_router  # noqa: E402  (also registers the nl_tick job)

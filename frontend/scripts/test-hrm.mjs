@@ -80,6 +80,15 @@ check(leave.includes('data-testid="hrm-bulk-leave"') && leave.includes("preview:
 const policy = read("src/pages/hrm/HrmLeavePolicy.jsx");
 check(leave.includes('["policy", "Leave policy"]') && leave.includes("<LeavePolicy />") && leave.includes('data-testid="hrm-read-policy"')
       && policy.includes("up to a maximum of 12 days") && policy.includes("recommended"), "leave policy readable inside Leave, for everyone");
+const exitTab = read("src/pages/hrm/HrmExit.jsx"), rec = read("src/pages/hrm/HrmRecognition.jsx");
+check(hrm.includes('["recognition", "Recognition", Trophy]') && hrm.includes('[["exit", "Exit", LogOut]]') && hrm.includes("<ExitTab me={me} />"),
+      "Recognition and Exit tabs");
+check(exitTab.includes('data-testid="hrm-resign-form"') && exitTab.includes("sepWithdraw") && exitTab.includes('data-testid="hrm-notice"'),
+      "employee: resign, withdraw, reply to a show-cause notice");
+check(exitTab.includes("function needs(c, today)") && exitTab.includes("disabled={!ready}"), "Terminate stays locked until the ground's steps are done (mirrors the server)");
+check(rec.includes("export function Celebration") && home.includes("<Celebration enabled={!!me.me} />") && home.includes('data-testid="hrm-home-shoutouts"'),
+      "recognition: celebration pop-up + shout-outs on Home");
+check(rec.includes("prefers-reduced-motion"), "animations respect reduced motion");
 const appr = read("src/pages/hrm/HrmAppraisal.jsx");
 check(hrm.includes('["appraisal", "Appraisal", Award]') && hrm.includes("<AppraisalTab me={me} />"), "Appraisal tab for everyone");
 check(["appraisalCycle", "appraisalStart", "appraisalMine", "appraisalTeam", "appraisalGet", "appraisalSaveSelf", "appraisalSaveManager",

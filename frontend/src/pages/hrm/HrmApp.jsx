@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { CalendarDays, CalendarCheck, Home, Settings2, Users, Plus, X, Send, Search, Target, Briefcase, Award } from "lucide-react";
+import { CalendarDays, CalendarCheck, Home, Settings2, Users, Plus, X, Send, Search, Target, Briefcase, Award, Trophy, LogOut } from "lucide-react";
 import {
     hrmMe, hrmPeople, hrmAddPerson, hrmEditPerson, hrmInvite, hrmConfirmAll, hrmSettings, hrmSaveSettings,
     formatApiError,
@@ -11,6 +11,8 @@ import HrmCalendar from "./HrmCalendar";
 import LeaveTab from "./HrmLeave";
 import GoalsTab from "./HrmGoals";
 import AppraisalTab from "./HrmAppraisal";
+import RecognitionTab from "./HrmRecognition";
+import ExitTab from "./HrmExit";
 import HiringTab, { LifecyclePanel, ChecklistSettings } from "./HrmHiring";
 import HomeTab from "./HrmHome";
 import { Avatar, PhotoPicker } from "./HrmBits";
@@ -57,9 +59,10 @@ export default function HrmApp() {
     if (!me) return <div className="py-32 text-center font-mono text-xs text-[#4B5563]">Loading…</div>;
 
     const role = me.hr ? "HR / Founder" : me.manager ? "Manager" : "Employee";
-    const tabs = [["home", "Home", Home], ["leave", "Leave", CalendarCheck], ["goals", "Goals", Target], ["appraisal", "Appraisal", Award], ...(me.hr || me.manager ? [["people", me.hr ? "People" : "My team", Users]] : []),
+    const tabs = [["home", "Home", Home], ["leave", "Leave", CalendarCheck], ["goals", "Goals", Target], ["appraisal", "Appraisal", Award], ["recognition", "Recognition", Trophy], ...(me.hr || me.manager ? [["people", me.hr ? "People" : "My team", Users]] : []),
         ...(me.hiring ? [["hiring", "Hiring", Briefcase]] : []),
-        ["calendar", "Calendar", CalendarDays], ...(me.hr ? [["settings", "Settings", Settings2]] : [])];
+        ["calendar", "Calendar", CalendarDays], ...(me.me || me.hr || me.manager ? [["exit", "Exit", LogOut]] : []),
+        ...(me.hr ? [["settings", "Settings", Settings2]] : [])];
 
     return (
         <div className="min-h-screen bg-[#F5F7FA]" data-testid="hrm-app">
@@ -84,6 +87,8 @@ export default function HrmApp() {
                 {tab === "leave" && <LeaveTab me={me} />}
                 {tab === "goals" && <GoalsTab me={me} />}
                 {tab === "appraisal" && <AppraisalTab me={me} />}
+                {tab === "recognition" && <RecognitionTab me={me} />}
+                {tab === "exit" && <ExitTab me={me} />}
                 {tab === "hiring" && me.hiring && <HiringTab />}
                 {tab === "people" && <PeopleTab hr={me.hr} superadmin={me.superadmin} />}
                 {tab === "calendar" && <HrmCalendar hr={me.hr} manager={me.manager} />}

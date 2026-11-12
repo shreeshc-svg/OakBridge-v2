@@ -4,6 +4,8 @@ import { hrmCalendar, hrmPeople, leaveSummary, leaveTeam, leaveApprovals, goalsP
 import { BalanceCards, Approvals } from "./HrmLeave";
 import { Avatar, PhotoPicker, Ring } from "./HrmBits";
 import { useMyAppraisal } from "./HrmAppraisal";
+import { Celebration, ShoutStrip } from "./HrmRecognition";
+import { recShoutouts } from "../../lib/api";
 
 /**
  * HRM Home (Nov 2026 refresh). Built around what an employee opens it for:
@@ -27,6 +29,8 @@ export default function HomeTab({ me, go }) {
     const [people, setPeople] = useState(null);
     const [waiting, setWaiting] = useState(null);
     const appr = useMyAppraisal(!!me.me);       // "self-review open" / "result ready" banner
+    const [shout, setShout] = useState(null);     // team shout-outs (Recognition)
+    useEffect(() => { recShoutouts().then(setShout).catch(() => setShout([])); }, []);
     const today = iso(new Date());
     useEffect(() => {
         hrmCalendar().then(setCal).catch(() => {});
@@ -89,6 +93,16 @@ export default function HomeTab({ me, go }) {
                 </div>
             </section>
 
+            <Celebration enabled={!!me.me} />
+            {shout && shout.length > 0 && (
+                <section data-testid="hrm-home-shoutouts">
+                    <div className="flex items-center justify-between mb-2">
+                        <h2 className="font-serif text-xl text-[#002B5C]">🎉 Team shout-outs</h2>
+                        <button type="button" onClick={() => go("recognition")} className="text-xs text-[#002B5C] inline-flex items-center">Wall of fame<ChevronRight size={14} /></button>
+                    </div>
+                    <ShoutStrip rows={shout.slice(0, 6)} />
+                </section>
+            )}
             {appr && (
                 <button type="button" onClick={() => go("appraisal")} data-testid="hrm-home-appraisal"
                     className="w-full text-left flex items-center gap-3 px-4 py-3 border border-[#F5B841] bg-[#FFFBEB] hover:bg-[#FEF3C7]">

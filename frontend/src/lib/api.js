@@ -183,6 +183,27 @@ export const appraisalRelease = (id) => api.post(`${HA}/${id}/release`).then((r)
 export const appraisalReopen = (id, body) => api.post(`${HA}/${id}/reopen`, body).then((r) => r.data);
 export const appraisalAck = (id, body) => api.post(`${HA}/${id}/ack`, body).then((r) => r.data);
 export const appraisalLetter = (id) => api.get(`${HA}/${id}/letter.pdf`, { responseType: "blob", timeout: 60000 }).then((r) => r.data);
+// HRM exit: resignation / termination / F&F (backend/hrm_separation.py)
+const HSP = "/hrm/separation";
+export const sepMine = () => api.get(`${HSP}/mine`).then((r) => r.data);
+export const sepResign = (body) => api.post(`${HSP}/resign`, body).then((r) => r.data);
+export const sepWithdraw = (id) => api.post(`${HSP}/${id}/withdraw`).then((r) => r.data);
+export const sepManager = (id, body) => api.post(`${HSP}/${id}/manager`, body).then((r) => r.data);
+export const sepAccept = (id, body) => api.post(`${HSP}/${id}/accept`, body).then((r) => r.data);
+export const sepBoard = () => api.get(`${HSP}/board`).then((r) => r.data);
+export const sepOpenCase = (body) => api.post(`${HSP}/cases`, body).then((r) => r.data);
+export const sepCaseStep = (id, step, body) => api.post(`${HSP}/cases/${id}/${step}`, body).then((r) => r.data);
+export const sepFnf = (id, body) => api.post(`${HSP}/${id}/fnf`, body).then((r) => r.data);
+export const sepLetter = (id) => api.get(`${HSP}/${id}/letter.pdf`, { responseType: "blob", timeout: 60000 }).then((r) => r.data);
+// HRM recognition (backend/hrm_recognition.py) — amounts only for the employee and HR
+const HRC = "/hrm/recognition";
+export const recMine = () => api.get(`${HRC}/mine`).then((r) => r.data.rows || []);
+export const recTeam = () => api.get(`${HRC}/team`).then((r) => r.data);
+export const recShoutouts = () => api.get(`${HRC}/shoutouts`).then((r) => r.data.rows || []);
+export const recGive = (body) => api.post(HRC, body).then((r) => r.data);
+export const recSeen = (id) => api.post(`${HRC}/${id}/seen`).then((r) => r.data);
+export const recWithdraw = (id) => api.post(`${HRC}/${id}/withdraw`).then((r) => r.data);
+export const recLetter = (id) => api.get(`${HRC}/${id}/letter.pdf`, { responseType: "blob", timeout: 60000 }).then((r) => r.data);
 // HRM leave (backend/hrm_leave.py)
 const HL = "/hrm/leave";
 export const leaveSummary = (empId, fy) => api.get(`${HL}/summary`, { params: { ...(empId ? { emp_id: empId } : {}), ...(fy ? { fy } : {}) } }).then((r) => r.data);
