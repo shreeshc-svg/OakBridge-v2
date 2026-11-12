@@ -2137,6 +2137,7 @@ from hrm_goals import router as hrm_goals_router  # noqa: E402  (HRM release 3: 
 app.include_router(hrm_goals_router)
 from hrm_lifecycle import router as hrm_lifecycle_router  # noqa: E402  (HRM release 4: hiring, onboarding, exit)
 app.include_router(hrm_lifecycle_router)
+import cart_reminders  # noqa: E402,F401  (registers the hourly cart-reminder job when jobs run in this process)
 from hrm_appraisal import router as hrm_appraisal_router  # noqa: E402  (HRM: annual appraisal — CTC encrypted, see hr_crypto.py)
 app.include_router(hrm_appraisal_router)
 app.include_router(marketing_admin_router)

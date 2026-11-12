@@ -86,7 +86,7 @@ KINDS: list[dict] = [
      "note": "I'm sorry this order didn't work out. If the cancellation wasn't what you expected, or you'd like us to "
              "reserve the books for you again, reply to this email and I'll take care of it."},
     # Cart & stock
-    {"key": "cart_reminder", "label": "Cart reminder (12 h · 1 week · month end)", "group": "Cart & stock",
+    {"key": "cart_reminder", "label": "Cart reminder (up to 3, 1–2 days apart, customers only)", "group": "Cart & stock",
      "trigger": "Signed-in customers with books left in their cart (skipped while a checkout is open — the Growth email covers that)", "locked": False,
      "note": "If something stopped you — delivery time, the right edition, paying by another method — reply and tell me. "
              "We help readers with exactly these questions every day."},

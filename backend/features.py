@@ -17,7 +17,6 @@ import re
 from urllib.parse import unquote
 import uuid
 import logging
-import calendar
 from datetime import datetime, timezone, timedelta
 from typing import Any, List, Optional
 
@@ -2683,83 +2682,22 @@ async def get_my_cart(user: dict = Depends(get_current_user)):
 @customer_router.put("/my/cart")
 async def save_my_cart(payload: CartSync, user: dict = Depends(get_current_user)):
     items = [i.model_dump() for i in payload.items]
-    await db.carts.update_one(
-        {"user_id": user["id"]},
-        {"$set": {
-            "user_id": user["id"],
-            "items": items,
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-            "reminders_sent": [],
-        }},
-        upsert=True,
-    )
+    old = await db.carts.find_one({"user_id": user["id"]}, {"_id": 0, "items": 1}) or {}
+    upd = {"user_id": user["id"], "items": items}
+    # Only a NEW book restarts the reminders (cart_reminders.py: max 3). The
+    # site re-saves the same cart on visits and quantity changes; resetting on
+    # those would restart the three reminders forever.
+    if {i["book_id"] for i in items} - {i.get("book_id") for i in old.get("items") or []}:
+        upd.update(updated_at=datetime.now(timezone.utc).isoformat(), reminders_sent=[], reminder_count=0, last_reminder_at=None)
+    await db.carts.update_one({"user_id": user["id"]}, {"$set": upd}, upsert=True)
     return {"ok": True, "count": len(items)}
 
 
-def _is_last_day_of_month(dt: datetime) -> bool:
-    return dt.day == calendar.monthrange(dt.year, dt.month)[1]
-
-
 async def process_cart_reminders(force: bool = False) -> dict:
-    """Send cart reminders at 12h, 1 week, and end of month (calm copy — emailer._CART_COPY)."""
-    now = datetime.now(timezone.utc)
-    result = {"scanned": 0, "sent": 0, "by_stage": {"12h": 0, "1w": 0, "eom": 0}}
-    carts = await db.carts.find({"items.0": {"$exists": True}}).to_list(5000)
-    from emailer import send_cart_reminder  # late import avoids cycle
-    order = ["12h", "1w", "eom"]
-    for c in carts:
-        result["scanned"] += 1
-        try:
-            updated = datetime.fromisoformat(c.get("updated_at"))
-        except Exception:
-            continue
-        if updated.tzinfo is None:
-            updated = updated.replace(tzinfo=timezone.utc)
-        age = now - updated
-        done = set(c.get("reminders_sent", []))
-        stage = None
-        if force:
-            for st in order:
-                if st not in done:
-                    stage = st
-                    break
-        elif "eom" not in done and _is_last_day_of_month(now) and age >= timedelta(hours=12):
-            stage = "eom"
-        elif "1w" not in done and age >= timedelta(days=7):
-            stage = "1w"
-        elif "12h" not in done and age >= timedelta(hours=12):
-            stage = "12h"
-        if not stage:
-            continue
-        u = await db.users.find_one({"id": c["user_id"]}, {"_id": 0, "email": 1, "name": 1})
-        if not u or not u.get("email"):
-            continue
-        # One reminder, not two: someone who reached checkout and didn't pay in
-        # the last 3 days is the Growth "abandoned checkout" email's job (and the
-        # payment-link email's). Mailing them a cart reminder too reads as being
-        # chased. Not marked as sent, so it still goes once that window passes.
-        recent = (now - timedelta(days=3)).isoformat()
-        if not force and await db.orders.find_one(
-                {"user_id": c["user_id"], "payment_status": {"$ne": "paid"}, "created_at": {"$gte": recent}}, {"_id": 1}):
-            continue
-        try:
-            await send_cart_reminder(u["email"], u.get("name", ""), c.get("items", []), stage)
-        except Exception:  # noqa: BLE001
-            log.exception("cart reminder email failed for %s", u.get("email"))
-            continue
-        # One WhatsApp per abandoned cart (opted-in customers only; interakt.py
-        # dedupes on the cart's last change). Never raises.
-        from interakt import on_cart_reminder
-        await on_cart_reminder(c["user_id"], c.get("items", []), c.get("updated_at", ""))
-        mark = set(order[: order.index(stage) + 1]) | done
-        await db.carts.update_one(
-            {"user_id": c["user_id"]},
-            {"$set": {"reminders_sent": sorted(mark, key=order.index), "last_reminder_at": now.isoformat()}},
-        )
-        result["sent"] += 1
-        result["by_stage"][stage] += 1
-    log.info("cart reminders: %s", result)
-    return result
+    """Customers only, max 3, 1–2 days apart, sent hourly by the worker —
+    the rules live in cart_reminders.py."""
+    import cart_reminders
+    return await cart_reminders.process(db, force=force)
 
 
 tasks_router = APIRouter(prefix="/api/tasks", tags=["tasks"])

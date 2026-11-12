@@ -4165,6 +4165,7 @@ async def periodic() -> dict:
     dispatch("mk_disposable", dedupe=hour)    # weekly
     dispatch("mk_lapse", dedupe=hour)
     dispatch("mk_auto", dedupe=hour)          # abandoned-checkout + review emails (growth.py), when switched on
+    dispatch("cart_reminders", dedupe=hour)   # cart reminders: customers only, max 3, 1–2 days apart (cart_reminders.py)
     try:
         import hrm_goals
         hrm_goals.schedule_tick()             # HRM: quarterly check-in / April goal-setting reminders (once a quarter)
