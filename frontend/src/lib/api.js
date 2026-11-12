@@ -203,6 +203,11 @@ export const recShoutouts = () => api.get(`${HRC}/shoutouts`).then((r) => r.data
 export const recGive = (body) => api.post(HRC, body).then((r) => r.data);
 export const recSeen = (id) => api.post(`${HRC}/${id}/seen`).then((r) => r.data);
 export const recWithdraw = (id) => api.post(`${HRC}/${id}/withdraw`).then((r) => r.data);
+export const recCongrats = (id, body) => api.post(`${HRC}/${id}/congrats`, body).then((r) => r.data);
+export const recCongratsUndo = (id) => api.post(`${HRC}/${id}/congrats/undo`).then((r) => r.data);
+export const recCongratsList = (id) => api.get(`${HRC}/${id}/congrats`).then((r) => r.data);
+export const recCongratsLog = () => api.get(`${HRC}/congrats/log`).then((r) => r.data.rows || []);
+export const recCongratsHide = (cid, reason) => api.post(`${HRC}/congrats/${cid}/hide`, { reason }).then((r) => r.data);
 export const recLetter = (id) => api.get(`${HRC}/${id}/letter.pdf`, { responseType: "blob", timeout: 60000 }).then((r) => r.data);
 // HRM My profile (backend/hrm_profile.py): employee edits own; HR sees all; manager = emergency contacts only
 export const profileMe = () => api.get("/hrm/profile/me").then((r) => r.data);

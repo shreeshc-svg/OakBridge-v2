@@ -453,8 +453,9 @@ async def daily() -> dict:
     # employee record (hrm_appraisal.apply_due — idempotent via applied_at).
     from hrm_appraisal import apply_due
     from hrm_separation import fnf_reminders
+    from hrm_recognition import congrats_digest
     return {"exits": await finalize_exits(), "purged": await purge_old_applications(), "appraisals": await apply_due(),
-            "fnf_reminded": await fnf_reminders()}
+            "fnf_reminded": await fnf_reminders(), "congrats_emails": await congrats_digest()}
 
 
 try:

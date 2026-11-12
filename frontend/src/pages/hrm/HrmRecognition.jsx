@@ -1,7 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Award, Download, Heart, Medal, Megaphone, Rocket, Sparkles, Star, Trophy, Undo2, X } from "lucide-react";
-import { recMine, recTeam, recShoutouts, recGive, recSeen, recWithdraw, recLetter, hrmPeople, saveBlob, formatApiError } from "../../lib/api";
+import {
+    recMine, recTeam, recShoutouts, recGive, recSeen, recWithdraw, recLetter, recCongrats, recCongratsUndo, recCongratsList, recCongratsLog, recCongratsHide,
+    hrmPeople, saveBlob, formatApiError,
+} from "../../lib/api";
 
 /**
  * HRM → Recognition (Nov 2026): appreciation letters, awards and rewards.
@@ -16,6 +19,7 @@ export const KIND_STYLE = {
     award: { label: "Award", grad: "linear-gradient(135deg,#7C3AED 0%,#C026D3 100%)", chip: "#F3E8FF", ink: "#6B21A8" },
     reward: { label: "Reward", grad: "linear-gradient(135deg,#B4750F 0%,#F5B841 100%)", chip: "#FEF3C7", ink: "#92400E" },
 };
+export const REACT = { clap: "👏", party: "🎉", heart: "❤️", fire: "🔥", star: "⭐" };
 const TITLES = ["Star of the month", "Above and beyond", "Customer hero", "Team player", "Fresh idea", "Launch hero", "Thank you"];
 const fmt = (d) => (d ? new Date(`${d}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "");
 const err = (e) => toast.error(formatApiError(e));
@@ -64,6 +68,7 @@ export default function RecognitionTab({ me }) {
                 {!shout ? <p className="text-sm text-[#6B7280]">Loading…</p> : shout.length ? <ShoutStrip rows={shout} /> : <p className="text-sm text-[#6B7280]">No shout-outs in the last 3 months.</p>}
             </section>
 
+            {me.hr && <CongratsLog />}
             {lead && team && (
                 <section className="bg-white border border-[#E5E7EB]">
                     <h3 className="px-4 py-3 border-b border-[#F3F4F6] font-medium text-[#002B5C]">{me.hr ? "Everyone's recognitions" : "Your team's recognitions"}</h3>
@@ -112,6 +117,7 @@ export function RecCard({ r, mine = false, big = false }) {
                     <span>{fmt(r.date)} · from {r.by_name}</span>
                     {r.amount ? <span className="ml-auto px-2 py-0.5 font-medium" style={{ background: k.chip, color: k.ink }}>Reward {inr(r.amount)}</span> : null}
                 </div>
+                {mine && r.congrats?.count > 0 && <CongratsLine r={r} you />}
                 {mine && <button type="button" onClick={dl} className="inline-flex items-center gap-1.5 text-sm text-[#002B5C] border border-[#002B5C] px-3 py-1.5 hover:bg-[#002B5C] hover:text-white transition-colors"><Download size={14} />Letter (PDF)</button>}
             </div>
         </article>
@@ -125,13 +131,14 @@ export function ShoutStrip({ rows }) {
                 const I = BADGE[r.badge] || Star;
                 const k = KIND_STYLE[r.kind] || KIND_STYLE.appreciation;
                 return (
-                    <div key={r.id} className="snap-start shrink-0 w-60 bg-white border border-[#E5E7EB] p-4 transition-transform hover:-translate-y-0.5">
+                    <div key={r.id} className="snap-start shrink-0 w-72 bg-white border border-[#E5E7EB] p-4 transition-transform hover:-translate-y-0.5">
                         <div className="flex items-center gap-2">
                             <span className="w-9 h-9 grid place-items-center text-white rounded-full" style={{ background: k.grad }}><I size={17} /></span>
                             <div className="min-w-0"><div className="font-medium text-[#002B5C] truncate">{r.name}</div><div className="text-[11px] text-[#6B7280] truncate">{r.department}</div></div>
                         </div>
                         <div className="mt-3 font-serif text-lg text-[#002B5C] leading-tight">{r.title}</div>
                         <div className="text-xs text-[#6B7280] mt-1">{k.label} · {fmt(r.date)}</div>
+                        {r.congrats && <Congratulate r={r} />}
                     </div>
                 );
             })}
@@ -250,5 +257,118 @@ function Confetti({ burst = false }) {
                         animation: `ob-fall ${2.2 + (i % 5) * 0.35}s linear ${(i % 9) * 0.12}s 1 both` }} />
             ))}
         </>
+    );
+}
+
+/* ---------------------------------------------------- congratulations --- */
+/* Reaction bar on a shout-out: tap an emoji to congratulate (tap yours again
+   to take it back), optionally add a short note. One per person — the server
+   keeps it that way (backend/hrm_recognition.py). */
+function Congratulate({ r }) {
+    const [c, setC] = useState(r.congrats);
+    const [note, setNote] = useState(r.congrats.mine?.note || "");
+    const [writing, setWriting] = useState(false);
+    const [pop, setPop] = useState("");
+    const mine = c.mine?.reaction;
+    const send = async (reaction, n = note) => {
+        try {
+            setPop(reaction); setTimeout(() => setPop(""), 600);
+            const res = reaction === mine && n === (c.mine?.note || "") ? await recCongratsUndo(r.id) : await recCongrats(r.id, { reaction, note: n });
+            setC(res); if (!res.mine) setNote("");
+        } catch (e) { err(e); }
+    };
+    if (!r.can_congratulate) {
+        return <div className="mt-3 border-t border-[#F3F4F6] pt-2"><CongratsLine r={{ ...r, congrats: c }} you /></div>;
+    }
+    return (
+        <div className="mt-3 border-t border-[#F3F4F6] pt-2" data-testid="hrm-congratulate">
+            <div className="flex items-center gap-1">
+                {Object.entries(REACT).map(([k, e]) => (
+                    <button key={k} type="button" onClick={() => send(k)} aria-pressed={mine === k} aria-label={`React ${k}`}
+                        className={`relative px-1.5 py-0.5 text-base rounded-full transition-transform hover:scale-125 ${mine === k ? "bg-[#FEF3C7] ring-1 ring-[#F5B841]" : ""} ${pop === k ? "scale-150" : ""}`}>
+                        {e}{c.by_reaction[k] ? <span className="text-[10px] text-[#4B5563] ml-0.5 align-top">{c.by_reaction[k]}</span> : null}
+                    </button>
+                ))}
+            </div>
+            {mine && !writing && <button type="button" onClick={() => setWriting(true)} className="mt-1 text-xs text-[#1E6FB8] underline">{c.mine.note ? "Edit your note" : "Add a note"}</button>}
+            {writing && (
+                <div className="mt-1 flex gap-1">
+                    <input value={note} onChange={(e) => setNote(e.target.value.slice(0, 200))} maxLength={200} placeholder="Well deserved!" className="flex-1 min-w-0 border border-[#E5E7EB] px-2 py-1 text-xs" />
+                    <button type="button" onClick={() => { send(mine, note); setWriting(false); }} className="bg-[#002B5C] text-white px-2 text-xs">Send</button>
+                </div>
+            )}
+            <CongratsLine r={{ ...r, congrats: c }} />
+        </div>
+    );
+}
+
+/* "Asha, Zed and 3 others" — opens the full list with notes. */
+function CongratsLine({ r, you = false }) {
+    const [open, setOpen] = useState(false);
+    const c = r.congrats;
+    if (!c?.count) return you ? <p className="text-xs text-[#9CA3AF] mt-1">No congratulations yet.</p> : null;
+    const names = c.recent.join(", ") + (c.count > c.recent.length ? ` and ${c.count - c.recent.length} more` : "");
+    return (
+        <>
+            <button type="button" onClick={() => setOpen(true)} className="mt-1 block text-left text-xs text-[#4B5563] hover:text-[#002B5C]">
+                {you ? <b className="text-[#B4750F]">🎉 {c.count} {c.count === 1 ? "person" : "people"} congratulated you</b> : <>{names} congratulated</>}
+            </button>
+            {open && <CongratsList id={r.id} title={r.title} onClose={() => setOpen(false)} />}
+        </>
+    );
+}
+
+function CongratsList({ id, title, onClose }) {
+    const [rows, setRows] = useState(null);
+    useEffect(() => { recCongratsList(id).then((d) => setRows(d.rows)).catch((e) => { err(e); onClose(); }); }, [id]);  // eslint-disable-line react-hooks/exhaustive-deps
+    return (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" role="dialog" aria-modal="true" onClick={onClose}>
+            <div className="bg-white w-full max-w-md max-h-[80vh] overflow-auto p-4 ob-pop" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center mb-3"><h3 className="font-serif text-xl text-[#002B5C] flex-1">Congratulations · {title}</h3><button type="button" onClick={onClose} aria-label="Close"><X size={16} /></button></div>
+                {!rows ? <p className="text-sm text-[#6B7280]">Loading…</p> : (
+                    <ul className="space-y-2">{rows.map((x, i) => (
+                        <li key={i} className="flex gap-3 bg-[#F5F7FA] px-3 py-2 text-sm">
+                            <span className="text-xl">{REACT[x.reaction]}</span>
+                            <span className="flex-1"><b className="text-[#002B5C]">{x.by_name}</b>{x.note && <span className="block text-[#374151]">“{x.note}”</span>}</span>
+                        </li>))}</ul>
+                )}
+            </div>
+        </div>
+    );
+}
+
+/* HR: every reaction and note — shown, changed, taken back or hidden. */
+function CongratsLog() {
+    const [rows, setRows] = useState(null);
+    const [open, setOpen] = useState(false);
+    const load = () => recCongratsLog().then(setRows).catch(err);
+    useEffect(() => { if (open && !rows) load(); }, [open]);  // eslint-disable-line react-hooks/exhaustive-deps
+    const hide = async (x) => {
+        const reason = window.confirm(`Hide ${x.by_name}'s note to ${x.to_name}? It disappears for everyone but stays in this log.`) && "Inappropriate for the team wall";
+        if (!reason) return;
+        try { await recCongratsHide(x.id, reason); toast.success("Hidden."); load(); } catch (e) { err(e); }
+    };
+    const TONE = { shown: "text-[#065F46]", removed: "text-[#6B7280]", hidden: "text-[#CC0033]" };
+    return (
+        <section className="bg-white border border-[#E5E7EB]" data-testid="hrm-congrats-log">
+            <button type="button" onClick={() => setOpen(!open)} className="w-full text-left px-4 py-3 font-medium text-[#002B5C] flex items-center">
+                <span className="flex-1">Congratulations log <span className="text-xs font-normal text-[#6B7280]">— who reacted how and what they wrote (HR only)</span></span>{open ? "▲" : "▼"}</button>
+            {open && (!rows ? <p className="px-4 pb-4 text-sm text-[#6B7280]">Loading…</p> : !rows.length ? <p className="px-4 pb-4 text-sm text-[#6B7280]">No reactions yet.</p> : (
+                <div className="overflow-x-auto border-t border-[#F3F4F6]"><table className="w-full text-sm">
+                    <thead className="bg-[#F5F7FA] text-left text-xs text-[#6B7280]"><tr><th className="px-3 py-2 font-normal">When</th><th className="px-3 font-normal">From</th><th className="px-3 font-normal">To · recognition</th><th className="px-3 font-normal">Reaction &amp; note</th><th className="px-3 font-normal">Status</th><th /></tr></thead>
+                    <tbody>{rows.map((x) => (
+                        <tr key={x.id} className="border-t border-[#F3F4F6] align-top">
+                            <td className="px-3 py-2 whitespace-nowrap text-xs text-[#6B7280]">{new Date(x.at).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</td>
+                            <td className="px-3 py-2">{x.by_name}<div className="text-[11px] text-[#9CA3AF]">{x.by_email}</div></td>
+                            <td className="px-3 py-2">{x.to_name}<div className="text-[11px] text-[#6B7280]">{x.title}</div></td>
+                            <td className="px-3 py-2"><span className="text-lg">{REACT[x.reaction]}</span> {x.note && <span>“{x.note}”</span>}
+                                {(x.edits || []).length > 0 && <div className="text-[11px] text-[#9CA3AF]">changed {x.edits.length}×: {x.edits.map((e) => `${REACT[e.reaction]}${e.note ? ` “${e.note}”` : ""}`).join(" → ")}</div>}
+                                {x.hidden_reason && <div className="text-[11px] text-[#CC0033]">hidden by {x.hidden_by}: {x.hidden_reason}</div>}</td>
+                            <td className={`px-3 py-2 text-xs ${TONE[x.status]}`}>{x.status}</td>
+                            <td className="px-3 py-2">{x.status === "shown" && x.note && <button type="button" onClick={() => hide(x)} className="text-xs underline text-[#CC0033]">Hide note</button>}</td>
+                        </tr>))}</tbody>
+                </table></div>
+            ))}
+        </section>
     );
 }

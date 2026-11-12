@@ -493,5 +493,7 @@ async def ensure_indexes() -> None:
         await db.hr_separations.create_index([("emp_id", 1), ("kind", 1)])
         await db.hr_recognitions.create_index("id", unique=True)
         await db.hr_recognitions.create_index([("emp_id", 1), ("at", -1)])
+        await db.hr_rec_congrats.create_index([("rec_id", 1), ("by_key", 1)], unique=True)
+        await db.hr_rec_congrats.create_index("to_emp_id")
     except Exception:  # noqa: BLE001
         log.warning("hrm separation: index creation failed", exc_info=True)

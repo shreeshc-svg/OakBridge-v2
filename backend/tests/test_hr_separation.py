@@ -218,6 +218,40 @@ async def flow():
     pdf = await HR.rec_letter(g["id"], M)
     check(pdf["content"][:4] == b"%PDF", "appreciation letter PDF")
     await expect(HR.rec_letter(g["id"], A), 404, "a colleague can't open someone else's letter")
+    print("-- congratulations --")
+    await expect(HR.rec_congrats(g["id"], HR.CongratsBody(reaction="clap"), M), 400, "can't congratulate yourself")
+    s1 = await HR.rec_congrats(g["id"], HR.CongratsBody(reaction="clap", note="Well deserved, Meera!"), A)
+    check(s1["count"] == 1 and s1["mine"]["reaction"] == "clap", "Asha claps with a note")
+    s1 = await HR.rec_congrats(g["id"], HR.CongratsBody(reaction="party", note="Well deserved, Meera! 🎉"), A)
+    check(s1["count"] == 1 and s1["by_reaction"]["party"] == 1 and s1["by_reaction"]["clap"] == 0, "again = change it (still one per person)")
+    await HR.rec_congrats(g["id"], HR.CongratsBody(reaction="heart"), Z)
+    sh = (await HR.rec_shoutouts(Z))["rows"][0]
+    check(sh["congrats"]["count"] == 2 and sh["congrats"]["mine"]["reaction"] == "heart" and not sh["congrats"].get("amount"), "shout-out shows counts + my reaction")
+    mine = (await HR.rec_mine(M))["rows"][0]
+    check(mine["congrats"]["count"] == 2 and set(mine["congrats"]["recent"]) == {"Asha", "Zed"}, "Meera sees who congratulated her")
+    lst = await HR.rec_congrats_list(g["id"], Z)
+    check(any(x["note"].startswith("Well deserved") for x in lst["rows"]), "everyone can read the notes on a shared one")
+    await HR.rec_congrats_undo(g["id"], Z)
+    log = (await HR.rec_congrats_log(F))["rows"]
+    zl = next(x for x in log if x["by_name"] == "Zed")
+    al = next(x for x in log if x["by_name"] == "Asha")
+    check(zl["status"] == "removed" and al["edits"][0]["reaction"] == "clap" and al["to_name"] == "Meera",
+          "HR log: who wrote what, to whom — including edits and taken-back reactions")
+    await HR.rec_congrats_hide(al["id"], HR.HideBody(reason="Contains a private joke"), F)
+    check((await HR.rec_congrats_list(g["id"], Z))["rows"] == [] and (await HR.rec_congrats_log(F))["rows"][0]["status"] in ("hidden", "removed"),
+          "HR hides a note: gone for everyone, still in HR's log")
+    await expect(HR.rec_congrats(g["id"], HR.CongratsBody(reaction="clap", note="again"), A), 409, "a hidden note can't be re-posted")
+    mails.clear()
+    n = await HR.congrats_digest()
+    check(n == 0, "hidden / removed ones aren't emailed")
+    await HR.rec_congrats(g["id"], HR.CongratsBody(reaction="fire"), Z)
+    check(await HR.congrats_digest() == 1 and await HR.congrats_digest() == 0 and any("congratulated you" in m["subject"] for m in mails),
+          "one daily email to Meera, then nothing until new ones")
+    priv = await HR.rec_give(HR.GiveBody(emp_id="a", kind="appreciation", title="Private thanks", message="Thanks for staying late on the catalogue."), F)
+    await expect(HR.rec_congrats(priv["id"], HR.CongratsBody(), Z), 404, "private recognitions can't be congratulated")
+    src = open(os.path.join(os.path.dirname(HERE), "hrm_recognition.py"), encoding="utf-8").read()
+    check("async def rec_congrats_log(user: dict = Depends(require_hr))" in src and "async def rec_congrats_hide(cid: str, body: HideBody, user: dict = Depends(require_hr))" in src,
+          "log + hide: HR only")
     await HR.rec_withdraw(g["id"], F)
     check((await HR.rec_shoutouts(A))["rows"] == [] and (await HR.rec_mine(M))["rows"] == [], "withdrawn: gone everywhere")
 
