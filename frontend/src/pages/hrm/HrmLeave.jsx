@@ -42,7 +42,13 @@ export function BalanceCards({ s }) {
     const confirmed = !!s.emp.confirmed_on;
     const of = { CL: b.CL.entitled, SL: b.SL.entitled, EL: Math.max(b.EL.available, b.EL.carried + b.EL.earned + (b.EL.adjusted || 0)), OPT: b.OPT.entitled, COMP: b.COMP.available };
     const left = { CL: b.CL.available, SL: b.SL.available, EL: Math.max(0, b.EL.available), OPT: b.OPT.available, COMP: b.COMP.available };
-    const sub = { CL: `of ${n(of.CL)} this year`, SL: `of ${n(of.SL)} this year`, EL: `${n(b.EL.carried)} carried + ${n(b.EL.earned)} earned`,
+    // Say where the numbers come from, so "3 left · of 4" isn't a puzzle:
+    // the difference is what's been taken (or is waiting approval), and EL
+    // shows HR's adjustments too (Nov 2026 — "it should be 3, why is it 4?").
+    const taken = (x) => (x.used + x.pending ? ` · ${n(x.used + x.pending)} taken` : "");
+    const adj = b.EL.adjusted ? ` ${b.EL.adjusted > 0 ? "+" : "−"} ${n(Math.abs(b.EL.adjusted))} by HR` : "";
+    const sub = { CL: `of ${n(of.CL)} this year${taken(b.CL)}`, SL: `of ${n(of.SL)} this year${taken(b.SL)}`,
+        EL: `${n(b.EL.carried)} carried + ${n(b.EL.earned)} earned${adj}${taken(b.EL)}`,
         OPT: "1 a year, from the list", COMP: b.COMP.available ? "use within 2 months" : "earned by working a day off" };
     return (
         <div>
