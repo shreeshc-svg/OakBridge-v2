@@ -204,6 +204,10 @@ export const recGive = (body) => api.post(HRC, body).then((r) => r.data);
 export const recSeen = (id) => api.post(`${HRC}/${id}/seen`).then((r) => r.data);
 export const recWithdraw = (id) => api.post(`${HRC}/${id}/withdraw`).then((r) => r.data);
 export const recLetter = (id) => api.get(`${HRC}/${id}/letter.pdf`, { responseType: "blob", timeout: 60000 }).then((r) => r.data);
+// HRM My profile (backend/hrm_profile.py): employee edits own; HR sees all; manager = emergency contacts only
+export const profileMe = () => api.get("/hrm/profile/me").then((r) => r.data);
+export const profileSave = (body) => api.put("/hrm/profile/me", body).then((r) => r.data);
+export const profileOf = (empId) => api.get(`/hrm/profile/${empId}`).then((r) => r.data);
 // HRM leave (backend/hrm_leave.py)
 const HL = "/hrm/leave";
 export const leaveSummary = (empId, fy) => api.get(`${HL}/summary`, { params: { ...(empId ? { emp_id: empId } : {}), ...(fy ? { fy } : {}) } }).then((r) => r.data);

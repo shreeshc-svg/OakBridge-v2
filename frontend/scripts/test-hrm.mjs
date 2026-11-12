@@ -89,6 +89,10 @@ check(exitTab.includes("function needs(c, today)") && exitTab.includes("disabled
 check(rec.includes("export function Celebration") && home.includes("<Celebration enabled={!!me.me} />") && home.includes('data-testid="hrm-home-shoutouts"'),
       "recognition: celebration pop-up + shout-outs on Home");
 check(rec.includes("prefers-reduced-motion"), "animations respect reduced motion");
+const prof = read("src/pages/hrm/HrmProfile.jsx");
+check(hrm.includes('["profile", "My profile", UserCircle]') && hrm.includes("<ProfileTab me={me} />") && hrm.includes('["profile", "Profile"]') && hrm.includes("<EmergencyButton person={r} />"),
+      "My profile tab; HR sees it in the person editor; managers get the emergency contact");
+check(!/\b(pan|aadhaar|ifsc|bank_account|account_no)\s*:/i.test(prof) && !/f\.(pan|aadhaar|ifsc|bank)/i.test(prof), "profile has no bank / PAN / Aadhaar fields");
 const appr = read("src/pages/hrm/HrmAppraisal.jsx");
 check(hrm.includes('["appraisal", "Appraisal", Award]') && hrm.includes("<AppraisalTab me={me} />"), "Appraisal tab for everyone");
 check(["appraisalCycle", "appraisalStart", "appraisalMine", "appraisalTeam", "appraisalGet", "appraisalSaveSelf", "appraisalSaveManager",

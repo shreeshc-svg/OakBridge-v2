@@ -757,6 +757,8 @@ async def startup_event():
     await hrm_appraisal_indexes()
     from hrm_separation import ensure_indexes as hrm_separation_indexes
     await hrm_separation_indexes()
+    from hrm_profile import ensure_indexes as hrm_profile_indexes
+    await hrm_profile_indexes()
     try:
         # Real review figures for every reviewed book (stars are shown only
         # from these — extensions.refresh_review_stats).
@@ -2146,6 +2148,8 @@ from hrm_separation import router as hrm_separation_router  # noqa: E402  (HRM: 
 app.include_router(hrm_separation_router)
 from hrm_recognition import router as hrm_recognition_router  # noqa: E402  (HRM: appreciation, awards, rewards)
 app.include_router(hrm_recognition_router)
+from hrm_profile import router as hrm_profile_router  # noqa: E402  (HRM: My profile — personal details, emergency contacts)
+app.include_router(hrm_profile_router)
 app.include_router(marketing_admin_router)
 app.include_router(marketing_tasks_router)
 from newsletter import router as newsletter_router  # noqa: E402  (also registers the nl_tick job)

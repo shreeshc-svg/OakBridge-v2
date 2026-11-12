@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { CalendarCheck, CalendarDays, Target, Users, Briefcase, PartyPopper, ChevronRight, Award } from "lucide-react";
+import { CalendarCheck, CalendarDays, Target, Users, Briefcase, PartyPopper, ChevronRight, Award, UserCircle } from "lucide-react";
 import { hrmCalendar, hrmPeople, leaveSummary, leaveTeam, leaveApprovals, goalsPlan } from "../../lib/api";
 import { BalanceCards, Approvals } from "./HrmLeave";
 import { Avatar, PhotoPicker, Ring } from "./HrmBits";
@@ -88,6 +88,7 @@ export default function HomeTab({ me, go }) {
                     {p && <Action icon={CalendarCheck} label="Apply for leave" onClick={() => go("leave")} primary testid="hrm-home-apply" />}
                     {p && <Action icon={Target} label={goalsTodo || "My goals"} onClick={() => go("goals")} badge={!!goalsTodo} />}
                     <Action icon={CalendarDays} label="Calendar" onClick={() => go("calendar")} />
+                    {p && <Action icon={UserCircle} label="My profile" onClick={() => go("profile")} />}
                     {(me.hr || me.manager) && <Action icon={Users} label={me.hr ? "People" : "My team"} onClick={() => go("people")} />}
                     {me.hiring && <Action icon={Briefcase} label="Hiring" onClick={() => go("hiring")} />}
                 </div>

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { CalendarDays, CalendarCheck, Home, Settings2, Users, Plus, X, Send, Search, Target, Briefcase, Award, Trophy, LogOut } from "lucide-react";
+import { CalendarDays, CalendarCheck, Home, Settings2, Users, Plus, X, Send, Search, Target, Briefcase, Award, Trophy, LogOut, UserCircle, HeartPulse } from "lucide-react";
 import {
     hrmMe, hrmPeople, hrmAddPerson, hrmEditPerson, hrmInvite, hrmConfirmAll, hrmSettings, hrmSaveSettings,
     formatApiError,
@@ -13,6 +13,7 @@ import GoalsTab from "./HrmGoals";
 import AppraisalTab from "./HrmAppraisal";
 import RecognitionTab from "./HrmRecognition";
 import ExitTab from "./HrmExit";
+import ProfileTab, { ProfileView } from "./HrmProfile";
 import HiringTab, { LifecyclePanel, ChecklistSettings } from "./HrmHiring";
 import HomeTab from "./HrmHome";
 import { Avatar, PhotoPicker } from "./HrmBits";
@@ -62,6 +63,7 @@ export default function HrmApp() {
     const tabs = [["home", "Home", Home], ["leave", "Leave", CalendarCheck], ["goals", "Goals", Target], ["appraisal", "Appraisal", Award], ["recognition", "Recognition", Trophy], ...(me.hr || me.manager ? [["people", me.hr ? "People" : "My team", Users]] : []),
         ...(me.hiring ? [["hiring", "Hiring", Briefcase]] : []),
         ["calendar", "Calendar", CalendarDays], ...(me.me || me.hr || me.manager ? [["exit", "Exit", LogOut]] : []),
+        ...(me.me ? [["profile", "My profile", UserCircle]] : []),
         ...(me.hr ? [["settings", "Settings", Settings2]] : [])];
 
     return (
@@ -89,6 +91,7 @@ export default function HrmApp() {
                 {tab === "appraisal" && <AppraisalTab me={me} />}
                 {tab === "recognition" && <RecognitionTab me={me} />}
                 {tab === "exit" && <ExitTab me={me} />}
+                {tab === "profile" && me.me && <ProfileTab me={me} />}
                 {tab === "hiring" && me.hiring && <HiringTab />}
                 {tab === "people" && <PeopleTab hr={me.hr} superadmin={me.superadmin} />}
                 {tab === "calendar" && <HrmCalendar hr={me.hr} manager={me.manager} />}
@@ -153,7 +156,7 @@ function PeopleTab({ hr, superadmin }) {
                 <table className="w-full text-sm">
                     <thead><tr className="text-left text-[#4B5563] border-b border-[#E5E7EB]">
                         <th className="px-3 py-2">Name</th><th className="px-3 py-2 whitespace-nowrap">Emp ID</th><th className="px-3 py-2">Department</th><th className="px-3 py-2">Reports to</th>
-                        <th className="px-3 py-2 whitespace-nowrap">Joined</th><th className="px-3 py-2">Status</th>{hr && <th className="px-3 py-2" />}
+                        <th className="px-3 py-2 whitespace-nowrap">Joined</th><th className="px-3 py-2">Status</th><th className="px-3 py-2" />
                     </tr></thead>
                     <tbody>
                         {shown.map((r) => (
@@ -177,6 +180,7 @@ function PeopleTab({ hr, superadmin }) {
                                             : r.confirmed_on ? "Confirmed" : <span className="text-[#B4750F]">Probation</span>}
                                     {hr && r.status === "active" && <div className="text-[11px] text-[#6B7280]">{r.user_id ? (r.invited_at ? "Login sent" : "Has a login") : "No login yet"}</div>}
                                 </td>
+                                {!hr && <td className="px-3 py-2 text-right"><EmergencyButton person={r} /></td>}
                                 {hr && (
                                     <td className="px-3 py-2 text-right whitespace-nowrap">
                                         <button type="button" onClick={() => setEdit(r)} className="text-xs border border-[#002B5C] px-2 py-1 mr-2">Edit</button>
@@ -189,7 +193,7 @@ function PeopleTab({ hr, superadmin }) {
                                 )}
                             </tr>
                         ))}
-                        {!shown.length && <tr><td colSpan={hr ? 7 : 6} className="px-3 py-8 text-center text-[#6B7280]">{rows.length ? "No one matches." : hr ? "No one yet — add your first person." : "No one in your team yet."}</td></tr>}
+                        {!shown.length && <tr><td colSpan={7} className="px-3 py-8 text-center text-[#6B7280]">{rows.length ? "No one matches." : hr ? "No one yet — add your first person." : "No one in your team yet."}</td></tr>}
                     </tbody>
                 </table>
             </div>
@@ -235,7 +239,7 @@ function PersonForm({ person, people, superadmin, onClose, onSaved }) {
         <>
         {person && (
             <div className="flex items-end gap-1 -mb-px" role="tablist" data-testid="hrm-person-tabs">
-                {[["details", "Details"], ["lifecycle", "Onboarding & exit"]].map(([k, l]) => (
+                {[["details", "Details"], ["profile", "Profile"], ["lifecycle", "Onboarding & exit"]].map(([k, l]) => (
                     <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
                         className={`px-4 py-2 text-sm border border-b-0 ${tab === k ? "bg-white border-[#002B5C] text-[#002B5C] font-medium" : "bg-[#F5F7FA] border-[#E5E7EB] text-[#4B5563]"}`}>{l}</button>
                 ))}
@@ -312,11 +316,36 @@ function PersonForm({ person, people, superadmin, onClose, onSaved }) {
             </div>
             </form>
         )}
+            {person && tab === "profile" && (
+                <div className="bg-white border border-[#002B5C] px-4 pb-4">
+                    <div className="pt-4 pb-3 flex items-center gap-3"><Avatar p={person} size={40} /><h2 className="font-serif text-xl text-[#002B5C]">{person.name}</h2>
+                        <span className="text-xs text-[#6B7280]">— filled in by them; read-only for HR</span></div>
+                    <ProfileView empId={person.id} />
+                </div>
+            )}
             {/* Outside the form on purpose: it has its own exit form, and forms can't nest. */}
             {person && tab === "lifecycle" && (
                 <div className="bg-white border border-[#002B5C] px-4 pb-4">
                     <div className="pt-4 flex items-center gap-3"><Avatar p={person} size={40} /><h2 className="font-serif text-xl text-[#002B5C]">{person.name}</h2></div>
                     <LifecyclePanel person={person} onChange={onSaved} />
+                </div>
+            )}
+        </>
+    );
+}
+
+/* Managers: their team member's emergency contacts only (the server sends nothing else). */
+function EmergencyButton({ person }) {
+    const [open, setOpen] = useState(false);
+    return (
+        <>
+            <button type="button" onClick={() => setOpen(true)} className="inline-flex items-center gap-1 text-xs border border-[#E5E7EB] px-2 py-1 hover:border-[#CC0033]"><HeartPulse size={12} className="text-[#CC0033]" />Emergency contact</button>
+            {open && (
+                <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4 text-left" role="dialog" aria-modal="true" onClick={() => setOpen(false)}>
+                    <div className="bg-white w-full max-w-sm p-4" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center gap-2 mb-3"><Avatar p={person} size={32} /><b className="flex-1 text-[#002B5C]">{person.name}</b><button type="button" onClick={() => setOpen(false)} aria-label="Close"><X size={16} /></button></div>
+                        <ProfileView empId={person.id} />
+                    </div>
                 </div>
             )}
         </>
