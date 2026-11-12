@@ -75,6 +75,9 @@ check(leave.includes('data-testid="hrm-no-optional"') && leave.includes("optBloc
       "optional holiday: named options; explains an empty list / used quota instead of an empty dropdown");
 check(leave.includes('["WFH", "Work from home (not leave)"]') && leave.includes('f.type === "WFH"') && home.includes('r.type !== "WFH" && r.start <= today'),
       "work from home: requested like leave, never counted as 'off today'");
+const policy = read("src/pages/hrm/HrmLeavePolicy.jsx");
+check(leave.includes('["policy", "Leave policy"]') && leave.includes("<LeavePolicy />") && leave.includes('data-testid="hrm-read-policy"')
+      && policy.includes("up to a maximum of 12 days") && policy.includes("recommended"), "leave policy readable inside Leave, for everyone");
 const appr = read("src/pages/hrm/HrmAppraisal.jsx");
 check(hrm.includes('["appraisal", "Appraisal", Award]') && hrm.includes("<AppraisalTab me={me} />"), "Appraisal tab for everyone");
 check(["appraisalCycle", "appraisalStart", "appraisalMine", "appraisalTeam", "appraisalGet", "appraisalSaveSelf", "appraisalSaveManager",

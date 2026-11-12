@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Check, X, Download } from "lucide-react";
 import { Ring } from "./HrmBits";
+import LeavePolicy from "./HrmLeavePolicy";
 import {
     leaveSummary, leaveApply, leaveCancel, leaveApprovals, leaveDecide, leaveAdjust, leaveAdjustments, leaveExport, leaveSetBalance,
     hrmPeople, saveBlob, formatApiError,
@@ -75,7 +76,7 @@ export default function LeaveTab({ me }) {
     // Three views instead of one long page: your own leave, what you approve,
     // and (HR) the setup tools — each person sees only the views they use.
     const views = [...(me.me ? [["mine", "My leave"]] : []), ...((me.hr || me.manager) ? [["approve", "Approvals"]] : []),
-        ...(me.hr ? [["tools", "HR tools"]] : [])];
+        ...(me.hr ? [["tools", "HR tools"]] : []), ["policy", "Leave policy"]];   // the policy: everyone can read it here
     const [view, setView] = useState(views[0]?.[0] || "mine");
     return (
         <div className="space-y-6">
@@ -89,12 +90,14 @@ export default function LeaveTab({ me }) {
             )}
             {view === "mine" && me.me && (
                 <>
+                    <button type="button" onClick={() => setView("policy")} className="text-sm text-[#002B5C] underline" data-testid="hrm-read-policy">Not sure what you can take? Read the leave policy</button>
                     <BalanceCards s={s} />
                     {s && <ApplyForm s={s} onDone={load} />}
                     {s && <MyRequests rows={s.requests} onChange={load} />}
                 </>
             )}
             {view === "approve" && (me.hr || me.manager) && <Approvals hr={me.hr} onChange={load} />}
+            {view === "policy" && <LeavePolicy />}
             {view === "tools" && me.hr && <HrTools superadmin={me.superadmin} />}
         </div>
     );
