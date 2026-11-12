@@ -332,6 +332,25 @@ async def offs():
     check("async def leave_set_balance(body: SetBalanceBody, user: dict = Depends(require_superadmin_hrm))" in src,
           "set-balance is super admin only")
 
+    print("-- bulk --")
+    B = HL.BulkBody
+    pv = await HL.leave_bulk(B(type="CL", mode="add", days=1, note="Diwali bonus day"), F)
+    check(not pv["applied"] and pv["rows"] and all(r["after"] == r["before"] + 1 for r in pv["rows"]), "preview: +1 CL for everyone, before -> after")
+    check(not [x async for x in db.hr_leave_adjust.find({"note": {"$regex": "^Bulk"}})], "preview writes nothing")
+    a0 = next(r for r in pv["rows"] if r["id"] == "a")["before"]
+    res = await HL.leave_bulk(B(type="CL", mode="add", days=1, note="Diwali bonus day", preview=False), F)
+    check(res["applied"] and res["changed"] == len(res["rows"]) == len(pv["rows"]), "applied to everyone in the preview")
+    check(HL._left(await db.hr_employees.find_one({"id": "a"}), "CL", FY, await HL._all_requests("a"), await HL._adjustments("a")) == a0 + 1,
+          "her card shows one more CL")
+    res = await HL.leave_bulk(B(type="COMP", mode="set", days=0, note="year-end reset", who="people", ids=["a"], preview=False), F)
+    check(len(res["rows"]) == 1 and res["rows"][0]["after"] == 0, "comp-off set to 0 for one picked person")
+    res = await HL.leave_bulk(B(type="SL", mode="add", days=-60, note="floor check", who="people", ids=["a"]), F)
+    check(res["rows"][0]["after"] == 0 and res["rows"][0]["floored"], "never below 0 (flagged in the preview)")
+    await expect(HL.leave_bulk(B(type="CL", mode="add", days=1, note="x"), F), 400, "a reason is required")
+    await expect(HL.leave_bulk(B(type="CL", mode="add", days=1, note="team outing", who="department", departments=["Nowhere"]), F), 400, "nobody matches -> refused")
+    await expect(HL.leave_bulk(B(type="COMP", mode="add", days=0.5, note="half comp"), F), 400, "comp-off is whole days")
+    check("async def leave_bulk(body: BulkBody, user: dict = Depends(require_hr))" in src, "bulk: HR and super admin")
+
 asyncio.run(flow())
 asyncio.run(offs())
 print("\nall passed" if not failed else f"\n{failed} FAILED")

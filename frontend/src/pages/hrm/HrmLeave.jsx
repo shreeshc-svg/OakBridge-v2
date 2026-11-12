@@ -4,7 +4,7 @@ import { Check, X, Download } from "lucide-react";
 import { Ring } from "./HrmBits";
 import LeavePolicy from "./HrmLeavePolicy";
 import {
-    leaveSummary, leaveApply, leaveCancel, leaveApprovals, leaveDecide, leaveAdjust, leaveAdjustments, leaveExport, leaveSetBalance,
+    leaveSummary, leaveApply, leaveCancel, leaveApprovals, leaveDecide, leaveAdjust, leaveAdjustments, leaveExport, leaveSetBalance, leaveBulk,
     hrmPeople, saveBlob, formatApiError,
 } from "../../lib/api";
 
@@ -285,6 +285,75 @@ export function Approvals({ hr, onChange, compact = false }) {
     );
 }
 
+/* Company-wide / team / picked people: add, remove or set a balance in one go.
+   Always previews first (server: preview=true writes nothing), then "Apply". */
+const BULK_TYPES = [["CL", "Casual leave"], ["SL", "Sick leave"], ["EL", "Earned leave"], ["COMP", "Comp-off"], ["OPT", "Optional holiday"]];
+
+function BulkTool({ people }) {
+    const blank = { type: "CL", mode: "add", days: "", note: "", who: "all", departments: [], ids: [], include_probation: false };
+    const [f, setF] = useState(blank);
+    const [pv, setPv] = useState(null);
+    const [busy, setBusy] = useState(false);
+    const deps = [...new Set(people.map((p) => p.department).filter(Boolean))].sort();
+    const set = (k, v) => { setPv(null); setF({ ...f, [k]: v }); };
+    const toggle = (k, v) => set(k, f[k].includes(v) ? f[k].filter((x) => x !== v) : [...f[k], v]);
+    const body = () => ({ ...f, days: Number(f.days) });
+    const label = BULK_TYPES.find(([k]) => k === f.type)[1].toLowerCase();
+    const what = f.mode === "set" ? `set ${label} to ${f.days}` : `${Number(f.days) > 0 ? "add" : "remove"} ${Math.abs(Number(f.days))} day(s) of ${label}`;
+    const preview = async (e) => {
+        e.preventDefault();
+        setBusy(true);
+        try { setPv(await leaveBulk({ ...body(), preview: true })); } catch (er) { toast.error(formatApiError(er)); } finally { setBusy(false); }
+    };
+    const apply = async () => {
+        if (!window.confirm(`${what[0].toUpperCase()}${what.slice(1)} for ${pv.changed} ${pv.changed === 1 ? "person" : "people"}?\n\nEach person's record shows: "${f.note}".`)) return;
+        setBusy(true);
+        try { const r = await leaveBulk({ ...body(), preview: false }); toast.success(`Done — ${r.changed} balance(s) changed.`); setPv(null); setF(blank); }
+        catch (er) { toast.error(formatApiError(er)); } finally { setBusy(false); }
+    };
+    const inp = "mt-1 w-full border border-[#E5E7EB] px-2 py-1.5 text-sm bg-white";
+    return (
+        <form onSubmit={preview} className="bg-white border border-[#E5E7EB] p-4 text-sm lg:col-span-2" data-testid="hrm-bulk-leave">
+            <h2 className="font-serif text-xl text-[#002B5C]">Change leave for many people</h2>
+            <p className="text-xs text-[#6B7280] mt-1">For the whole company, some teams or picked people — e.g. "+1 casual leave for everyone", "set comp-off to 0". You'll see every person's before → after before anything changes.</p>
+            <div className="grid sm:grid-cols-4 gap-2 mt-3">
+                <label>Leave<select value={f.type} onChange={(e) => set("type", e.target.value)} className={inp}>{BULK_TYPES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>
+                <label>What<select value={f.mode} onChange={(e) => set("mode", e.target.value)} className={inp}>
+                    <option value="add">Add / remove days</option><option value="set">Set balance to exactly</option></select></label>
+                <label>{f.mode === "set" ? "Balance" : "Days (+ add / − remove)"}<input required type="number" step={f.type === "COMP" ? 1 : 0.5} min={f.mode === "set" ? 0 : undefined}
+                    value={f.days} onChange={(e) => set("days", e.target.value)} className={inp} /></label>
+                <label>For<select value={f.who} onChange={(e) => set("who", e.target.value)} className={inp}>
+                    <option value="all">Everyone</option><option value="department">Some teams</option><option value="people">Picked people</option></select></label>
+            </div>
+            {f.who === "department" && (
+                <div className="mt-2 flex flex-wrap gap-2">{deps.length ? deps.map((d) => <label key={d} className="inline-flex items-center gap-1 border border-[#E5E7EB] px-2 py-1"><input type="checkbox" checked={f.departments.includes(d)} onChange={() => toggle("departments", d)} />{d}</label>)
+                    : <span className="text-xs text-[#6B7280]">No departments set on people yet.</span>}</div>
+            )}
+            {f.who === "people" && (
+                <div className="mt-2 grid sm:grid-cols-3 gap-1 max-h-48 overflow-auto border border-[#F3F4F6] p-2">{people.map((p) => (
+                    <label key={p.id} className="inline-flex items-center gap-1"><input type="checkbox" checked={f.ids.includes(p.id)} onChange={() => toggle("ids", p.id)} />{p.name}</label>))}</div>
+            )}
+            <label className="mt-2 inline-flex items-center gap-2"><input type="checkbox" checked={f.include_probation} onChange={(e) => set("include_probation", e.target.checked)} />Include people on probation</label>
+            <label className="block mt-2">Reason (shown on each person's record)<input required minLength={5} value={f.note} onChange={(e) => set("note", e.target.value)} className={inp} placeholder="e.g. Extra day off for Diwali" /></label>
+            <div className="mt-3 flex flex-wrap gap-2 items-center">
+                <button type="submit" disabled={busy} className="border border-[#002B5C] text-[#002B5C] px-4 py-2 disabled:opacity-50">{busy && !pv ? "Checking…" : "Preview"}</button>
+                {pv && <button type="button" disabled={busy || !pv.changed} onClick={apply} className="bg-[#002B5C] text-white px-4 py-2 disabled:opacity-50">Apply to {pv.changed} {pv.changed === 1 ? "person" : "people"}</button>}
+            </div>
+            {pv && (
+                <div className="mt-3 border border-[#E5E7EB] max-h-72 overflow-auto" data-testid="hrm-bulk-preview">
+                    <table className="w-full text-sm">
+                        <thead className="bg-[#F5F7FA] text-left text-xs text-[#6B7280]"><tr><th className="px-2 py-1.5 font-normal">Person</th><th className="px-2 font-normal">Team</th><th className="px-2 font-normal text-right">Now</th><th className="px-2 font-normal text-right">After</th></tr></thead>
+                        <tbody>{pv.rows.map((r) => (
+                            <tr key={r.id} className="border-t border-[#F3F4F6]"><td className="px-2 py-1.5">{r.name}</td><td className="px-2 text-[#6B7280]">{r.department}</td>
+                                <td className="px-2 text-right">{n(r.before)}</td>
+                                <td className={`px-2 text-right font-medium ${r.after === r.before ? "text-[#6B7280]" : "text-[#002B5C]"}`}>{n(r.after)}{r.floored ? <span className="text-xs text-[#B4750F]"> (can't go below 0)</span> : ""}</td></tr>))}</tbody>
+                    </table>
+                </div>
+            )}
+        </form>
+    );
+}
+
 function SetBalance({ people }) {
     const [f, setF] = useState({ emp_id: "", type: "EL", to: "", note: "" });
     const [cur, setCur] = useState(null);
@@ -364,6 +433,7 @@ function HrTools({ superadmin }) {
     const inp = "mt-1 w-full border border-[#E5E7EB] px-2 py-1.5 text-sm bg-white";
     return (
         <div className="grid gap-4 lg:grid-cols-2">
+            <BulkTool people={people} />
             {superadmin && <SetBalance people={people} />}
             <form onSubmit={add} className="bg-white border border-[#E5E7EB] p-4 text-sm" data-testid="hrm-adjust">
                 <h2 className="font-serif text-xl text-[#002B5C]">Opening balances &amp; corrections</h2>

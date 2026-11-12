@@ -194,6 +194,7 @@ export const leaveTeam = (start, end) => api.get(`${HL}/team`, { params: { start
 export const leaveAdjustments = (empId) => api.get(`${HL}/adjustments`, { params: empId ? { emp_id: empId } : {} }).then((r) => r.data.rows || []);
 export const leaveAdjust = (body) => api.post(`${HL}/adjustments`, body).then((r) => r.data);
 export const leaveSetBalance = (body) => api.post(`${HL}/set-balance`, body).then((r) => r.data);
+export const leaveBulk = (body) => api.post(`${HL}/bulk`, body).then((r) => r.data);   // preview: true (default) writes nothing
 export const leaveExport = (month) => api.get(`${HL}/export.csv`, { params: { month }, responseType: "blob" }).then((r) => r.data);
 export const whLookup = (code, id = "") => api.get("/warehouse/lookup", { params: id ? { id } : { code } }).then((r) => r.data);
 export const whBooks = (opts = {}) => api.get("/warehouse/books", { params: opts.all ? { all: true } : {} }).then((r) => r.data);

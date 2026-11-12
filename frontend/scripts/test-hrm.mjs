@@ -75,6 +75,8 @@ check(leave.includes('data-testid="hrm-no-optional"') && leave.includes("optBloc
       "optional holiday: named options; explains an empty list / used quota instead of an empty dropdown");
 check(leave.includes('["WFH", "Work from home (not leave)"]') && leave.includes('f.type === "WFH"') && home.includes('r.type !== "WFH" && r.start <= today'),
       "work from home: requested like leave, never counted as 'off today'");
+check(leave.includes('data-testid="hrm-bulk-leave"') && leave.includes("preview: true") && leave.includes("preview: false") && api.includes("export const leaveBulk ="),
+      "bulk leave change: preview every person's before -> after, then apply");
 const policy = read("src/pages/hrm/HrmLeavePolicy.jsx");
 check(leave.includes('["policy", "Leave policy"]') && leave.includes("<LeavePolicy />") && leave.includes('data-testid="hrm-read-policy"')
       && policy.includes("up to a maximum of 12 days") && policy.includes("recommended"), "leave policy readable inside Leave, for everyone");

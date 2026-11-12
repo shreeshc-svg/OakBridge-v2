@@ -475,36 +475,121 @@ async def leave_set_balance(body: SetBalanceBody, user: dict = Depends(require_s
     emp = await db.hr_employees.find_one({"id": body.emp_id}, {"_id": 0})
     if not emp:
         raise HTTPException(status_code=404, detail="Not found")
+    if body.type == "COMP" and body.to != int(body.to):
+        raise HTTPException(status_code=400, detail="Comp-off is whole days.")
     fy = body.fy or hr_core.fiscal_year(_today())
-    reqs, adjs = await _all_requests(body.emp_id), await _adjustments(body.emp_id)
+    before, after = await _change_balance(emp, body.type, fy, to=body.to, add=None,
+                                          note=f"Set to {body.to:g} by super admin: {body.note.strip()}"[:300], user=user)
+    await audit_log(db, "HRM_LEAVE_BALANCE_SET", email=user.get("email", ""), role=user.get("role", ""),
+                    meta={"person": body.emp_id, "type": body.type, "to": body.to, "fy": fy})
+    return {"ok": True, "balances": core.balances(emp, fy, _today(), await _all_requests(body.emp_id), await _adjustments(body.emp_id))}
+
+
+def _left(emp: dict, ltype: str, fy: str, reqs: list, adjs: list) -> float:
+    """What is LEFT of a type right now (the number on the person's card)."""
+    if ltype == "COMP":
+        return float(len(core.comp_available(reqs, emp["id"], _today())))
+    b = core.balances(emp, fy, _today(), reqs, adjs)[ltype]
+    return b["available"] if ltype == "EL" else b["entitled"] - b["used"] - b["pending"]
+
+
+async def _change_balance(emp: dict, ltype: str, fy: str, *, to: Optional[float], add: Optional[float], note: str,
+                          user: dict, dry: bool = False) -> tuple[float, float]:
+    """Move one person's balance of `ltype` to `to` (exact) or by `add` (±),
+    never below 0. Recorded as an adjustment of the difference so the history
+    still adds up; comp-off by granting (valid 2 months) or voiding days,
+    soonest-expiring first. Returns (before, after). dry=True: no writes."""
+    reqs, adjs = await _all_requests(emp["id"]), await _adjustments(emp["id"])
+    cur = _left(emp, ltype, fy, reqs, adjs)
+    target = max(0.0, float(to) if to is not None else cur + float(add or 0))
+    if ltype == "COMP":
+        target = float(int(target))
+    diff = round(target - cur, 1)
+    if dry or not diff:
+        return cur, cur + diff
     now = _now().isoformat()
-    note = f"Set to {body.to:g} by super admin: {body.note.strip()}"[:300]
-    if body.type == "COMP":
-        if body.to != int(body.to):
-            raise HTTPException(status_code=400, detail="Comp-off is whole days.")
-        avail = core.comp_available(reqs, body.emp_id, _today())
-        diff = int(body.to) - len(avail)
-        if diff > 0:
-            for _ in range(diff):
-                await db.hr_leave.insert_one({"id": str(uuid.uuid4()), "emp_id": body.emp_id, "type": "COMP_EARN", "status": "approved",
-                                              "worked_on": _today().isoformat(), "start": _today().isoformat(), "end": _today().isoformat(),
-                                              "days": 0, "granted": True, "reason": note, "applied_at": now,
-                                              "applied_by": user.get("email", ""), "decided_by": user.get("email", ""), "decided_at": now,
-                                              "flags": [], "history": []})
-        for c in sorted(avail, key=lambda c: c["expires"])[:max(0, -diff)]:
+    if ltype == "COMP":
+        avail = core.comp_available(reqs, emp["id"], _today())
+        for _ in range(max(0, int(diff))):
+            await db.hr_leave.insert_one({"id": str(uuid.uuid4()), "emp_id": emp["id"], "type": "COMP_EARN", "status": "approved",
+                                          "worked_on": _today().isoformat(), "start": _today().isoformat(), "end": _today().isoformat(),
+                                          "days": 0, "granted": True, "reason": note, "applied_at": now,
+                                          "applied_by": user.get("email", ""), "decided_by": user.get("email", ""), "decided_at": now,
+                                          "flags": [], "history": []})
+        for c in sorted(avail, key=lambda c: c["expires"])[:max(0, -int(diff))]:
             await db.hr_leave.update_one({"id": c["id"]}, {"$set": {"status": "voided", "voided_by": user.get("email", ""), "voided_at": now,
                                                                     "decision_note": note}})
     else:
-        b = core.balances(emp, fy, _today(), reqs, adjs)[body.type]
-        cur = b["available"] if body.type == "EL" else b["entitled"] - b["used"] - b["pending"]
-        diff = round(body.to - cur, 1)
-        if diff:
-            await db.hr_leave_adjust.insert_one({"id": str(uuid.uuid4()), "emp_id": body.emp_id, "fy": fy, "type": body.type,
-                                                 "days": float(diff), "note": note, "by": user.get("email", ""), "at": now})
-    await audit_log(db, "HRM_LEAVE_BALANCE_SET", email=user.get("email", ""), role=user.get("role", ""),
-                    meta={"person": body.emp_id, "type": body.type, "to": body.to, "fy": fy})
-    after = core.balances(emp, fy, _today(), await _all_requests(body.emp_id), await _adjustments(body.emp_id))
-    return {"ok": True, "balances": after}
+        await db.hr_leave_adjust.insert_one({"id": str(uuid.uuid4()), "emp_id": emp["id"], "fy": fy, "type": ltype,
+                                             "days": float(diff), "note": note, "by": user.get("email", ""), "at": now})
+    return cur, cur + diff
+
+
+class BulkBody(BaseModel):
+    type: str                         # CL | SL | EL | OPT | COMP
+    mode: str                         # add (± days) | set (exact balance)
+    days: float
+    note: str
+    who: str = "all"                  # all | department | people
+    departments: list = []
+    ids: list = []
+    include_probation: bool = False
+    fy: Optional[str] = None
+    preview: bool = True
+
+
+@router.post("/bulk")
+async def leave_bulk(body: BulkBody, user: dict = Depends(require_hr)):
+    """HR / super admin: change a leave balance for many people at once —
+    the whole company, some departments or picked people (e.g. "+1 CL for
+    everyone for Diwali", "set comp-off to 0"). preview=True (the default)
+    returns before → after for each person and writes nothing; the screen
+    shows that list, then sends preview=False. Every person gets their own
+    adjustment record with the note, and the whole run is in the audit log."""
+    if body.type not in ("CL", "SL", "EL", "OPT", "COMP"):
+        raise HTTPException(status_code=400, detail="Choose casual, sick, earned leave, optional holiday or comp-off.")
+    if body.mode not in ("add", "set"):
+        raise HTTPException(status_code=400, detail="Choose add / remove days, or set an exact balance.")
+    d = float(body.days)
+    if (d * 2) != int(d * 2) or not (-60 <= d <= 60) or (body.mode == "add" and d == 0) or (body.mode == "set" and d < 0):
+        raise HTTPException(status_code=400, detail="Days must be a whole or half number (−60 to 60; not 0 when adding).")
+    if body.type == "COMP" and d != int(d):
+        raise HTTPException(status_code=400, detail="Comp-off is whole days.")
+    if len((body.note or "").strip()) < 5:
+        raise HTTPException(status_code=400, detail="Say why (at least 5 characters) — every person's record shows it.")
+    fy = body.fy or hr_core.fiscal_year(_today())
+    try:
+        hr_core.fy_bounds(fy)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    people, _, _ = await _ctx(user)
+    deps = {str(x).strip().lower() for x in body.departments if str(x).strip()}
+    ids = {str(x) for x in body.ids}
+    targets = []
+    for p in sorted(people.values(), key=lambda p: (p.get("department") or "", p.get("name") or "")):
+        if p.get("status") != "active":
+            continue
+        if body.who == "department" and (p.get("department") or "").strip().lower() not in deps:
+            continue
+        if body.who == "people" and p["id"] not in ids:
+            continue
+        if not body.include_probation and not p.get("confirmed_on"):
+            continue
+        targets.append(p)
+    if not targets:
+        raise HTTPException(status_code=400, detail="Nobody matches — check who it's for.")
+    verb = f"set to {d:g}" if body.mode == "set" else f"{d:+g}"
+    note = f"Bulk {verb} by {user.get('email', '')}: {body.note.strip()}"[:300]
+    rows = []
+    for p in targets:
+        before, after = await _change_balance(p, body.type, fy, to=d if body.mode == "set" else None,
+                                              add=d if body.mode == "add" else None, note=note, user=user, dry=body.preview)
+        rows.append({"id": p["id"], "name": p.get("name", ""), "emp_code": p.get("emp_code", ""), "department": p.get("department", ""),
+                     "before": before, "after": after, "floored": body.mode == "add" and before + d < 0})
+    if not body.preview:
+        await audit_log(db, "HRM_LEAVE_BULK", email=user.get("email", ""), role=user.get("role", ""),
+                        meta={"type": body.type, "mode": body.mode, "days": d, "fy": fy, "people": len(rows), "who": body.who})
+    return {"ok": True, "applied": not body.preview, "fy": fy, "rows": rows, "changed": sum(1 for r in rows if r["after"] != r["before"])}
 
 
 # ---------------------------------------------------------- payroll export ---
