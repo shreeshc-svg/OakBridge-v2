@@ -354,21 +354,28 @@ function ShelfCard({ b, ed, cat, onLeave }) {
                 <div className="eb-cover relative aspect-[2/3] bg-white border border-[#E5E7EB] overflow-hidden">
                     {b.cover_image ? <img src={mediaUrl(b.cover_image)} alt={b.title} loading="lazy" className="w-full h-full object-cover" />
                         : <div className="w-full h-full grid place-items-center p-3 text-center font-serif text-[#002B5C]">{b.title}</div>}
-                    <span className="absolute top-2 left-2 inline-flex items-center gap-1 bg-[#0A7D55] text-white text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5"><Tablet size={10} />eBook</span>
+                    <span className="absolute top-2 left-2 inline-flex items-center gap-1 bg-[#3D9970] text-white text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5"><Tablet size={10} />eBook</span>
                     {save > 0 && <span className="absolute bottom-2 left-2 bg-[#F59E0B] text-[#001A38] text-[11px] font-semibold px-2 py-0.5 shadow">Save {formatINR(save)} vs print</span>}
                 </div>
             </Link>
+            {/* Fixed slots (subject 1 line, title 2, author 1) and the button
+                pinned to the bottom, so every CTA in a row lines up whatever
+                the title length — a one-line title used to lift its button
+                above its neighbours'. */}
             <div className="mt-3 flex-1 flex flex-col">
-                {cat && <div className="text-[10px] uppercase tracking-[0.15em] text-[#9CA3AF]">{cat}</div>}
-                <Link to={`/books/${b.id}`} className="font-serif text-[15px] text-[#002B5C] leading-snug mt-0.5 line-clamp-2 hover:underline">{b.title}</Link>
-                {b.author && <div className="text-xs text-[#6B7280] mt-0.5 line-clamp-1">{b.author}</div>}
-                <div className="mt-2 flex items-baseline gap-2 text-sm">
-                    {ed.price != null && <span className="font-semibold text-[#0A7D55]">{formatINR(ed.price)}</span>}
+                <div className="text-[10px] uppercase tracking-[0.15em] text-[#9CA3AF] h-4 truncate">{cat || "\u00a0"}</div>
+                <Link to={`/books/${b.id}`} title={b.title} className="font-serif text-[15px] text-[#002B5C] leading-snug mt-0.5 line-clamp-2 min-h-[2.75em] hover:underline">{b.title}</Link>
+                <div className="text-xs text-[#6B7280] mt-0.5 h-4 truncate">{b.author || "\u00a0"}</div>
+                <div className="mt-2 mb-3 flex items-baseline gap-2 text-sm h-6">
+                    {ed.price != null && <span className="font-semibold text-[#3D9970]">{formatINR(ed.price)}</span>}
                     {print && <span className="text-xs text-[#9CA3AF]">Print {formatINR(print)}</span>}
                 </div>
+                {/* Same words and green as the eBook link on bookstore cards
+                    (components/BookCard.jsx), as a full-width button here. */}
                 <a href={ed.url} target="_blank" rel="noopener noreferrer" onClick={() => onLeave("ebooks_shelf", ed.url, b)}
-                    className="mt-3 inline-flex items-center justify-center gap-1.5 border border-[#0A7D55] text-[#0A7D55] px-3 py-2 text-xs font-semibold hover:bg-[#0A7D55] hover:text-white transition-colors">
-                    Read the eBook <ArrowUpRight size={12} />
+                    data-testid={`ebooks-read-${b.id}`}
+                    className="mt-auto inline-flex items-center justify-center gap-1.5 border border-[#3D9970] text-[#3D9970] h-10 text-xs font-semibold hover:bg-[#3D9970] hover:text-white transition-colors">
+                    Read eBook <ArrowUpRight size={12} />
                 </a>
             </div>
         </li>
