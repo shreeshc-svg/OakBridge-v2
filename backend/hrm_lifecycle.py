@@ -454,8 +454,9 @@ async def daily() -> dict:
     from hrm_appraisal import apply_due
     from hrm_separation import fnf_reminders
     from hrm_recognition import congrats_digest
+    from hrm_profile import purge_leavers
     return {"exits": await finalize_exits(), "purged": await purge_old_applications(), "appraisals": await apply_due(),
-            "fnf_reminded": await fnf_reminders(), "congrats_emails": await congrats_digest()}
+            "fnf_reminded": await fnf_reminders(), "congrats_emails": await congrats_digest(), "personal_purged": await purge_leavers()}
 
 
 try:

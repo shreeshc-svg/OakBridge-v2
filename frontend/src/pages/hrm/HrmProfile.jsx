@@ -64,7 +64,7 @@ export default function ProfileTab({ me }) {
                 <div className="mt-3"><Rows rows={[["Employee ID", p.work.emp_code], ["Designation", p.work.designation], ["Department", p.work.department], ["Work email", p.work.work_email],
                     ["Joined", fmt(p.work.joined_on)], ["Confirmed", p.work.confirmed_on ? fmt(p.work.confirmed_on) : "On probation"]]} /></div>
             </section>
-            <p className="text-xs text-[#6B7280] flex items-center gap-1.5"><ShieldCheck size={14} />Only you and HR see your personal details. We don't store bank, PAN or Aadhaar here — those stay with payroll.</p>
+            <p className="text-xs text-[#6B7280] flex items-center gap-1.5"><ShieldCheck size={14} />Only you and HR see your personal details. We don't store bank, PAN or Aadhaar here — those stay with payroll. If you leave, these personal details are deleted automatically one year after your Full &amp; Final settlement.</p>
         </div>
     );
 }

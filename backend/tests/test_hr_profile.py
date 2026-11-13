@@ -132,6 +132,21 @@ async def flow():
     check(any(a[0] == "HRM_PROFILE_VIEWED" for a in audits), "HR's view is audited")
     await expect(P.profile_of("a", Z), 404, "a colleague sees nothing")
 
+    print("-- DPDP: leavers' personal details --")
+    E = {"id": "x", "status": "exited", "exited_on": "2025-09-01"}
+    check(P.purge_due_on(E, None) == "2026-09-15", "no F&F tracked: last day + 14 + 365")
+    check(P.purge_due_on(E, {"fnf": {"status": "pending"}}) is None, "F&F unpaid: keep (may still be needed to pay them)")
+    check(P.purge_due_on(E, {"fnf": {"status": "paid", "paid_on": "2025-10-01"}}) == "2026-10-01", "1 year after F&F is paid")
+    check(P.purge_due_on({**E, "status": "active"}, None) is None, "never for someone still working")
+    await db.hr_employees.update_one({"id": "z"}, {"$set": {"status": "exited", "exited_on": "2025-06-01", "phone": "9822222222"}})
+    await db.hr_profiles.insert_one({"emp_id": "z", "dob": "1990-01-01", "emergency": [{"name": "K", "phone": "9833333333"}]})
+    await db.hr_separations.insert_one({"id": "s1", "emp_id": "z", "kind": "resignation", "fnf": {"status": "paid", "paid_on": "2025-07-01"}, "updated_at": "2025-07-01"})
+    check(await P.purge_leavers() == 1, "purged once due")
+    z = await db.hr_employees.find_one({"id": "z"})
+    check(not await db.hr_profiles.find_one({"emp_id": "z"}) and "phone" not in z and z.get("personal_purged_at") and z["name"] == "Zed",
+          "profile + mobile deleted; work record (name, dates) kept")
+    check(await P.purge_leavers() == 0 and await db.hr_profiles.find_one({"emp_id": "a"}), "only once; current staff untouched")
+
 asyncio.run(flow())
 print("\nall passed" if not failed else f"\n{failed} FAILED")
 sys.exit(1 if failed else 0)

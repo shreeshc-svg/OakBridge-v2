@@ -163,6 +163,7 @@ async def flow():
     await expect(HS.sep_manager(sid, HS.ManagerBody(comment="Tried to retain her; handover to Zed planned."), Z), 404, "a colleague can't act")
     board = await HS.sep_board(M)
     check([x["name"] for x in board["resignations"]] == ["Asha"] and board["cases"] == [] and board["fnf"] == [], "manager's board: team resignation only")
+    await db.hr_profiles.insert_one({"emp_id": "a", "personal_email": "asha.home@gmail.com"})
     await HS.sep_manager(sid, HS.ManagerBody(comment="Tried to retain her; handover to Zed planned.", suggested_last_day="2026-12-05"), M)
     mails.clear()
     r = await HS.sep_accept(sid, HS.AcceptBody(last_day="2026-12-05", waive_shortfall=True), F)
@@ -170,7 +171,9 @@ async def flow():
           "HR accepts: 7 days short (waived), F&F due 19 Dec")
     emp = await db.hr_employees.find_one({"id": "a"})
     check(emp["exited_on"] == "2026-12-05" and emp["exit"]["reason"] == "resigned" and emp.get("exit_checklist"), "the normal exit is recorded")
-    check(any(m["to"] == "a@o.in" and "accepted" in m["subject"] for m in mails), "Asha told, with her last day")
+    acc_mails = [m for m in mails if "accepted" in m["subject"] and m["to"] in ("a@o.in", "asha.home@gmail.com")]
+    check({m["to"] for m in acc_mails} == {"a@o.in", "asha.home@gmail.com"}, "acceptance emailed to work AND personal email")
+    check(all((m.get("attachments") or [[None, b""]])[0][1][:4] == b"%PDF" for m in acc_mails), "…with the acceptance letter attached (theirs after HRM access ends)")
     await expect(HS.sep_withdraw(sid, A), 409, "can't withdraw after acceptance")
     HS._today = lambda: date(2026, 12, 21)
     check(await HS.fnf_reminders() == 1 and await HS.fnf_reminders() == 0, "F&F overdue -> HR reminded once")
@@ -197,9 +200,13 @@ async def flow():
     check(mine["notices"] and "show_cause" in mine["notices"][0] and "Repeated rude" not in json.dumps(mine), "Zed sees the notice, not HR's notes")
     await HS.case_step(cid, "reply", HS.StepBody(text="I apologise — I was under stress; it won't happen again."), Z)
     await expect(HS.case_step(cid, "reply", HS.StepBody(text="Second reply attempt here."), Z), 409, "one reply")
-    r = await HS.case_step(cid, "terminate", HS.StepBody(notice="pay_in_lieu", last_day="2026-11-12", note="Reply considered; second incident after warning."), F)
-    check(r["status"] == "terminated" and r["fnf"]["due"] == "2026-11-26", "terminated after the reply; F&F due in 14 days")
+    r = await HS.case_step(cid, "terminate", HS.StepBody(notice="pay_in_lieu", last_day="2026-12-31", note="Reply considered; second incident after warning."), F)
+    # A future last day on purpose: hrm._people() uses the REAL date to treat
+    # people past their last day as gone, and Zed still has to react below.
+    check(r["status"] == "terminated" and r["fnf"]["due"] == "2027-01-14", "terminated after the reply; F&F due 14 days after the last day")
     check((await db.hr_employees.find_one({"id": "z"}))["exit"]["reason"] == "terminated", "exit recorded as terminated")
+    tm = [m for m in mails if m["to"] == "z@o.in" and "Important" in m["subject"]]
+    check(tm and tm[0]["attachments"][0][1][:4] == b"%PDF", "termination letter attached to the email")
 
     print("-- recognition --")
     await expect(HR.rec_give(HR.GiveBody(emp_id="f", kind="award", title="Top", message="Great leadership all year long."), F), 400, "not to yourself")
@@ -208,6 +215,8 @@ async def flow():
                  "only a reward carries money")
     g = await HR.rec_give(HR.GiveBody(emp_id="m", kind="reward", title="Launch hero", message="Brilliant launch of the law catalogue.",
                                       amount=5000, shout_out=True, badge="rocket"), F)
+    gm = [m for m in mails if m["to"] == "m@o.in" and "Launch hero" in m["subject"]]
+    check(gm and gm[0]["attachments"][0][1][:4] == b"%PDF", "appreciation letter attached to the email")
     mine = (await HR.rec_mine(M))["rows"]
     check(mine[0]["amount"] == 5000 and mine[0]["message"], "Meera sees hers, with the amount")
     shout = (await HR.rec_shoutouts(A))["rows"]

@@ -208,6 +208,55 @@ async def profile_of(emp_id: str, user: dict = Depends(get_current_user)):
     return {**_view(emp, prof, full=full), "scope": "full" if full else "emergency"}
 
 
+# ------------------------------------------------------- DPDP retention ---
+PURGE_AFTER_DAYS = 365        # after the Full & Final is paid
+
+
+def purge_due_on(emp: dict, sep: Optional[dict]) -> Optional[str]:
+    """When a leaver's PERSONAL details (this profile, mobile, photo) are
+    deleted: 1 year after their Full & Final was paid. Exits recorded straight
+    by HR (no F&F tracked) count from last day + 14 days (the F&F due date).
+    F&F still unpaid -> not yet (None): it may still be needed to pay them.
+    The WORK record (name, code, designation, dates, exit) is kept — it's an
+    employment record the company must keep."""
+    if emp.get("status") != "exited" or emp.get("personal_purged_at"):
+        return None
+    fnf = (sep or {}).get("fnf") or {}
+    if fnf.get("status") == "paid" and fnf.get("paid_on"):
+        start = date.fromisoformat(fnf["paid_on"][:10])
+    elif fnf.get("status") == "pending":
+        return None
+    elif emp.get("exited_on"):
+        start = date.fromisoformat(emp["exited_on"][:10]) + timedelta(days=14)
+    else:
+        return None
+    return (start + timedelta(days=PURGE_AFTER_DAYS)).isoformat()
+
+
+async def purge_leavers(today: Optional[date] = None) -> int:
+    """Daily (hrm_lifecycle.daily): delete leavers' personal details once due."""
+    today = today or _today()
+    n = 0
+    async for emp in db.hr_employees.find({"status": "exited", "personal_purged_at": None}, {"_id": 0}):
+        sep = await db.hr_separations.find_one({"emp_id": emp["id"], "fnf": {"$exists": True}}, {"_id": 0}, sort=[("updated_at", -1)])
+        due = purge_due_on(emp, sep)
+        if not due or due > today.isoformat():
+            continue
+        await db.hr_profiles.delete_one({"emp_id": emp["id"]})
+        if emp.get("photo_path"):
+            try:
+                import asyncio
+                from features import delete_object
+                await asyncio.to_thread(delete_object, emp["photo_path"])
+            except Exception:  # noqa: BLE001 — the record is cleared either way
+                log.warning("hrm profile: photo delete failed for %s", emp["id"], exc_info=True)
+        await db.hr_employees.update_one({"id": emp["id"]}, {"$set": {"personal_purged_at": datetime.now(timezone.utc).isoformat()},
+                                                            "$unset": {"phone": "", "photo_path": "", "photo_at": ""}})
+        await audit_log(db, "HRM_PERSONAL_DATA_PURGED", email="system", role="system", meta={"person": emp["id"], "due": due})
+        n += 1
+    return n
+
+
 async def ensure_indexes() -> None:
     try:
         await db.hr_profiles.create_index("emp_id", unique=True)

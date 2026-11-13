@@ -322,13 +322,22 @@ async def rec_give(body: GiveBody, user: dict = Depends(require_hr)):
         from emailer import send_email
         site = (os.environ.get("SITE_URL") or "https://www.oakbridge.in").rstrip("/")
         first = (emp.get("name") or "there").split(" ")[0]
+        # The letter travels with the email: theirs to keep even after they
+        # leave and lose HRM access. A PDF failure never stops the email.
+        try:
+            pdf = await asyncio.to_thread(_letter_pdf, doc, emp)
+            files = [(f"Appreciation - {title}.pdf", pdf)]
+        except Exception:  # noqa: BLE001
+            log.exception("hrm recognition: letter PDF failed")
+            files = None
         await send_email(to=emp.get("work_email"), subject=f"🎉 {title} — well done, {first}!",
                          html=f"<div style='font-family:Arial,sans-serif;color:#002B5C;max-width:560px'>"
                               f"<p style='font-size:15px'>Hi {html.escape(first)},</p>"
                               f"<p style='font-size:15px;line-height:1.5'>{html.escape(doc['by_name'])} has recognised you with "
                               f"<b>{html.escape(KINDS[body.kind].lower())}: {html.escape(title)}</b>.</p>"
                               f"<blockquote style='border-left:4px solid #F5B841;margin:0;padding:6px 14px;font-size:15px;line-height:1.5'>{html.escape(msg)}</blockquote>"
-                              f"<p><a href='{site}/hrm' style='background:#002B5C;color:#fff;padding:10px 20px;text-decoration:none;display:inline-block;margin-top:14px'>See it in the HRM</a></p></div>")
+                              f"<p><a href='{site}/hrm' style='background:#002B5C;color:#fff;padding:10px 20px;text-decoration:none;display:inline-block;margin-top:14px'>See it in the HRM</a></p></div>",
+                         attachments=files)
     except Exception:  # noqa: BLE001
         log.exception("hrm recognition: mail failed")
     return view(doc, role="hr", people=people)
@@ -367,6 +376,17 @@ async def rec_withdraw(rid: str, user: dict = Depends(require_hr)):
     return {"ok": True}
 
 
+def _letter_pdf(r: dict, emp: dict) -> bytes:
+    """The appreciation letter — same file for the download and the email."""
+    from hr_letters import letter_pdf
+    rows = [["Recognition", f"{KINDS[r['kind']]}: {r['title']}"], ["Date", date.fromisoformat(r["date"]).strftime("%d %B %Y")]]
+    if r.get("amount"):
+        rows.append(["Reward", f"Rs {r['amount']:,}"])
+    return letter_pdf(title=f"Letter of appreciation - {r['title']}", heading="Letter of appreciation",
+                      to_name=emp.get("name", ""), paragraphs=[r.get("message", ""), "Thank you for your dedication — keep up the great work."],
+                      rows=rows, sign_off=r.get("by_name") or "Human Resources")
+
+
 @router.get("/{rid}/letter.pdf")
 async def rec_letter(rid: str, user: dict = Depends(get_current_user)):
     people, me, acc = await _ctx(user)
@@ -374,12 +394,6 @@ async def rec_letter(rid: str, user: dict = Depends(get_current_user)):
     if not r or not _member(me, acc) or not (acc["hr"] or (me and r["emp_id"] == me["id"])):
         raise HTTPException(status_code=404, detail="Not found")
     emp = people.get(r["emp_id"]) or {}
-    from hr_letters import letter_pdf
-    rows = [["Recognition", f"{KINDS[r['kind']]}: {r['title']}"], ["Date", date.fromisoformat(r["date"]).strftime("%d %B %Y")]]
-    if r.get("amount"):
-        rows.append(["Reward", f"Rs {r['amount']:,}"])
-    pdf = await asyncio.to_thread(letter_pdf, title=f"Letter of appreciation - {r['title']}", heading="Letter of appreciation",
-                                  to_name=emp.get("name", ""), paragraphs=[r.get("message", ""), "Thank you for your dedication — keep up the great work."],
-                                  rows=rows, sign_off=r.get("by_name") or "Human Resources")
+    pdf = await asyncio.to_thread(_letter_pdf, r, emp)
     return Response(content=pdf, media_type="application/pdf",
                     headers={"Content-Disposition": 'attachment; filename="Appreciation letter.pdf"', "Cache-Control": "private, no-store"})

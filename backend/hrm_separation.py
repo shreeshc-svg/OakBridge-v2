@@ -51,7 +51,7 @@ async def _audit(user: dict, action: str, meta: dict) -> None:
     await audit_log(db, action, email=user.get("email", ""), role=user.get("role", ""), meta=meta)
 
 
-async def _mail(tos: list, subject: str, lines: list, *, fallback: bool = False) -> None:
+async def _mail(tos: list, subject: str, lines: list, *, fallback: bool = False, attachments: Optional[list] = None) -> None:
     tos = [t for t in tos if t]
     if not tos and fallback:
         tos = await superadmin_emails()
@@ -63,7 +63,8 @@ async def _mail(tos: list, subject: str, lines: list, *, fallback: bool = False)
         body = "".join(f"<p style='margin:0 0 10px;font-size:15px;line-height:1.5'>{html.escape(x)}</p>" for x in lines if x)
         for to in dict.fromkeys(tos):
             await send_email(to=to, subject=subject, html=f"<div style='font-family:Arial,sans-serif;color:#002B5C;max-width:560px'>{body}"
-                             f"<p><a href='{site}/hrm' style='background:#002B5C;color:#fff;padding:10px 20px;text-decoration:none'>Open the HRM</a></p></div>")
+                             f"<p><a href='{site}/hrm' style='background:#002B5C;color:#fff;padding:10px 20px;text-decoration:none'>Open the HRM</a></p></div>",
+                             attachments=attachments)
     except Exception:  # noqa: BLE001 — mail never blocks the step
         log.exception("hrm separation: mail failed")
 
@@ -90,6 +91,49 @@ async def _step(doc: dict, upd: dict, user: dict, what: str, expect: dict) -> di
     await _audit(user, f"HRM_SEPARATION_{what.upper().replace(' ', '_').replace('-', '_')}",
                  {"separation": doc["id"], "person": doc["emp_id"], "kind": doc["kind"]})
     return await db.hr_separations.find_one({"id": doc["id"]}, {"_id": 0})
+
+
+async def _leaver_emails(emp: dict) -> list:
+    """Work email AND the personal email from their profile: the work inbox
+    closes after the last day, so the letter must also reach them outside it
+    (they lose HRM access too — the emailed PDF is their copy to keep)."""
+    prof = await db.hr_profiles.find_one({"emp_id": emp.get("id")}, {"_id": 0, "personal_email": 1}) or {}
+    return [e for e in (emp.get("work_email"), prof.get("personal_email")) if e]
+
+
+def _letter_args(doc: dict, emp: dict) -> Optional[dict]:
+    """The acceptance / termination letter for this separation, or None if
+    there isn't one yet. Used by the download AND the email attachment, so
+    both are always the same letter."""
+    rows = [["Employee ID", emp.get("emp_code") or "-"], ["Designation", emp.get("designation") or "-"]]
+    if doc["kind"] == "resignation" and doc.get("status") == "accepted":
+        return dict(title="Acceptance of resignation", heading="Acceptance of resignation", to_name=emp.get("name", ""), rows=rows,
+                    paragraphs=[f"We acknowledge receipt of your resignation dated {_fmt(doc['submitted_on'])} and accept it.",
+                                f"Your last working day with the company will be {_fmt(doc['last_day'])}. Please complete the handover "
+                                "and return company property before then.",
+                                f"Your Full & Final settlement will be processed by {_fmt(doc['fnf']['due'])}.",
+                                "We thank you for your contribution and wish you success in the future."])
+    if doc["kind"] == "termination" and doc.get("status") == "terminated":
+        return dict(title="Termination of employment", heading="Termination of employment", to_name=emp.get("name", ""), rows=rows,
+                    paragraphs=[f"This is to inform you that your employment with the company is terminated, with your last working day "
+                                f"being {_fmt(doc['last_day'])}.",
+                                f"Ground: {core.GROUNDS.get(doc['ground'], '')}. Notice: {core.NOTICE_MODES.get(doc['notice'], '')}.",
+                                "Please return all company property and complete the handover with HR.",
+                                f"Your Full & Final settlement will be processed by {_fmt(doc['fnf']['due'])}."])
+    return None
+
+
+async def _letter_attachment(doc: dict, emp: dict) -> Optional[list]:
+    args = _letter_args(doc, emp)
+    if not args:
+        return None
+    try:
+        from hr_letters import letter_pdf
+        pdf = await asyncio.to_thread(letter_pdf, **args)
+        return [(f"{args['title']} - {emp.get('name', '')}.pdf", pdf)]
+    except Exception:  # noqa: BLE001 — the email still goes; the letter is downloadable until the last day
+        log.exception("hrm separation: letter PDF failed")
+        return None
 
 
 def _res_view(r: dict, people: dict) -> dict:
@@ -246,12 +290,14 @@ async def sep_accept(sid: str, body: AcceptBody, user: dict = Depends(require_hr
           "note": core.txt(body.note, 1000)}
     saved = await _step(doc, {"status": "accepted", "hr_decision": hr, "last_day": last.isoformat(), "shortfall_days": short, "fnf": fnf},
                         user, "accepted", {"status": "hr"})
-    await _mail([emp.get("work_email")], "Your resignation has been accepted",
+    await _mail(await _leaver_emails(emp), "Your resignation has been accepted",
                 [f"Hi {_first(emp)},", f"Your resignation has been accepted. Your last working day is {_fmt(last)}.",
+                 "Your acceptance letter is attached — please keep it; HRM access closes after your last day.",
                  (f"Your notice is {short} day(s) short of {core.NOTICE_DAYS}; this has been waived." if short and body.waive_shortfall
                   else f"Your notice is {short} day(s) short of {core.NOTICE_DAYS}; HR will settle this in your Full & Final." if short else ""),
                  f"Your Full & Final settlement is due by {_fmt(fnf['due'])}. Please complete your handover checklist with HR.",
-                 "Thank you for everything you've done at Oakbridge — we wish you the very best."])
+                 "Thank you for everything you've done at Oakbridge — we wish you the very best."],
+                attachments=await _letter_attachment(saved, emp))
     if doc.get("manager_id") in people:
         await _mail([people[doc["manager_id"]].get("work_email")], f"Resignation accepted: {emp.get('name')}",
                     [f"HR has accepted {emp.get('name')}'s resignation. Last working day: {_fmt(last)}. Please plan the handover."])
@@ -385,10 +431,11 @@ async def case_step(cid: str, step: str, body: StepBody, user: dict = Depends(ge
             saved = await _step(c, {"status": "terminated", "last_day": last.isoformat(), "notice": body.notice, "decision_note": core.txt(body.note, 2000),
                                     "decided_by": user.get("email", ""), "decided_at": _now().isoformat(), "fnf": fnf},
                                 user, "terminated", {"status": "open"})
-            await _mail([emp.get("work_email")], "Important: your employment with Oakbridge",
+            await _mail(await _leaver_emails(emp), "Important: your employment with Oakbridge",
                         [f"Dear {emp.get('name')},", f"This is to inform you that your employment ends with your last working day on {_fmt(last)} "
-                         f"({core.NOTICE_MODES[body.notice].lower()}).", "Your letter is available in the HRM. "
-                         f"Your Full & Final settlement will be completed by {_fmt(fnf['due'])}. Please contact HR for the handover."])
+                         f"({core.NOTICE_MODES[body.notice].lower()}).", "Your letter is attached — please keep it; HRM access closes after your last day. "
+                         f"Your Full & Final settlement will be completed by {_fmt(fnf['due'])}. Please contact HR for the handover."],
+                        attachments=await _letter_attachment(saved, emp))
         else:
             raise HTTPException(status_code=404, detail="Unknown step")
     except core.Refused as e:
@@ -430,7 +477,7 @@ async def sep_fnf(sid: str, body: FnfBody, user: dict = Depends(require_hr)):
     fnf = {**doc["fnf"], "status": "paid", "paid_on": _today().isoformat(), "by": user.get("email", ""), "note": core.txt(body.note, 600)}
     saved = await _step(doc, {"fnf": fnf}, user, "fnf paid", {"fnf.status": "pending"})
     emp = people.get(doc["emp_id"]) or {}
-    await _mail([emp.get("personal_email") or emp.get("work_email")], "Your Full & Final settlement is complete",
+    await _mail(await _leaver_emails(emp), "Your Full & Final settlement is complete",
                 [f"Hi {_first(emp)},", "Your Full & Final settlement has been processed. Thank you, and all the best."])
     return _res_view(saved, people) if saved["kind"] == "resignation" else _case_view(saved, people)
 
@@ -463,23 +510,8 @@ async def sep_letter(sid: str, user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="Not found")
     emp = people.get(doc["emp_id"]) or {}
     from hr_letters import letter_pdf
-    if doc["kind"] == "resignation" and doc["status"] == "accepted":
-        args = dict(title="Acceptance of resignation", heading="Acceptance of resignation", to_name=emp.get("name", ""),
-                    paragraphs=[f"We acknowledge receipt of your resignation dated {_fmt(doc['submitted_on'])} and accept it.",
-                                f"Your last working day with the company will be {_fmt(doc['last_day'])}. Please complete the handover "
-                                "and return company property before then.",
-                                f"Your Full & Final settlement will be processed by {_fmt(doc['fnf']['due'])}.",
-                                "We thank you for your contribution and wish you success in the future."],
-                    rows=[["Employee ID", emp.get("emp_code") or "-"], ["Designation", emp.get("designation") or "-"]])
-    elif doc["kind"] == "termination" and doc["status"] == "terminated":
-        args = dict(title="Termination of employment", heading="Termination of employment", to_name=emp.get("name", ""),
-                    paragraphs=[f"This is to inform you that your employment with the company is terminated, with your last working day "
-                                f"being {_fmt(doc['last_day'])}.",
-                                f"Ground: {core.GROUNDS.get(doc['ground'], '')}. Notice: {core.NOTICE_MODES.get(doc['notice'], '')}.",
-                                "Please return all company property and complete the handover with HR.",
-                                f"Your Full & Final settlement will be processed by {_fmt(doc['fnf']['due'])}."],
-                    rows=[["Employee ID", emp.get("emp_code") or "-"], ["Designation", emp.get("designation") or "-"]])
-    else:
+    args = _letter_args(doc, emp)
+    if not args:
         raise HTTPException(status_code=404, detail="The letter is available once it's accepted / decided.")
     pdf = await asyncio.to_thread(letter_pdf, **args)
     await _audit(user, "HRM_SEPARATION_LETTER", {"separation": sid, "person": doc["emp_id"]})
