@@ -113,6 +113,18 @@ check(!page.includes("/books?ebook=true"),
 check(page.includes("ebook_cta_clicked"),
       "leaving for the eReader is tracked, because that click is the last thing we can see before the visitor is on another site");
 
+console.log("\n-- storefront-first (Nov 2026 redesign) --");
+/* The drawings (FormatSplitGraphic, CloudSyncGraphic, OrbitField) are no longer
+   on this page — real covers sell, illustrations explained. The component
+   checks further down still guard those files for anywhere they are reused. */
+check(page.includes('fetchBooks({ limit: 1000 })') && page.includes('ebookEdition(b, site, "plp")') && /\.filter\(\(x\) => x\.ed\.linked\)/.test(page),
+      "the shelf is the real catalogue, filtered by the SAME eBook rules as the bookstore cards (lib/ebook.js) — switch, link and price gates in one place");
+check(page.includes('data-testid="ebooks-shelf"') && page.includes('data-testid="ebooks-card"') && page.includes('data-testid="ebooks-search"'),
+      "hero search, the shelf and its cards are all on the page");
+check(/ed\.price != null && print && ed\.price < print \? print - ed\.price : 0/.test(page),
+      "'Save ₹X vs print' is worked out per title from its own two prices, and only when the eBook really is cheaper — no blanket claim");
+check(page.includes('onLeave("ebooks_shelf", ed.url, b)'), "every per-title exit to the eReader is tracked too, with the title");
+check(page.includes("prefers-reduced-motion"), "the hover tilt and float stop for people who asked for less motion");
 console.log("\n-- the copy is admin-editable --");
 for (const key of ["eb_eyebrow", "eb_headline", "eb_accent", "eb_body",
                    "eb_print_title", "eb_ebook_title", "eb_cta_headline",
@@ -262,16 +274,6 @@ check(/aria-hidden="true"/.test(orbit) && /pointer-events-none/.test(orbit),
 check(/left: -insetX, right: -insetX, top: -insetY, bottom: -insetY/.test(orbit),
       "the layer is held outside the artwork by insets passed IN, not by fixed Tailwind classes — the artwork width "
       + "is an admin setting, and a fixed class is right for exactly one width and wrong either side of it");
-check(page.includes("portalFit(site?.eb_art_width)"),
-      "and the page derives both the artwork width and those insets from one setting");
-check(/<OrbitField[\s\S]{0,80}className="hidden lg:block"/.test(page),
-      "and it is desktop only: on a phone the artwork already fills the screen, so there are no margins for a portal to occupy");
-check(page.indexOf("<OrbitField") < page.indexOf("<FormatSplitGraphic"),
-      "painted before its siblings, so it sits behind them without needing a stacking context");
-check(page.indexOf("fg-flank-art") < page.indexOf("fg-flank-print")
-      && page.indexOf("fg-flank-print") < page.indexOf("fg-flank-ebook"),
-      "source order is artwork, printed book, eBook — which is the phone reading order; the three-column arrangement is "
-      + "done with grid-column, so the markup never has to be written twice");
 /*
  * The lists are pulled UP into the white wedges either side of the circle's
  * bottom. Safe only because the portal is a donut: the glow is on the rim and
@@ -281,12 +283,6 @@ check(page.indexOf("fg-flank-art") < page.indexOf("fg-flank-print")
  * headings land outside the rim — x=310 against a circle starting at x=320 on a
  * 1900px viewport — and the dashes run straight through "Printed book".
  */
-check(/fg-flank/.test(page) && /fg-flank-print/.test(page) && /fg-flank-ebook/.test(page),
-      "one grid holds a list, the artwork and a list — not two layouts with the markup written twice");
-check(page.indexOf('"--fg-flank-col"') > -1 && css.includes("var(--fg-flank-col)"),
-      "the column width is computed and handed to the stylesheet, because it depends on the admin's artwork size");
-check(/fit\.flank\.fits \? "" : " fg-flank--stacked"/.test(page),
-      "and when there is no room beside the artwork the grid stays stacked rather than overlapping it");
 check(/minmax\(var\(--fg-flank-col\), 1fr\)[\s\S]{0,60}var\(--fg-art\)[\s\S]{0,60}minmax\(var\(--fg-flank-col\), 1fr\)/.test(css),
       "three columns at 1280 and up with the artwork in the middle, and the side columns FLEX — fixed tracks summing to "
       + "the container's max-width overflowed at every narrower viewport and clipped the left column off the page");
@@ -444,10 +440,6 @@ for (const key of ["eb_anim_enabled", "eb_portal_enabled", "eb_anim_beat", "eb_a
 check(/const cls = \(name\) => \(animate \? name : undefined\)/.test(svg)
       && /const cls = \(name\) => \(animate \? name : undefined\)/.test(cloud),
       "with motion off the markup carries no animated class at all, rather than the keyframes being blanked — nothing to compute, and nothing a later stylesheet can reanimate by accident");
-check(/Number\.isFinite\(n\) && n > 0 \? n : fallback/.test(page),
-      "a blank or nonsense duration falls back to the design value, not to 0s, which would freeze every drawing on its first keyframe");
-check(/"--fg-beat"/.test(page) && /"--fg-flight"/.test(page) && /var\(--fg-beat, 2\.6s\)/.test(css),
-      "the rhythm reaches the CSS through custom properties, with the design values as the fallback");
 
 console.log("\n-- the rich treatment is scoped to this one drawing --");
 /*
@@ -530,7 +522,6 @@ check(/viewBox="0 0 560 262"/.test(cloud), "the cloud graphic has a fixed viewBo
 check(!/<image|xlink:href|linearGradient|feDropShadow/.test(cloud),
       "no fetched asset, no gradient, no shadow — same rules as the drawing above it");
 check(/role="img"/.test(cloud) && /aria-label=/.test(cloud), "and one aria-label rather than thirty silent rectangles");
-check(/<CloudSyncGraphic animate=\{animate\} \/>/.test(page), "the page renders it, and hands it the motion switch");
 check(cloud.includes("DEVICES") && /cx=\{d\.cx\}/.test(cloud),
       "the connector end points and the devices come from one list, so a nudge cannot leave a line pointing at nothing");
 check(strayHex(cloud).length === 0, `and no stray colour in it either ${strayHex(cloud).join(", ")}`);
