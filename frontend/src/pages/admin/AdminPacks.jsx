@@ -8,6 +8,8 @@ import {
 } from "../../lib/api";
 import { canDelete } from "../../lib/rbac";
 import { useAuth } from "../../context/AuthContext";
+import { useSearchParams } from "react-router-dom";
+import { isbnDigits, isbn13to10 } from "../../lib/bookSearch";
 
 /**
  * Admin → Packs.
@@ -63,8 +65,31 @@ function PackEditor({ initial, categories, catalogue, onClose, onSaved }) {
         language: initial?.language || "English", publisher: initial?.publisher || "Oakbridge Publishing",
     }));
     const [q, setQ] = useState("");
+    const [isbns, setIsbns] = useState("");
     const [busy, setBusy] = useState(false);
     const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
+    // Paste the books' ISBNs (any separator, with or without hyphens, ISBN-10
+    // or -13) and they're all added in one go. Unknown ISBNs are named, never
+    // guessed — that book must be in Books first.
+    const addByIsbn = () => {
+        const want = isbns.split(/[\s,;]+/).map(isbnDigits).filter((x) => x.length >= 10);
+        const index = new Map();
+        catalogue.forEach((b) => { const d = isbnDigits(b.isbn); if (d) { index.set(d, b); const t = isbn13to10(d); if (t) index.set(t, b); } });
+        const added = [], missing = [], dup = [];
+        let items = [...f.pack_items];
+        for (const w of want) {
+            const b = index.get(w) || index.get(isbn13to10(w) || "");
+            if (!b) { missing.push(w); continue; }
+            if (items.includes(b.id)) { dup.push(w); continue; }
+            if (items.length >= 6) { toast.error("A pack holds at most 6 books."); break; }
+            items = [...items, b.id]; added.push(b.title);
+        }
+        set("pack_items", items);
+        if (added.length) toast.success(`Added ${added.length}: ${added.join(", ")}`);
+        if (missing.length) toast.error(`Not in Books (add them there first): ${missing.join(", ")}`);
+        if (dup.length && !added.length && !missing.length) toast("Already in this pack.");
+        setIsbns(missing.join(" "));
+    };
 
     const byId = useMemo(() => Object.fromEntries(catalogue.map((b) => [b.id, b])), [catalogue]);
     const matches = useMemo(() => {
@@ -184,6 +209,13 @@ function PackEditor({ initial, categories, catalogue, onClose, onSaved }) {
                         })}
                     </ul>
                     {f.pack_items.length < 6 && (
+                        <div className="mt-2 flex gap-2" data-testid="pack-isbn-bulk">
+                            <input className={input} placeholder="Paste the books' ISBNs — e.g. 9789391234567, 9789391234574, 9789391234581" value={isbns}
+                                onChange={(e) => setIsbns(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addByIsbn(); } }} />
+                            <button type="button" onClick={addByIsbn} disabled={!isbns.trim()} className="shrink-0 bg-[#002B5C] text-white px-3 text-sm disabled:opacity-40">Add by ISBN</button>
+                        </div>
+                    )}
+                    {f.pack_items.length < 6 && (
                         <div className="mt-2 relative">
                             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#4B5563]" />
                             <input className={`${input} pl-8`} placeholder="Add a book — search title, author or ISBN" value={q} onChange={(e) => setQ(e.target.value)} data-testid="pack-book-search" />
@@ -302,6 +334,9 @@ export default function AdminPacks() {
     const [enabled, setEnabled] = useState("all");
     const [sort, setSort] = useState("order");
     const [editing, setEditing] = useState(null); // null | {} | pack
+    // Admin → Books → "New pack" lands here with ?new=1 and the editor open.
+    const [params, setParams] = useSearchParams();
+    useEffect(() => { if (params.get("new") === "1") { setEditing({}); setParams({}, { replace: true }); } }, [params, setParams]);
     const [categories, setCategories] = useState([]);
     const [catalogue, setCatalogue] = useState([]);
 

@@ -30,6 +30,7 @@ import { toast } from "sonner";
 import { useAuth } from "../../context/AuthContext";
 import { canDelete } from "../../lib/rbac";
 import ExportButton from "../../components/admin/ExportButton";
+import { Link } from "react-router-dom";
 
 const BLANK = {
     title: "",
@@ -1669,6 +1670,12 @@ export default function AdminBooks() {
                     >
                         <Trash size={14} strokeWidth={1.5} /> Delete all
                     </button>
+                    {/* Packs are edited on their own screen (backend/packs.py) — this
+                        opens it with a blank pack, where the books' ISBNs can be pasted. */}
+                    <Link to="/admin/packs?new=1" data-testid="admin-new-pack-link"
+                        className="inline-flex items-center gap-2 border border-[#002B5C] text-[#002B5C] px-4 py-2 text-sm hover:bg-[#F5F7FA]">
+                        <Plus size={14} strokeWidth={1.5} /> New Pack
+                    </Link>
                     <button
                         onClick={() => setEditing("new")}
                         data-testid="admin-new-book-button"
