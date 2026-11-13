@@ -14,7 +14,7 @@ const isSimilarDoc = (e) => e?.response?.status === 409 && e?.response?.data?.de
 import { ArrowLeft, Camera, FileSpreadsheet, FileText, PackagePlus, PackageMinus, Search, ScanBarcode, Truck } from "lucide-react";
 import {
     whState, whLookup, whBooks, whUploadDoc, whConfirmDoc, whReport, whMove, whDocFile, whInbox, whAck, whReopen, whCancelledParcel, whGetDoc, whOpenOrders,
-    whLabels, saveBlob, formatApiError,
+    whLabels, whOwed, whOwedSent, saveBlob, formatApiError,
 } from "../../lib/api";
 import { useAuth } from "../../context/AuthContext";
 import NoIndex from "../../components/NoIndex";
@@ -88,6 +88,7 @@ export default function WarehouseApp() {
                     <div className="space-y-3">
                         <Inbox onRepack={(d) => { setRepack(d); setScreen("out"); }}
                             onOpenJob={(d) => { setRepack(d); setScreen(d.direction); }} />
+                        <StillToSend />
                         <p className="text-sm text-[#4B5563]">Hello {user?.name?.split(" ")[0] || ""}. What are you doing?</p>
                         <button type="button" className={`${BIG} border-[#15803D]`} onClick={() => setScreen("in")} data-testid="wh-go-in">
                             <PackagePlus size={30} className="text-[#15803D]" /> Books arrived from printer
@@ -615,12 +616,68 @@ function BookPicker({ books, candidates = [], value, onPick, placeholder = "Titl
     );
 }
 
+/* ------------------------------------------------------- still to send --- */
+// Copies owed from parcels that went short. "Sent the rest" when the
+// follow-up parcel goes; the office decides cancellations (and refunds).
+function StillToSend() {
+    const [rows, setRows] = useState(null);
+    const [busy, setBusy] = useState("");
+    const load = useCallback(() => whOwed().then(setRows).catch(() => setRows([])), []);
+    useEffect(() => { load(); }, [load]);
+    if (!rows || !rows.length) return null;
+    const done = async (o) => {
+        if (!window.confirm(`Sent the remaining ${o.owed} × “${o.title}” to ${o.party}?`)) return;
+        setBusy(o.id);
+        try {
+            const r = await whOwedSent(o.id);
+            toast.success(r.stock_moved ? `${r.stock_moved} more taken off stock.` : "Marked sent (already off stock — paid website order).");
+            load();
+        } catch (e) { toast.error(formatApiError(e)); } finally { setBusy(""); }
+    };
+    return (
+        <div className="space-y-2" data-testid="wh-still-to-send">
+            <div className="text-sm font-medium text-[#CC0033]">Still to send ({rows.length})</div>
+            {rows.map((o) => (
+                <div key={o.id} className="border-2 border-[#F59E0B] bg-white p-3">
+                    <div className="font-medium text-[#002B5C]">{o.title} <span className="font-mono">× {o.owed}</span></div>
+                    <div className="text-sm text-[#4B5563]">{o.kind_label}{o.order_number ? ` ${o.order_number}` : ""} · {o.party} · {o.sent} of {o.ordered} went on {new Date(o.created_at).toLocaleDateString("en-IN")}</div>
+                    {o.kind === "website_order" && <div className="text-xs text-[#B4750F] mt-1">Keep these {o.owed} aside — the customer has paid for them.</div>}
+                    <button type="button" disabled={busy === o.id} onClick={() => done(o)} className={`${BTN} mt-2 w-full bg-[#15803D] text-white`} data-testid="wh-owed-sent">
+                        Sent the rest
+                    </button>
+                </div>
+            ))}
+            <p className="text-xs text-[#6B7280]">Not sending them after all? Tell the office — they cancel it.</p>
+        </div>
+    );
+}
+
+/* ----------------------------------------------- short shipment ("sent") --- */
+// Copies actually SENT for a line; unset = all of the label's number.
+const sentOf = (l) => (l.sent === undefined || l.sent === "" ? Number(l.qty) || 0 : Math.max(0, Math.min(Number(l.sent) || 0, Number(l.qty) || 0)));
+// "Label says 9, only 7 going": − / + next to the label's number. Fewer than
+// the label = the rest waits in "Still to send" (backend/warehouse_shortship.py).
+function SentBox({ l, onChange }) {
+    const label = Number(l.qty) || 0;
+    const sent = sentOf(l);
+    const short = sent < label;
+    return (
+        <div className="flex items-center gap-1" data-testid="wh-sent-box">
+            <span className="text-[10px] text-[#4B5563]">Sent</span>
+            <button type="button" aria-label="One fewer sent" onClick={() => onChange(Math.max(0, sent - 1))} className="w-8 h-8 border-2 text-lg leading-none">−</button>
+            <span className={`w-8 text-center font-mono font-semibold ${short ? "text-[#CC0033]" : "text-[#15803D]"}`}>{sent}</span>
+            <button type="button" aria-label="One more sent" disabled={sent >= label} onClick={() => onChange(Math.min(label, sent + 1))} className="w-8 h-8 border-2 text-lg leading-none disabled:opacity-30">+</button>
+            {short && <span className="text-[11px] text-[#CC0033] font-medium whitespace-nowrap">{label - sent} later</span>}
+        </div>
+    );
+}
+
 /* ------------------------------------------------- office-made parcel ---- */
 // Read-only: what to pack and where it goes, and one big "Packed" tick. If
 // something is wrong he tells the office, which recalls the run and fixes it
 // — the phone never edits what the office decided.
 const RUN_KIND = { website_order: "Website order", dealer_order: "Phone / dealer order", author_copy: "Author copy", free_copy: "Free copy" };
-function OfficeParcel({ p, byId, packed, onToggle }) {
+function OfficeParcel({ p, byId, packed, onToggle, onSent }) {
     return (
         <div className={`bg-white border-2 p-3 space-y-2 ${packed ? "border-[#15803D]" : "border-[#7C3AED]"}`} data-testid="wh-office-parcel">
             <div className="flex items-center justify-between gap-2">
@@ -630,14 +687,17 @@ function OfficeParcel({ p, byId, packed, onToggle }) {
             <div className="text-lg font-semibold text-[#002B5C]">{p.name}</div>
             <div className="text-sm text-[#4B5563]">{[p.org, ...(p.address || []).slice(-2)].filter(Boolean).join(" · ")}</div>
             <ul className="border-t pt-2 space-y-1">
-                {p.lines.map((l) => (
-                    <li key={l.line_no} className="flex justify-between gap-3 text-base">
+                {p.lines.map((l, li) => (
+                    <li key={l.line_no ?? li} className="flex justify-between gap-3 text-base">
                         <span className="text-[#002B5C]">
                             {byId[l.book_id]?.title || l.doc_title}
                             {/* ISBN to check against the barcode while packing. */}
                             {(l.doc_isbn || byId[l.book_id]?.isbn) && <span className="block text-[11px] font-mono text-[#4B5563]">ISBN {l.doc_isbn || byId[l.book_id]?.isbn}</span>}
                         </span>
-                        <span className="font-mono font-semibold whitespace-nowrap">× {l.qty}</span>
+                        <span className="flex flex-col items-end gap-1">
+                            <span className="font-mono font-semibold whitespace-nowrap">× {l.qty}</span>
+                            <SentBox l={l} onChange={(v) => onSent(li, v)} />
+                        </span>
                     </li>
                 ))}
             </ul>
@@ -739,7 +799,9 @@ function CourierFlow({ practice, onDone, initialDoc = null }) {
     };
     const unlinked = parcels.filter((p) => p.kind === "skip").length;
     const copiesOf = (kind) => parcels.filter((p) => p.kind === kind)
-        .reduce((n, p) => n + p.lines.filter((l) => l.include && l.book_id).reduce((a, l) => a + Number(l.qty || 0), 0), 0);
+        .reduce((n, p) => n + p.lines.filter((l) => l.include && l.book_id).reduce((a, l) => a + sentOf(l), 0), 0);
+    const shortLines = parcels.flatMap((p) => p.kind === "skip" ? [] : p.lines.filter((l) => l.include && l.book_id && sentOf(l) < (Number(l.qty) || 0))
+        .map((l) => `Parcel ${p.no}: ${byId[l.book_id]?.title || "?"} — ${sentOf(l)} of ${l.qty} sent`));
     const dealerCopies = copiesOf("dealer_order");
     const authorCopies = copiesOf("author_copy");
     const freeCopies = copiesOf("free_copy");
@@ -766,13 +828,20 @@ function CourierFlow({ practice, onDone, initialDoc = null }) {
             `• ${dealerCopies} cop${dealerCopies === 1 ? "y" : "ies"} in phone / dealer orders: removed from stock as sales.\n` +
             `• ${authorCopies} author cop${authorCopies === 1 ? "y" : "ies"}: removed from stock.\n` +
             `• ${freeCopies} free cop${freeCopies === 1 ? "y" : "ies"}: removed from stock.\n` +
-            `• ${unlinked} parcel(s) not sending: no change.`)) return;
+            `• ${unlinked} parcel(s) not sending: no change.` +
+            (shortLines.length ? `\n\nSent short — the rest goes to “Still to send”:\n${shortLines.join("\n")}` : ""))) return;
         setBusy(true);
         try {
             const res = await whConfirmDoc(doc.id, {
                 parcels: parcels.map((p) => ({
                     no: p.no, kind: p.kind, order_id: p.kind === "website_order" ? p.order_id || null : null,
-                    lines: p.lines.map((l) => ({ line_no: l.line_no, book_id: l.book_id, qty: Number(l.qty) || 0, include: !!l.include })),
+                    // qty = copies SENT; ordered = the label's number when fewer
+                    // went — the rest becomes "Still to send" (warehouse_shortship.py).
+                    lines: p.lines.map((l) => {
+                        const label = Number(l.qty) || 0;
+                        const sent = sentOf(l);
+                        return { line_no: l.line_no, book_id: l.book_id, qty: sent, include: !!l.include, ...(sent < label ? { ordered: label } : {}) };
+                    }),
                 })),
             });
             toast.success(res.practice ? "Practice saved — stock not changed." : `Done. ${linked} website order(s) packed; ${dealerCopies + authorCopies + freeCopies} copies removed from stock (${dealerCopies} sold, ${authorCopies} author, ${freeCopies} free).`);
@@ -844,7 +913,8 @@ function CourierFlow({ practice, onDone, initialDoc = null }) {
             )}
             {parcels.map((p, pi) => office ? (
                 <OfficeParcel key={p.no} p={p} byId={byId} packed={!!packed[p.no]}
-                    onToggle={() => setPacked((x) => ({ ...x, [p.no]: !x[p.no] }))} />
+                    onToggle={() => setPacked((x) => ({ ...x, [p.no]: !x[p.no] }))}
+                    onSent={(li, v) => setLine(pi, li, { sent: v })} />
             ) : (
                 <div key={p.no} className={`bg-white border-2 p-3 space-y-3 ${p.kind === "skip" ? "border-[#E5E7EB] opacity-70" : "border-[#7C3AED]"}`} data-testid="wh-parcel">
                     <div>
@@ -930,8 +1000,13 @@ function CourierFlow({ practice, onDone, initialDoc = null }) {
                                         <BookPicker books={books} candidates={l.candidates || []} value={l.book_id || ""}
                                             onPick={(id) => setLine(pi, li, { book_id: id || null, include: !!id })} />
                                     </div>
-                                    <input type="number" min={1} inputMode="numeric" value={l.qty} onChange={(e) => setLine(pi, li, { qty: e.target.value === "" ? "" : Number(e.target.value) })}
-                                        className={`w-16 border-2 px-2 py-2 text-base font-mono ${l.include && !(Number(l.qty) >= 1) ? "border-[#CC0033]" : l.qty_read === false ? "border-[#F59E0B]" : ""}`} aria-label="Copies" />
+                                    <div className="flex flex-col items-end gap-1">
+                                        <label className="text-[10px] text-[#4B5563] text-right">On label
+                                            <input type="number" min={1} inputMode="numeric" value={l.qty} onChange={(e) => setLine(pi, li, { qty: e.target.value === "" ? "" : Number(e.target.value) })}
+                                                className={`block w-16 border-2 px-2 py-2 text-base font-mono ${l.include && !(Number(l.qty) >= 1) ? "border-[#CC0033]" : l.qty_read === false ? "border-[#F59E0B]" : ""}`} aria-label="Copies on the label" />
+                                        </label>
+                                        <SentBox l={l} onChange={(v) => setLine(pi, li, { sent: v })} />
+                                    </div>
                                 </div>
                             </div>
                         );

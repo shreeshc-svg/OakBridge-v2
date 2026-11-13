@@ -21,7 +21,8 @@ const OUT = [["damaged", "Damaged"], ["sample", "Free copy / sample"], ["author_
 const REASON = Object.fromEntries([...IN, ...OUT, ["correction_in", "Correction +"], ["correction_out", "Correction −"],
     ["website_order", "Website order"], ["opening", "Opening count"],
     // Amazon / Flipkart daily sheet (backend/warehouse_marketplace.py)
-    ["amazon_mp", "Carton out – Amazon"], ["flipkart_mp", "Carton out – Flipkart"]]);
+    ["amazon_mp", "Carton out – Amazon"], ["flipkart_mp", "Carton out – Flipkart"],
+    ["short_cancelled", "Short parcel cancelled – back in stock"]]);
 const when = (iso) => (iso ? new Date(iso).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : "—");
 
 export default function WarehouseInventory({ onHistory }) {

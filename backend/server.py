@@ -761,6 +761,8 @@ async def startup_event():
     await hrm_profile_indexes()
     from warehouse_marketplace import ensure_indexes as wh_mp_indexes
     await wh_mp_indexes()
+    from warehouse_shortship import ensure_indexes as wh_owed_indexes
+    await wh_owed_indexes()
     try:
         # Real review figures for every reviewed book (stars are shown only
         # from these — extensions.refresh_review_stats).
@@ -2122,6 +2124,9 @@ from inventory_sync import inventory_router  # noqa: E402
 from warehouse_marketplace import router as wh_marketplace_router, admin_router as wh_marketplace_admin_router  # noqa: E402  (Amazon / Flipkart daily sheet)
 app.include_router(wh_marketplace_router)
 app.include_router(wh_marketplace_admin_router)
+from warehouse_shortship import router as wh_owed_router, admin_router as wh_owed_admin_router  # noqa: E402  (short shipments: still to send)
+app.include_router(wh_owed_router)
+app.include_router(wh_owed_admin_router)
 from warehouse import wh_router, wh_admin_router  # noqa: E402
 app.include_router(inventory_router)
 app.include_router(wh_router)

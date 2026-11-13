@@ -244,6 +244,13 @@ export const whMpPreview = (file, sheetDate = "") => {
     return api.post("/warehouse/marketplace/preview", fd, { timeout: 60000 }).then((r) => r.data);
 };
 export const whMpConfirm = (id) => api.post(`/warehouse/marketplace/${id}/confirm`, {}, { timeout: 120000 }).then((r) => r.data);
+// Short shipments — "label 9, only 7 sent" (backend/warehouse_shortship.py)
+export const whOwed = () => api.get("/warehouse/owed").then((r) => r.data.rows || []);
+export const whOwedSent = (id, note = "") => api.post(`/warehouse/owed/${id}/sent`, { note }).then((r) => r.data);
+export const adminOwed = (status = "open") => api.get("/admin/warehouse/owed", { params: { status } }).then((r) => r.data);
+export const adminOwedSent = (id, note = "") => api.post(`/admin/warehouse/owed/${id}/sent`, { note }).then((r) => r.data);
+export const adminOwedCancel = (id, note = "") => api.post(`/admin/warehouse/owed/${id}/cancel`, { note }).then((r) => r.data);
+export const adminOwedRefundDone = (id, note = "") => api.post(`/admin/warehouse/owed/${id}/refund-done`, { note }).then((r) => r.data);
 export const whConfirmDoc = (id, body) => api.post(`/warehouse/docs/${id}/confirm`, body).then((r) => r.data);
 export const whReport = (id, note, lineNo) =>
     api.post(`/warehouse/docs/${id}/report`, { note, line_no: lineNo ?? null }).then((r) => r.data);

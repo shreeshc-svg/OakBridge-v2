@@ -12,6 +12,7 @@ import { isSuperadmin } from "../../lib/rbac";
 import CourierRuns from "../../components/admin/CourierRuns";
 import WarehouseInventory from "../../components/admin/WarehouseInventory";
 import MarketplaceSheets from "../../components/admin/MarketplaceSheets";
+import StillToSend from "../../components/admin/StillToSend";
 
 /**
  * Admin → Warehouse: the manager's side of the warehouse trial.
@@ -31,9 +32,9 @@ import MarketplaceSheets from "../../components/admin/MarketplaceSheets";
  *
  * The warehouse role itself never lands here: it is sent to /warehouse.
  */
-const TABS = [["approve", "To approve"], ["inventory", "Inventory"], ["courier", "Courier labels"], ["trial", "Trial & comparison"], ["docs", "Bills & invoices"], ["accuracy", "Accuracy"], ["marketplace", "Amazon / Flipkart sheets"], ["moves", "Movements"]];
+const TABS = [["approve", "To approve"], ["inventory", "Inventory"], ["courier", "Courier labels"], ["trial", "Trial & comparison"], ["docs", "Bills & invoices"], ["accuracy", "Accuracy"], ["marketplace", "Amazon / Flipkart sheets"], ["owed", "Still to send"], ["moves", "Movements"]];
 // Readable names for the reasons the Movements table shows raw.
-const REASON_NAME = { amazon_mp: "Carton out – Amazon", flipkart_mp: "Carton out – Flipkart" };
+const REASON_NAME = { amazon_mp: "Carton out – Amazon", flipkart_mp: "Carton out – Flipkart", short_cancelled: "Short parcel cancelled – back in stock" };
 const pct = (x) => (x == null ? "—" : `${Math.round(x * 100)}%`);
 const when = (iso) => (iso ? new Date(iso).toLocaleString("en-IN") : "—");
 
@@ -89,6 +90,7 @@ export default function AdminWarehouse() {
                 {tab === "accuracy" && <AccuracyTab />}
                 {tab === "courier" && <CourierRuns />}
                 {tab === "inventory" && <WarehouseInventory onHistory={(q) => { setMoveQ(q); setTab("moves"); }} />}
+                {tab === "owed" && <StillToSend />}
                 {tab === "marketplace" && <MarketplaceSheets onOpen={(d) => { setMoveQ(`MP-${d}`); setTab("moves"); }} />}
                 {tab === "moves" && <MovesTab q={moveQ} />}
             </div>

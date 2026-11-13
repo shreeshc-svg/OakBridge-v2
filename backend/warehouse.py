@@ -80,6 +80,8 @@ NOT_COUNTED = ("hamper", "pack")
 COURIER_DEDUCT = {"dealer_order": "sale_offline", "author_copy": "author_copy", "free_copy": "sample"}
 COURIER_KINDS = set(COURIER_DEDUCT) | {"website_order", "skip"}
 IN_REASONS = {"printer", "return", "correction_in", "opening"}
+# "short_cancelled" (warehouse_shortship.py): copies a website order paid for
+# but that were never sent and won't be — back into stock. Written only there.
 OUT_REASONS = {"damaged", "sample", "author_copy", "sale_offline", "correction_out", "amazon_fba", "amazon_vendor_po", "office"}
 # Cartons can go to a dealer, an author, Amazon's FBA warehouse (our own stock,
 # moved to Amazon) or Amazon Retail against a Vendor Central purchase order
@@ -724,6 +726,9 @@ class ConfirmLine(BaseModel):
     qty: int = 0
     include: bool = True
     invoiced: Optional[int] = None   # out: copies on the invoice (qty = copies packed)
+    # courier: copies on the LABEL when fewer were sent (qty = copies sent).
+    # ordered > qty makes an owed line — warehouse_shortship.py.
+    ordered: Optional[int] = None
 
 
 class ConfirmParcel(BaseModel):
@@ -860,11 +865,20 @@ async def wh_confirm(doc_id: str, body: ConfirmBody, user: dict = Depends(requir
                         f"{' by ' + sim['confirmed_by'] if sim.get('confirmed_by') else ''}"
                         f"{' on ' + at[:10] + ' at ' + at[11:16] + ' UTC' if at else ''}. "
                         "Is this really a second " + ("carton" if doc["direction"] == "out" else "delivery") + "?")})
+    if courier:
+        for p in body.parcels:
+            for ln in p.lines:
+                if getattr(ln, "ordered", None) is not None and (ln.ordered < 0 or ln.qty > ln.ordered):
+                    raise HTTPException(status_code=400, detail=f"Parcel {p.no}: more copies sent than on the label — correct the label number.")
     if not doc["practice"] and courier:
         read_parcels = {p["no"]: p for p in doc.get("parcels") or []}
+        shorts = []
         for p in body.parcels:
             rp = read_parcels.get(p.no, {})
             who = ", ".join(x for x in (rp.get("name"), rp.get("org")) if x) or f"Parcel {p.no}"
+            if p.kind != "skip":
+                shorts += [(p, ln, who) for ln in p.lines
+                           if ln.include and ln.book_id and getattr(ln, "ordered", None) is not None and ln.ordered > ln.qty]
             if p.kind in COURIER_DEDUCT:
                 # Phone / dealer / university / coaching orders sent by DTDC
                 # are SALES (no Tally invoice goes with a courier parcel), not
@@ -878,6 +892,11 @@ async def wh_confirm(doc_id: str, body: ConfirmBody, user: dict = Depends(requir
                 await db.orders.update_one(
                     {"id": p.order_id, "payment_status": "paid"},
                     {"$set": {"warehouse_doc_id": doc_id, "warehouse_packed_at": _now().isoformat()}})
+        if shorts:
+            # "Label says 9, only 7 went": the rest waits as owed lines
+            # (Still to send) until sent or cancelled — warehouse_shortship.py.
+            from warehouse_shortship import record_shorts
+            await record_shorts(doc_id, shorts, user)
     elif not doc["practice"]:
         sign = 1 if doc["direction"] == "in" else -1
         reason = "printer" if doc["direction"] == "in" else party_kind

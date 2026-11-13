@@ -267,6 +267,69 @@ async def main():
         check(book("a")["wh_stock"] == before_n - 2 and mv and mv[0]["reason"] == reason,
               f"{kind}: deducted once and recorded as '{reason}' (DTDC phone/dealer orders are sales, not samples)")
 
+    print("-- short shipments: label 9, only 7 sent --")
+    import warehouse_shortship as WS
+    sent_mail = []
+
+    async def _sm(**k):
+        sent_mail.append(k)
+        return True
+    sys.modules["emailer"] = types.SimpleNamespace(send_email=_sm)
+    await db.orders.insert_one({"id": "w9", "order_number": "OAK-261113-SHORT", "payment_status": "paid", "status": "confirmed",
+                                "email": "reader@x.in", "full_name": "Reader", "items": [{"book_id": "a", "quantity": 9, "price": 500.0}]})
+
+    def sbody(kind, qty, ordered, order_id=None):
+        return wh.ConfirmBody(lines=[], parcels=[P(no=1, kind=kind, order_id=order_id,
+                              lines=[L(line_no=None, book_id="a", qty=qty, include=True, invoiced=None, ordered=ordered)])],
+                              doc_number=None, party_name=None, party_kind=None, allow_duplicate=False, confirm_similar=False, note=None)
+    for n in (11, 12, 13):
+        await db.warehouse_docs.insert_one({
+            "id": f"cs{n}", "direction": "courier", "practice": False, "status": "draft", "source": "manual",
+            "created_at": "2026-11-13T05:00:00+00:00", "read_lines": [], "sha256": f"cs{n}", "parcels": [{"no": 1, "name": "Reader"}],
+            "doc_number": "", "party_name": "", "party_gstin": "", "party_kind": ""})
+    try:
+        await wh.wh_confirm("cs11", sbody("dealer_order", 10, 9), PACKER)
+        check(False, "sending more than the label should be refused")
+    except HTTPException as e:
+        check(e.status_code == 400, "sent can't be more than the label")
+    s0 = book("a")["wh_stock"]
+    await wh.wh_confirm("cs11", sbody("dealer_order", 7, 9), PACKER)
+    owed = [o for o in db.wh_owed.docs if o["doc_id"] == "cs11"]
+    check(book("a")["wh_stock"] == s0 - 7 and owed and owed[0]["owed"] == 2 and owed[0]["status"] == "open",
+          "dealer parcel 7 of 9: only 7 off stock, 2 owed")
+    await WS.owed_sent(owed[0]["id"], WS.NoteBody(note="DTDC 2nd parcel"), PACKER)
+    check(book("a")["wh_stock"] == s0 - 9, "'send the rest': the 2 come off then, as a sale")
+    try:
+        await WS.owed_sent(owed[0]["id"], WS.NoteBody(), PACKER)
+        check(False, "resolving twice should be refused")
+    except HTTPException as e:
+        check(e.status_code == 409, "an owed line is resolved once only (no double deduction)")
+    s1, site1 = book("a")["wh_stock"], book("a")["stock"]
+    await wh.wh_confirm("cs12", sbody("website_order", 7, 9, "w9"), PACKER)
+    ow = [o for o in db.wh_owed.docs if o["doc_id"] == "cs12"][0]
+    check(book("a")["wh_stock"] == s1 and ow["owed"] == 2 and ow["order_number"] == "OAK-261113-SHORT",
+          "website order 7 of 9: nothing moves (all 9 were taken at payment), 2 owed to the customer")
+    check(next(o for o in db.orders.docs if o["id"] == "w9")["short_open"] and any("Part of your order" in m["subject"] for m in sent_mail),
+          "order flagged part-shipped; customer told the rest follows")
+    r = await WS.adm_owed_cancel(ow["id"], WS.NoteBody(note="Out of print"), SUPER)
+    check(r["restocked"] == 2 and r["refund_due"] == 1000.0 and book("a")["wh_stock"] == s1 + 2,
+          "cancel: 2 back into stock, refund reminder ₹1,000 (2 × ₹500)")
+    check(not next(o for o in db.orders.docs if o["id"] == "w9")["short_open"], "order no longer part-shipped")
+    pending = await WS.adm_owed("refund")
+    check(len(pending["rows"]) == 1 and pending["refunds_pending"] == 1, "refund shows as pending for the office")
+    await WS.adm_owed_refund_done(ow["id"], WS.NoteBody(note="rfnd_123"), SUPER)
+    check((await WS.adm_owed("refund"))["refunds_pending"] == 0, "office ticks refund done")
+    s2 = book("a")["wh_stock"]
+    await wh.wh_confirm("cs13", sbody("free_copy", 0, 3), PACKER)
+    o3 = [o for o in db.wh_owed.docs if o["doc_id"] == "cs13"][0]
+    await WS.adm_owed_cancel(o3["id"], WS.NoteBody(), SUPER)
+    check(book("a")["wh_stock"] == s2 and o3["owed"] == 3, "free copy none sent then cancelled: nothing ever moved")
+    try:
+        await WS.adm_owed_cancel(o3["id"], WS.NoteBody(), {"email": "w@o.in", "role": "warehouse"})
+        check(False, "warehouse login cancel")
+    except HTTPException as e:
+        check(e.status_code == 403, "the phone can't cancel (office only)")
+
     print("-- record_fill never records twice --")
     n = len(db.stock_movements.docs)
     await wh.record_fill({"order_number": "T1"}, "a", 3)       # T1 already has a website_order movement for a
