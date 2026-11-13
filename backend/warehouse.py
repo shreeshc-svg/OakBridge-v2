@@ -1726,6 +1726,10 @@ async def adm_undo_move(mv_id: str, user: dict = Depends(require_admin)):
     # undoing one here would leave the ledger disagreeing with the order.
     if not mv or mv.get("undone") or mv.get("reason") in ("website_order", "website_return", "opening"):
         raise HTTPException(status_code=409, detail="This movement cannot be undone here.")
+    if mv.get("reason") in ("amazon_mp", "flipkart_mp"):
+        # Per-date ledger (warehouse_marketplace.py) must stay in step: undo the
+        # whole sheet, or fix the sheet and upload it again.
+        raise HTTPException(status_code=409, detail="Amazon / Flipkart sheet lines are undone as a whole sheet (Warehouse → Amazon / Flipkart sheets), or fix the sheet and upload it again.")
     if _now() - datetime.fromisoformat(mv["at"]) > timedelta(hours=UNDO_HOURS):
         raise HTTPException(status_code=409, detail=f"Undo is only possible within {UNDO_HOURS} hours.")
     await _reverse(mv, user)

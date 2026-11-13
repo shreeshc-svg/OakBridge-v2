@@ -759,6 +759,8 @@ async def startup_event():
     await hrm_separation_indexes()
     from hrm_profile import ensure_indexes as hrm_profile_indexes
     await hrm_profile_indexes()
+    from warehouse_marketplace import ensure_indexes as wh_mp_indexes
+    await wh_mp_indexes()
     try:
         # Real review figures for every reviewed book (stars are shown only
         # from these — extensions.refresh_review_stats).
@@ -2115,6 +2117,11 @@ app.include_router(hampers_admin_router)
 app.include_router(packs_public_router)
 app.include_router(packs_admin_router)
 from inventory_sync import inventory_router  # noqa: E402
+# BEFORE wh_router: its own routes are under /api/warehouse/marketplace/… and
+# must not be swallowed by a /api/warehouse/{something}/{action} pattern.
+from warehouse_marketplace import router as wh_marketplace_router, admin_router as wh_marketplace_admin_router  # noqa: E402  (Amazon / Flipkart daily sheet)
+app.include_router(wh_marketplace_router)
+app.include_router(wh_marketplace_admin_router)
 from warehouse import wh_router, wh_admin_router  # noqa: E402
 app.include_router(inventory_router)
 app.include_router(wh_router)

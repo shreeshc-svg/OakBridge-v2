@@ -11,6 +11,7 @@ import { useAuth } from "../../context/AuthContext";
 import { isSuperadmin } from "../../lib/rbac";
 import CourierRuns from "../../components/admin/CourierRuns";
 import WarehouseInventory from "../../components/admin/WarehouseInventory";
+import MarketplaceSheets from "../../components/admin/MarketplaceSheets";
 
 /**
  * Admin → Warehouse: the manager's side of the warehouse trial.
@@ -30,7 +31,9 @@ import WarehouseInventory from "../../components/admin/WarehouseInventory";
  *
  * The warehouse role itself never lands here: it is sent to /warehouse.
  */
-const TABS = [["approve", "To approve"], ["inventory", "Inventory"], ["courier", "Courier labels"], ["trial", "Trial & comparison"], ["docs", "Bills & invoices"], ["accuracy", "Accuracy"], ["moves", "Movements"]];
+const TABS = [["approve", "To approve"], ["inventory", "Inventory"], ["courier", "Courier labels"], ["trial", "Trial & comparison"], ["docs", "Bills & invoices"], ["accuracy", "Accuracy"], ["marketplace", "Amazon / Flipkart sheets"], ["moves", "Movements"]];
+// Readable names for the reasons the Movements table shows raw.
+const REASON_NAME = { amazon_mp: "Carton out – Amazon", flipkart_mp: "Carton out – Flipkart" };
 const pct = (x) => (x == null ? "—" : `${Math.round(x * 100)}%`);
 const when = (iso) => (iso ? new Date(iso).toLocaleString("en-IN") : "—");
 
@@ -86,6 +89,7 @@ export default function AdminWarehouse() {
                 {tab === "accuracy" && <AccuracyTab />}
                 {tab === "courier" && <CourierRuns />}
                 {tab === "inventory" && <WarehouseInventory onHistory={(q) => { setMoveQ(q); setTab("moves"); }} />}
+                {tab === "marketplace" && <MarketplaceSheets onOpen={(d) => { setMoveQ(`MP-${d}`); setTab("moves"); }} />}
                 {tab === "moves" && <MovesTab q={moveQ} />}
             </div>
         </div>
@@ -705,7 +709,7 @@ function MovesTab({ q = "" }) {
                 {moves.map((m) => (
                     <tr key={m.id} className={`border-t ${m.undone ? "opacity-50 line-through" : ""}`}>
                         <td className="p-2 text-xs">{when(m.at)}</td><td>{m.title}{m.isbn ? <span className="block text-[11px] font-mono text-[#4B5563]">{m.isbn}</span> : null}</td>
-                        <td className="text-xs text-[#4B5563]">{m.category || "—"}</td><td>{m.reason}</td>
+                        <td className="text-xs text-[#4B5563]">{m.category || "—"}</td><td>{REASON_NAME[m.reason] || m.reason}</td>
                         <td className="text-xs">{m.by}{m.party ? ` → ${m.party}` : ""}</td>
                         <td className={`text-right font-mono ${m.qty > 0 ? "text-[#15803D]" : "text-[#CC0033]"}`}>{m.qty > 0 ? `+${m.qty}` : m.qty}</td>
                         <td className="p-2 text-right">

@@ -11,13 +11,14 @@ const warnBelowZero = (list) => {
 // one already done (two photos of one invoice have nothing else in common
 // when no number was read). Ask once; "yes" sends confirm_similar.
 const isSimilarDoc = (e) => e?.response?.status === 409 && e?.response?.data?.detail?.code === "similar_doc";
-import { ArrowLeft, Camera, FileText, PackagePlus, PackageMinus, Search, ScanBarcode, Truck } from "lucide-react";
+import { ArrowLeft, Camera, FileSpreadsheet, FileText, PackagePlus, PackageMinus, Search, ScanBarcode, Truck } from "lucide-react";
 import {
     whState, whLookup, whBooks, whUploadDoc, whConfirmDoc, whReport, whMove, whDocFile, whInbox, whAck, whReopen, whCancelledParcel, whGetDoc, whOpenOrders,
     whLabels, saveBlob, formatApiError,
 } from "../../lib/api";
 import { useAuth } from "../../context/AuthContext";
 import NoIndex from "../../components/NoIndex";
+import MarketplaceSheet from "./WarehouseMarketplace";
 import { searchBooks } from "../../lib/bookSearch";
 
 /**
@@ -97,6 +98,9 @@ export default function WarehouseApp() {
                         <button type="button" className={`${BIG} border-[#7C3AED]`} onClick={() => setScreen("courier")} data-testid="wh-go-courier">
                             <Truck size={30} className="text-[#7C3AED]" /> Courier sheet (parcels out)
                         </button>
+                        <button type="button" className={`${BIG} border-[#F97316]`} onClick={() => setScreen("marketplace")} data-testid="wh-go-marketplace">
+                            <FileSpreadsheet size={30} className="text-[#F97316]" /> Upload Amazon / Flipkart sheet
+                        </button>
                         <button type="button" className={`${BIG} border-[#F59E0B]`} onClick={() => setScreen("move")} data-testid="wh-go-move">
                             <ScanBarcode size={30} className="text-[#B4750F]" /> One book in or out
                         </button>
@@ -113,6 +117,7 @@ export default function WarehouseApp() {
                     <CourierFlow key={repack?.id || "new"} practice={practice} onDone={back}
                         initialDoc={repack?.direction === "courier" ? repack : null} />
                 )}
+                {screen === "marketplace" && <MarketplaceSheet practice={practice} onDone={back} />}
                 {screen === "move" && <SingleMove practice={practice} />}
                 {screen === "check" && <CheckStock />}
             </main>

@@ -236,6 +236,14 @@ export const whUploadDoc = (direction, file, practice) => {
     // 3 min: a scanned courier sheet is now read up to 12 pages (was 3).
     return api.post("/warehouse/docs", fd, { timeout: 180000 }).then((r) => r.data);
 };
+// Amazon / Flipkart daily sheet (backend/warehouse_marketplace.py): preview, then confirm.
+export const whMpPreview = (file, sheetDate = "") => {
+    const fd = new FormData();
+    fd.append("file", file);
+    if (sheetDate) fd.append("sheet_date", sheetDate);
+    return api.post("/warehouse/marketplace/preview", fd, { timeout: 60000 }).then((r) => r.data);
+};
+export const whMpConfirm = (id) => api.post(`/warehouse/marketplace/${id}/confirm`, {}, { timeout: 120000 }).then((r) => r.data);
 export const whConfirmDoc = (id, body) => api.post(`/warehouse/docs/${id}/confirm`, body).then((r) => r.data);
 export const whReport = (id, note, lineNo) =>
     api.post(`/warehouse/docs/${id}/report`, { note, line_no: lineNo ?? null }).then((r) => r.data);
@@ -279,6 +287,8 @@ export const saveBlob = (blob, filename) => {
     setTimeout(() => URL.revokeObjectURL(url), 60000);
 };
 // Admin → Warehouse → Inventory: the warehouse's own counts (warehouse.py).
+export const adminWhMpSheets = () => api.get("/admin/warehouse/marketplace/sheets").then((r) => r.data.rows || []);
+export const adminWhMpUndo = (date) => api.post(`/admin/warehouse/marketplace/sheets/${date}/undo`).then((r) => r.data);
 export const adminWhInventory = () => api.get("/admin/warehouse/inventory").then((r) => r.data);
 export const adminWhSetCount = (bookId, count, note) =>
     api.post(`/admin/warehouse/inventory/${bookId}/count`, { count, note }).then((r) => r.data);
