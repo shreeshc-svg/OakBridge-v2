@@ -85,18 +85,21 @@ export default function AdminUsers() {
     // snapshot of name, address and what was bought, so the financial record
     // survives. The confirmation says so, because "delete customer" reads like
     // it takes the order history with it.
+    // Staff too (Nov 2026 — mistakenly created IDs): the server refuses
+    // yourself and the last super admin, and unlinks any HRM employee record
+    // (kept) so HR can send a fresh login later.
     const removeUser = async (u) => {
         const label = `${u.name || u.email}`;
-        if (
-            !window.confirm(
-                `Permanently delete ${label}?\n\nTheir orders are kept — an order holds its own copy of the name and delivery address. Only the account goes.\n\nThis cannot be undone.`,
-            )
-        )
-            return;
+        const staff = u.role !== "customer";
+        const msg = staff
+            ? `Permanently delete the ${u.role} account ${label} (${u.email})?\n\nTheir admin access ends immediately. If they're in the HRM, their employee record stays (HR can send a new login). Any orders they placed are kept.\n\nThis cannot be undone.`
+            : `Permanently delete ${label}?\n\nTheir orders are kept — an order holds its own copy of the name and delivery address. Only the account goes.\n\nThis cannot be undone.`;
+        if (!window.confirm(msg)) return;
+        if (staff && window.prompt(`Type DELETE to remove the staff account ${u.email}`) !== "DELETE") return;
         try {
             const res = await adminDeleteUser(u.id);
             toast.success(
-                `${res.email} removed${res.orders_kept ? ` — ${res.orders_kept} order(s) kept` : ""}.`,
+                `${res.email} removed${res.orders_kept ? ` — ${res.orders_kept} order(s) kept` : ""}${res.hrm_unlinked ? " — HRM record kept, login unlinked" : ""}.`,
             );
             setUsers((prev) => prev.filter((x) => x.id !== u.id));
         } catch (e) {
@@ -475,11 +478,11 @@ export default function AdminUsers() {
                                             {editing?.id === u.id ? "Close" : `Sections (${effectiveSections(u).length})`}
                                         </button>
                                     )}
-                                    {canManage && u.role === "customer" && (
+                                    {canManage && u.id !== me?.id && (
                                         <button
                                             onClick={() => removeUser(u)}
                                             data-testid={`delete-user-${u.id}`}
-                                            title="Delete this customer account. Their orders are kept."
+                                            title={u.role === "customer" ? "Delete this customer account. Their orders are kept." : "Delete this staff account (e.g. created by mistake)."}
                                             className="ml-2 inline-flex items-center gap-1.5 text-xs font-medium border border-[#CC0033] text-[#CC0033] px-3 py-1.5 hover:bg-[#CC0033]/5 whitespace-nowrap"
                                         >
                                             <Trash2 size={12} strokeWidth={1.75} />

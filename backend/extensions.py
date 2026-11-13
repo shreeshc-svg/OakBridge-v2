@@ -2353,7 +2353,8 @@ async def admin_create_user(
 
 @admin_router.delete("/users/{user_id}")
 async def admin_delete_user(user_id: str, actor: dict = Depends(require_superadmin)):
-    """Remove a customer account. Superadmin only.
+    """Remove an account — customer OR staff (Nov 2026: so a mistakenly
+    created staff ID can be removed). Superadmin only.
 
     ORDERS ARE NOT TOUCHED. An order carries its own snapshot of name, email,
     phone and address taken at checkout, so the record of what was bought and
@@ -2361,9 +2362,13 @@ async def admin_delete_user(user_id: str, actor: dict = Depends(require_superadm
     history is a financial record, and deleting an account is not a reason to
     lose one.
 
-    Staff cannot be removed here — role changes go through /users/{id}/role,
-    which already refuses to strip the last superadmin. Nor can you delete
-    yourself, which is the one mistake that cannot be undone from the admin.
+    Guards (the mistakes that can't be undone from the admin):
+      * not yourself;
+      * not the LAST superadmin — someone must keep the keys;
+      * a staff account linked to an HRM employee is UNLINKED first: the
+        employee record (leave, goals, exit history) stays, and HR can send
+        them a fresh login from the HRM. The staff role goes with the account,
+        so admin access ends at once (every request re-reads the user).
 
     The row is copied into deleted_users first. It does not bring the account
     back, but it answers "what was that address" afterwards.
@@ -2373,11 +2378,15 @@ async def admin_delete_user(user_id: str, actor: dict = Depends(require_superadm
         raise HTTPException(status_code=404, detail="User not found")
     if user_id == actor.get("id"):
         raise HTTPException(status_code=400, detail="You cannot delete your own account.")
-    if (doc.get("role") or "customer") != "customer":
-        raise HTTPException(
-            status_code=400,
-            detail="This is a staff account. Change the role to customer first, or remove their access instead.",
-        )
+    role = doc.get("role") or "customer"
+    if rbac.is_superadmin(role):
+        others = await db.users.count_documents({"role": {"$in": list(rbac.SUPERADMIN_ROLES)}, "id": {"$ne": user_id}})
+        if not others:
+            raise HTTPException(status_code=409, detail="This is the last super admin — make someone else super admin first.")
+    hrm_unlinked = 0
+    if role != "customer":
+        res = await db.hr_employees.update_many({"user_id": user_id}, {"$set": {"user_id": None, "invited_at": None}})
+        hrm_unlinked = getattr(res, "modified_count", 0) or 0
 
     orders = await db.orders.count_documents({"user_id": user_id})
     await db.deleted_users.insert_one(
@@ -2385,6 +2394,7 @@ async def admin_delete_user(user_id: str, actor: dict = Depends(require_superadm
             "at": datetime.now(timezone.utc).isoformat(),
             "by": actor.get("email"),
             "orders_left_intact": orders,
+            "hrm_unlinked": hrm_unlinked,
             "row": doc,
         }
     )
@@ -2394,9 +2404,9 @@ async def admin_delete_user(user_id: str, actor: dict = Depends(require_superadm
         email=actor.get("email", ""), role=actor.get("role", ""),
         # The deleted account's address is the point of the record; the row
         # itself is already preserved in deleted_users.
-        meta={"deleted_email": doc.get("email"), "orders_kept": orders},
+        meta={"deleted_email": doc.get("email"), "role": role, "orders_kept": orders, "hrm_unlinked": hrm_unlinked},
     )
-    return {"deleted": True, "email": doc.get("email"), "orders_kept": orders}
+    return {"deleted": True, "email": doc.get("email"), "role": role, "orders_kept": orders, "hrm_unlinked": hrm_unlinked}
 
 
 @admin_router.patch("/users/{user_id}/role")
