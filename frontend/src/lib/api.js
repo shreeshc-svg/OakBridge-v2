@@ -59,7 +59,18 @@ export const fetchBooksWithMeta = (params = {}) =>
     api.get("/books", { params }).then((r) => ({
         items: r.data,
         correctedTo: r.headers?.["x-search-corrected-to"] || null,
+        // A learned fix (backend/search_learning.py): the note to show and the
+        // fix's id, so a click on one of its books can be counted.
+        searchNote: (() => { try { return r.headers?.["x-search-note"] ? decodeURIComponent(r.headers["x-search-note"]) : null; } catch { return null; } })(),
+        rewriteId: r.headers?.["x-search-rewrite"] || null,
     }));
+// Admin → Dashboard → Search that learns (backend/search_learning.py)
+export const adminSearchLearning = () => api.get("/admin/search-learning").then((r) => r.data);
+export const adminSearchLearningRun = () => api.post("/admin/search-learning/run", {}, { timeout: 200000 }).then((r) => r.data);
+export const adminSearchLearningAct = (id, action) => api.post(`/admin/search-learning/${id}/${action}`).then((r) => r.data);
+// "The learned fix worked": a visitor clicked one of the books it showed. Anonymous.
+export const recordRewriteClick = (rewriteId, bookId) =>
+    api.post("/search/rewrite-click", { rewrite_id: rewriteId, book_id: bookId }).catch(() => {});
 export const fetchFeatured = () =>
     api.get("/books/featured").then((r) => r.data);
 export const fetchNewReleases = (limit = 12) =>

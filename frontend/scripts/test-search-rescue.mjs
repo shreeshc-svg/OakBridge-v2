@@ -46,8 +46,8 @@ check(/elif row\["rescued_to"\]:\s*\n\s*rescued\.append\(row\)/.test(feat),
       "a rescued term is not filed under 'found nothing'");
 check(/"rescued": rescued/.test(feat), "and is returned as its own list");
 check(/corrected_to: correctedTo \|\| null/.test(api), "the client sends it");
-check(/correctedTo && data\.length \? correctedTo : null/.test(catalog),
-      "only when the rewrite actually returned something");
+check(/correctedTo && data\.length \? correctedTo : rewriteId && data\.length \? "learned fix" : null/.test(catalog),
+      "only when the rewrite (spelling fix, or a learned fix) actually returned something");
 check(/rows=\{searchInsight\.rescued \|\| \[\]\}/.test(dash), "and the dashboard shows the list");
 
 console.log();

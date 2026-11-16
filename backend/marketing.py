@@ -4171,6 +4171,7 @@ async def periodic() -> dict:
         hrm_goals.schedule_tick()             # HRM: quarterly check-in / April goal-setting reminders (once a quarter)
         dispatch("wh_tidy_drafts", dedupe=_now().strftime("%Y%m%d"))   # warehouse: archive drafts left 2+ days
         dispatch("hrm_daily", dedupe=_now().strftime("%Y%m%d"))        # HRM: finalise exits, delete old applications (DPDP)
+        dispatch("search_learn", dedupe=_now().strftime("%Y%m%d"))     # search that learns: AI proposals for dead-end searches (search_learning.py)
     except Exception:  # noqa: BLE001
         log.warning("hrm: goals reminder tick failed", exc_info=True)
     return {"ok": True, "started": started}

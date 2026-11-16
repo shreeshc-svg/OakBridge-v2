@@ -46,6 +46,7 @@ import hrm_goals  # noqa: E402,F401  (registers the HRM quarterly goals reminder
 import hrm_lifecycle  # noqa: E402,F401  (registers the HRM daily job: finalise exits, purge old applications)
 import warehouse  # noqa: E402,F401  (registers the daily tidy of unfinished warehouse drafts)
 import cart_reminders  # noqa: E402,F401  (registers the hourly cart-reminder job)
+import search_learning  # noqa: E402,F401  (registers the nightly search-learning job)
 from extensions import db  # noqa: E402
 
 CONCURRENCY = max(1, int(os.environ.get("WORKER_CONCURRENCY", "3")))

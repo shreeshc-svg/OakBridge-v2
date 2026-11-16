@@ -143,7 +143,7 @@ console.log("\n-- the header that makes downloads work --");
    Content-Disposition, the API is a different origin from the site, and the
    header was never exposed — so every admin export has been saving under its
    hardcoded fallback name. */
-check(/expose_headers=\["X-Search-Corrected-To", "Content-Disposition"\]/.test(server),
+check(/expose_headers=\[[^\]]*"X-Search-Corrected-To"[^\]]*"Content-Disposition"\]/.test(server),
       "Content-Disposition is exposed to JavaScript, so downloadBlob can read the name the server chose");
 
 console.log();

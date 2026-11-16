@@ -6,6 +6,9 @@ import PaymentBadge from "../../components/admin/PaymentBadge";
 import { RANGE_PRESETS, resolveRange, rangeLabel } from "../../lib/dateRange";
 import { readTileOrder, writeTileOrder, clearTileOrder, moveTile } from "../../lib/tileOrder";
 import { toast } from "sonner";
+import SearchLearning from "../../components/admin/SearchLearning";
+import { useAuth } from "../../context/AuthContext";
+import { isSuperadmin } from "../../lib/rbac";
 
 /**
  * One bucket of the search report.
@@ -188,6 +191,7 @@ const TILE_ORDER_DEFAULT = [
 ];
 
 export default function AdminDashboard() {
+    const { user: me } = useAuth();
     const [stats, setStats] = useState(null);
     const [reminding, setReminding] = useState(false);
     const [searchInsight, setSearchInsight] = useState(null);
@@ -546,6 +550,7 @@ export default function AdminDashboard() {
                         </div>
                     </div>
                 )}
+                <SearchLearning superadmin={isSuperadmin(me?.role)} />
             </section>
         </div>
     );

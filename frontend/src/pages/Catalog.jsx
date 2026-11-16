@@ -5,7 +5,7 @@ import Seo from "../components/Seo";
 import { Link, useSearchParams } from "react-router-dom";
 import { Search, SlidersHorizontal, X, Clock, BookOpen } from "lucide-react";
 import BookCard from "../components/BookCard";
-import { fetchBooks, fetchBooksWithMeta, fetchCategories, fetchSiteContent, fetchSettings, mediaUrl, logSearch, fetchSuggestIndex, fetchAuthors } from "../lib/api";
+import { fetchBooks, fetchBooksWithMeta, fetchCategories, fetchSiteContent, fetchSettings, mediaUrl, logSearch, fetchSuggestIndex, fetchAuthors, recordRewriteClick } from "../lib/api";
 import { PromoBar } from "../components/PromoBits";
 import { PodExplore } from "../components/PodBits";
 import { useCart } from "../context/CartContext";
@@ -340,7 +340,7 @@ export default function Catalog() {
             skipRef.current = 0;
         }
         fetchBooksWithMeta({ ...buildParams(), skip: 0, limit })
-            .then(({ items: data, correctedTo }) => {
+            .then(({ items: data, correctedTo, searchNote, rewriteId }) => {
                 if (cancelled) return;
                 setBooks(data);
                 skipRef.current = data.length;
@@ -357,13 +357,16 @@ export default function Catalog() {
                 /* corrected_to rides along only when the rewrite actually found
                    something, so the report can list it as "rescued" rather than
                    as a catalogue gap. */
+                /* A learned fix counts the same way: the literal term still
+                   found nothing (0), and "learned fix" files it as rescued. */
                 if (search)
                     logSearch(
                         search,
-                        correctedTo ? 0 : data.length,
+                        correctedTo || rewriteId ? 0 : data.length,
                         category || null,
-                        correctedTo && data.length ? correctedTo : null,
+                        correctedTo && data.length ? correctedTo : rewriteId && data.length ? "learned fix" : null,
                     );
+                setLearned(rewriteId && data.length ? { id: rewriteId, note: searchNote || "" } : null);
 
                 /*
                  * The server fixed the spelling and told us to what. Kept
@@ -545,6 +548,9 @@ export default function Catalog() {
     // what the visitor typed, so this is tracked separately from the
     // client-side correction above, which rewrites the URL to the fixed term.
     const [serverCorrection, setServerCorrection] = useState(null);
+    // {id, note} when the server answered with a LEARNED fix (approved by the
+    // team — backend/search_learning.py) instead of nothing.
+    const [learned, setLearned] = useState(null);
     const triedRef = useRef(new Set());
 
     useEffect(() => {
@@ -866,6 +872,12 @@ export default function Catalog() {
                         already for the corrected spelling — so there is nothing
                         to offer as "search instead", only a note that we did not
                         take them literally. */}
+                    {!correctedFrom && !serverCorrection && learned?.note && books.length > 0 && (
+                        <div data-testid="catalog-learned-fix"
+                            className="mb-6 border-l-2 border-[#0A7D55] bg-[#ECFDF5] pl-3 py-2.5 pr-3 text-sm text-[#002B5C]">
+                            {learned.note}.
+                        </div>
+                    )}
                     {!correctedFrom && serverCorrection && books.length > 0 && (
                         <div
                             data-testid="catalog-server-autocorrect"
@@ -1059,7 +1071,13 @@ export default function Catalog() {
                               ? `${activeCat.name} titles`
                               : "All titles"}
                     </h2>
-                    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-10">
+                    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-10"
+                        onClickCapture={learned ? (e) => {
+                            // Did the learned fix help? Count a click on one of its books.
+                            const a = e.target.closest?.('a[href^="/books/"]');
+                            const id = a && a.getAttribute("href").split("/")[2];
+                            if (id) recordRewriteClick(learned.id, id);
+                        } : undefined}>
                         {books.map((b, i) => (
                             <BookCard
                                 key={b.id}

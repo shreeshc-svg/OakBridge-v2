@@ -763,6 +763,8 @@ async def startup_event():
     await wh_mp_indexes()
     from warehouse_shortship import ensure_indexes as wh_owed_indexes
     await wh_owed_indexes()
+    from search_learning import ensure_indexes as search_learning_indexes
+    await search_learning_indexes()
     try:
         # Real review figures for every reviewed book (stars are shown only
         # from these — extensions.refresh_review_stats).
@@ -1526,6 +1528,30 @@ async def list_books(
     # titles showed 24 and said "that's everything". Correction is idempotent
     # and the vocabulary is cached, so simply doing it on every page is both
     # cheaper to reason about and correct.
+    # A LEARNED fix comes first (search_learning.py): a search the team has
+    # approved an answer for — "civil and judicial services english" → our
+    # Compulsory English — or an obvious one checked by the rules. Only when
+    # the literal search found nothing; never overrides real results. Only the
+    # approved book ids are used; the note is written by our code.
+    if search and not docs:
+        try:
+            import search_learning
+            rw = await search_learning.lookup(search)
+        except Exception:  # noqa: BLE001 — a learning hiccup must never break search
+            rw = None
+        if rw:
+            rw_clauses = [c for c in clauses if c not in _alias_aware_clauses(search)]
+            rw_clauses.append({"id": {"$in": rw["book_ids"]}})
+            rw_query = dict(query)
+            rw_query["$and"] = rw_clauses
+            docs = await db.books.aggregate([{"$match": rw_query}] + pipeline[1:]).to_list(fetch_n)
+            if docs:
+                from urllib.parse import quote
+                response.headers["X-Search-Note"] = quote(rw["note"])
+                response.headers["X-Search-Rewrite"] = rw["id"]
+                if skip == 0:
+                    await search_learning.count_hit(rw["id"])
+
     if search and not docs:
         fixed = await _correct_search(search)
         if fixed:
@@ -2121,6 +2147,9 @@ app.include_router(packs_admin_router)
 from inventory_sync import inventory_router  # noqa: E402
 # BEFORE wh_router: its own routes are under /api/warehouse/marketplace/… and
 # must not be swallowed by a /api/warehouse/{something}/{action} pattern.
+from search_learning import admin_router as search_learning_admin_router, public_router as search_learning_public_router  # noqa: E402  (search that learns)
+app.include_router(search_learning_admin_router)
+app.include_router(search_learning_public_router)
 from warehouse_marketplace import router as wh_marketplace_router, admin_router as wh_marketplace_admin_router  # noqa: E402  (Amazon / Flipkart daily sheet)
 app.include_router(wh_marketplace_router)
 app.include_router(wh_marketplace_admin_router)
@@ -2213,7 +2242,7 @@ app.add_middleware(
     # fallback name instead of the dated one the server chose, which is the one
     # thing the comment on downloadBlob promises: "two downloads a week apart do
     # not overwrite each other in the Downloads folder". They did.
-    expose_headers=["X-Search-Corrected-To", "Content-Disposition"],
+    expose_headers=["X-Search-Corrected-To", "X-Search-Note", "X-Search-Rewrite", "Content-Disposition"],
 )
 
 

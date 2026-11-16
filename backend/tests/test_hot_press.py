@@ -102,7 +102,7 @@ check('"enabled": {"$ne": False}' in home and "_new_release_clause()" in home, "
 lst = code[code.index("async def list_books"):code.index("async def _drop_dead_words")]
 check('hot = bool(new_release) and sort in (None, "featured")' in lst and "hot_order(docs, _preorder_active)[skip:skip + limit]" in lst,
       "View all (default sort) uses the same order, paginated after ordering")
-check(lst.count("to_list(fetch_n)") == 3, "search-fallback paths fetch the whole set too")
+check(lst.count("to_list(fetch_n)") == 4, "search-fallback paths (learned fix, spelling fix, dropped word) fetch the whole set too")
 check('"coming_soon": True, "launch_at": {"$gte": today}' in code, "unlaunched pre-orders qualify for the row")
 
 print()
