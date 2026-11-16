@@ -114,15 +114,30 @@ export default function AdminInventory() {
                 </div>
                 <div className="flex items-center gap-4">
                     <ExportButton path="/admin/inventory/export.csv" />
-                    <button
-                        type="button"
-                        onClick={doSync}
-                        disabled={syncing}
-                        data-testid="inventory-sync-sheet"
-                        className="inline-flex items-center gap-2 bg-[#002B5C] text-white px-4 py-2 text-sm font-medium hover:bg-[#001F42] disabled:opacity-60"
-                    >
-                        {syncing ? "Syncing…" : "Sync from sheet"}
-                    </button>
+                    {/* Once the warehouse is LIVE it sets stock itself: every
+                        movement (printer, carton, courier, Amazon/Flipkart sheet)
+                        changes website stock as it happens, so there is nothing
+                        to sync — the old sheet sync would only refuse. The button
+                        stays for an install still on the Google sheet (warehouse
+                        off / in trial). */}
+                    {data?.warehouse_mode === "live" ? (
+                        <Link to="/admin/warehouse" data-testid="inventory-live-from-warehouse"
+                            title="Website stock updates automatically with every warehouse movement — no sync needed."
+                            className="inline-flex items-center gap-2 border border-[#15803D] text-[#15803D] bg-[#F0FDF4] px-4 py-2 text-sm font-medium hover:bg-[#DCFCE7]">
+                            <span className="w-2 h-2 rounded-full bg-[#15803D] animate-pulse" aria-hidden="true" />
+                            Live from warehouse
+                        </Link>
+                    ) : data?.warehouse_mode && (
+                        <button
+                            type="button"
+                            onClick={doSync}
+                            disabled={syncing}
+                            data-testid="inventory-sync-sheet"
+                            className="inline-flex items-center gap-2 bg-[#002B5C] text-white px-4 py-2 text-sm font-medium hover:bg-[#001F42] disabled:opacity-60"
+                        >
+                            {syncing ? "Syncing…" : "Sync from sheet"}
+                        </button>
+                    )}
                     <label className="flex items-center gap-3 text-sm">
                         <span className="overline !text-[10px]">Low stock threshold</span>
                         <input

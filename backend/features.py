@@ -2465,7 +2465,15 @@ async def admin_low_stock(threshold: Optional[int] = None):
         {"stock": {"$lte": threshold, "$gt": 0}}, {"_id": 0}
     ).sort([("stock", 1)]).to_list(200)
     out = await db.books.find({"stock": {"$lte": 0}}, {"_id": 0}).to_list(200)
-    return {"threshold": threshold, "low_stock": low, "out_of_stock": out}
+    # Who sets stock now, so Admin → Inventory shows "Live from the warehouse"
+    # instead of a "Sync from sheet" button that can only answer 409 once the
+    # warehouse is live (inventory_sync.admin_sync_from_sheet).
+    try:
+        from warehouse import get_state
+        wh_mode = (await get_state())["mode"]
+    except Exception:  # noqa: BLE001
+        wh_mode = "off"
+    return {"threshold": threshold, "low_stock": low, "out_of_stock": out, "warehouse_mode": wh_mode}
 
 
 @admin_router.get("/submissions", response_model=List[Submission])
