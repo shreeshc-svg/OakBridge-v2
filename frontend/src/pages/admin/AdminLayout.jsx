@@ -34,6 +34,13 @@ export default function AdminLayout() {
     // Typing a restricted URL directly must not render the page. The API would
     // refuse anyway, but an empty screen full of failed requests is a poor answer.
     const allowedHere = canPath(user, loc.pathname);
+    // Someone whose Dashboard was switched off (Admin → Users → Sections)
+    // signs in to /admin: take them to the first page they CAN open instead of
+    // a "no access" wall on their very first screen.
+    const isHome = /^\/admin\/?$/.test(loc.pathname);
+    React.useEffect(() => {
+        if (isHome && !allowedHere && orderedLinks.length) nav(orderedLinks[0].to, { replace: true });
+    }, [isHome, allowedHere, orderedLinks, nav]);
 
     React.useEffect(() => {
         window.scrollTo(0, 0);
