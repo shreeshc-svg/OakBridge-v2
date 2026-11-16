@@ -85,7 +85,10 @@ async def _notify(book):
 
 _mod("extensions", db=db, _notify_back_in_stock=_notify, get_current_user=_noop,
      require_admin=_noop, require_superadmin=_noop)
-_mod("features", APP_NAME="oakbridge", delete_object=_noop, get_object=_noop, put_object=_noop)
+async def _threshold():
+    return 10
+
+_mod("features", APP_NAME="oakbridge", delete_object=_noop, get_object=_noop, put_object=_noop, _low_stock_threshold=_threshold)
 _mod("uploads_guard", is_pdf=_noop, read_limited=_anoop, sniff_image=_noop, require_safe_pdf=_noop)
 _mod("audit", audit_log=_anoop)
 _mod("rbac", ADMIN_ROLES=("admin", "superadmin"), effective_sections=lambda u: ["warehouse"])
@@ -311,10 +314,21 @@ async def main():
           "website order 7 of 9: nothing moves (all 9 were taken at payment), 2 owed to the customer")
     check(next(o for o in db.orders.docs if o["id"] == "w9")["short_open"] and any("Part of your order" in m["subject"] for m in sent_mail),
           "order flagged part-shipped; customer told the rest follows")
+    rows, _, _ = await wh._inventory_rows()
+    check(next(x for x in rows if x["id"] == "a")["set_aside"] == 2, "inventory shows the 2 set aside for the short website parcel")
+    shelf = book("a")["wh_stock"] + 2            # what a person actually counts on the shelf
+    r = await wh.adm_set_count("a", wh.CountBody(count=shelf, note="shelf count"), SUPER)
+    check(r.get("unchanged") and r["set_aside"] == 2 and book("a")["wh_stock"] == s1,
+          "counting the shelf (incl. the 2 set aside) does NOT add them back — they're sold")
+    import inventory_reports as IR
+    check(IR.reason_label("amazon_mp") == "Carton out – Amazon" and IR.reason_label("short_cancelled").startswith("Short parcel")
+          and IR.reason_label("weird_code") == "weird_code", "exports print readable reasons")
     r = await WS.adm_owed_cancel(ow["id"], WS.NoteBody(note="Out of print"), SUPER)
     check(r["restocked"] == 2 and r["refund_due"] == 1000.0 and book("a")["wh_stock"] == s1 + 2,
           "cancel: 2 back into stock, refund reminder ₹1,000 (2 × ₹500)")
     check(not next(o for o in db.orders.docs if o["id"] == "w9")["short_open"], "order no longer part-shipped")
+    rows, _, _ = await wh._inventory_rows()
+    check(next(x for x in rows if x["id"] == "a")["set_aside"] == 0, "after cancel nothing is set aside any more")
     pending = await WS.adm_owed("refund")
     check(len(pending["rows"]) == 1 and pending["refunds_pending"] == 1, "refund shows as pending for the office")
     await WS.adm_owed_refund_done(ow["id"], WS.NoteBody(note="rfnd_123"), SUPER)

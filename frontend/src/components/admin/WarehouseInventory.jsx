@@ -154,7 +154,8 @@ export default function WarehouseInventory({ onHistory }) {
                                         <td className={`px-3 py-2 text-right font-mono ${b.wh_stock == null ? "text-[#9CA3AF]" : b.wh_stock < 0 ? "text-[#CC0033]" : b.wh_stock <= d.threshold ? "text-[#B45309]" : "text-[#002B5C]"}`}>{b.wh_stock ?? "—"}</td>
                                     )}
                                     <td className="px-3 py-2 text-right font-mono">{b.stock}{b.diff ? <span className="block text-[10px] text-[#CC0033]">{b.diff > 0 ? "+" : ""}{b.diff} vs website</span> : null}</td>
-                                    <td className="px-3 py-2 text-right font-mono">{b.owed || "—"}</td>
+                                    <td className="px-3 py-2 text-right font-mono">{b.owed || "—"}
+                                        {b.set_aside ? <span className="block text-[10px] text-[#B4750F]" title="On the shelf but sold: a short website parcel's rest (Still to send)">{b.set_aside} set aside</span> : null}</td>
                                     <td className="px-3 py-2 text-xs text-[#4B5563] whitespace-nowrap">{b.last_at ? <>{when(b.last_at)}<span className="block">{REASON[b.last_reason] || b.last_reason}</span></> : "—"}</td>
                                     <td className="px-3 py-2 text-right whitespace-nowrap">
                                         <button type="button" className="text-xs border border-[#002B5C] px-2 py-1 mr-2" onClick={() => setOpen(open === b.id ? null : b.id)} data-testid="wh-inv-edit">{open === b.id ? "Close" : "Edit"}</button>
@@ -173,7 +174,11 @@ export default function WarehouseInventory({ onHistory }) {
 }
 
 function EditPanel({ b, onDone }) {
-    const [count, setCount] = useState(b.wh_stock ?? 0);
+    // What he counts on the SHELF. Copies set aside for short website parcels
+    // are on the shelf but already sold; the server takes them out of the
+    // count (warehouse.adm_set_count), and this preview does the same.
+    const aside = b.set_aside || 0;
+    const [count, setCount] = useState((b.wh_stock ?? 0) + aside);
     const [note, setNote] = useState("");
     const [qty, setQty] = useState(1);
     const [reason, setReason] = useState("printer");
@@ -188,12 +193,13 @@ function EditPanel({ b, onDone }) {
             onDone();
         } catch (e) { toast.error(formatApiError(e)); } finally { setBusy(false); }
     };
-    const diff = Number(count) - (b.wh_stock ?? 0);
+    const diff = Number(count) - aside - (b.wh_stock ?? 0);
     const inp = "border border-[#E5E7EB] bg-white px-2 py-1.5 text-sm";
     return (
         <div className="grid md:grid-cols-2 gap-5 text-sm">
             <div className="space-y-2">
-                <div className="font-medium text-[#002B5C]">Set the counted number</div>
+                <div className="font-medium text-[#002B5C]">Set the counted number <span className="font-normal text-xs text-[#6B7280]">(copies on the shelf)</span></div>
+                {aside > 0 && <div className="text-xs bg-[#FEF3C7] px-2 py-1">Includes {aside} cop{aside === 1 ? "y" : "ies"} set aside for a short website parcel — already sold, so the count saved is {Number(count) - aside}.</div>}
                 <div className="flex flex-wrap items-center gap-2">
                     <input type="number" min={0} value={count} onChange={(e) => setCount(e.target.value)} className={`${inp} w-24 font-mono`} aria-label="Counted copies" />
                     <span className={`text-xs ${diff ? "text-[#B45309]" : "text-[#6B7280]"}`}>{diff ? `${diff > 0 ? "+" : ""}${diff} copies (saved as a correction)` : "no change"}</span>

@@ -1216,6 +1216,11 @@ async def _inventory_rows() -> tuple[list, int, dict]:
     state = await get_state()
     books = await db.books.find({"product_type": {"$nin": list(NOT_COUNTED)}}, INV_FIELDS).sort("title", 1).to_list(5000)
     owed = await order_stock.owed_by_book(db, since=state.get("started_at")) if state.get("started_at") else {}
+    # Copies on the shelf that a paid website order still owns: its parcel
+    # went short and the rest is waiting (warehouse_shortship.py). They're
+    # already off the count, so a shelf count must leave them out.
+    from warehouse_shortship import set_aside_by_book
+    aside = await set_aside_by_book()
     last = {r["_id"]: r async for r in db.stock_movements.aggregate([
         {"$match": {"undone": {"$ne": True}}}, {"$sort": {"at": -1}},
         {"$group": {"_id": "$book_id", "at": {"$first": "$at"}, "reason": {"$first": "$reason"}, "n": {"$sum": 1}}}])}
@@ -1228,7 +1233,8 @@ async def _inventory_rows() -> tuple[list, int, dict]:
         # kind: book | preorder | pod | launched_empty (warehouse_core.inventory_kind);
         # diff allows for owed copies, so a paid pre-order is not "≠ website".
         rows.append({**b, "wh_stock": int(wh) if wh is not None else None, "stock": int(b.get("stock") or 0),
-                     "owed": o, "diff": core.owed_diff(wh, o, b.get("stock")) or None if wh is not None else None,
+                     "owed": o, "set_aside": int(aside.get(b["id"], 0)),
+                     "diff": core.owed_diff(wh, o, b.get("stock")) or None if wh is not None else None,
                      "kind": core.inventory_kind(b, now),
                      "last_at": lm.get("at"), "last_reason": lm.get("reason"), "moves": int(lm.get("n") or 0)})
     return rows, await _low_stock_threshold(), state
@@ -1243,18 +1249,18 @@ async def adm_inventory():
 @wh_admin_router.get("/inventory/export.csv")
 async def adm_inventory_export(user: dict = Depends(require_admin)):
     from csv_export import csv_response
-    from inventory_reports import status_of
+    from inventory_reports import reason_label, status_of
     rows, threshold, state = await _inventory_rows()
     await audit_log(db, "WAREHOUSE_INVENTORY_EXPORT", email=user.get("email", ""), role=user.get("role", ""),
                     meta={"rows": len(rows)})
     return csv_response(
         f"warehouse-inventory-{_now():%Y-%m-%d}.csv",
         ["Title", "Author", "ISBN", "Category", "Price", "Warehouse count", "Website stock", "Owed to orders",
-         "Difference", "Status", "Last movement", "Last reason", "Movements"],
+         "Set aside (short parcels)", "Difference", "Status", "Last movement", "Last reason", "Movements"],
         ([r.get("title", ""), r.get("author", ""), r.get("isbn", ""), r.get("category", ""), r.get("price", ""),
-          "" if r["wh_stock"] is None else r["wh_stock"], r["stock"], r["owed"], "" if r["diff"] is None else r["diff"],
-          status_of(r, threshold),
-          (r.get("last_at") or "")[:16], r.get("last_reason") or "", r["moves"]] for r in rows))
+          "" if r["wh_stock"] is None else r["wh_stock"], r["stock"], r["owed"], r.get("set_aside", 0),
+          "" if r["diff"] is None else r["diff"], status_of(r, threshold),
+          (r.get("last_at") or "")[:16], reason_label(r.get("last_reason")), r["moves"]] for r in rows))
 
 
 async def _category_names() -> dict:
@@ -1335,23 +1341,28 @@ class AdminMoveBody(BaseModel):
 
 @wh_admin_router.post("/inventory/{book_id}/count")
 async def adm_set_count(book_id: str, body: CountBody, user: dict = Depends(require_admin)):
-    """'There are N on the shelf' — saved as the correction that gets there."""
+    """'There are N on the shelf' — saved as the correction that gets there.
+    N is what is PHYSICALLY on the shelf; copies set aside for short website
+    parcels (already sold, already off the count) are taken out of it, or a
+    count would add them back and they'd be sold twice."""
     if not (0 <= body.count <= 100000):
         raise HTTPException(status_code=400, detail="Enter a count between 0 and 1,00,000.")
+    from warehouse_shortship import set_aside_by_book
+    aside = int((await set_aside_by_book([book_id])).get(book_id, 0))
     note = (body.note or "").strip()
     if len(note) < 3:
         raise HTTPException(status_code=400, detail="Say why (e.g. 'shelf counted 28 Oct').")
     b = await db.books.find_one({"id": book_id, "product_type": {"$nin": list(NOT_COUNTED)}}, {"_id": 0, "wh_stock": 1})
     if not b:
         raise HTTPException(status_code=404, detail="Book not found (packs and hampers are counted per book).")
-    diff = body.count - int(b.get("wh_stock") or 0)
+    diff = (body.count - aside) - int(b.get("wh_stock") or 0)
     if diff == 0:
-        return {"ok": True, "unchanged": True}
+        return {"ok": True, "unchanged": True, "set_aside": aside}
     mv = await _apply(book_id, diff, "correction_in" if diff > 0 else "correction_out", actor=user,
-                      note=f"Counted in Admin: {note}"[:300])
+                      note=(f"Counted in Admin: {note}" + (f" (shelf {body.count} incl. {aside} set aside for short parcels)" if aside else ""))[:300])
     await audit_log(db, "WAREHOUSE_COUNT_SET", email=user.get("email", ""), role=user.get("role", ""),
-                    meta={"book": book_id, "count": body.count, "change": diff})
-    return {"ok": True, "movement": mv, "below_zero": await _below_zero([book_id]) if diff < 0 else []}
+                    meta={"book": book_id, "count": body.count, "set_aside": aside, "change": diff})
+    return {"ok": True, "movement": mv, "set_aside": aside, "below_zero": await _below_zero([book_id]) if diff < 0 else []}
 
 
 @wh_admin_router.post("/inventory/{book_id}/move")

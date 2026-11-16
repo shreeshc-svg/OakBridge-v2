@@ -20,7 +20,23 @@ from typing import Optional
 from xml.sax.saxutils import escape
 
 INVENTORY_HEADER = ["Title", "Author", "ISBN", "Category", "Price (Rs)", "MRP (Rs)", "Warehouse count", "Website stock",
-                    "Owed to orders", "Difference", "Status", "Last movement", "Last reason", "Movements"]
+                    "Owed to orders", "Set aside (short parcels)", "Difference", "Status", "Last movement", "Last reason", "Movements"]
+
+# Readable names for movement reasons — exports used to print the raw codes
+# (amazon_mp, short_cancelled …). Keep in step with the screens' label maps
+# (WarehouseInventory.jsx REASON, AdminWarehouse.jsx REASON_NAME).
+REASON_LABELS = {
+    "printer": "Arrived from printer", "return": "Customer return (good copy)", "correction_in": "Correction +",
+    "correction_out": "Correction −", "opening": "Opening count", "damaged": "Damaged", "sample": "Free copy / sample",
+    "author_copy": "Author copy", "sale_offline": "Offline / dealer sale", "amazon_fba": "Sent to Amazon FBA",
+    "amazon_vendor_po": "Amazon Vendor PO", "office": "Sent to office", "website_order": "Website order",
+    "website_return": "Website order returned", "amazon_mp": "Carton out – Amazon", "flipkart_mp": "Carton out – Flipkart",
+    "short_cancelled": "Short parcel cancelled – back in stock",
+}
+
+
+def reason_label(code) -> str:
+    return REASON_LABELS.get(code or "", code or "")
 
 
 def status_of(r: dict, threshold: int) -> str:
@@ -95,10 +111,10 @@ def inventory_xlsx(rows: list, threshold: int, mode: str, cat_names: dict) -> by
         inv.append([_safe(r.get("title", "")), _safe(r.get("author") or ""), r.get("isbn") or "",
                     cat_names.get(r.get("category"), r.get("category") or ""), float(r.get("price") or 0),
                     float(r.get("original_price") or r.get("price") or 0),
-                    r.get("wh_stock"), int(r.get("stock") or 0), int(r.get("owed") or 0), r.get("diff"),
-                    status_of(r, threshold), (r.get("last_at") or "")[:16].replace("T", " "), r.get("last_reason") or "",
+                    r.get("wh_stock"), int(r.get("stock") or 0), int(r.get("owed") or 0), int(r.get("set_aside") or 0), r.get("diff"),
+                    status_of(r, threshold), (r.get("last_at") or "")[:16].replace("T", " "), reason_label(r.get("last_reason")),
                     int(r.get("moves") or 0)])
-    widths = [48, 28, 16, 18, 11, 11, 14, 13, 13, 11, 16, 17, 16, 11]
+    widths = [48, 28, 16, 18, 11, 11, 14, 13, 13, 14, 11, 16, 17, 22, 11]
     for i, w in enumerate(widths, start=1):
         inv.column_dimensions[get_column_letter(i)].width = w
     for row in inv.iter_rows(min_row=2, min_col=5, max_col=6):
@@ -109,8 +125,8 @@ def inventory_xlsx(rows: list, threshold: int, mode: str, cat_names: dict) -> by
         wh = row[6].value
         if isinstance(wh, (int, float)) and wh < 0:
             row[6].font = red
-        if row[9].value:
-            row[9].font = red
+        if row[10].value:            # Difference
+            row[10].font = red
     inv.freeze_panes = "B2"
     inv.auto_filter.ref = f"A1:{get_column_letter(len(INVENTORY_HEADER))}{max(1, inv.max_row)}"
     buf = io.BytesIO()

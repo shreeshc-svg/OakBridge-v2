@@ -102,6 +102,19 @@ async def _mail_customer(order: dict, subject: str, lines: list) -> None:
         log.exception("short shipment: customer mail failed")
 
 
+async def set_aside_by_book(book_ids: Optional[list] = None) -> dict:
+    """{book_id: copies} on the shelf that belong to a paid website order whose
+    parcel went short and whose rest is still open. They are already off the
+    warehouse count (taken at payment) — a shelf count must not add them back."""
+    q = {"status": "open", "kind": "website_order"}
+    if book_ids:
+        q["book_id"] = {"$in": list(book_ids)}
+    out: dict = {}
+    async for o in db.wh_owed.find(q, {"_id": 0, "book_id": 1, "owed": 1}):
+        out[o["book_id"]] = out.get(o["book_id"], 0) + int(o.get("owed") or 0)
+    return out
+
+
 def _view(o: dict) -> dict:
     v = {k: o.get(k) for k in ("id", "doc_id", "parcel_no", "kind", "party", "order_id", "order_number", "book_id", "title", "isbn",
                                "ordered", "sent", "owed", "status", "created_at", "created_by", "resolved_at", "resolved_by",
