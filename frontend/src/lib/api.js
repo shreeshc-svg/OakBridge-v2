@@ -580,8 +580,11 @@ export const adminApplyReleaseOrder = (dryRun = true) =>
 // order forward to paid — there is no path in it that marks anything failed.
 export const adminReconcilePayment = (id) =>
     api.post(`/admin/orders/${id}/reconcile-payment`).then((r) => r.data);
-export const adminListOrders = () =>
-    api.get("/admin/orders").then((r) => r.data);
+export const adminListOrders = (archived = false) =>
+    api.get("/admin/orders", { params: archived ? { archived: true } : {} }).then((r) => r.data);
+// Bulk (backend/orders_cleanup.py, super admin): delete never-paid orders; archive / unarchive any.
+export const adminBulkDeleteOrders = (ids, reason) => api.post("/admin/orders/bulk-delete", { ids, reason }).then((r) => r.data);
+export const adminBulkArchiveOrders = (ids, archive = true) => api.post("/admin/orders/bulk-archive", { ids, archive }).then((r) => r.data);
 /*
  * Accept that a bounced order's money is never arriving, or take that back.
  *

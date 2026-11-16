@@ -16,6 +16,8 @@ import {
     adminUpdateOrder,
     adminRestockOrder,
     adminWriteOffOrder,
+    adminBulkDeleteOrders,
+    adminBulkArchiveOrders,
     formatApiError,
     formatINR,
 } from "../../lib/api";
@@ -65,11 +67,49 @@ export default function AdminOrders() {
     // permission story stays in one place rather than growing a second rule.
     const mayWriteOff = canDelete(me);
 
+    // Bulk select (super admin): delete never-paid orders, archive the rest.
+    // The server decides what may go (orders_cleanup.deletable) — paid,
+    // stock-taken or packed orders come back as "skipped" with the reason.
+    const [picked, setPicked] = useState(() => new Set());
+    const [showArchived, setShowArchived] = useState(false);
+    const [bulkBusy, setBulkBusy] = useState(false);
+    const togglePick = (id) => setPicked((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+
     const load = () => {
         setLoading(true);
-        adminListOrders()
+        setPicked(new Set());
+        adminListOrders(showArchived)
             .then(setOrders)
             .finally(() => setLoading(false));
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    useEffect(() => { load(); }, [showArchived]);
+
+    const bulkDelete = async () => {
+        const ids = [...picked];
+        const chosen = orders.filter((o) => picked.has(o.id));
+        const paid = chosen.filter((o) => o.payment_status === "paid").length;
+        const reason = window.prompt(
+            `Delete ${ids.length} order(s)?\n\nOnly orders that never took money are deleted${paid ? ` — the ${paid} paid one(s) will be skipped (archive those instead)` : ""}. ` +
+            "If a late payment ever arrives for a deleted order, it comes back automatically.\n\nReason (e.g. failed payments, test orders):", "Failed / unpaid orders");
+        if (!reason) return;
+        setBulkBusy(true);
+        try {
+            const r = await adminBulkDeleteOrders(ids, reason);
+            toast.success(`Deleted ${r.deleted} order(s).${r.skipped.length ? ` ${r.skipped.length} kept.` : ""}`);
+            r.skipped.slice(0, 5).forEach((s) => toast.message(`${s.order_number}: ${s.why}`, { duration: 8000 }));
+            load();
+        } catch (e) { toast.error(formatApiError(e)); } finally { setBulkBusy(false); }
+    };
+    const bulkArchive = async (archive) => {
+        const ids = [...picked];
+        if (archive && !window.confirm(`Archive ${ids.length} order(s)? They're hidden from this list; reports, invoices and the customer's account don't change. You can unarchive them any time.`)) return;
+        setBulkBusy(true);
+        try {
+            const r = await adminBulkArchiveOrders(ids, archive);
+            toast.success(`${archive ? "Archived" : "Restored"} ${r.changed} order(s).`);
+            load();
+        } catch (e) { toast.error(formatApiError(e)); } finally { setBulkBusy(false); }
     };
 
     const applyWriteOff = async ({ written_off, note, notify }) => {
@@ -96,9 +136,6 @@ export default function AdminOrders() {
         }
     };
 
-    useEffect(() => {
-        load();
-    }, []);
 
     // The dropdown no longer acts. It proposes, and the dialog decides —
     // because writing the status also emails the customer, and a mis-click
@@ -396,10 +433,36 @@ export default function AdminOrders() {
                 total={orders.length}
             />
 
-            <div className="mt-6 bg-white border border-[#E5E7EB] overflow-x-auto">
+            {mayWriteOff && (
+                <div className="mt-4 flex flex-wrap items-center gap-3 text-sm" data-testid="orders-bulk-bar">
+                    <label className="inline-flex items-center gap-2 text-xs text-[#4B5563]">
+                        <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} data-testid="orders-show-archived" />
+                        Show archived orders
+                    </label>
+                    {picked.size > 0 && (
+                        <div className="flex flex-wrap items-center gap-2 bg-[#002B5C] text-white px-3 py-2 ml-auto">
+                            <span className="font-medium">{picked.size} selected</span>
+                            <button type="button" disabled={bulkBusy} onClick={bulkDelete} data-testid="orders-bulk-delete"
+                                className="bg-[#CC0033] px-3 py-1 text-xs font-medium disabled:opacity-50">Delete unpaid</button>
+                            <button type="button" disabled={bulkBusy} onClick={() => bulkArchive(!showArchived)} data-testid="orders-bulk-archive"
+                                className="border border-white/60 px-3 py-1 text-xs disabled:opacity-50">{showArchived ? "Unarchive" : "Archive"}</button>
+                            <button type="button" onClick={() => setPicked(new Set())} className="text-xs underline">Clear</button>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            <div className="mt-4 bg-white border border-[#E5E7EB] overflow-x-auto">
                 <table className="w-full text-sm">
                     <thead className="bg-[#F5F7FA] text-[10px] font-mono uppercase tracking-widest text-[#4B5563]">
                         <tr>
+                            {mayWriteOff && (
+                                <th className="px-3 py-3 w-8">
+                                    <input type="checkbox" aria-label="Select all orders shown" data-testid="orders-select-all"
+                                        checked={view.length > 0 && view.every((o) => picked.has(o.id))}
+                                        onChange={(e) => setPicked(e.target.checked ? new Set(view.map((o) => o.id)) : new Set())} />
+                                </th>
+                            )}
                             <th className="text-left px-4 py-3">Order #</th>
                             <th className="text-left px-4 py-3">Customer</th>
                             <th className="text-left px-4 py-3">Deliver to</th>
@@ -413,14 +476,14 @@ export default function AdminOrders() {
                     <tbody>
                         {loading && (
                             <tr>
-                                <td colSpan={8} className="px-4 py-10 text-center text-[#4B5563]">
+                                <td colSpan={mayWriteOff ? 9 : 8} className="px-4 py-10 text-center text-[#4B5563]">
                                     Loading…
                                 </td>
                             </tr>
                         )}
                         {!loading && view.length === 0 && (
                             <tr>
-                                <td colSpan={8} className="px-4 py-10 text-center text-[#4B5563]">
+                                <td colSpan={mayWriteOff ? 9 : 8} className="px-4 py-10 text-center text-[#4B5563]">
                                     {orders.length === 0 ? "No orders yet." : "No orders match your search."}
                                 </td>
                             </tr>
@@ -429,8 +492,14 @@ export default function AdminOrders() {
                             <tr
                                 key={o.id}
                                 data-testid={`admin-order-row-${o.id}`}
-                                className="border-t border-[#E5E7EB]"
+                                className={`border-t border-[#E5E7EB] ${picked.has(o.id) ? "bg-[#EFF6FF]" : ""}`}
                             >
+                                {mayWriteOff && (
+                                    <td className="px-3 py-3 align-top">
+                                        <input type="checkbox" checked={picked.has(o.id)} onChange={() => togglePick(o.id)}
+                                            aria-label={`Select order ${o.order_number}`} data-testid={`order-pick-${o.id}`} />
+                                    </td>
+                                )}
                                 <td className="px-4 py-3 font-mono text-xs text-[#002B5C]">
                                     {o.order_number}
                                     {/* Directly under the order number, because

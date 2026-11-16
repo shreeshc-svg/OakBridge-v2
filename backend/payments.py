@@ -524,6 +524,11 @@ async def verify_payment(payload: VerifyPaymentRequest):
         {"rzp_order_id": payload.razorpay_order_id}, {"_id": 0}
     )
     if not order:
+        # Deleted by an admin as unpaid, and the customer paid after all:
+        # orders_cleanup keeps it whole and puts it back (never lose money).
+        from orders_cleanup import restore_deleted
+        order = await restore_deleted(payload.razorpay_order_id)
+    if not order:
         raise HTTPException(status_code=404, detail="Order not found for this Razorpay order id")
 
     # Ask Razorpay what it actually took, rather than assuming the cart total.
@@ -689,6 +694,9 @@ async def razorpay_webhook(
     )
 
     if event_type == "payment.captured":
+        if not order_doc:
+            from orders_cleanup import restore_deleted
+            order_doc = await restore_deleted(rzp_order_id)
         if not order_doc:
             return {"received": True, "ignored": "unknown_order"}
         await _settle_capture(order_doc, rzp_payment_id, payment.get("amount"), "webhook")

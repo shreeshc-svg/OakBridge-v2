@@ -1738,7 +1738,7 @@ async def admin_delete_book(book_id: str):
 
 
 @admin_router.get("/orders")
-async def admin_list_orders():
+async def admin_list_orders(archived: bool = False):
     """Orders newest-first, with each line item enriched for fulfilment.
 
     Order items only persist book_id/title/author/price/qty (a snapshot taken at
@@ -1746,7 +1746,10 @@ async def admin_list_orders():
     right stock — are joined from the catalogue here. Done server-side in one
     query so it also applies to orders placed before these fields existed.
     """
-    orders = await db.orders.find({}, {"_id": 0}).sort([("created_at", -1)]).to_list(500)
+    # Archived orders (orders_cleanup.py) are hidden unless asked for; they
+    # still count everywhere else (reports, revenue, the customer's account).
+    flt = {"archived": True} if archived else {"archived": {"$ne": True}}
+    orders = await db.orders.find(flt, {"_id": 0}).sort([("created_at", -1)]).to_list(500)
 
     ids = {
         it.get("book_id")

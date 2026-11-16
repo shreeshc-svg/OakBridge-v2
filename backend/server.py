@@ -2147,6 +2147,8 @@ app.include_router(packs_admin_router)
 from inventory_sync import inventory_router  # noqa: E402
 # BEFORE wh_router: its own routes are under /api/warehouse/marketplace/… and
 # must not be swallowed by a /api/warehouse/{something}/{action} pattern.
+from orders_cleanup import router as orders_cleanup_router  # noqa: E402  (bulk delete unpaid / archive orders) — before admin routes with /orders/{id}
+app.include_router(orders_cleanup_router)
 from search_learning import admin_router as search_learning_admin_router, public_router as search_learning_public_router  # noqa: E402  (search that learns)
 app.include_router(search_learning_admin_router)
 app.include_router(search_learning_public_router)
