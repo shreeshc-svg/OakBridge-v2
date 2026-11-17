@@ -416,7 +416,7 @@ export default function AdminHampers() {
         // limit=500 because the default page is 60 and the picker searches the
         // whole catalogue. /books already excludes hampers, so a hamper cannot
         // be put inside another hamper.
-        fetchBooks({ limit: 500 })
+        fetchBooks({ limit: 500, all_formats: true })
             .then((b) => setBooks(Array.isArray(b) ? b : b?.books || []))
             .catch(() => {});
         fetchSiteContent()

@@ -11,6 +11,7 @@ import EbookCta from "../components/EbookCta";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { Minus, Plus, ShoppingBag, ArrowLeft, Star, ChevronLeft, ChevronRight, BookOpen, Truck, PackageCheck, RotateCcw, ShieldCheck, BadgeCheck, ExternalLink } from "lucide-react";
 import BookCard from "../components/BookCard";
+import FormatSwitcher from "../components/FormatSwitcher";
 import ReviewsSection from "../components/ReviewsSection";
 import { fetchBook, fetchBooks, formatINR, notifyBackInStock, fetchSettings, mediaUrl,
     fetchBookPreview, fetchBookAuthors, fetchPackItems, fetchCollection, API,
@@ -166,7 +167,10 @@ export default function BookDetail() {
                     in_stock: Number(b?.stock ?? 0) > 0,
                     product_type: b?.product_type || "book",
                 });
-                return fetchBooks({ category: b.category, limit: 20 }).catch(() => []);
+                // Not this title in another format: those are in the switcher.
+                return fetchBooks({ category: b.category, limit: 20 })
+                    .then((list) => list.filter((x) => !b.format_group || x.format_group !== b.format_group))
+                    .catch(() => []);
             })
             .then((list) => setRelated(list.filter((x) => x.id !== id).slice(0, 12)))
             // On a quiet refresh the prerendered book stays up if the request
@@ -660,8 +664,11 @@ export default function BookDetail() {
                         `hasOptions` block further down only renders for titles with
                         selectable variants, so without this a book's binding was
                         never surfaced outside the Specifications tab. */}
+                    {/* Sold in formats: the switcher names the format, so the
+                        binding badge below would only repeat it. */}
+                    <FormatSwitcher book={book} />
                     <div className="mt-4 flex items-center gap-3 flex-wrap">
-                        {book.binding && (
+                        {book.binding && !(book.formats?.length > 1) && (
                             <>
                                 <span
                                     data-testid="book-binding-badge"

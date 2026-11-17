@@ -1241,7 +1241,7 @@ function BookPicker({ block, onPick }) {
     const [res, setRes] = useState([]);
     useEffect(() => {
         if (!dq.trim()) { setRes([]); return; }
-        fetchBooks({ search: dq, limit: 8 }).then((r) => setRes(Array.isArray(r) ? r : r?.items || [])).catch(() => setRes([]));
+        fetchBooks({ search: dq, limit: 8, all_formats: true }).then((r) => setRes(Array.isArray(r) ? r : r?.items || [])).catch(() => setRes([]));
     }, [dq]);
     return (
         <div className="space-y-2">

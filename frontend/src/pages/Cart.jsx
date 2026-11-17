@@ -87,7 +87,7 @@ export default function Cart() {
                                             {i.title}
                                         </Link>
                                         <p className="text-xs text-[#4B5563] mt-1">
-                                            {i.author}
+                                            {i.format ? `${i.format} · ` : ""}{i.author}
                                         </p>
                                         <p className="text-xs font-mono text-[#4B5563] mt-2">
                                             {formatINR(i.price)} each

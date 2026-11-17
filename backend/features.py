@@ -1111,7 +1111,9 @@ async def suggest_index():
     """
     docs = (
         await db.books.find(
-            {}, {"_id": 0, "id": 1, "title": 1, "author": 1, "category": 1, "release_rank": 1}
+            # Secondary formats (a Hardback beside the listed Paperback) would
+            # suggest the same title twice; the listed one is enough.
+            {"format_primary": {"$ne": False}}, {"_id": 0, "id": 1, "title": 1, "author": 1, "category": 1, "release_rank": 1}
         )
         .sort("release_rank", 1)
         .to_list(None)
@@ -2190,6 +2192,14 @@ class BulkDeleteRequest(BaseModel):
     confirm: Optional[str] = None  # user must type "DELETE ALL" for delete_all
 
 
+async def _heal_formats() -> None:
+    """After any book delete: a title sold in formats must not lose its listed
+    record and vanish from the store (book_formats.heal). Late import: that
+    module imports extensions, which this one is imported beside."""
+    from book_formats import heal_quietly
+    await heal_quietly()
+
+
 @admin_router.post("/books/bulk-delete")
 async def admin_bulk_delete(payload: BulkDeleteRequest):
     """Delete multiple books by id, or every book (with typed confirmation)."""
@@ -2200,12 +2210,14 @@ async def admin_bulk_delete(payload: BulkDeleteRequest):
                 detail='To delete every book, send confirm="DELETE ALL"',
             )
         result = await db.books.delete_many({})
+        await _heal_formats()
         return {"deleted": result.deleted_count}
 
     ids = [i for i in (payload.ids or []) if i]
     if not ids:
         raise HTTPException(status_code=400, detail="No book ids provided")
     result = await db.books.delete_many({"id": {"$in": ids}})
+    await _heal_formats()
     return {"deleted": result.deleted_count, "requested": len(ids)}
 
 
@@ -3032,6 +3044,7 @@ async def merge_titles(dry_run: bool = True, remove_obsolete: bool = False):
         ids = [str(b.get("isbn", "")).strip() for b in obsolete]
         res = await db.books.delete_many({"isbn": {"$in": ids}})
         result["removed"] = res.deleted_count
+        await _heal_formats()
     return result
 
 
@@ -3102,6 +3115,7 @@ async def delete_coverless(dry_run: bool = True):
     if ids:
         res = await db.books.delete_many({"id": {"$in": ids}})
         result["deleted"] = res.deleted_count
+        await _heal_formats()
     return result
 
 
@@ -3168,6 +3182,7 @@ async def find_generated_covers(dry_run: bool = True, threshold: float = 0.5):
     if isbns:
         res = await db.books.delete_many({"isbn": {"$in": isbns}})
         result["deleted"] = res.deleted_count
+        await _heal_formats()
     return result
 
 

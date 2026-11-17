@@ -1721,6 +1721,11 @@ async def admin_update_book(book_id: str, payload: BookAdminUpdate):
     # Back-in-stock: if stock crossed from 0 -> positive, notify everyone waiting.
     if int(prev.get("stock", 0) or 0) <= 0 and int((book or {}).get("stock", 0) or 0) > 0:
         await _notify_back_in_stock(book)
+    if "isbn" in updates and (book or {}).get("format_group"):
+        # The listed format carries every format's ISBN for search; an ISBN
+        # corrected here must reach it (book_formats._write_group).
+        from book_formats import heal_quietly
+        await heal_quietly()
     if "stock" in updates:
         # Live warehouse system: a typed stock number becomes a ledger
         # correction, so the warehouse count never silently disagrees.
@@ -1734,6 +1739,10 @@ async def admin_delete_book(book_id: str):
     result = await db.books.delete_one({"id": book_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Book not found")
+    # Deleting one format of a title (say the listed Paperback) must not take
+    # the Hardback off the store with it — book_formats.heal re-lists it.
+    from book_formats import heal_quietly
+    await heal_quietly()
     return {"ok": True}
 
 

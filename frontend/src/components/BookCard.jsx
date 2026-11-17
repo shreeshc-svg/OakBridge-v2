@@ -137,6 +137,8 @@ export default function BookCard({ book, index = 0, compact = false, toEbook = f
     const starred = !!book.star_title;
     // A pre-order has no stock to run low on (same rule as the product page).
     const low = !oos && !preorder.active && !pod && stock <= LOW_STOCK;
+    const otherFormats = (Array.isArray(book.formats) ? book.formats : []).filter((f) => f.id !== book.id);
+    const otherInStock = otherFormats.find((f) => f.stock > 0 && !f.coming_soon) || null;
     const discount = book.original_price
         ? Math.round(100 - (book.price / book.original_price) * 100)
         : 0;
@@ -386,6 +388,18 @@ export default function BookCard({ book, index = 0, compact = false, toEbook = f
              * against the author with white space beneath it.
              */}
             <div className="mt-auto flex-shrink-0">
+                {/* Sold in formats (backend/book_formats.py): the bookstore lists
+                    one card per title, so the card says what else there is.
+                    When THIS format is out but another is on the shelf, say
+                    that instead — otherwise a title we can ship today reads as
+                    sold out. Same slot and treatment as the low-stock line. */}
+                {otherFormats.length > 0 && (
+                    <div data-testid={`also-in-${book.id}`} className={`font-mono ${compact ? "text-[10px] pt-1.5" : "text-[11px] pt-2"} ${oos && otherInStock ? "text-[#15803D]" : "text-[#4B5563]"}`}>
+                        {oos && otherInStock
+                            ? `${otherInStock.label} in stock — ${formatINR(otherInStock.price)}`
+                            : `Also in ${otherFormats.map((f) => f.label).join(" · ")}`}
+                    </div>
+                )}
                 {low && (
                     <div data-testid={`low-stock-${book.id}`} className={`font-mono text-[#CC0033] ${compact ? "text-[10px] pt-1.5" : "text-[11px] pt-2"}`}>
                         Only {stock} left — order soon

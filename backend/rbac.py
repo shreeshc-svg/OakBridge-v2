@@ -101,7 +101,7 @@ SHARED_CONTENT_SECTIONS = frozenset(
 # Section -> the first path segments under /api/admin/ that it unlocks.
 SECTION_PATHS: dict[str, set[str]] = {
     "dashboard": {"stats", "roles", "search-logs", "search-learning"},
-    "books": {"books", "categories", "uploads", "apply-book-specs", "apply-release-order"},
+    "books": {"books", "book-formats", "categories", "uploads", "apply-book-specs", "apply-release-order"},
     # `uploads` is shared with books and authors: the hamper form posts its
     # photography to the same image endpoint, and without it the picker 403s.
     "hampers": {"hampers", "hampers-copy-defaults", "uploads", "settings"},

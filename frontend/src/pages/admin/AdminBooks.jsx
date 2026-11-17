@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { fetchSettings, mediaUrl, fetchCollection,
+import { mediaUrl, fetchCollection,
     adminUploadBookPreview,
     adminRemoveBookPreview,
 } from "../../lib/api";
@@ -30,6 +30,7 @@ import { toast } from "sonner";
 import { useAuth } from "../../context/AuthContext";
 import { canDelete } from "../../lib/rbac";
 import ExportButton from "../../components/admin/ExportButton";
+import BookFormats from "../../components/admin/BookFormats";
 import { Link } from "react-router-dom";
 
 const BLANK = {
@@ -747,10 +748,6 @@ function EbookManager({ bookId, hasEbook, filename, onChange }) {
 
 function BookForm({ initial, categories, onClose, onSaved }) {
     const [form, setForm] = useState({ ...BLANK, ...(initial || {}) });
-    const [vsettings, setVsettings] = useState(null);
-    useEffect(() => {
-        fetchSettings().then(setVsettings).catch(() => {});
-    }, []);
     // Stores come from Admin → Pages → "Available on" stores; one link box each.
     // The Oakbridge eReader has its own field (ebook_url) and is left out here.
     const [stores, setStores] = useState([]);
@@ -761,12 +758,6 @@ function BookForm({ initial, categories, onClose, onSaved }) {
     }, []);
     const setStoreLink = (id, url) =>
         setForm((f) => ({ ...f, store_links: { ...(f.store_links || {}), [id]: url } }));
-    const bindingOpts = vsettings?.binding_options || ["Hardcover", "Softcover"];
-    const sizeOpts = vsettings?.size_options || ["Demi", "Royal", "Crown"];
-    const updateVariant = (i, key, val) =>
-        setForm((f) => ({ ...f, variants: (f.variants || []).map((v, idx) => (idx === i ? { ...v, [key]: val } : v)) }));
-    const removeVariant = (i) =>
-        setForm((f) => ({ ...f, variants: (f.variants || []).filter((_, idx) => idx !== i) }));
     const updateVolume = (i, key, val) =>
         setForm((f) => ({ ...f, volumes: (f.volumes || []).map((v, idx) => (idx === i ? { ...v, [key]: val } : v)) }));
     const removeVolume = (i) =>
@@ -1362,51 +1353,24 @@ function BookForm({ initial, categories, onClose, onSaved }) {
                     )}
                 </div>
 
-                <div className="mt-8 border-t border-[#E5E7EB] pt-6">
-                    <div className="flex items-center justify-between gap-4">
-                        <div>
-                            <div className="overline">Price matrix (optional)</div>
-                            <p className="text-xs text-[#4B5563] mt-1">
-                                Binding &times; size variants with their own price. Leave empty to sell at the single price above.
-                            </p>
-                        </div>
-                        <button
-                            type="button"
-                            onClick={() =>
-                                setForm((f) => ({
-                                    ...f,
-                                    variants: [
-                                        ...(f.variants || []),
-                                        { binding: bindingOpts[0] || "", size: sizeOpts[0] || "", price: form.price, stock: "" },
-                                    ],
-                                }))
-                            }
-                            data-testid="add-variant"
-                            className="text-xs border border-[#002B5C] px-3 py-1.5 hover:bg-[#F5F7FA] whitespace-nowrap"
-                        >
-                            + Add variant
-                        </button>
+                {/* Formats (Paperback / Hardback …) replace the old binding × size
+                    "Price matrix": that matrix kept one ISBN and one stock for
+                    every option, which a publisher's formats never share. Each
+                    format is now its own book — see components/admin/BookFormats.jsx
+                    and backend/book_formats.py. Existing books only: a format is
+                    linked to a saved book, so a new title is saved first. */}
+                {isEdit ? (
+                    <BookFormats
+                        book={{ ...initial, price: form.price, original_price: form.original_price, binding: form.binding }}
+                        onAnchorPrice={(price, mrp) => setForm((f) => ({ ...f, price, original_price: mrp ?? "" }))}
+                        onChanged={onSaved}
+                    />
+                ) : (
+                    <div className="mt-8 border-t border-[#E5E7EB] pt-6 text-xs text-[#4B5563]">
+                        <div className="overline">Formats</div>
+                        <p className="mt-1">Selling this title as Paperback and Hardback? Create the book first, then open it again to add formats.</p>
                     </div>
-                    {(form.variants || []).length > 0 && (
-                        <div className="mt-4 space-y-2">
-                            {(form.variants || []).map((v, i) => (
-                                <div key={i} className="flex flex-wrap items-center gap-2">
-                                    <select value={v.binding || ""} onChange={(e) => updateVariant(i, "binding", e.target.value)} className="border border-[#E5E7EB] bg-white px-2 py-1.5 text-sm">
-                                        <option value="">Binding…</option>
-                                        {bindingOpts.map((b) => (<option key={b} value={b}>{b}</option>))}
-                                    </select>
-                                    <select value={v.size || ""} onChange={(e) => updateVariant(i, "size", e.target.value)} className="border border-[#E5E7EB] bg-white px-2 py-1.5 text-sm">
-                                        <option value="">Size…</option>
-                                        {sizeOpts.map((sz) => (<option key={sz} value={sz}>{sz}</option>))}
-                                    </select>
-                                    <input type="number" value={v.price} onChange={(e) => updateVariant(i, "price", e.target.value)} placeholder="Price" className="w-28 border border-[#E5E7EB] bg-white px-2 py-1.5 text-sm" />
-                                    <input type="number" value={v.stock ?? ""} onChange={(e) => updateVariant(i, "stock", e.target.value)} placeholder="Stock" className="w-24 border border-[#E5E7EB] bg-white px-2 py-1.5 text-sm" />
-                                    <button type="button" onClick={() => removeVariant(i)} className="text-[#CC0033] border border-[#CC0033] px-2 py-1.5 text-xs">Remove</button>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
+                )}
 
                 <div className="mt-8 flex justify-end gap-3">
                     <button
@@ -1453,7 +1417,7 @@ export default function AdminBooks() {
 
     const load = () => {
         setLoading(true);
-        fetchBooks({ limit: 500 })
+        fetchBooks({ limit: 500, all_formats: true })
             .then((list) => {
                 // Packs live in db.books so they can be sold like a book, but
                 // they are managed in Admin → Packs. Listing them here too is

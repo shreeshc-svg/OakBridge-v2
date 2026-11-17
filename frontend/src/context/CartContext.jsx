@@ -170,6 +170,9 @@ export function CartProvider({ children }) {
                     pod,
                     binding,
                     size,
+                    // "Hardback" — display only; the server names the format on
+                    // the order from its own record (server.create_order).
+                    format: Array.isArray(book.formats) && book.formats.length > 1 ? book.format_label || null : null,
                 },
             ];
         });

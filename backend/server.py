@@ -58,6 +58,7 @@ from hampers import (
 )
 
 import volume_sets
+from book_formats import LISTED, attach as attach_formats, to_primaries as to_primary_formats  # one card per title; see book_formats.py
 from packs import (
     public_router as packs_public_router,
     admin_router as packs_admin_router,
@@ -188,6 +189,15 @@ class Book(BaseModel):
     # response_model=Book drops it and the storefront never sees the offer.
     pod: bool = False
     variants: list = Field(default_factory=list)  # [{binding,size,price,mrp?,stock?}]
+    # Formats (book_formats.py): this title is also sold as another book —
+    # "Paperback" here, "Hardback" under its own id, ISBN, price and stock.
+    # `formats` is filled per response by book_formats.attach (the siblings
+    # with label / price / stock), [] for an ordinary book. Declared, or
+    # response_model=Book drops them and the switcher never appears.
+    format_group: Optional[str] = None
+    format_label: Optional[str] = None
+    format_primary: Optional[bool] = None
+    formats: list = Field(default_factory=list)
 
     # ---- Gift hampers -------------------------------------------------------
     #
@@ -765,6 +775,8 @@ async def startup_event():
     await wh_owed_indexes()
     from search_learning import ensure_indexes as search_learning_indexes
     await search_learning_indexes()
+    from book_formats import ensure_indexes as book_formats_indexes
+    await book_formats_indexes()
     try:
         # Real review figures for every reviewed book (stars are shown only
         # from these — extensions.refresh_review_stats).
@@ -921,7 +933,8 @@ async def list_categories(shelves: bool = False):
     # number is what makes Coffee Table and Bespoke appear the moment a title is
     # assigned to them -- no deploy, no switch.
     for c in cats:
-        c["book_count"] = await db.books.count_documents({**NOT_A_HAMPER, "category": c["id"]})
+        # LISTED: a title in two formats is one title on the shelf, not two.
+        c["book_count"] = await db.books.count_documents({**NOT_A_HAMPER, **LISTED, "category": c["id"]})
     # Virtual shelves only for the storefront row (?shelves=true). Admin's
     # category pickers (Books, Packs, Pages, Marketing) call it plain, so
     # nobody can assign a book to "Print on Demand" as if it were a category.
@@ -957,7 +970,10 @@ def _new_release_clause() -> dict:
     ]}
 
 # Fields a storefront search looks at, best-match first.
-SEARCH_FIELDS = ("title", "subtitle", "author", "subject", "isbn", "description")
+# format_isbns: on a title sold in several formats, the LISTED record carries
+# every format's ISBN (book_formats._write_group), so typing the hardback's
+# ISBN finds the title's one card instead of nothing.
+SEARCH_FIELDS = ("title", "subtitle", "author", "subject", "isbn", "description", "format_isbns")
 
 
 #
@@ -1394,6 +1410,10 @@ async def list_books(
     sort: Optional[str] = Query("featured", description="featured | price_asc | price_desc | title | rating_desc | newest"),
     limit: int = 60,
     skip: int = 0,
+    # Admin screens (Books, Inventory, Packs, Hampers) must see EVERY format
+    # as its own row — a Hardback hidden from Admin → Books could never be
+    # edited. Not a secret: each format has its own public page anyway.
+    all_formats: bool = False,
 ):
     # Clauses are collected and combined with $and, because several of them below
     # are themselves $or expressions (search, bestseller, new_release). Assigning
@@ -1403,6 +1423,10 @@ async def list_books(
     # Books carry no `enabled` field, and $ne False matches a missing field, so
     # every existing title is unaffected.
     query["enabled"] = {"$ne": False}
+    # One card per title: a Hardback sold beside a Paperback is listed once,
+    # through its primary format (book_formats.LISTED / attach).
+    if not all_formats:
+        query.update(LISTED)
     clauses: List[dict] = []
     if category:
         # `professional` was retired when Law and Tax became categories of their
@@ -1593,7 +1617,7 @@ async def list_books(
         docs = hot_order(docs, _preorder_active)[skip:skip + limit]
         for d in docs:
             d.pop("_id", None)
-    return [_decorate_book(d) for d in docs]
+    return await attach_formats([_decorate_book(d) for d in docs])
 
 
 async def _drop_dead_words(
@@ -1656,9 +1680,9 @@ HOT_FETCH_CAP = 500
 
 @api_router.get("/books/featured", response_model=List[Book])
 async def featured_books(limit: int = 8):
-    cursor = db.books.find({**NOT_A_HAMPER, "bestseller": True}, {"_id": 0}).limit(limit)
+    cursor = db.books.find({**NOT_A_HAMPER, **LISTED, "bestseller": True}, {"_id": 0}).limit(limit)
     docs = await cursor.to_list(limit)
-    return [_decorate_book(d) for d in docs]
+    return await attach_formats([_decorate_book(d) for d in docs])
 
 
 @api_router.get("/books/new-releases", response_model=List[Book])
@@ -1677,12 +1701,12 @@ async def new_release_books(limit: int = 8):
     # for that and removed before the response. `enabled` matches /books: a
     # pack switched off in Admin left the store but stayed in this row.
     docs = await db.books.find(
-        {**NOT_A_HAMPER, "enabled": {"$ne": False}, **_new_release_clause()}
+        {**NOT_A_HAMPER, **LISTED, "enabled": {"$ne": False}, **_new_release_clause()}
     ).to_list(HOT_FETCH_CAP)
     docs = hot_order(docs, _preorder_active)[:max(0, min(limit, 60))]
     for d in docs:
         d.pop("_id", None)
-    return [_decorate_book(d) for d in docs]
+    return await attach_formats([_decorate_book(d) for d in docs])
 
 
 @api_router.get("/books/bestsellers", response_model=List[Book])
@@ -1722,7 +1746,7 @@ async def bestseller_books(limit: int = 12, days: int = 90):
     # Cold-start / top-up fallback.
     if len(ordered) < limit:
         fillers = await db.books.find(
-            {**NOT_A_HAMPER, "id": {"$nin": list(seen | excluded)}}, {"_id": 0, "id": 1}
+            {**NOT_A_HAMPER, **LISTED, "id": {"$nin": list(seen | excluded)}}, {"_id": 0, "id": 1}
         ).sort([("bestseller", -1), ("new_release", -1), ("rating", -1)]).limit(limit * 3).to_list(limit * 3)
         for f in fillers:
             if len(ordered) >= limit:
@@ -1736,7 +1760,10 @@ async def bestseller_books(limit: int = 12, days: int = 90):
         {**NOT_A_HAMPER, "id": {"$in": ordered}}, {"_id": 0}
     ).to_list(len(ordered) or 1)
     by_id = {d["id"]: d for d in docs}
-    return [_decorate_book(by_id[i]) for i in ordered if i in by_id]
+    # Sales of a Hardback are sales of the title: a ranked secondary format
+    # is shown as the title's listed card, once (book_formats.to_primaries).
+    docs = await to_primary_formats([by_id[i] for i in ordered if i in by_id])
+    return await attach_formats([_decorate_book(d) for d in docs if d["id"] not in excluded])
 
 
 @api_router.get("/books/{book_id}", response_model=Book)
@@ -1745,7 +1772,7 @@ async def get_book(book_id: str):
     # A disabled pack is withdrawn: its page must not be reachable by old link.
     if not book or (book.get("product_type") == "pack" and book.get("enabled") is False):
         raise HTTPException(status_code=404, detail="Book not found")
-    return _decorate_book(book)
+    return (await attach_formats([_decorate_book(book)]))[0]
 
 
 @api_router.post("/newsletter", response_model=NewsletterResponse)
@@ -1998,7 +2025,10 @@ async def create_order(payload: OrderCreate, user: Optional[dict] = Depends(get_
             cover_image=b.get("cover_image", ""),
             price=_variant_price(b, it.binding, it.size),
             quantity=it.quantity,
-            binding=it.binding,
+            # A title sold in formats: the line says which one ("Hardback"),
+            # from OUR record, so the invoice and packing slip name it. Each
+            # format is its own book id, so price and stock are already right.
+            binding=it.binding or (b.get("format_label") if b.get("format_group") else None),
             size=it.size,
         ))
     subtotal = round(sum(i.price * i.quantity for i in server_items), 2)
@@ -2151,6 +2181,8 @@ from orders_cleanup import router as orders_cleanup_router  # noqa: E402  (bulk 
 app.include_router(orders_cleanup_router)
 from search_learning import admin_router as search_learning_admin_router, public_router as search_learning_public_router  # noqa: E402  (search that learns)
 app.include_router(search_learning_admin_router)
+from book_formats import admin_router as book_formats_admin_router  # noqa: E402  (Paperback / Hardback formats)
+app.include_router(book_formats_admin_router)
 app.include_router(search_learning_public_router)
 from warehouse_marketplace import router as wh_marketplace_router, admin_router as wh_marketplace_admin_router  # noqa: E402  (Amazon / Flipkart daily sheet)
 app.include_router(wh_marketplace_router)

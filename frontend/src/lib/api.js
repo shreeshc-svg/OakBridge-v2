@@ -646,6 +646,13 @@ export const adminUpdateBook = (id, payload) =>
     api.patch(`/admin/books/${id}`, payload).then((r) => r.data);
 export const adminDeleteBook = (id) =>
     api.delete(`/admin/books/${id}`).then((r) => r.data);
+// Formats: one title as Paperback / Hardback / … (backend/book_formats.py).
+export const adminGetBookFormats = (id) =>
+    api.get(`/admin/book-formats/${id}`).then((r) => r.data);
+export const adminSaveBookFormats = (id, payload) =>
+    api.put(`/admin/book-formats/${id}`, payload).then((r) => r.data);
+export const adminLookupFormatIsbn = (isbn, bookId) =>
+    api.get(`/admin/book-formats/isbn/${encodeURIComponent(String(isbn).trim())}`, { params: { book_id: bookId } }).then((r) => r.data);
 export const adminListUsers = () =>
     api.get("/admin/users").then((r) => r.data);
 export const adminCreateUser = (payload) =>

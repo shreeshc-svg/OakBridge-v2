@@ -112,7 +112,7 @@ export default function CartSheet() {
                                             {i.title}
                                         </h4>
                                         <p className="text-xs text-[#4B5563] mt-0.5">
-                                            {i.author}
+                                            {i.format ? `${i.format} · ` : ""}{i.author}
                                         </p>
                                         <div className="mt-auto flex items-center justify-between">
                                             <div className="flex items-center border border-[#E5E7EB]">

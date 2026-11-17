@@ -350,7 +350,7 @@ export default function AdminPacks() {
     useEffect(() => {
         fetchCategories().then((c) => setCategories(c || [])).catch(() => {});
         // The picker offers books only — never a pack or a hamper inside a pack.
-        fetchBooks({ limit: 1000 })
+        fetchBooks({ limit: 1000, all_formats: true })
             .then((l) => setCatalogue((l || []).filter((b) => !["pack", "hamper"].includes(b.product_type))))
             .catch(() => {});
     }, []);

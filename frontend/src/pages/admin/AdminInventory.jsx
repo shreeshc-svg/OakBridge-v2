@@ -48,7 +48,7 @@ export default function AdminInventory() {
     };
     const loadBooks = () => {
         setBooksLoading(true);
-        fetchBooks({ limit: 1000 })
+        fetchBooks({ limit: 1000, all_formats: true })
             .then(setBooks)
             .finally(() => setBooksLoading(false));
     };
