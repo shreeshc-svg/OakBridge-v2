@@ -37,6 +37,8 @@ const rbacFe = code("frontend/src/lib/rbac.js");
 const app = code("frontend/src/App.js");
 // Raw, not code(): accept="image/*" would read as the start of a /* comment.
 const screen = readFileSync(join(ROOT, "frontend/src/pages/warehouse/WarehouseApp.jsx"), "utf8");
+check(!/window\.confirm\(\s*[`"'(!]/.test(screen.replace(/resolve\(window\.confirm\(message\)\)/, "")) && screen.includes("<ConfirmHost />"),
+      "every question on the warehouse screen opens inside the page — a blocked browser pop-up made 'Done' do nothing (Nov 2026)");
 const admin = code("frontend/src/pages/admin/AdminWarehouse.jsx");
 const login = code("frontend/src/pages/auth/Login.jsx");
 const robots = readFileSync(join(ROOT, "frontend/public/robots.txt"), "utf8");

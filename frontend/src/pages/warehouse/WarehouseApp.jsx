@@ -42,6 +42,32 @@ const OUT_REASONS = [["damaged", "Damaged"], ["sample", "Sample / gift"], ["auth
     ["sale_offline", "Bulk / shop order"], ["office", "Sent to office"], ["amazon_fba", "Sent to Amazon FBA"], ["amazon_vendor_po", "Amazon Vendor PO"],
     ["correction_out", "Correction: remove"]];
 
+/* In-page confirm box (Nov 2026). The browser's own confirm() pop-up is
+   silently BLOCKED in some places — Chrome after "don't let this page show
+   more dialogs", embedded / in-app browsers — and then returns "Cancel" at
+   once, so "Done" on a courier run did nothing at all. Every question on
+   this screen now opens inside the page instead. */
+let openAsk = null;
+export const askConfirm = (message) => new Promise((resolve) => (openAsk ? openAsk(message, resolve) : resolve(window.confirm(message))));
+
+function ConfirmHost() {
+    const [q, setQ] = useState(null);
+    useEffect(() => { openAsk = (message, resolve) => setQ({ message, resolve }); return () => { openAsk = null; }; }, []);
+    if (!q) return null;
+    const answer = (v) => { q.resolve(v); setQ(null); };
+    return (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4" role="dialog" aria-modal="true" data-testid="wh-confirm-box">
+            <div className="bg-white w-full max-w-md p-5 shadow-2xl">
+                <p className="text-base text-[#111827] whitespace-pre-line leading-relaxed">{q.message}</p>
+                <div className="mt-5 grid grid-cols-2 gap-3">
+                    <button type="button" onClick={() => answer(false)} className="py-3 text-lg border-2 border-[#E5E7EB] text-[#002B5C]" data-testid="wh-confirm-no">Cancel</button>
+                    <button type="button" onClick={() => answer(true)} className="py-3 text-lg bg-[#15803D] text-white font-medium" data-testid="wh-confirm-yes" autoFocus>OK</button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 export default function WarehouseApp() {
     const { user } = useAuth();
     const [state, setState] = useState(null);
@@ -60,6 +86,7 @@ export default function WarehouseApp() {
     return (
         <div className="min-h-screen bg-[#F5F7FA]" data-testid="warehouse-app">
             <NoIndex title="Warehouse" />
+            <ConfirmHost />
             <header className="sticky top-0 z-10 bg-[#002B5C] text-white px-4 py-3 flex items-center gap-3">
                 {screen !== "home" ? (
                     <button type="button" onClick={back} aria-label="Back" className="p-1"><ArrowLeft size={22} /></button>
@@ -347,7 +374,7 @@ function DocFlow({ direction, practice, onDone, initialDoc = null }) {
             const short = included.filter((l) => l.packed < l.qty);
             if (short.length) {
                 const msg = short.map((l) => `${byId[l.book_id]?.title || "?"}: packed ${l.packed} of ${l.qty}`).join("\n");
-                if (!window.confirm(`Some books are short:\n\n${msg}\n\nSave only what is packed?`)) return;
+                if (!await askConfirm(`Some books are short:\n\n${msg}\n\nSave only what is packed?`)) return;
             }
             // qty becomes what is packed; invoiced keeps the invoice number so
             // the approver sees "packed 10 of 12".
@@ -368,7 +395,7 @@ function DocFlow({ direction, practice, onDone, initialDoc = null }) {
                 res = await whConfirmDoc(doc.id, body);
             } catch (e) {
                 if (!isSimilarDoc(e)) throw e;
-                if (!window.confirm(`${formatApiError(e)}\n\nOK = yes, count it as a second ${isOut ? "carton" : "delivery"}.\nCancel = no, it is the same one (nothing is counted).`)) return;
+                if (!await askConfirm(`${formatApiError(e)}\n\nOK = yes, count it as a second ${isOut ? "carton" : "delivery"}.\nCancel = no, it is the same one (nothing is counted).`)) return;
                 res = await whConfirmDoc(doc.id, { ...body, confirm_similar: true });
             }
             toast.success(res.practice ? "Practice saved — stock not changed."
@@ -626,7 +653,7 @@ function StillToSend() {
     useEffect(() => { load(); }, [load]);
     if (!rows || !rows.length) return null;
     const done = async (o) => {
-        if (!window.confirm(`Sent the remaining ${o.owed} × “${o.title}” to ${o.party}?`)) return;
+        if (!await askConfirm(`Sent the remaining ${o.owed} × “${o.title}” to ${o.party}?`)) return;
         setBusy(o.id);
         try {
             const r = await whOwedSent(o.id);
@@ -821,9 +848,9 @@ function CourierFlow({ practice, onDone, initialDoc = null }) {
             toast.error(`Parcel ${empty.join(", ")}: no book ticked. Add its books, or choose “Not sending”.`);
             return;
         }
-        if (missingLabels > 0 && !window.confirm(
+        if (missingLabels > 0 && !await askConfirm(
             `The sheet has ${doc.labels_seen} labels but only ${parcels.length} parcel(s) are here.\n\nOK only if you have checked the sheet and nothing is missing.`)) return;
-        if (!practice && !window.confirm(
+        if (!practice && !await askConfirm(
             `Confirm this courier sheet?\n\n• ${linked} website order(s): marked packed — NOT deducted again (taken off at payment).\n` +
             `• ${dealerCopies} cop${dealerCopies === 1 ? "y" : "ies"} in phone / dealer orders: removed from stock as sales.\n` +
             `• ${authorCopies} author cop${authorCopies === 1 ? "y" : "ies"}: removed from stock.\n` +
