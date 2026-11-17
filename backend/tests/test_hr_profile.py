@@ -132,6 +132,18 @@ async def flow():
     check(any(a[0] == "HRM_PROFILE_VIEWED" for a in audits), "HR's view is audited")
     await expect(P.profile_of("a", Z), 404, "a colleague sees nothing")
 
+    print("-- HR overview --")
+    ov = await P.profile_overview(F)
+    asha = next(r for r in ov["rows"] if r["name"] == "Asha")
+    check(asha["complete"] > 0 and "date of birth" not in asha["missing"] and asha["history"] and "emergency contacts" in asha["history"][0]["fields"],
+          "HR sees each person's %, what's missing and which fields they changed (newest first)")
+    check(ov["rows"][0]["complete"] <= ov["rows"][-1]["complete"], "least complete first")
+    check("9876543210" not in json.dumps(ov), "the overview shows field names, never values")
+    try:
+        await P.profile_overview(A)
+        check(False, "employee overview")
+    except HTTPException as e:
+        check(e.status_code == 403, "employees and managers can't see the overview")
     print("-- DPDP: leavers' personal details --")
     E = {"id": "x", "status": "exited", "exited_on": "2025-09-01"}
     check(P.purge_due_on(E, None) == "2026-09-15", "no F&F tracked: last day + 14 + 365")

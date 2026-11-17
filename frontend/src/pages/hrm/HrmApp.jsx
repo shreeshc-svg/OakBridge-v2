@@ -13,7 +13,7 @@ import GoalsTab from "./HrmGoals";
 import AppraisalTab from "./HrmAppraisal";
 import RecognitionTab from "./HrmRecognition";
 import ExitTab from "./HrmExit";
-import ProfileTab, { ProfileView } from "./HrmProfile";
+import ProfileTab, { ProfileView, ProfileOverview } from "./HrmProfile";
 import HiringTab, { LifecyclePanel, ChecklistSettings } from "./HrmHiring";
 import HomeTab from "./HrmHome";
 import { Avatar, PhotoPicker } from "./HrmBits";
@@ -110,6 +110,7 @@ function PeopleTab({ hr, superadmin }) {
     const [q, setQ] = useState("");
     const [edit, setEdit] = useState(null);   // null | "new" | person
     const [showExited, setShowExited] = useState(false);
+    const [showProfiles, setShowProfiles] = useState(false);   // HR: profile completion overview
     const load = useCallback(() => hrmPeople(showExited).then(setRows).catch((e) => toast.error(formatApiError(e))), [showExited]);
     useEffect(() => { load(); }, [load]);
     const shown = useMemo(() => {
@@ -147,10 +148,17 @@ function PeopleTab({ hr, superadmin }) {
                 </div>
                 {hr && <label className="text-xs text-[#4B5563] flex items-center gap-1.5"><input type="checkbox" checked={showExited} onChange={(e) => setShowExited(e.target.checked)} />Show people who left</label>}
                 {hr && (
+                    <button type="button" onClick={() => setShowProfiles(!showProfiles)} data-testid="hrm-profiles-toggle"
+                        className={`inline-flex items-center gap-1.5 border px-3 py-2 text-sm ${showProfiles ? "bg-[#002B5C] text-white border-[#002B5C]" : "border-[#002B5C] text-[#002B5C]"}`}>
+                        <UserCircle size={14} />Profile completion
+                    </button>
+                )}
+                {hr && (
                     <button type="button" onClick={() => setEdit("new")} data-testid="hrm-add"
                         className="inline-flex items-center gap-1.5 bg-[#002B5C] text-white px-3 py-2 text-sm"><Plus size={14} />Add person</button>
                 )}
             </div>
+            {hr && showProfiles && <ProfileOverview onOpen={(id) => { const p = (rows || []).find((x) => x.id === id); if (p) setEdit(p); }} />}
             {edit && <PersonForm person={edit === "new" ? null : edit} people={rows} superadmin={superadmin} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); load(); }} />}
             <div className="bg-white border border-[#E5E7EB] overflow-x-auto">
                 <table className="w-full text-sm">

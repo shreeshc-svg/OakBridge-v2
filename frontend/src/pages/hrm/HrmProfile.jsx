@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Briefcase, Droplet, HeartPulse, Home, Mail, Pencil, Phone, Plus, ShieldCheck, Trash2, User, X } from "lucide-react";
-import { profileMe, profileSave, profileOf, formatApiError } from "../../lib/api";
+import { profileMe, profileSave, profileOf, profileOverview, formatApiError } from "../../lib/api";
 import { Ring, SelfPhoto } from "./HrmBits";
 
 /**
@@ -212,5 +212,50 @@ export function ProfileView({ empId }) {
             <div><div className="font-medium text-[#002B5C] mb-2 flex items-center gap-1.5"><HeartPulse size={15} className="text-[#CC0033]" />Emergency contacts</div>
                 {p.emergency.length ? <ul className="space-y-2">{p.emergency.map((c) => <Contact key={c.phone} c={c} />)}</ul> : <Empty text="None added yet." />}</div>
         </div>
+    );
+}
+
+/* HR / super admin: everyone's profile at a glance — how complete, what is
+   missing, and who changed what (field names and dates, never the values). */
+export function ProfileOverview({ onOpen }) {
+    const [d, setD] = useState(null);
+    const [open, setOpen] = useState(null);
+    useEffect(() => { profileOverview().then(setD).catch((e) => setD({ error: formatApiError(e) })); }, []);
+    if (!d) return <p className="text-sm text-[#6B7280]">Loading…</p>;
+    if (d.error) return <p className="text-sm text-[#CC0033]">{d.error}</p>;
+    const when = (iso) => (iso ? new Date(iso).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "Never");
+    return (
+        <section className="bg-white border border-[#E5E7EB]" data-testid="hrm-profile-overview">
+            <div className="px-4 py-3 border-b border-[#F3F4F6] flex flex-wrap items-center gap-4">
+                <h3 className="font-medium text-[#002B5C] flex-1">Profile completion</h3>
+                <span className="text-sm text-[#4B5563]">Average <b className="text-[#002B5C]">{d.average}%</b> · {d.complete_count} of {d.rows.length} complete</span>
+            </div>
+            <ul className="divide-y divide-[#F3F4F6]">
+                {d.rows.map((r) => (
+                    <li key={r.emp_id} className="px-4 py-3">
+                        <div className="flex flex-wrap items-center gap-3">
+                            <Ring value={r.complete} max={100} color={r.complete === 100 ? "#0E9F6E" : r.complete >= 50 ? "#F5B841" : "#CC0033"} size={44} label={`${r.complete}%`} />
+                            <div className="flex-1 min-w-[200px]">
+                                <button type="button" onClick={() => onOpen && onOpen(r.emp_id)} className="font-medium text-[#002B5C] hover:underline text-left">{r.name}</button>
+                                <div className="text-xs text-[#6B7280]">{[r.emp_code, r.department].filter(Boolean).join(" · ")}{!r.has_login ? " · no login yet" : ""}</div>
+                                {r.missing.length > 0 && <div className="text-xs text-[#B4750F] mt-0.5">Missing: {r.missing.join(", ")}</div>}
+                            </div>
+                            <div className="text-xs text-right text-[#4B5563]">Last changed<br /><b>{when(r.updated_at)}</b></div>
+                            {r.history.length > 0 && (
+                                <button type="button" onClick={() => setOpen(open === r.emp_id ? null : r.emp_id)} className="text-xs underline text-[#002B5C]">
+                                    {open === r.emp_id ? "Hide changes" : `Changes (${r.history.length})`}
+                                </button>
+                            )}
+                        </div>
+                        {open === r.emp_id && (
+                            <ol className="mt-2 ml-14 space-y-1 text-xs text-[#374151] border-l-2 border-[#E5E7EB] pl-3">
+                                {r.history.map((h, i) => <li key={i}><span className="text-[#6B7280]">{when(h.at)}</span> — updated {h.fields.join(", ")}</li>)}
+                            </ol>
+                        )}
+                    </li>
+                ))}
+            </ul>
+            <p className="px-4 py-2 text-[11px] text-[#6B7280] border-t border-[#F3F4F6]">Shows which details changed and when — not the values. Open a person (People → Edit → Profile) to see the details.</p>
+        </section>
     );
 }

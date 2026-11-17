@@ -92,6 +92,8 @@ check(rec.includes("prefers-reduced-motion"), "animations respect reduced motion
 check(rec.includes('data-testid="hrm-congratulate"') && rec.includes("recCongratsUndo") && rec.includes('data-testid="hrm-congrats-log"') && rec.includes("you />"),
       "congratulate on shout-outs (Home + Wall of fame), 'N people congratulated you', HR log");
 const prof = read("src/pages/hrm/HrmProfile.jsx");
+check(prof.includes("export function ProfileOverview") && hrm.includes("<ProfileOverview") && hrm.includes('data-testid="hrm-profiles-toggle"'),
+      "HR: profile completion overview in People (%, missing, which fields changed)");
 check(hrm.includes('["profile", "My profile", UserCircle]') && hrm.includes("<ProfileTab me={me} />") && hrm.includes('["profile", "Profile"]') && hrm.includes("<EmergencyButton person={r} />"),
       "My profile tab; HR sees it in the person editor; managers get the emergency contact");
 check(!/\b(pan|aadhaar|ifsc|bank_account|account_no)\s*:/i.test(prof) && !/f\.(pan|aadhaar|ifsc|bank)/i.test(prof), "profile has no bank / PAN / Aadhaar fields");

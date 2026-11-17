@@ -117,6 +117,16 @@ def clean_profile(raw: dict, today: date) -> dict:
     return out
 
 
+CHECKS = (("phone", "mobile"), ("personal_email", "personal email"), ("dob", "date of birth"),
+          ("current_address", "current address"), ("permanent_address", "permanent address"),
+          ("blood_group", "blood group"), ("marital_status", "marital status"), ("emergency", "emergency contact"))
+
+
+def missing(emp: dict, prof: dict) -> list:
+    """What is still empty, in words — for HR's overview."""
+    return [label for k, label in CHECKS if not (emp.get("phone") if k == "phone" else prof.get(k))]
+
+
 def completeness(emp: dict, prof: dict) -> int:
     """% of the profile filled in — the ring on the screen."""
     checks = [emp.get("phone"), prof.get("personal_email"), prof.get("dob"), prof.get("current_address"),
@@ -173,8 +183,12 @@ async def profile_save(body: ProfileBody, user: dict = Depends(get_current_user)
     if not changed:
         return await profile_me(user)
     now = datetime.now(timezone.utc).isoformat()
+    # History keeps WHICH fields changed and when — never the values (the
+    # current values are the profile itself). Last 50 changes per person.
     await db.hr_profiles.update_one({"emp_id": me["id"]}, {"$set": {**upd, "emp_id": me["id"], "updated_at": now,
-                                                                   "updated_by": user.get("email", "")}}, upsert=True)
+                                                                   "updated_by": user.get("email", "")},
+                                                          "$push": {"history": {"$each": [{"at": now, "fields": changed}], "$slice": -50}}},
+                                    upsert=True)
     names = [LABEL[k] for k in changed]
     await audit_log(db, "HRM_PROFILE_UPDATED", email=user.get("email", ""), role=user.get("role", ""),
                     meta={"person": me["id"], "fields": changed})
@@ -190,6 +204,31 @@ async def profile_save(body: ProfileBody, user: dict = Depends(get_current_user)
     except Exception:  # noqa: BLE001 — never blocks the save
         log.exception("hrm profile: mail failed")
     return await profile_me(user)
+
+
+@router.get("/overview")
+async def profile_overview(user: dict = Depends(get_current_user)):
+    """HR / super admin: every active person's profile — how complete, what
+    is missing, when they last changed it and WHICH fields (never values).
+    Declared before /{emp_id} so 'overview' is never read as an employee id."""
+    people, me, acc = await _ctx(user)
+    if not acc["hr"]:
+        raise HTTPException(status_code=403, detail="Only HR / founders can see everyone's profiles.")
+    profs = {p["emp_id"]: p async for p in db.hr_profiles.find({}, {"_id": 0})}
+    rows = []
+    for emp in people.values():
+        if emp.get("status") != "active":
+            continue
+        prof = profs.get(emp["id"]) or {}
+        rows.append({"emp_id": emp["id"], "name": emp.get("name", ""), "emp_code": emp.get("emp_code", ""),
+                     "department": emp.get("department", ""), "complete": completeness(emp, prof), "missing": missing(emp, prof),
+                     "updated_at": prof.get("updated_at"), "has_login": bool(emp.get("user_id")),
+                     "history": [{"at": h["at"], "fields": [LABEL.get(f, f) for f in h.get("fields") or []]}
+                                 for h in reversed((prof.get("history") or [])[-10:])]})
+    rows.sort(key=lambda r: (r["complete"], r["name"]))
+    await audit_log(db, "HRM_PROFILE_OVERVIEW_VIEWED", email=user.get("email", ""), role=user.get("role", ""), meta={"people": len(rows)})
+    return {"rows": rows, "average": round(sum(r["complete"] for r in rows) / len(rows)) if rows else 0,
+            "complete_count": sum(1 for r in rows if r["complete"] == 100)}
 
 
 @router.get("/{emp_id}")
