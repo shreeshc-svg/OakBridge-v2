@@ -69,6 +69,9 @@ export const SECTION_LABELS = {
 
 /** Grouping for the permission picker only — not a security boundary. */
 export const SECTION_GROUPS = [
+    // Dashboard became tickable (Nov 2026): it shows sales, revenue and the
+    // search report, which not every staff member should see.
+    { label: "Overview", sections: ["dashboard"] },
     { label: "Catalogue", sections: ["books", "hampers", "packs", "authors", "inventory", "warehouse"] },
     {
         label: "Site content",

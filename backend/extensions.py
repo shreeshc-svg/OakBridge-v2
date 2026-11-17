@@ -2475,8 +2475,11 @@ async def admin_set_user_sections(
         )
 
     clean = [s for s in payload.sections if s in rbac.SECTIONS]
-    if "dashboard" not in clean:
-        clean.append("dashboard")  # always needed for a usable landing page
+    # Dashboard is a choice now (sales and revenue aren't for every staff
+    # member). Someone without it lands on their first ticked section
+    # (AdminLayout) — but they need at least ONE, or they'd have no page at all.
+    if not clean:
+        raise HTTPException(status_code=400, detail="Tick at least one section — or change their role to customer to remove admin access.")
     await db.users.update_one({"id": user_id}, {"$set": {"sections": clean}})
     log.info("Sections set for %s by %s: %s", target.get("email"), actor.get("email"), clean)
     return {"ok": True, "id": user_id, "sections": clean}

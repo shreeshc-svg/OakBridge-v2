@@ -64,7 +64,7 @@ function SectionPicker({ value, onChange, disabled }) {
                 ))}
             </div>
             <p className="text-[11px] text-[#4B5563] mt-3">
-                Dashboard is always included. Items marked{" "}
+                Untick Dashboard to hide sales, revenue and the search report — they'll land on their first ticked section instead. Items marked{" "}
                 <span className="text-[#F59E0B] font-mono">~</span> share the same save
                 endpoints, so unticking one hides it but doesn't fully isolate it from the
                 others in that group.
