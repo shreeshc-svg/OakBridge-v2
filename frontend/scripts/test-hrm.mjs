@@ -38,6 +38,8 @@ check(hrm.includes('data-testid="hrm-confirm-all"'), "one click to confirm every
 check(hrm.includes('data-testid="hrm-own-weekly-off"') && read("src/pages/hrm/HrmLeave.jsx").includes('data-testid="hrm-set-balance"'),
       "super admin: per-person weekly off + set exact balances");
 check(bits.includes("hrmPhotoBlob") && bits.includes("URL.createObjectURL"), "photos fetched with the sign-in token (not a public URL)");
+check(bits.includes("hrmPhotoBlob(p.id, p.photo_at)") && read("src/lib/api.js").includes("params: v ? { v } : {}"),
+      "a new photo shows at once: the photo URL carries its version, so the browser never shows the old cached one");
 const reset = read("src/pages/auth/ResetPassword.jsx"), login = read("src/pages/auth/Login.jsx");
 check(reset.includes('sp.get("next")') && login.includes("/^\\/(?!\\/)/.test(nextParam)"), "invite -> set password -> sign in lands in the HRM; ?next only accepts a path on this site");
 const goals = read("src/pages/hrm/HrmGoals.jsx");

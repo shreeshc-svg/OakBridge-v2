@@ -11,7 +11,7 @@ export function Avatar({ p, size = 36, bust = "" }) {
     useEffect(() => {
         let gone = false;
         let u = "";
-        if (p?.photo_at) hrmPhotoBlob(p.id).then((b) => { if (!gone) { u = URL.createObjectURL(b); setUrl(u); } }).catch(() => {});
+        if (p?.photo_at) hrmPhotoBlob(p.id, p.photo_at).then((b) => { if (!gone) { u = URL.createObjectURL(b); setUrl(u); } }).catch(() => {});
         else setUrl("");
         return () => { gone = true; if (u) URL.revokeObjectURL(u); };
     }, [p?.id, p?.photo_at, bust]);
@@ -26,7 +26,9 @@ export function PhotoPicker({ p, onChanged }) {
     const [busy, setBusy] = useState(false);
     const up = async (file) => {
         if (!file) return;
-        if (!/^image\//.test(file.type)) { toast.error("Choose a photo (JPEG or PNG)."); return; }
+        // Some phone galleries hand over a photo with NO type — let the server
+        // (which checks the real bytes) decide rather than refusing it here.
+        if (file.type && !/^image\//.test(file.type)) { toast.error("Choose a photo (JPEG or PNG)."); return; }
         setBusy(true);
         try { const r = await hrmUploadPhoto(p.id, file); toast.success("Photo saved."); onChanged(r.photo_at); }
         catch (e) { toast.error(formatApiError(e)); } finally { setBusy(false); }

@@ -400,9 +400,12 @@ async def hrm_photo_upload(pid: str, file: UploadFile = File(...), user: dict = 
         raise HTTPException(status_code=400, detail="That image couldn't be read — use a JPEG or PNG.")
     path = f"{APP_NAME}/hr-photos/{pid}-{uuid.uuid4().hex[:8]}.jpg"
     await asyncio.to_thread(put_object, path, jpg, "image/jpeg")
-    await db.hr_employees.update_one({"id": pid}, {"$set": {"photo_path": path, "photo_at": _now().isoformat()}})
+    at = _now().isoformat()
+    await db.hr_employees.update_one({"id": pid}, {"$set": {"photo_path": path, "photo_at": at}})
     await _audit(user, "HRM_PHOTO_SET", {"person": pid})
-    return {"ok": True, "photo_at": _now().isoformat()}
+    # The SAME value that was stored: the screens use it as the photo's
+    # version (?v=) so the new photo shows at once instead of the cached one.
+    return {"ok": True, "photo_at": at}
 
 
 @router.post("/people/{pid}/photo/remove")

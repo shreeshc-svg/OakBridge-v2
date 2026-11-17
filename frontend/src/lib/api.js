@@ -143,7 +143,10 @@ export const hrmCalendar = (fy) => api.get("/hrm/calendar", { params: fy ? { fy 
 export const hrmSaveCalendar = (fy, rows) => api.put(`/hrm/calendar/${fy}`, { rows }).then((r) => r.data);
 export const hrmSettings = () => api.get("/hrm/settings").then((r) => r.data);
 export const hrmSaveSettings = (body) => api.put("/hrm/settings", body).then((r) => r.data);
-export const hrmPhotoBlob = (id) => api.get(`/hrm/people/${id}/photo`, { responseType: "blob" }).then((r) => r.data);
+// `v` = the photo's photo_at. The server lets the browser cache the photo for
+// an hour, so without a version in the URL a NEW photo kept showing the old
+// cached one — people uploaded 3-5 times thinking it hadn't worked (Nov 2026).
+export const hrmPhotoBlob = (id, v = "") => api.get(`/hrm/people/${id}/photo`, { responseType: "blob", params: v ? { v } : {} }).then((r) => r.data);
 export const hrmUploadPhoto = (id, file) => {
     const fd = new FormData();
     fd.append("file", file);
@@ -333,6 +336,9 @@ export const adminWhCreateDoc = (direction, file) => {
     return api.post("/admin/warehouse/docs", fd, { timeout: 180000 }).then((r) => r.data);
 };
 export const adminWhEditDoc = (id, body) => api.patch(`/admin/warehouse/docs/${id}`, body).then((r) => r.data);
+// Correct one parcel of a confirmed courier sheet / run (warehouse.adm_edit_parcel):
+// books, quantities, recipient, kind — stock moves by the difference.
+export const adminWhEditParcel = (docId, no, body) => api.post(`/admin/warehouse/docs/${docId}/parcels/${no}`, body).then((r) => r.data);
 export const adminWhEditLines = (id, lines, note) =>
     api.post(`/admin/warehouse/docs/${id}/lines`, { lines, note }).then((r) => r.data);
 export const adminWhDeleteDoc = (id) => api.delete(`/admin/warehouse/docs/${id}`).then((r) => r.data);
