@@ -400,6 +400,16 @@ async def bf_save(book_id: str, body: FormatsBody, user: dict = Depends(require_
             to_create.append(doc)
             members.append((doc, r))
 
+    # One book, two rows: a typed ISBN that resolves to a format ALREADY
+    # listed further down by id. The per-row check above only sees rows
+    # before it, so the order "new ISBN row, then the same book's own row"
+    # slipped through and stamped one book twice (two format_order values,
+    # the label of whichever came last). Checked here, before anything is
+    # written, so a refused save creates nothing.
+    ids = [d["id"] for d, _ in members]
+    if len(ids) != len(set(ids)):
+        raise HTTPException(status_code=400, detail="The same book appears twice in this list — remove one of the rows.")
+
     gid = gid or f"fmt-{uuid.uuid4().hex[:12]}"
     for doc in to_create:
         doc["price"] = float(next(r for d, r in members if d is doc)["price"])

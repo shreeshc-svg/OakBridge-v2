@@ -164,6 +164,13 @@ async def main():
     e = await err(F.bf_save("pb", body([row(book_id="pb", label="Paperback", price=595),
                                         row(book_id="x", label="Hardback", price=900)]), ADMIN))
     check(e and e.status_code == 409, "a book id that isn't in this title is refused")
+    n_before = len(await db.books.find({}, {"_id": 0}).to_list(99))
+    e = await err(F.bf_save("pb", body([row(book_id="pb", label="Paperback", price=595),
+                                        row(isbn="9780306406157", label="DJ again", price=1200),
+                                        row(book_id="dj", label="Hardback with dust jacket", price=1200),
+                                        row(book_id=hb["id"], label="Hardback", price=950)], primary_index=3), ADMIN))
+    check(e and e.status_code == 400 and "twice" in e.detail, "typed ISBN of a format listed below it: refused, not stamped twice")
+    check(len(await db.books.find({}, {"_id": 0}).to_list(99)) == n_before, "…and the refused save created nothing")
     await db.books.insert_one({"id": "pk", "product_type": "pack", "title": "Pack", "isbn": "9780306406157"})
     e = await err(F.bf_save("pk", body([]), ADMIN))
     check(e and e.status_code == 400, "packs / hampers can't have formats")
