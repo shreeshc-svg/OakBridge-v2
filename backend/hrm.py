@@ -174,7 +174,19 @@ async def hrm_me(user: dict = Depends(get_current_user)):
             # Super admins alone set per-person weekly offs and exact leave balances.
             "superadmin": hrm_superadmin(user, me),
             # Hiring tab: HR, or anyone who is hiring manager for a candidate.
-            "hiring": acc["hr"] or bool(me and await db.job_applications.find_one({"hiring_manager_id": me["id"]}, {"_id": 1}))}
+            "hiring": acc["hr"] or bool(me and await db.job_applications.find_one({"hiring_manager_id": me["id"]}, {"_id": 1})),
+            # Exit tab: HR, or someone with something addressed to them there
+            # (hrm_separation.has_exit_items). Late import: that module imports this one.
+            "exit_tab": await _exit_tab(me, acc)}
+
+
+async def _exit_tab(me, acc) -> bool:
+    try:
+        from hrm_separation import has_exit_items
+        return await has_exit_items(me, acc)
+    except Exception:  # noqa: BLE001 — a hiccup hides a tab, never breaks the HRM
+        log.exception("hrm: exit tab check failed")
+        return bool(acc.get("hr"))
 
 
 # ---------------------------------------------------------------- people ---

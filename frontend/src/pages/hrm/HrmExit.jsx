@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { AlertTriangle, Check, CircleDot, Download, FileWarning, Gavel, HandCoins, LogOut, Plus, Send, Undo2, UserCheck } from "lucide-react";
+import { AlertTriangle, Check, CircleDot, Download, FileWarning, Gavel, HandCoins, LogOut, Mail, Plus, Undo2, UserCheck } from "lucide-react";
 import {
     sepMine, sepResign, sepWithdraw, sepManager, sepAccept, sepBoard, sepOpenCase, sepCaseStep, sepFnf, sepLetter,
     hrmPeople, saveBlob, formatApiError,
@@ -8,8 +8,11 @@ import {
 
 /**
  * HRM → Exit (Nov 2026). Rules on the server (backend/hr_separation_core.py):
- *   resignation  employee -> reporting manager -> HR confirms the last day
- *                (30 days' notice; shortfall recorded) -> exit + F&F in 14 days
+ *   resignation  employee EMAILS HR / a founder -> HR records it here (notice
+ *                runs from the email's date) -> HR confirms the last day
+ *                (30 days' notice; shortfall recorded) -> exit + F&F in 14 days.
+ *                No "Resign" button: the tab only appears for an employee
+ *                once something is addressed to them (backend has_exit_items).
  *   termination  HR / Directors only, as a documented case: each ground needs
  *                its steps (PIP, show-cause + reply, absence notice …) before
  *                "Terminate" is allowed.
@@ -40,48 +43,9 @@ function Mine() {
     return (
         <div className="space-y-5">
             {d.notices.map((n) => <Notice key={n.id} n={n} onChange={load} />)}
-            {d.resignation ? <MyResignation r={d.resignation} onChange={load} /> : !d.exit_recorded && <Resign d={d} onDone={load} />}
+            {d.resignation && <MyResignation r={d.resignation} />}
+            {!d.resignation && !d.notices.length && <p className="text-sm text-[#6B7280] bg-white border border-[#E5E7EB] p-5">Nothing here for you.</p>}
         </div>
-    );
-}
-
-function Resign({ d, onDone }) {
-    const [open, setOpen] = useState(false);
-    const [f, setF] = useState({ reason: "", last_day: d.default_last_day });
-    const [busy, setBusy] = useState(false);
-    const short = Math.max(0, d.notice_days - Math.round((new Date(`${f.last_day}T00:00:00`) - new Date(new Date().toDateString())) / 86400000));
-    const go = async () => {
-        if (!window.confirm(`Submit your resignation?\n\nProposed last day: ${fmt(f.last_day)}\nIt goes to ${d.manager_name || "HR"} first. You can withdraw it until HR accepts.`)) return;
-        setBusy(true);
-        try { await sepResign(f); toast.success("Submitted. We'll keep you posted by email."); onDone(); } catch (e) { err(e); } finally { setBusy(false); }
-    };
-    if (!open) {
-        return (
-            <section className="bg-white border border-[#E5E7EB] p-5 flex flex-wrap items-center gap-4">
-                <LogOut className="text-[#6B7280]" />
-                <div className="flex-1 min-w-[220px]"><div className="font-medium text-[#002B5C]">Thinking of moving on?</div>
-                    <p className="text-sm text-[#6B7280]">We'd love to talk first — speak to {d.manager_name || "HR"} any time. If you've decided, you can start your resignation here.</p></div>
-                <button type="button" onClick={() => setOpen(true)} className="border border-[#002B5C] text-[#002B5C] px-4 py-2 text-sm" data-testid="hrm-start-resign">Start resignation</button>
-            </section>
-        );
-    }
-    return (
-        <section className="bg-white border border-[#E5E7EB] p-5 space-y-4" data-testid="hrm-resign-form">
-            <h3 className="font-serif text-2xl text-[#002B5C]">Resignation</h3>
-            <ol className="grid sm:grid-cols-4 gap-2 text-xs">
-                {["You submit", `${d.manager_name || "HR"} reviews`, "HR confirms your last day", "Handover & Full and Final (14 days)"].map((s, i) => (
-                    <li key={s} className="bg-[#F5F7FA] px-3 py-2"><b className="text-[#002B5C]">{i + 1}.</b> {s}</li>))}
-            </ol>
-            <label className="block text-sm">Reason <span className="text-[#6B7280]">(kept confidential with your manager and HR)</span>
-                <textarea rows={3} value={f.reason} onChange={(e) => setF({ ...f, reason: e.target.value })} className={inp} maxLength={2000} /></label>
-            <label className="block text-sm max-w-xs">Proposed last working day
-                <input type="date" min={plus(0)} value={f.last_day} onChange={(e) => setF({ ...f, last_day: e.target.value })} className={inp} />
-                <span className="text-xs text-[#6B7280]">{fmt(f.last_day)} · notice period is {d.notice_days} days{short ? ` — ${short} day(s) short; HR decides if that's waived` : " ✓"}</span></label>
-            <div className="flex gap-2">
-                <button type="button" disabled={busy || f.reason.trim().length < 10} onClick={go} className="inline-flex items-center gap-1.5 bg-[#002B5C] text-white px-5 py-2 text-sm disabled:opacity-50"><Send size={14} />Submit resignation</button>
-                <button type="button" onClick={() => setOpen(false)} className="text-sm underline">Not now</button>
-            </div>
-        </section>
     );
 }
 
@@ -101,11 +65,7 @@ function Timeline({ r }) {
     );
 }
 
-function MyResignation({ r, onChange }) {
-    const withdraw = async () => {
-        if (!window.confirm("Withdraw your resignation? You'll continue as normal.")) return;
-        try { await sepWithdraw(r.id); toast.success("Withdrawn — glad you're staying!"); onChange(); } catch (e) { err(e); }
-    };
+function MyResignation({ r }) {
     return (
         <section className="bg-white border border-[#E5E7EB] overflow-hidden" data-testid="hrm-my-resignation">
             <div className="px-5 py-4 text-white" style={{ background: "linear-gradient(120deg,#002B5C 0%,#0B4A8B 60%,#1E6FB8 100%)" }}>
@@ -121,7 +81,7 @@ function MyResignation({ r, onChange }) {
                 </div>
                 {r.manager?.comment && <p className="text-[#4B5563]">{r.manager.name} reviewed it on {fmt(r.manager.at)}.</p>}
                 <div className="flex flex-wrap gap-2">
-                    {["manager", "hr"].includes(r.status) && <button type="button" onClick={withdraw} className="inline-flex items-center gap-1 border border-[#002B5C] text-[#002B5C] px-3 py-1.5"><Undo2 size={14} />Withdraw</button>}
+                    {["manager", "hr"].includes(r.status) && <p className="text-[#4B5563]">Changed your mind? Just write to HR before it's accepted.</p>}
                     {r.status === "accepted" && <button type="button" onClick={() => dl(r.id, "Acceptance of resignation")} className="inline-flex items-center gap-1 bg-[#002B5C] text-white px-3 py-1.5"><Download size={14} />Acceptance letter</button>}
                 </div>
             </div>
@@ -169,6 +129,7 @@ function Notice({ n, onChange }) {
 function Board({ hr }) {
     const [b, setB] = useState(null);
     const [opening, setOpening] = useState(false);
+    const [recording, setRecording] = useState(false);
     const load = useCallback(() => sepBoard().then(setB).catch(err), []);
     useEffect(() => { load(); }, [load]);
     if (!b) return null;
@@ -178,6 +139,7 @@ function Board({ hr }) {
         <div className="space-y-5" data-testid="hrm-exit-board">
             <div className="flex flex-wrap items-center gap-3">
                 <h2 className="font-serif text-2xl text-[#002B5C] flex-1">{hr ? "Exits & separations" : "Your team"}</h2>
+                {hr && <button type="button" onClick={() => setRecording(!recording)} className="inline-flex items-center gap-1 bg-[#002B5C] text-white px-3 py-1.5 text-sm" data-testid="hrm-record-resign"><Mail size={14} />Record a resignation</button>}
                 {hr && <button type="button" onClick={() => setOpening(!opening)} className="inline-flex items-center gap-1 border border-[#CC0033] text-[#CC0033] px-3 py-1.5 text-sm"><Gavel size={14} />Open a termination case</button>}
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -186,6 +148,7 @@ function Board({ hr }) {
                 {hr && <Kpi icon={Gavel} label="Open cases" value={b.cases.filter((c) => c.status === "open").length} />}
                 {hr && <Kpi icon={HandCoins} label="Full & Final pending" value={`${b.fnf.length}${overdue ? ` (${overdue} late)` : ""}`} hot={overdue > 0} />}
             </div>
+            {recording && <RecordResignation onDone={() => { setRecording(false); load(); }} />}
             {opening && <OpenCase grounds={b.grounds} onDone={() => { setOpening(false); load(); }} />}
             {b.resignations.filter((r) => r.status !== "withdrawn").map((r) => <ResCard key={r.id} r={r} hr={hr} onChange={load} />)}
             {hr && b.cases.map((c) => <CaseCard key={c.id} c={c} b={b} onChange={load} />)}
@@ -228,7 +191,7 @@ function ResCard({ r, hr, onChange }) {
             <div className="flex flex-wrap items-center gap-2"><LogOut size={16} className="text-[#6B7280]" /><b className="text-[#002B5C]">{r.name}</b>
                 <span className="text-[#6B7280]">{[r.designation, r.department].filter(Boolean).join(" · ")}</span><span className="ml-auto"><Pill s={r.status} /></span></div>
             <div className="grid sm:grid-cols-3 gap-2">
-                <Fact label="Resigned on" value={fmt(r.submitted_at)} />
+                <Fact label={r.via === "email" ? "Email received" : "Resigned on"} value={fmt(r.submitted_at)} />
                 <Fact label="Proposed last day" value={fmt(r.requested_last_day)} />
                 <Fact label={r.last_day ? "Final last day" : "Notice"} value={r.last_day ? fmt(r.last_day) : `${r.notice_days} days`} />
             </div>
@@ -242,6 +205,11 @@ function ResCard({ r, hr, onChange }) {
                     <button type="button" disabled={f.comment.trim().length < 10} onClick={() => act(() => sepManager(r.id, { comment: f.comment, suggested_last_day: f.suggested_last_day || null }), "Forwarded to HR.")}
                         className="bg-[#002B5C] text-white px-4 py-2 disabled:opacity-50">Accept &amp; forward to HR</button>
                 </div>
+            )}
+            {["manager", "hr"].includes(r.status) && hr && (
+                <button type="button" onClick={() => window.confirm(`${r.name} asked to withdraw their resignation? They'll continue as normal and are emailed.`)
+                    && act(() => sepWithdraw(r.id), "Withdrawn.")} className="inline-flex items-center gap-1 text-[#4B5563] underline">
+                    <Undo2 size={13} />They've withdrawn it (by email)</button>
             )}
             {r.status === "hr" && hr && (
                 <div className="bg-[#FFFBEB] border border-[#FDE68A] p-3 space-y-2">
@@ -340,6 +308,41 @@ function Panel({ go, label, children, danger = false }) {
             {children}
             {go && <button type="button" onClick={go} className={`${danger ? "bg-[#CC0033]" : "bg-[#002B5C]"} text-white px-4 py-2`}>{label}</button>}
         </div>
+    );
+}
+
+/* An employee emailed HR / a founder; HR puts it on record. Notice is counted
+   from the day the email arrived (backend sep_resign). */
+function RecordResignation({ onDone }) {
+    const [people, setPeople] = useState([]);
+    const [f, setF] = useState({ emp_id: "", received_on: plus(0), last_day: plus(30), reason: "" });
+    const [busy, setBusy] = useState(false);
+    useEffect(() => { hrmPeople().then((d) => setPeople((d || []).filter((p) => !p.exited_on))).catch(() => {}); }, []);
+    const setReceived = (v) => {
+        // Keep the proposed last day 30 days after the email unless HR changed it.
+        const auto = (() => { const x = new Date(`${f.received_on}T00:00:00`); x.setDate(x.getDate() + 30); return x.toLocaleDateString("en-CA"); })();
+        const next = (() => { const x = new Date(`${v}T00:00:00`); x.setDate(x.getDate() + 30); return x.toLocaleDateString("en-CA"); })();
+        setF({ ...f, received_on: v, last_day: f.last_day === auto ? next : f.last_day });
+    };
+    const name = people.find((p) => p.id === f.emp_id)?.name || "";
+    const go = async () => {
+        if (!window.confirm(`Record ${name}'s resignation?\n\nEmail received ${fmt(f.received_on)} · proposed last day ${fmt(f.last_day)}.\n${name} gets an acknowledgement and their manager is told. You confirm the final last day next.`)) return;
+        setBusy(true);
+        try { await sepResign(f); toast.success("Recorded — confirm the last day below."); onDone(); } catch (e) { err(e); } finally { setBusy(false); }
+    };
+    return (
+        <section className="bg-white border-2 border-[#BFDBFE] p-4 space-y-3 text-sm" data-testid="hrm-record-resign-form">
+            <h3 className="font-medium text-[#002B5C] flex items-center gap-2"><Mail size={16} />Record a resignation received by email</h3>
+            <p className="text-xs text-[#6B7280]">Employees resign by writing to HR or a founder. Put it on record here — keep the email itself in your mailbox.</p>
+            <div className="grid sm:grid-cols-3 gap-2">
+                <label>Employee<select value={f.emp_id} onChange={(e) => setF({ ...f, emp_id: e.target.value })} className={inp}><option value="">Choose…</option>{people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
+                <label>Email received on<input type="date" max={plus(0)} value={f.received_on} onChange={(e) => setReceived(e.target.value)} className={inp} /></label>
+                <label>Proposed last working day<input type="date" value={f.last_day} onChange={(e) => setF({ ...f, last_day: e.target.value })} className={inp} /></label>
+            </div>
+            <textarea rows={2} value={f.reason} onChange={(e) => setF({ ...f, reason: e.target.value })} className={inp} maxLength={2000}
+                placeholder="Reason, as given in their email (kept between HR and their manager)" />
+            <button type="button" disabled={busy || !f.emp_id || f.reason.trim().length < 10} onClick={go} className="inline-flex items-center gap-1 bg-[#002B5C] text-white px-4 py-2 disabled:opacity-50"><Check size={14} />Record resignation</button>
+        </section>
     );
 }
 

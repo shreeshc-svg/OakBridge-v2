@@ -4,8 +4,8 @@ as HR's "Record exit" (hrm_lifecycle.record_exit) and a Full & Final
 settlement due 14 days after the last working day.
 
     GET  /api/hrm/separation/mine                 my resignation + anything addressed to me (PIP, show-cause, outcome)
-    POST /api/hrm/separation/resign               employee: resign (reason, proposed last day)
-    POST /api/hrm/separation/{id}/withdraw        employee: withdraw (until HR accepts)
+    POST /api/hrm/separation/resign               HR: record a resignation the employee EMAILED (emp_id, date received)
+    POST /api/hrm/separation/{id}/withdraw        HR (employee asked by email) or the employee: withdraw, until HR accepts
     POST /api/hrm/separation/{id}/manager         reporting manager: comment + accept & forward to HR
     POST /api/hrm/separation/{id}/accept          HR: final last day, notice waived / early release -> exit
     GET  /api/hrm/separation/board                manager: team resignations; HR: everything + F&F
@@ -139,7 +139,7 @@ async def _letter_attachment(doc: dict, emp: dict) -> Optional[list]:
 def _res_view(r: dict, people: dict) -> dict:
     emp = people.get(r["emp_id"]) or {}
     v = {k: r.get(k) for k in ("id", "kind", "emp_id", "status", "reason", "requested_last_day", "submitted_at", "manager",
-                               "hr_decision", "last_day", "fnf", "withdrawn_at", "notice_days", "shortfall_days")}
+                               "hr_decision", "last_day", "fnf", "withdrawn_at", "notice_days", "shortfall_days", "via")}
     v.update(name=emp.get("name", ""), emp_code=emp.get("emp_code", ""), department=emp.get("department", ""),
              designation=emp.get("designation", ""), status_label=core.RES_STATUS.get(r["status"], r["status"]),
              manager_name=(people.get(r.get("manager_id")) or {}).get("name", "") if r.get("manager_id") else "")
@@ -173,38 +173,103 @@ async def sep_mine(user: dict = Depends(get_current_user)):
 class ResignBody(BaseModel):
     reason: str
     last_day: Optional[str] = None
+    emp_id: Optional[str] = None       # who resigned (HR records it)
+    received_on: Optional[str] = None  # the day their email arrived; notice runs from here
+
+
+async def has_exit_items(me: Optional[dict], acc: dict) -> bool:
+    """Should this person see the HRM "Exit" tab? (hrm.hrm_me)
+
+    Since Nov 2026 employees resign by EMAIL to HR or a founder, and HR records
+    it here — so there is no "Resign" button and, for most people, nothing to
+    show. The tab appears for HR always, and otherwise only when something is
+    actually addressed to them: their own resignation (status + acceptance
+    letter), a notice (PIP / show-cause, which needs their reply here), or a
+    team member's resignation still waiting on them as manager.
+
+    Termination cases count ONLY through core.employee_view: a case HR has
+    opened but not yet issued a notice on must stay invisible, and a tab that
+    appeared on its own would give it away.
+    """
+    if acc.get("hr"):
+        return True
+    if not me:
+        return False
+    if await db.hr_separations.find_one({"$or": [
+            {"emp_id": me["id"], "kind": "resignation", "status": {"$ne": "withdrawn"}},
+            {"manager_id": me["id"], "kind": "resignation", "status": "manager"}]}, {"_id": 1}):
+        return True
+    async for c in db.hr_separations.find({"emp_id": me["id"], "kind": "termination"}, {"_id": 0}):
+        if core.employee_view(c):
+            return True
+    return False
 
 
 @router.post("/resign")
 async def sep_resign(body: ResignBody, user: dict = Depends(get_current_user)):
+    """HR records a resignation that arrived by email.
+
+    Employees no longer resign through the HRM: they write to HR or a founder,
+    which is how it is done here and leaves the employee a copy in their own
+    sent mail. A self-service call (no emp_id) is refused with that advice,
+    so an old browser tab can't bypass the process.
+
+    It goes straight to "HR confirms the last day" — HR is the one holding
+    the email — and the reporting manager is told, not asked. Notice is
+    counted from the day the email ARRIVED (received_on), not from when HR got
+    round to typing it in, so a resignation recorded on Monday for a Friday
+    email isn't three days short.
+    """
     people, me, acc = await _ctx(user)
-    if not me or me.get("status") != "active":
-        raise HTTPException(status_code=404, detail="Not set up in the HRM.")
-    if me.get("exited_on"):
-        raise HTTPException(status_code=409, detail="Your exit is already recorded.")
-    if await db.hr_separations.find_one({"emp_id": me["id"], "kind": "resignation", "status": {"$in": ["manager", "hr"]}}, {"_id": 1}):
-        raise HTTPException(status_code=409, detail="You already have a resignation in progress.")
+    if not body.emp_id:
+        raise HTTPException(status_code=403, detail="Please email your resignation to HR or a founder — HR records it in the HRM.")
+    if not acc["hr"]:
+        raise HTTPException(status_code=403, detail="Only HR records a resignation.")
+    emp = people.get(body.emp_id)
+    if not emp or emp.get("status") != "active":
+        raise HTTPException(status_code=404, detail="Not found")
+    if me and emp["id"] == me["id"]:
+        raise HTTPException(status_code=400, detail="Your own resignation is recorded by someone else in HR.")
+    if emp.get("exited_on"):
+        raise HTTPException(status_code=409, detail="Their exit is already recorded.")
+    if await db.hr_separations.find_one({"emp_id": emp["id"], "kind": "resignation", "status": {"$in": ["manager", "hr"]}}, {"_id": 1}):
+        raise HTTPException(status_code=409, detail="They already have a resignation in progress.")
     today = _today()
     try:
-        last = core.check_resignation(body.reason, body.last_day or core.default_last_day(today).isoformat(), today, me.get("joined_on"))
+        received = core.d(body.received_on) if body.received_on else today
     except core.Refused as e:
         raise HTTPException(status_code=400, detail=str(e))
-    mgr = approver_for(me, people)
-    doc = {"id": str(uuid.uuid4()), "kind": "resignation", "emp_id": me["id"], "status": "manager" if mgr else "hr",
+    if received > today:
+        raise HTTPException(status_code=400, detail="The email can't be dated in the future.")
+    if received < today - timedelta(days=60):
+        raise HTTPException(status_code=400, detail="That's more than 60 days ago — check the date the email arrived.")
+    if emp.get("joined_on") and received < core.d(emp["joined_on"]):
+        raise HTTPException(status_code=400, detail="That's before they joined.")
+    try:
+        last = core.check_resignation(body.reason, body.last_day or core.default_last_day(received).isoformat(), received, emp.get("joined_on"))
+    except core.Refused as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    mgr = approver_for(emp, people)
+    doc = {"id": str(uuid.uuid4()), "kind": "resignation", "emp_id": emp["id"], "status": "hr", "via": "email",
            "manager_id": mgr, "reason": core.txt(body.reason), "requested_last_day": last.isoformat(),
-           "notice_days": core.NOTICE_DAYS, "submitted_at": _now().isoformat(), "submitted_on": today.isoformat(),
-           "history": [{"at": _now().isoformat(), "by": user.get("email", ""), "what": "submitted"}]}
+           "notice_days": core.NOTICE_DAYS, "submitted_at": f"{received.isoformat()}T00:00:00+00:00", "submitted_on": received.isoformat(),
+           "recorded_at": _now().isoformat(), "recorded_by": user.get("email", ""),
+           "history": [{"at": _now().isoformat(), "by": user.get("email", ""), "what": f"recorded from their email of {received.isoformat()}"}]}
     await db.hr_separations.insert_one(dict(doc))
-    await _audit(user, "HRM_RESIGNATION_SUBMITTED", {"separation": doc["id"], "last_day": last.isoformat()})
-    lines = [f"{me['name']} has submitted their resignation.", f"Proposed last working day: {_fmt(last)}.", f"Reason: “{doc['reason']}”"]
-    if mgr:
-        await _mail([people[mgr].get("work_email")], f"Resignation: {me['name']}",
-                    [f"Hi {_first(people[mgr])},", *lines, "Please have a conversation with them, then add your comments and forward it to HR in the HRM."])
-    await _mail(_hr_emails(people, me["id"]), f"Resignation received: {me['name']}",
-                [*lines, "With their manager first." if mgr else "There's no reporting manager, so it's with HR to accept."], fallback=True)
-    await _mail([me.get("work_email")], "We've received your resignation",
-                [f"Hi {_first(me)},", f"Your resignation has been received{' and sent to ' + people[mgr]['name'] if mgr else ' by HR'}.",
-                 f"Proposed last working day: {_fmt(last)}. You can withdraw it in the HRM until HR accepts it."])
+    await _audit(user, "HRM_RESIGNATION_RECORDED", {"separation": doc["id"], "employee": emp["id"], "received_on": received.isoformat(),
+                                                    "last_day": last.isoformat()})
+    lines = [f"{emp['name']} has resigned (by email, {_fmt(received)}).", f"Proposed last working day: {_fmt(last)}."]
+    if mgr in people:
+        await _mail([people[mgr].get("work_email")], f"Resignation: {emp['name']}",
+                    [f"Hi {_first(people[mgr])},", *lines, "HR will confirm the final last day. Please start thinking about the handover, "
+                     "and let HR know if you'd like to talk to them first."])
+    others = [e for e in _hr_emails(people, emp["id"]) if e and e.lower() != (user.get("email") or "").lower()]
+    if others:
+        await _mail(others, f"Resignation recorded: {emp['name']}", [*lines, f"Recorded by {user.get('email', 'HR')}; waiting for HR to confirm the last day."])
+    await _mail([emp.get("work_email")], "We've received your resignation",
+                [f"Hi {_first(emp)},", f"Thank you for letting us know. HR has received your resignation email of {_fmt(received)}.",
+                 f"Proposed last working day: {_fmt(last)}. HR will confirm your final last day shortly.",
+                 "If you change your mind, just write to HR before it's accepted."])
     return _res_view(doc, people)
 
 
@@ -219,13 +284,21 @@ async def _load(sid: str, kind: str) -> dict:
 async def sep_withdraw(sid: str, user: dict = Depends(get_current_user)):
     people, me, acc = await _ctx(user)
     doc = await _load(sid, "resignation")
-    if not me or doc["emp_id"] != me["id"]:
+    own = bool(me) and doc["emp_id"] == me["id"]
+    # HR withdraws on the employee's behalf when they write in to say they're
+    # staying (the same email route they resigned by) — never their own.
+    if not own and not acc["hr"]:
         raise HTTPException(status_code=404, detail="Not found")
     if doc["status"] not in ("manager", "hr"):
         raise HTTPException(status_code=409, detail="It's already been accepted — please speak to HR.")
-    saved = await _step(doc, {"status": "withdrawn", "withdrawn_at": _now().isoformat()}, user, "withdrawn", {"status": doc["status"]})
-    tos = _hr_emails(people, me["id"]) + ([people[doc["manager_id"]].get("work_email")] if doc.get("manager_id") in people else [])
-    await _mail(tos, f"Resignation withdrawn: {me['name']}", [f"{me['name']} has withdrawn their resignation. No action needed."], fallback=True)
+    emp = people.get(doc["emp_id"]) or {}
+    saved = await _step(doc, {"status": "withdrawn", "withdrawn_at": _now().isoformat()}, user,
+                        "withdrawn" if own else "withdrawn by HR at the employee's request", {"status": doc["status"]})
+    tos = _hr_emails(people, doc["emp_id"]) + ([people[doc["manager_id"]].get("work_email")] if doc.get("manager_id") in people else [])
+    await _mail(tos, f"Resignation withdrawn: {emp.get('name', '')}", [f"{emp.get('name', 'They')} has withdrawn their resignation. No action needed."], fallback=True)
+    if not own:
+        await _mail([emp.get("work_email")], "Your resignation has been withdrawn",
+                    [f"Hi {_first(emp)},", "As you asked, your resignation has been withdrawn and you'll continue as normal. We're glad you're staying!"])
     return _res_view(saved, people)
 
 

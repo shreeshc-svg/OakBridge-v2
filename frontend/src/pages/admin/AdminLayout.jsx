@@ -7,6 +7,7 @@ import { fetchSettings } from "../../lib/api";
 import { canPath, sectionForPath, SECTION_LABELS } from "../../lib/rbac";
 import NoIndex from "../../components/NoIndex";
 import HrmShortcut from "../../components/HrmShortcut";
+import BackToTop from "../../components/BackToTop";
 import { useHrmAccess } from "../../lib/hrmAccess";
 import { applyNavOrder } from "../../lib/adminNav";
 
@@ -191,6 +192,9 @@ export default function AdminLayout() {
                 )}
             </main>
             <Toaster position="bottom-right" />
+            {/* Long admin lists (Books, Orders, Inventory) scroll the window;
+                no chat launcher or bottom tray here, so a plain corner. */}
+            <BackToTop placement="bottom-6 right-6" showAfter={600} />
         </div>
     );
 }

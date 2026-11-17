@@ -139,6 +139,10 @@ async def expect(coro, status, label):
         check(e.status_code == status, f"{label} ({e.status_code}: {e.detail})")
 
 
+def people_of(i):
+    return {"id": i}
+
+
 async def flow():
     for p in ({"id": "f", "name": "Founder", "work_email": "f@o.in", "status": "active", "hr_access": True, "user_id": "uf",
                "joined_on": "2020-01-01", "confirmed_on": "2020-07-01"},
@@ -153,18 +157,25 @@ async def flow():
     U = lambda i: {"id": f"u{i}", "email": f"{i}@o.in", "role": "customer"}  # noqa: E731
     A, M, F, Z = U("a"), U("m"), U("f"), U("z")
 
-    print("-- resignation --")
-    r = await HS.sep_resign(HS.ResignBody(reason="Moving to Bengaluru for family reasons."), A)
+    print("-- resignation (emailed to HR, recorded by HR) --")
+    await expect(HS.sep_resign(HS.ResignBody(reason="Moving to Bengaluru for family reasons."), A), 403, "no self-service resign: email HR")
+    await expect(HS.sep_resign(HS.ResignBody(reason="Moving to Bengaluru for family reasons.", emp_id="z"), M), 403, "a manager can't record one")
+    await expect(HS.sep_resign(HS.ResignBody(reason="Stepping down from the company.", emp_id="f"), F), 400, "HR can't record their own")
+    await expect(HS.sep_resign(HS.ResignBody(reason="Moving to Bengaluru for family reasons.", emp_id="a", received_on="2026-11-13"), F), 400,
+                 "the email can't be from the future")
+    check(not await HS.has_exit_items(people_of("a"), {"hr": False}), "no Exit tab for Asha before anything is addressed to her")
+    r = await HS.sep_resign(HS.ResignBody(reason="Moving to Bengaluru for family reasons.", emp_id="a"), F)
     sid = r["id"]
-    check(r["status"] == "manager" and r["requested_last_day"] == "2026-12-12", "submitted -> with her manager; last day = 30 days' notice")
-    check({m["to"] for m in mails} >= {"m@o.in", "f@o.in", "a@o.in"}, "manager, HR and Asha emailed")
-    await expect(HS.sep_resign(HS.ResignBody(reason="Moving to Bengaluru for family reasons."), A), 409, "one at a time")
-    await expect(HS.sep_accept(sid, HS.AcceptBody(last_day="2026-12-12"), F), 409, "HR waits for the manager")
-    await expect(HS.sep_manager(sid, HS.ManagerBody(comment="Tried to retain her; handover to Zed planned."), Z), 404, "a colleague can't act")
+    check(r["status"] == "hr" and r["requested_last_day"] == "2026-12-12", "recorded -> straight to HR; last day = 30 days' notice")
+    check({m["to"] for m in mails} >= {"m@o.in", "a@o.in"} and "f@o.in" not in {m["to"] for m in mails},
+          "manager told, Asha acknowledged; the HR person who recorded it isn't emailed")
+    check(await HS.has_exit_items(people_of("a"), {"hr": False}), "…now Asha has an Exit tab (status + letter)")
+    check(not await HS.has_exit_items(people_of("z"), {"hr": False}), "…her colleague doesn't")
+    await expect(HS.sep_resign(HS.ResignBody(reason="Moving to Bengaluru for family reasons.", emp_id="a"), F), 409, "one at a time")
+    await expect(HS.sep_manager(sid, HS.ManagerBody(comment="Tried to retain her; handover to Zed planned."), M), 404, "already with HR: no manager step")
     board = await HS.sep_board(M)
     check([x["name"] for x in board["resignations"]] == ["Asha"] and board["cases"] == [] and board["fnf"] == [], "manager's board: team resignation only")
     await db.hr_profiles.insert_one({"emp_id": "a", "personal_email": "asha.home@gmail.com"})
-    await HS.sep_manager(sid, HS.ManagerBody(comment="Tried to retain her; handover to Zed planned.", suggested_last_day="2026-12-05"), M)
     mails.clear()
     r = await HS.sep_accept(sid, HS.AcceptBody(last_day="2026-12-05", waive_shortfall=True), F)
     check(r["status"] == "accepted" and r["shortfall_days"] == 7 and r["fnf"] == {"due": "2026-12-19", "status": "pending"},
@@ -183,9 +194,13 @@ async def flow():
     pdf = await HS.sep_letter(sid, A)
     check(pdf["media_type"] == "application/pdf" and pdf["content"][:4] == b"%PDF", "acceptance letter PDF for the employee")
 
-    r2 = await HS.sep_resign(HS.ResignBody(reason="Going back to studies full time."), Z)
-    await HS.sep_withdraw(r2["id"], Z)
-    check((await db.hr_separations.find_one({"id": r2["id"]}))["status"] == "withdrawn", "withdrawn before acceptance")
+    r2 = await HS.sep_resign(HS.ResignBody(reason="Going back to studies full time.", emp_id="z", received_on="2026-11-09"), F)
+    check(r2["requested_last_day"] == "2026-12-09", "notice counted from the day the email arrived, not the day HR typed it")
+    await expect(HS.sep_withdraw(r2["id"], M), 404, "a manager can't withdraw it")
+    mails.clear()
+    await HS.sep_withdraw(r2["id"], F)
+    check((await db.hr_separations.find_one({"id": r2["id"]}))["status"] == "withdrawn", "HR withdraws it when Zed writes in")
+    check(any(m["to"] == "z@o.in" and "withdrawn" in m["subject"] for m in mails), "…and Zed is told")
 
     print("-- termination --")
     await expect(HS.case_open(HS.CaseBody(emp_id="f", ground="performance"), F), 400, "no case about yourself")
@@ -194,8 +209,10 @@ async def flow():
     await expect(HS.case_step(cid, "terminate", HS.StepBody(notice="none", last_day="2026-11-12", note="Decision after the enquiry."), F), 400,
                  "can't terminate before a show-cause notice")
     await expect(HS.case_step(cid, "show-cause", HS.StepBody(text="x", deadline="2026-11-20"), M), 403, "a manager can't issue one")
+    check(not await HS.has_exit_items(people_of("z"), {"hr": False}), "a case with no notice yet: no Exit tab appears to give it away")
     await HS.case_step(cid, "show-cause", HS.StepBody(text="Emails on 2 and 4 Nov to an author were abusive. Explain why action shouldn't be taken.",
                                                        deadline="2026-11-16"), F)
+    check(await HS.has_exit_items(people_of("z"), {"hr": False}), "show-cause issued: Zed gets the Exit tab to reply")
     mine = await HS.sep_mine(Z)
     check(mine["notices"] and "show_cause" in mine["notices"][0] and "Repeated rude" not in json.dumps(mine), "Zed sees the notice, not HR's notes")
     await HS.case_step(cid, "reply", HS.StepBody(text="I apologise — I was under stress; it won't happen again."), Z)

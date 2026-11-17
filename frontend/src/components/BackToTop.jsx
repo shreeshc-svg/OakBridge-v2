@@ -9,7 +9,11 @@ import { ArrowUp } from "lucide-react";
  * sits at bottom-36 / md:bottom-24 to leave a consistent gap above it.
  * z-40 keeps it beneath the open chat panel (z-50) rather than fighting it.
  */
-export default function BackToTop({ showAfter = 400 }) {
+// `placement`: the storefront default sits above the chat launcher and the
+// mobile bottom tray. Admin has neither, so it passes a plain corner.
+const STOREFRONT = "bottom-above-tray-2 right-5 md:bottom-24 fixed-stable";
+
+export default function BackToTop({ showAfter = 400, placement = STOREFRONT }) {
     const [visible, setVisible] = useState(false);
 
     useEffect(() => {
@@ -31,7 +35,7 @@ export default function BackToTop({ showAfter = 400 }) {
             aria-label="Back to top"
             title="Back to top"
             data-testid="back-to-top"
-            className={`fixed z-40 bottom-above-tray-2 right-5 md:bottom-24 fixed-stable w-11 h-11 rounded-full bg-[#002B5C] text-white shadow-lg flex items-center justify-center hover:bg-[#001F42] active:scale-95 transition-all duration-300 touch-manipulation ${
+            className={`fixed z-40 ${placement} w-11 h-11 rounded-full bg-[#002B5C] text-white shadow-lg flex items-center justify-center hover:bg-[#001F42] active:scale-95 transition-all duration-300 touch-manipulation ${
                 visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2 pointer-events-none"
             }`}
         >

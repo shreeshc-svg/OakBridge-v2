@@ -83,10 +83,14 @@ const policy = read("src/pages/hrm/HrmLeavePolicy.jsx");
 check(leave.includes('["policy", "Leave policy"]') && leave.includes("<LeavePolicy />") && leave.includes('data-testid="hrm-read-policy"')
       && policy.includes("up to a maximum of 12 days") && policy.includes("recommended"), "leave policy readable inside Leave, for everyone");
 const exitTab = read("src/pages/hrm/HrmExit.jsx"), rec = read("src/pages/hrm/HrmRecognition.jsx");
-check(hrm.includes('["recognition", "Recognition", Trophy]') && hrm.includes('[["exit", "Exit", LogOut]]') && hrm.includes("<ExitTab me={me} />"),
-      "Recognition and Exit tabs");
-check(exitTab.includes('data-testid="hrm-resign-form"') && exitTab.includes("sepWithdraw") && exitTab.includes('data-testid="hrm-notice"'),
-      "employee: resign, withdraw, reply to a show-cause notice");
+check(hrm.includes('["recognition", "Recognition", Trophy]') && hrm.includes('...(me.hr || me.exit_tab ? [["exit", "Exit", LogOut]] : [])') && hrm.includes("<ExitTab me={me} />"),
+      "Recognition tab; Exit tab only for HR or when something is addressed to you");
+check(!exitTab.includes("hrm-resign-form") && !exitTab.includes("hrm-start-resign"), "no self-service Resign: employees email HR / a founder");
+check(exitTab.includes('data-testid="hrm-record-resign-form"') && /sepResign\(f\)/.test(exitTab) && exitTab.includes("received_on"),
+      "HR records an emailed resignation, dated by the email");
+check(exitTab.includes("act(() => sepWithdraw(r.id)") && exitTab.includes('data-testid="hrm-notice"'),
+      "HR withdraws on request; employee still replies to a show-cause notice");
+check(hrm.includes('data-testid="hrm-back-to-admin"') && hrm.includes("{isAdmin && ("), "HRM header: back to the admin panel (admins only)");
 check(exitTab.includes("function needs(c, today)") && exitTab.includes("disabled={!ready}"), "Terminate stays locked until the ground's steps are done (mirrors the server)");
 check(rec.includes("export function Celebration") && home.includes("<Celebration enabled={!!me.me} />") && home.includes('data-testid="hrm-home-shoutouts"'),
       "recognition: celebration pop-up + shout-outs on Home");

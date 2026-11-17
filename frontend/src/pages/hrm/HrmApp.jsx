@@ -1,12 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { CalendarDays, CalendarCheck, Home, Settings2, Users, Plus, X, Send, Search, Target, Briefcase, Award, Trophy, LogOut, UserCircle, HeartPulse } from "lucide-react";
+import { CalendarDays, CalendarCheck, Home, Settings2, Users, Plus, X, Send, Search, Target, Briefcase, Award, Trophy, LogOut, UserCircle, HeartPulse, ArrowLeft } from "lucide-react";
 import {
     hrmMe, hrmPeople, hrmAddPerson, hrmEditPerson, hrmInvite, hrmConfirmAll, hrmSettings, hrmSaveSettings,
     formatApiError,
 } from "../../lib/api";
 import NoIndex from "../../components/NoIndex";
+import { useAuth } from "../../context/AuthContext";
 import HrmCalendar from "./HrmCalendar";
 import LeaveTab from "./HrmLeave";
 import GoalsTab from "./HrmGoals";
@@ -40,6 +41,9 @@ const weeklyOffText = (w) => {
 };
 
 export default function HrmApp() {
+    // Staff with admin access come here from the admin sidebar; give them the
+    // way back (everyone else has no admin panel to return to).
+    const { isAdmin } = useAuth();
     const [me, setMe] = useState(null);
     const [err, setErr] = useState("");
     const [tab, setTab] = useState("home");
@@ -62,7 +66,10 @@ export default function HrmApp() {
     const role = me.hr ? "HR / Founder" : me.manager ? "Manager" : "Employee";
     const tabs = [["home", "Home", Home], ["leave", "Leave", CalendarCheck], ["goals", "Goals", Target], ["appraisal", "Appraisal", Award], ["recognition", "Recognition", Trophy], ...(me.hr || me.manager ? [["people", me.hr ? "People" : "My team", Users]] : []),
         ...(me.hiring ? [["hiring", "Hiring", Briefcase]] : []),
-        ["calendar", "Calendar", CalendarDays], ...(me.me || me.hr || me.manager ? [["exit", "Exit", LogOut]] : []),
+        // Exit: HR always; anyone else only when something is addressed to
+        // them (their resignation, a notice to reply to) — employees resign by
+        // email to HR / a founder, so there is no "Resign" button to offer.
+        ["calendar", "Calendar", CalendarDays], ...(me.hr || me.exit_tab ? [["exit", "Exit", LogOut]] : []),
         ...(me.me ? [["profile", "My profile", UserCircle]] : []),
         ...(me.hr ? [["settings", "Settings", Settings2]] : [])];
 
@@ -72,6 +79,12 @@ export default function HrmApp() {
             <header className="bg-[#002B5C] text-white">
                 <div className="max-w-5xl mx-auto px-4 py-3 flex items-center gap-3">
                     <div className="font-serif text-xl flex-1">Oakbridge <span className="text-[#F5B841]">HRM</span></div>
+                    {isAdmin && (
+                        <Link to="/admin" data-testid="hrm-back-to-admin"
+                            className="inline-flex items-center gap-1 text-xs border border-white/40 px-2.5 py-1 hover:bg-white/10 whitespace-nowrap">
+                            <ArrowLeft size={13} aria-hidden="true" />Admin panel
+                        </Link>
+                    )}
                     <span className="text-xs text-white/80 hidden sm:inline">{me.me?.name || "Super admin"}</span>
                     <span className="text-[10px] font-mono tracking-widest border border-white/40 px-2 py-0.5 uppercase">{role}</span>
                 </div>
