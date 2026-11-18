@@ -5,7 +5,7 @@ import { Search, X } from "lucide-react";
 import {
     adminWhOverview, adminWhDocs, adminWhDoc, adminWhUndoDoc, adminWhTestCase, adminWhAccuracy,
     adminWhReplay, adminWhMode, adminWhGoLiveCheck, adminWhMovements, adminWhUndoMove, adminWhReview, adminWhCreateDoc, adminWhEditDoc,
-    adminWhEditLines, adminWhDeleteDoc, adminWhRestoreDoc, adminWhResetFromSheet, syncInventoryFromSheet, whBooks, whDocFile, formatApiError,
+    adminWhEditLines, adminWhDeleteDoc, adminWhRestoreDoc, adminWhNotDelivered, adminWhResetFromSheet, syncInventoryFromSheet, whBooks, whDocFile, formatApiError,
 } from "../../lib/api";
 import { useAuth } from "../../context/AuthContext";
 import { isSuperadmin } from "../../lib/rbac";
@@ -278,6 +278,45 @@ const STATUS_LABEL = {
 const NO_FILTER = { q: "", direction: "", status: "", practice: "", date_from: "", date_to: "", archived: false };
 const DIRECTIONS = [["out", "Carton out (Tally invoice)"], ["in", "Printer bill (books arriving)"], ["courier", "Courier sheet"]];
 
+/* A shipped carton out that never reached the customer (delivery missed; it
+   goes by courier instead). Its copies come back to stock and the document is
+   archived — otherwise the courier run deducts the same copies a second time.
+   backend/warehouse_undeliver.py. Superadmin, with a reason. */
+function NotDelivered({ doc, onDone }) {
+    const [open, setOpen] = useState(false);
+    const [note, setNote] = useState("");
+    const [busy, setBusy] = useState(false);
+    const units = (doc.lines || []).reduce((n, l) => n + Math.abs(Number(l.qty) || 0), 0);
+    const go = async () => {
+        if (!window.confirm(`Mark ${doc.doc_number || "this carton"} as NOT delivered?\n\n${units ? `${units} copies go back into warehouse stock` : "Its copies go back into warehouse stock"} and the document is archived (kept in the history with your reason).\n\nOnly do this if the copies are physically back with us.`)) return;
+        setBusy(true);
+        try {
+            const r = await adminWhNotDelivered(doc.id, note);
+            toast.success(`Back in stock — ${r.reversed} stock movement(s) reversed. Ship it by courier as usual.`);
+            onDone();
+        } catch (e) { toast.error(formatApiError(e)); } finally { setBusy(false); }
+    };
+    if (!open) {
+        return (
+            <button type="button" onClick={() => setOpen(true)} className="text-sm border border-[#B4750F] text-[#B4750F] px-3 py-1 hover:bg-[#FFFBEB]" data-testid="wh-not-delivered">
+                Not delivered — bring copies back to stock
+            </button>
+        );
+    }
+    return (
+        <div className="border border-[#FDE68A] bg-[#FFFBEB] p-3 space-y-2 text-sm" data-testid="wh-not-delivered-form">
+            <div className="font-medium text-[#92400E]">Carton came back undelivered</div>
+            <p className="text-xs text-[#4B5563]">Its copies are added back to warehouse stock and this document is archived. When it goes out again (e.g. by courier), that shipment deducts them — so they're counted once, not twice.</p>
+            <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} maxLength={500}
+                placeholder="What happened? (required — e.g. Delivery missed, sending by courier instead)" className="w-full border border-[#E5E7EB] px-2 py-1.5 bg-white" />
+            <div className="flex gap-2">
+                <button type="button" disabled={busy || note.trim().length < 10} onClick={go} className="bg-[#B4750F] text-white px-3 py-1.5 disabled:opacity-50">{busy ? "Saving…" : "Bring copies back to stock"}</button>
+                <button type="button" onClick={() => setOpen(false)} className="underline">Cancel</button>
+            </div>
+        </div>
+    );
+}
+
 function DocsTab({ status = null, onChange = () => {}, canDelete = false }) {
     const [docs, setDocs] = useState(null);
     const [open, setOpen] = useState(null);
@@ -505,7 +544,19 @@ function DocsTab({ status = null, onChange = () => {}, canDelete = false }) {
                                 ? <button type="button" className="border px-3 py-1" onClick={() => restore(open.id)} data-testid="wh-restore">Restore to the list</button>
                                 : <button type="button" disabled={busy || !!open.shipped_at} className="border border-[#CC0033] text-[#CC0033] px-3 py-1 disabled:opacity-50" onClick={() => remove(open)} data-testid="wh-delete"
                                     title={open.shipped_at ? "Shipped — record a return instead" : ""}>Delete</button>}
+                            {/* Said in words, not only in a hover tooltip. */}
+                            {!open.archived && open.shipped_at && (
+                                <span className="text-xs text-[#6B7280] self-center">Shipped, so it can't be deleted — the copies have left. Came back undelivered? Use the box below.</span>
+                            )}
                         </div>
+                    )}
+                    {canDelete && !status && !open.archived && open.direction === "out" && open.shipped_at && (
+                        <NotDelivered doc={open} onDone={() => { setOpen(null); load(); onChange(); }} />
+                    )}
+                    {open.not_delivered && (
+                        <p className="text-xs text-[#4B5563] bg-[#F5F7FA] px-3 py-2" data-testid="wh-not-delivered-note">
+                            Came back undelivered — marked by {open.not_delivered.by} on {new Date(open.not_delivered.at).toLocaleString("en-IN")}: “{open.not_delivered.note}”. Copies returned to stock.
+                        </p>
                     )}
                 </div>
             )}

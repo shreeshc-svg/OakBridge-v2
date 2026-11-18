@@ -343,6 +343,8 @@ export const adminWhEditLines = (id, lines, note) =>
     api.post(`/admin/warehouse/docs/${id}/lines`, { lines, note }).then((r) => r.data);
 export const adminWhDeleteDoc = (id) => api.delete(`/admin/warehouse/docs/${id}`).then((r) => r.data);
 export const adminWhRestoreDoc = (id) => api.post(`/admin/warehouse/docs/${id}/restore`).then((r) => r.data);
+// A shipped carton came back undelivered: copies back to stock, document archived (backend/warehouse_undeliver.py).
+export const adminWhNotDelivered = (id, note) => api.post(`/admin/warehouse/docs/${id}/not-delivered`, { note }).then((r) => r.data);
 export const adminWhReview = (id, action, note) =>
     api.post(`/admin/warehouse/docs/${id}/review`, { action, note: note || null }).then((r) => r.data);
 export const adminWhDoc = (id) => api.get(`/admin/warehouse/docs/${id}`).then((r) => r.data);
