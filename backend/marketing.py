@@ -3710,6 +3710,8 @@ def missing_fields(c: dict, contact: dict, used: dict) -> list:
 
 async def _unknown_vars(c: dict, all_lists: bool = False) -> list:
     keys = [f["key"] for f in await list_fields(None if all_lists else _camp_lists(c))]
+    if all_lists:
+        keys += list(_starter_fields())
     return core.unknown_variables(*core.campaign_texts(c), extra=keys)
 
 
@@ -3717,7 +3719,8 @@ async def _sample_contact(c: Optional[dict] = None, all_lists: bool = False) -> 
     """The preview recipient, with each custom field's first value from its
     sheet, so the preview shows a real-looking link and pass number."""
     fs = await list_fields(None if all_lists or c is None else _camp_lists(c))
-    return {**PREVIEW_CONTACT, "_fields": {f["key"]: f.get("sample") or f["key"].upper() for f in fs}}
+    vals = {**(_starter_fields() if all_lists else {}), **{f["key"]: f.get("sample") or f["key"].upper() for f in fs}}
+    return {**PREVIEW_CONTACT, "_fields": vals}
 
 
 async def field_check(c: dict) -> dict:
@@ -3770,8 +3773,19 @@ class TemplateBody(BaseModel):
 
 def _starters() -> list:
     return [{"id": f"starter:{t['key']}", "starter": True, "name": t["name"], "description": t["description"],
-             "subject": t["subject"], "preheader": t["preheader"], "blocks": [dict(b) for b in t["blocks"]]}
+             "subject": t["subject"], "preheader": t["preheader"], "blocks": [dict(b) for b in t["blocks"]],
+             "fields": sorted(t.get("fields") or {})}
             for t in core.STARTER_TEMPLATES]
+
+
+def _starter_fields() -> dict:
+    """Sheet columns the starter templates are written for ({{offer_link}} …),
+    key -> example: known (and previewable) in the TEMPLATE editor, which
+    isn't tied to a list yet. A campaign still needs a list that has them."""
+    out: dict = {}
+    for t in core.STARTER_TEMPLATES:
+        out.update(t.get("fields") or {})
+    return out
 
 
 async def _template(tid: str) -> dict:

@@ -940,6 +940,28 @@ STARTER_TEMPLATES = [
                 {"type": "text", "text": "Hi {{first_name}}, [two or three lines about the author and why their work matters]."},
                 {"type": "book"},
                 {"type": "button", "label": "All books by [author]", "url": "https://www.oakbridge.in/authors"}]},
+    # Event special offer (Nov 2026): each person's own booking link comes
+    # from the list's sheet — import it with an "Offer Link" column. `fields`
+    # names the sheet columns a starter needs (key -> an example for the
+    # preview); a campaign to a list without that column can't be sent
+    # (unknown variable), so nobody gets a "Book now" button with no link.
+    # Every built-in variable is used, each where a blank still reads well.
+    {"key": "event-special-offer", "name": "Event special offer — personal booking link",
+     "description": "India Law, AI & Tech Summit 2026 Delegate Pass at ₹7,999. Needs a list imported with an “Offer Link” column ({{offer_link}}).",
+     "fields": {"offer_link": "https://www.oakbridge.events/offer/o/AE78xn9Y5H"},
+     "subject": "{{first_name|Hello}}, your Delegate Pass at ₹7,999 — India Law, AI & Tech Summit 2026",
+     "preheader": "A special price reserved for {{name|you}} · Saturday 28 November, Shangri-La Eros, New Delhi",
+     "blocks": [{"type": "heading", "text": "{{first_name|Hello}}, a special price for you"},
+                {"type": "text", "text": "We'd love to see you at the **India Law, AI & Tech Summit 2026** — **Saturday, 28 November 2026** at "
+                                         "**Shangri-La Eros, New Delhi**.\n\nAs one of our readers, you can book your "
+                                         "**Delegate Pass at the special price of ₹7,999** — up to 5 passes."},
+                {"type": "text", "text": "Pass holder: **{{first_name|(add your name on the booking page)}} {{last_name}}**\nPasses are emailed to: **{{email}}**\n\n"
+                                         "Your booking page is personal to you. Each pass gets its own pass number, "
+                                         "emailed as soon as your payment goes through."},
+                {"type": "button", "label": "Book my Delegate Pass — ₹7,999", "url": "{{offer_link}}"},
+                {"type": "text", "text": "Offer valid until **28 November 2026**. Questions? Call +91 88003 37299 or simply reply to this email."},
+                {"type": "divider"},
+                {"type": "text", "text": "This personal offer was sent to {{email}} in {{month}} {{year}} because you're part of the Oakbridge community."}]},
     {"key": "welcome", "name": "Welcome", "description": "First email to a new subscriber.",
      "subject": "Welcome to Oakbridge, {{first_name|there}}", "preheader": "What to expect from us",
      "blocks": [{"type": "heading", "text": "Welcome, {{first_name}}"},

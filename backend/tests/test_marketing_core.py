@@ -209,9 +209,22 @@ check(_p("{{email}}", {"email": "a@b.co"}) == "a@b.co", "email")
 keys = {v["key"] for v in m.VARIABLES}
 used = set()
 for t in m.STARTER_TEMPLATES:
-    for txt in [t["subject"], t["preheader"]] + [b.get("text", "") + b.get("label", "") for b in t["blocks"]]:
-        used |= {m.group(1) for m in m._VAR_RE.finditer(txt)}
-check(used <= keys and "first_name" in used, f"starter templates use only known variables ({sorted(used)})")
+    t_used = set()
+    for txt in [t["subject"], t["preheader"]] + [b.get("text", "") + b.get("label", "") + b.get("url", "") for b in t["blocks"]]:
+        t_used |= {x.group(1) for x in m._VAR_RE.finditer(txt)}
+    # A sheet column ({{offer_link}}) only when the starter declares it in `fields`.
+    check(t_used <= keys | set(t.get("fields") or {}), f"starter '{t['key']}' uses only known or declared variables ({sorted(t_used)})")
+    used |= t_used
+check("first_name" in used, "starters personalise")
+ev = next(t for t in m.STARTER_TEMPLATES if t["key"] == "event-special-offer")
+ev_used = set()
+for txt in m.campaign_texts(ev):
+    ev_used |= {x.group(1) for x in m._VAR_RE.finditer(txt)}
+check(ev_used >= keys | {"offer_link"} and any(b.get("url") == "{{offer_link}}" for b in ev["blocks"] if b["type"] == "button"),
+      "event offer: every built-in variable + the personal {{offer_link}} on the button")
+eh, _ = m.render_email(ev["blocks"], brand={}, contact={"name": "Asha Verma", "email": "asha@x.in", "_fields": {"offer_link": "https://www.oakbridge.events/offer/o/AE78xn9Y5H?k=1"}}, link_for=lambda u: u)
+check('href="https://www.oakbridge.events/offer/o/AE78xn9Y5H?k=1"' in eh and "{{" not in eh,
+      "event offer renders her own booking link, no raw braces")
 check(len({t["key"] for t in m.STARTER_TEMPLATES}) == len(m.STARTER_TEMPLATES) >= 5, "starter templates have unique keys")
 
 print("-- exports & clean-up (15 Oct 2026) --")
