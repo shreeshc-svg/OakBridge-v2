@@ -227,6 +227,8 @@ async def _ensure_indexes() -> None:
     await _index(db.mk_sends, [("campaign_id", 1), ("tail", 1), ("status", 1)])
     await _index(db.mk_contacts, [("email_consent.status", 1), ("email_status", 1)])
     await _index(db.mk_import_rows, [("import_id", 1), ("i", 1)])
+    await _index(db.mk_list_fields, [("list_id", 1), ("contact_id", 1)], unique=True)
+    await _index(db.mk_list_fields, "contact_id")
     await _unique_index(db.mk_removed, "h")
     await _index(db.mk_contacts, "created_at")
     await _index(db.mk_events, "at")
@@ -1276,10 +1278,16 @@ def _abs_media(u: str) -> str:
 def render_for(campaign: dict, contact: dict, send_id: str, st: dict, links: Optional[list] = None) -> tuple[str, str]:
     """`links`: this send's own link list (campaign links + the reader's
     picks) — click tracking redirects by index into exactly this list."""
-    links = links if links is not None else (campaign.get("links") or [])
+    tmpl = campaign.get("links") or []
+    links = links if links is not None else tmpl
     L = _links(send_id)
 
+    # Look links up AS WRITTEN in the campaign first ("{{offer_link}}" is in
+    # the campaign's list; this send's list holds the resolved link at the
+    # same index), then this send's extras (the reader's picks).
     def link_for(u):
+        if u in tmpl:
+            return L["click"](tmpl.index(u))
         return L["click"](links.index(u)) if u in links else u
 
     brand = {"name": "Oakbridge Publishing", "logo": st.get("logo"), "footer": st.get("footer"), "navy": "#002B5C", "red": "#CC0033"}
@@ -1611,6 +1619,10 @@ async def _run_campaign(cid: str) -> None:
                 return
             tail_batch = any(s.get("tail") for s in batch)
             pool = None  # latest releases, loaded once per batch when the email has "Picked for you"
+            # Custom fields (offer link, pass number …) from the campaign's lists.
+            camp_lids = _camp_lists(camp)
+            used = core.used_fields(core.campaign_texts(camp), [f["key"] for f in await list_fields(camp_lids)]) if camp_lids else {}
+            personal_links = any("{{" in u for u in camp.get("links") or [])
             for s in batch:
                 contact = await db.mk_contacts.find_one({"id": s["contact_id"]}, {"_id": 0}) or {}
                 cs = contact.get("email_consent", {}).get("status")
@@ -1621,14 +1633,28 @@ async def _run_campaign(cid: str) -> None:
                 if not ok_now:  # unsubscribed / bounced since the campaign was queued
                     await db.mk_sends.update_one({"id": s["id"]}, {"$set": {"status": "skipped", "error": "no longer subscribed"}})
                     continue
+                if camp["channel"] == "email" and used:
+                    contact["_fields"] = await contact_fields(contact["id"], camp_lids)
+                    gap = missing_fields(camp, contact, used)
+                    if gap:
+                        # Never "Pay here:" with no link, or a blank pass number.
+                        await db.mk_sends.update_one({"id": s["id"]}, {"$set": {
+                            "status": "skipped", "error": "no " + ", ".join("{{" + k + "}}" for k in gap) + " for this person"}})
+                        continue
                 if camp["channel"] == "email":
                     try:
                         send_links = None
+                        if personal_links:
+                            # This person's own links, index for index with the
+                            # campaign's — click tracking redirects to these.
+                            send_links = [core.resolve_url(u, contact) or u for u in camp.get("links") or []]
                         if _for_you_count(camp):
                             if pool is None:
                                 pool = await release_pool()
                             extra = await attach_picks(contact, camp, pool)
-                            send_links = (camp.get("links") or []) + [u for u in extra if u not in (camp.get("links") or [])]
+                            base = send_links or (camp.get("links") or [])
+                            send_links = base + [u for u in extra if u not in base]
+                        if send_links is not None:
                             await db.mk_sends.update_one({"id": s["id"]}, {"$set": {"links": send_links}})
                         html_doc, text_doc = render_for(camp, contact, s["id"], st, links=send_links)
                         raw = build_mime(st=st, to=contact["email"], subject=core.personalise(camp["subject"], contact),
@@ -2309,6 +2335,28 @@ def _read_table(data: bytes, filename: str) -> list[dict]:
     return [{(k or "").strip().lower(): (v or "").strip() for k, v in r.items()} for r in rd]
 
 
+def _field_report(fcols: list, rows: list) -> list:
+    """What the admin is told about the extra columns before importing:
+    the {{variable}} each becomes, how many rows have it, whether it's a
+    link, and duplicates where there must be none (core.should_be_unique —
+    a serial number or payment link shared by two people)."""
+    out = []
+    for col, k in fcols:
+        vals = [str(r.get(col) or "").strip() for r in rows]
+        filled = [v for v in vals if v]
+        seen, dups = set(), []
+        for v in filled:
+            if v in seen and v not in dups:
+                dups.append(v)
+            seen.add(v)
+        links = bool(filled) and all(core.is_link(v) for v in filled)
+        unique = core.should_be_unique(k, filled)
+        out.append({"key": k, "header": col, "filled": len(filled), "empty": len(vals) - len(filled), "link": links,
+                    "unique": unique, "duplicates": dups[:10] if unique else [], "sample": filled[0][:120] if filled else "",
+                    "bad_links": sum(1 for v in filled if not core.is_link(v)) if (links or "link" in k or "url" in k) else 0})
+    return out
+
+
 def _pick(cols: list, *names) -> Optional[str]:
     for n in names:
         for c in cols:
@@ -2378,6 +2426,16 @@ async def adm_import(
         raise HTTPException(status_code=400, detail=f"No email column found (columns: {', '.join(cols[:12])})")
     ncol = _pick(cols, "name", "full name", "first name")
     pcol = _pick(cols, "phone", "mobile", "whatsapp", "contact")
+    # Every other column is kept as a custom field of the list this import
+    # becomes ({{offer_link}}, {{pass_no}} …). See core.field_key / mk_list_fields.
+    fcols, fkeys = [], set()
+    for col in cols:
+        if col in (ecol, ncol, pcol):
+            continue
+        k = core.field_key(col)
+        if k and k not in fkeys and len(fcols) < core.MAX_FIELDS:
+            fkeys.add(k)
+            fcols.append((col, k))
     if not dry_run and audience not in ("known", "unknown"):
         raise HTTPException(status_code=400, detail=(
             "Choose who these people are (known clients/customers, or not known to us). "
@@ -2409,6 +2467,7 @@ async def adm_import(
     lid = None
     pending_id = None
     would_save = 0
+    field_report = _field_report(fcols, unique_rows)
     if not dry_run:
         # Staged, not saved: what WOULD be imported is kept with its verdicts
         # (no second paid check at approval), and someone else with Marketing
@@ -2434,6 +2493,7 @@ async def adm_import(
                 continue
             staged.append({"import_id": pending_id, "i": len(staged), "email": v["email"],
                            "name": str(r.get(ncol, "") if ncol else "")[:120], "phone": str(r.get(pcol, "") if pcol else "")[:40],
+                           "fields": {k: str(r.get(col) or "").strip()[:core.FIELD_VALUE_MAX] for col, k in fcols if str(r.get(col) or "").strip()},
                            "v": {k: v.get(k) for k in ("status", "reasons", "email_norm", "ses_checked", "risk_kind",
                                                        "ses_overall", "score", "flags", "role")}})
         for k in range(0, len(staged), 1000):
@@ -2442,6 +2502,7 @@ async def adm_import(
         await db.mk_imports.insert_one({
             "id": pending_id, "status": "pending", "at": _iso(), "by": user.get("email", ""), "by_role": user.get("role", ""),
             "file": file.filename, "list_name": name[:80], "audience": audience, "consent_whatsapp": bool(consent_whatsapp),
+            "fields": field_report,
             "consent_source": consent_source.strip()[:120], "readd_erased": bool(readd_erased),
             "counts": counts, "would_save": would_save, "skipped": skipped,
             "ses_after": sum(1 for x in staged if not x["v"].get("ses_checked") and x["v"]["status"] in ("valid", "risky"))})
@@ -2464,7 +2525,7 @@ async def adm_import(
     row_report = [{"email": v["email"] or v["input"], "name": (r.get(ncol, "") if ncol else "")[:60], "status": v["status"],
                    "score": v.get("score"), "why": (v.get("reasons") or [])[:3], "risk_kind": v.get("risk_kind", "")}
                   for r, v in zip(unique_rows[:2000], results[:2000])]
-    return {"columns": {"email": ecol, "name": ncol, "phone": pcol}, "counts": counts, "sample": sample, "fixed": fixed,
+    return {"columns": {"email": ecol, "name": ncol, "phone": pcol}, "fields": field_report, "counts": counts, "sample": sample, "fixed": fixed,
             "saved": saved, "list_id": lid, "dry_run": dry_run, "rows": row_report,
             "pending_id": pending_id, "would_save": would_save,
             "skipped": skipped if not dry_run else {},
@@ -2532,7 +2593,7 @@ async def adm_import_estimate(file: Optional[UploadFile] = File(None), emails: s
 
 
 def _import_view(d: dict) -> dict:
-    return {k: d.get(k) for k in ("id", "status", "at", "by", "file", "list_name", "audience", "consent_whatsapp",
+    return {k: d.get(k) for k in ("id", "status", "at", "by", "file", "list_name", "audience", "consent_whatsapp", "fields",
                                   "consent_source", "counts", "would_save", "skipped", "ses_after", "readd_erased",
                                   "approved_by", "approved_at", "rejected_by", "rejected_at", "reject_note", "saved", "list_id")}
 
@@ -2586,7 +2647,9 @@ async def adm_import_approve(iid: str, user: dict = Depends(require_admin)):
     lid = str(uuid.uuid4())
     await db.mk_lists.insert_one({"id": lid, "name": d["list_name"], "kind": "static", "created_at": _iso(),
                                   "created_by": d.get("by", ""), "approved_by": user.get("email", ""),
-                                  "audience": d.get("audience")})
+                                  "audience": d.get("audience"),
+                                  # Custom fields of this list → {{variables}} (mk_list_fields holds the values).
+                                  "fields": [{k: f.get(k) for k in ("key", "header", "link", "unique", "sample")} for f in d.get("fields") or []]})
     known = d.get("audience") == "known"
     src = (f"import: existing client/customer — {d['list_name']} (approved by {user.get('email', '')})" if known
            else f"import: {d['list_name']} (not known — permission email first)")[:120]
@@ -2609,6 +2672,9 @@ async def adm_import_approve(iid: str, user: dict = Depends(require_admin)):
             continue
         saved += 1
         readded += was_erased
+        if r.get("fields"):
+            await db.mk_list_fields.update_one({"list_id": lid, "contact_id": doc["id"]},
+                                               {"$set": {"fields": r["fields"], "at": _iso()}}, upsert=True)
         if not known:
             # Only people with no consent decision yet. Someone already
             # subscribed stays subscribed; someone who unsubscribed, complained
@@ -2996,6 +3062,7 @@ async def adm_contacts_cleanup(body: CleanupBody, user: dict = Depends(require_a
         await db.mk_removed.update_one({"h": _erase_hash(ct["email_norm"])},
                                        {"$set": {"reason": ct["kind"], "at": _iso(), "by": user.get("email", "")}}, upsert=True)
         r = await db.mk_contacts.delete_one({"id": ct["id"]})
+        await db.mk_list_fields.delete_many({"contact_id": ct["id"]})
         done += r.deleted_count
     await audit_log(db, "MARKETING_CLEANUP", email=user.get("email", ""), role=user.get("role", ""),
                     meta={"removed": done, "by_kind": by_kind, "campaign": body.campaign_id})
@@ -3050,6 +3117,8 @@ async def adm_delete_contact(cid: str, erase: bool = False, user: dict = Depends
     if not c:
         raise HTTPException(status_code=404, detail="Contact not found")
     await db.mk_contacts.delete_one({"id": cid})
+    # Their sheet values (payment links, pass numbers) go with them.
+    await db.mk_list_fields.delete_many({"contact_id": cid})
     if erase:
         await db.mk_erased.update_one({"h": _erase_hash(c["email_norm"])}, {"$set": {"at": _iso()}}, upsert=True)
     await audit_log(db, "MARKETING_CONTACT_ERASED" if erase else "MARKETING_CONTACT_DELETED", email=user.get("email", ""),
@@ -3095,12 +3164,16 @@ async def adm_contacts_bulk(body: ContactBulk, user: dict = Depends(require_admi
                                              {"$set": {"email_consent": _consent("unsubscribed", "admin (bulk)", user.get("email", ""))}})
         done = r.modified_count
     elif body.action == "delete":
+        gone = [c["id"] async for c in db.mk_contacts.find(flt, {"_id": 0, "id": 1})]
         r = await db.mk_contacts.delete_many(flt)  # can be imported again later
         done = r.deleted_count
+        for k in range(0, len(gone), 1000):
+            await db.mk_list_fields.delete_many({"contact_id": {"$in": gone[k:k + 1000]}})
     else:
         async for c in db.mk_contacts.find(flt, {"_id": 0, "id": 1, "email_norm": 1}):
             await db.mk_erased.update_one({"h": _erase_hash(c["email_norm"])}, {"$set": {"at": _iso()}}, upsert=True)
             await db.mk_contacts.delete_one({"id": c["id"]})
+            await db.mk_list_fields.delete_many({"contact_id": c["id"]})
             done += 1
     await audit_log(db, f"MARKETING_CONTACTS_BULK_{body.action.upper()}", email=user.get("email", ""), role=user.get("role", ""),
                     meta={"count": done, "by_filter": body.all_matching is not None})
@@ -3286,6 +3359,7 @@ async def adm_list_from_users(body: FromUsersBody, user: dict = Depends(require_
 async def adm_delete_list(lid: str):
     await db.mk_lists.delete_one({"id": lid})
     await db.mk_contacts.update_many({"lists": lid}, {"$pull": {"lists": lid}})
+    await db.mk_list_fields.delete_many({"list_id": lid})
     return {"ok": True}
 
 
@@ -3299,6 +3373,7 @@ async def adm_lists_bulk_delete(body: IdsBody, user: dict = Depends(require_supe
     ids = [str(x) for x in body.ids][:500]
     r = await db.mk_lists.delete_many({"id": {"$in": ids}})
     await db.mk_contacts.update_many({"lists": {"$in": ids}}, {"$pull": {"lists": {"$in": ids}}})
+    await db.mk_list_fields.delete_many({"list_id": {"$in": ids}})
     await audit_log(db, "MARKETING_LISTS_DELETED", email=user.get("email", ""), role=user.get("role", ""), meta={"count": r.deleted_count})
     return {"ok": True, "deleted": r.deleted_count}
 
@@ -3332,7 +3407,12 @@ def _clean_blocks(blocks: list) -> list:
             except (TypeError, ValueError):
                 c["count"] = 3
         for k in ("url", "src", "cover"):
-            if c.get(k) and not re.match(r"^https?://", str(c[k]), re.I):
+            # A button / image link may also be a personal link from the
+            # list's sheet ("{{offer_link}}", or https://…/{{pass_no}});
+            # core.resolve_url fills it per person and drops anything that
+            # doesn't come out as a web link.
+            ok = re.match(r"^https?://", str(c.get(k) or ""), re.I) or (k == "url" and re.match(r"^\{\{\s*[a-z_][a-z0-9_]*\s*\}\}$", str(c.get(k) or ""), re.I))
+            if c.get(k) and not ok:
                 c.pop(k)   # only web links / images
         out.append(c)
     return out
@@ -3521,7 +3601,9 @@ async def adm_test_campaign(cid: str, body: TestBody, user: dict = Depends(requi
     if c["channel"] == "email":
         if not core.check_syntax(body.to)["ok"]:
             raise HTTPException(status_code=400, detail="Not an email address")
-        contact = {"name": user.get("name") or "Test", "email": body.to}
+        # The first row's values from the list's sheet, so the test shows a
+        # real link and pass number (sent only to the admin's own test address).
+        contact = {**(await _sample_contact(c)), "name": user.get("name") or "Test", "email": body.to}
         await attach_picks(contact, c)   # the test address's own picks (or the newest, if it has no history)
         html_doc, text_doc = core.render_email(c.get("blocks") or [], brand={"name": "Oakbridge Publishing", "logo": st.get("logo"), "footer": st.get("footer")},
                                                contact=contact, link_for=lambda u: core.add_utm(u, cid), unsubscribe_url=f"{SITE}/unsubscribe",
@@ -3559,24 +3641,120 @@ async def adm_preview(cid: str):
     if not c:
         raise HTTPException(status_code=404, detail="Campaign not found")
     st = await get_settings()
-    pc = dict(PREVIEW_CONTACT)
+    pc = await _sample_contact(c)
     await attach_picks(pc, c)  # sample: the newest releases (the sample reader has no history)
     html_doc, _ = core.render_email(c.get("blocks") or [], brand={"name": "Oakbridge Publishing", "logo": st.get("logo"), "footer": st.get("footer")},
                                     contact=pc, link_for=lambda u: u, unsubscribe_url="#",
-                                    preheader=core.personalise(c.get("preheader") or "", PREVIEW_CONTACT))
-    return {"html": html_doc, "subject": core.personalise(c.get("subject") or "", PREVIEW_CONTACT),
-            "unknown_variables": _unknown_vars(c)}
+                                    preheader=core.personalise(c.get("preheader") or "", pc))
+    return {"html": html_doc, "subject": core.personalise(c.get("subject") or "", pc),
+            "unknown_variables": await _unknown_vars(c),
+            # The list's sheet columns, offered as variables in the editor.
+            "custom_fields": [{k: f.get(k) for k in ("key", "header", "link", "sample", "list")} for f in await list_fields(_camp_lists(c))]}
 
 
 # The sample recipient for every preview (campaigns and templates).
 PREVIEW_CONTACT = {"name": "Asha Verma", "email": "asha@example.com"}
 
 
-def _unknown_vars(c: dict) -> list:
-    texts = [c.get("subject") or "", c.get("preheader") or ""]
+# ------------------------------------------------- custom fields (per list) ---
+async def list_fields(list_ids: Optional[list] = None) -> list:
+    """[{key, header, link, unique, sample, list_id, list}] of these lists (all
+    lists when None), first list first — the {{variables}} a campaign to them
+    can use."""
+    q = {"id": {"$in": list(list_ids)}} if list_ids is not None else {"fields.0": {"$exists": True}}
+    order = {x: i for i, x in enumerate(list_ids or [])}
+    lists = sorted([x async for x in db.mk_lists.find(q, {"_id": 0, "id": 1, "name": 1, "fields": 1})],
+                   key=lambda x: order.get(x["id"], 0))
+    out, seen = [], set()
+    for lst in lists:
+        for f in lst.get("fields") or []:
+            if f.get("key") and f["key"] not in seen:
+                seen.add(f["key"])
+                out.append({**f, "list_id": lst["id"], "list": lst.get("name", "")})
+    return out
+
+
+def _camp_lists(c: dict) -> list:
+    return list((c.get("audience") or {}).get("list_ids") or [])
+
+
+async def contact_fields(contact_id: str, list_ids: list) -> dict:
+    """This person's sheet values for a campaign: from the campaign's lists,
+    the FIRST list (in the campaign's order) winning a clash — never from a
+    list the campaign isn't sent to."""
+    if not list_ids or not contact_id:
+        return {}
+    rows = {r["list_id"]: r.get("fields") or {} async for r in db.mk_list_fields.find(
+        {"list_id": {"$in": list_ids}, "contact_id": contact_id}, {"_id": 0, "list_id": 1, "fields": 1})}
+    out: dict = {}
+    for lid in reversed(list_ids):
+        out.update(rows.get(lid) or {})
+    return out
+
+
+def missing_fields(c: dict, contact: dict, used: dict) -> list:
+    """Required custom fields this person has no usable value for — they are
+    skipped rather than sent "Pay here: " with no link, or pass number blank.
+    A field used inside a link must also make a valid web link."""
+    vals = contact.get("_fields") or {}
+    bad = [k for k, req in used.items() if req and not str(vals.get(k) or "").strip()]
     for b in c.get("blocks") or []:
-        texts += [b.get("text") or "", b.get("label") or ""]
-    return core.unknown_variables(*texts)
+        u = b.get("url") or ""
+        if "{{" in u and not core.resolve_url(u, contact):
+            bad += [k for k in core.used_fields([u], used.keys()) if k not in bad]
+        for t in re.findall(r"\]\((\{\{[^)\s]+|https?://[^)\s]*\{\{[^)\s]+)\)", b.get("text") or ""):
+            if not core.resolve_url(t, contact):
+                bad += [k for k in core.used_fields([t], used.keys()) if k not in bad]
+    return bad
+
+
+async def _unknown_vars(c: dict, all_lists: bool = False) -> list:
+    keys = [f["key"] for f in await list_fields(None if all_lists else _camp_lists(c))]
+    return core.unknown_variables(*core.campaign_texts(c), extra=keys)
+
+
+async def _sample_contact(c: Optional[dict] = None, all_lists: bool = False) -> dict:
+    """The preview recipient, with each custom field's first value from its
+    sheet, so the preview shows a real-looking link and pass number."""
+    fs = await list_fields(None if all_lists or c is None else _camp_lists(c))
+    return {**PREVIEW_CONTACT, "_fields": {f["key"]: f.get("sample") or f["key"].upper() for f in fs}}
+
+
+async def field_check(c: dict) -> dict:
+    """Before sending: the custom fields this campaign uses, how many people
+    in the audience lack one (they'll be skipped), and any value two people
+    share where it must be unique (blocks the send)."""
+    lids = _camp_lists(c)
+    fs = await list_fields(lids)
+    used = core.used_fields(core.campaign_texts(c), [f["key"] for f in fs])
+    if not used:
+        return {"used": {}, "missing": 0, "duplicates": {}}
+    meta = {f["key"]: f for f in fs}
+    flt = await audience_filter(c)
+    missing, values = 0, {k: {} for k in used}
+    # All of the lists' values in one read (thousands of small rows), not one
+    # query per person — this runs when Send is pressed.
+    by_contact: dict = {}
+    async for r in db.mk_list_fields.find({"list_id": {"$in": lids}}, {"_id": 0, "list_id": 1, "contact_id": 1, "fields": 1}):
+        by_contact.setdefault(r["contact_id"], {})[r["list_id"]] = r.get("fields") or {}
+    async for ct in db.mk_contacts.find(flt, {"_id": 0, "id": 1, "name": 1, "email": 1}):
+        merged: dict = {}
+        for lid in reversed(lids):
+            merged.update((by_contact.get(ct["id"]) or {}).get(lid) or {})
+        ct["_fields"] = merged
+        if missing_fields(c, ct, used):
+            missing += 1
+        for k in used:
+            v = str(ct["_fields"].get(k) or "").strip()
+            if v:
+                values[k].setdefault(v, []).append(ct.get("email") or "")
+    dups = {}
+    for k, by in values.items():
+        if (meta.get(k) or {}).get("unique") or core.should_be_unique(k, by.keys()):
+            d = {v: e for v, e in by.items() if len(e) > 1}
+            if d:
+                dups[k] = [{"value": v[:80], "emails": e[:3], "n": len(e)} for v, e in list(d.items())[:5]]
+    return {"used": used, "missing": missing, "duplicates": dups}
 
 
 # ------------------------------------------------------------- templates ---
@@ -3612,6 +3790,15 @@ async def adm_templates():
     variables the renderer fills (one list — marketing_core.VARIABLES)."""
     saved = await db.mk_templates.find({}, {"_id": 0}).sort("updated_at", -1).to_list(500)
     return {"templates": saved + _starters(), "variables": core.VARIABLES}
+
+
+@admin_router.get("/campaigns/{cid}/fields")
+async def adm_campaign_fields(cid: str):
+    """The pre-send check of custom fields, for the Send panel."""
+    c = await db.mk_campaigns.find_one({"id": cid}, {"_id": 0})
+    if not c:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    return await field_check(c)
 
 
 @admin_router.post("/templates")
@@ -3752,11 +3939,13 @@ async def adm_template_preview(body: TemplatePreviewBody):
     """Render unsaved template content for the sample recipient."""
     st = await get_settings()
     blocks = _clean_blocks(body.blocks or [])
+    # A template isn't tied to a list yet, so any list's sheet columns count.
+    pc = await _sample_contact(all_lists=True)
     html_doc, _ = core.render_email(blocks, brand={"name": "Oakbridge Publishing", "logo": st.get("logo"), "footer": st.get("footer")},
-                                    contact=PREVIEW_CONTACT, link_for=lambda u: u, unsubscribe_url="#",
-                                    preheader=core.personalise(body.preheader or "", PREVIEW_CONTACT))
-    return {"html": html_doc, "subject": core.personalise(body.subject or "", PREVIEW_CONTACT),
-            "unknown_variables": _unknown_vars({"subject": body.subject, "preheader": body.preheader, "blocks": blocks})}
+                                    contact=pc, link_for=lambda u: u, unsubscribe_url="#",
+                                    preheader=core.personalise(body.preheader or "", pc))
+    return {"html": html_doc, "subject": core.personalise(body.subject or "", pc),
+            "unknown_variables": await _unknown_vars({"subject": body.subject, "preheader": body.preheader, "blocks": blocks}, all_lists=True)}
 
 
 class SendBody(BaseModel):
@@ -3773,12 +3962,23 @@ async def adm_send(cid: str, body: SendBody, user: dict = Depends(require_admin)
         raise HTTPException(status_code=409, detail="This campaign has already been sent")
     if c["channel"] == "email" and (not c.get("subject") or not c.get("blocks")):
         raise HTTPException(status_code=400, detail="Add a subject and some content first")
-    bad = _unknown_vars(c) if c["channel"] == "email" else []
+    bad = await _unknown_vars(c) if c["channel"] == "email" else []
     if bad:
         # Unknown {{variables}} are blanked when sent ("Dear ,"), so stop here.
         raise HTTPException(status_code=400, detail=(
             f"Unknown variable(s): {', '.join('{{' + b + '}}' for b in bad)}. "
-            f"Use one of: {', '.join('{{' + v['key'] + '}}' for v in core.VARIABLES)}."))
+            f"Use one of: {', '.join('{{' + v['key'] + '}}' for v in core.VARIABLES)}, "
+            "or a column of the chosen list's sheet."))
+    if c["channel"] == "email":
+        fc = await field_check(c)
+        if fc["duplicates"]:
+            k, rows = next(iter(fc["duplicates"].items()))
+            ex = rows[0]
+            # Two people with one serial number or one payment link would
+            # mean one pass sold twice. Fix the sheet, re-import, then send.
+            raise HTTPException(status_code=400, detail=(
+                f"{{{{{k}}}}} must be different for everyone, but {ex['n']} people share “{ex['value']}” "
+                f"({', '.join(ex['emails'])}). Fix the sheet and import it again."))
     if c["channel"] == "whatsapp" and not c.get("wa_template"):
         raise HTTPException(status_code=400, detail="Choose the approved WhatsApp template first")
     return await queue_send(c, body.schedule_at, by_email=user.get("email", ""), by_role=user.get("role", ""),

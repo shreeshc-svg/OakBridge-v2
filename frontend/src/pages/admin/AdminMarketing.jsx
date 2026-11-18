@@ -5,7 +5,7 @@ import {
     mkDashboard, mkHealth, mkProviders, mkSettings, mkSaveSettings, mkVerify, mkImport, mkImportEstimate, mkImports, mkImportApprove, mkImportReject, mkReverify, mkSync, mkContacts, mkPatchContact,
     mkDeleteContact, mkLists, mkCreateList, mkCampaigns, mkNewCampaign, mkCampaign, mkSaveCampaign, mkDuplicate,
     mkAiGrowth, mkAiCampaign, mkAiDeliverability, mkListMembers, mkExportList, mkActivity,
-    mkAudience, mkPreview, mkTemplates, mkNewTemplate, mkSaveTemplate, mkDeleteTemplate, mkUseTemplate, mkTemplatePreview, mkUploadEmailImage, mkExportCampaign, mkExportContacts, mkCleanup, mkGrowthFunnel, mkPartners, mkNewPartner, mkSavePartner, mkAutomations, mkSaveAutomations, mkAutomationsPreview, MERCHANT_FEED_URL, mkTestSend, mkSend, mkCampaignAction, mkReport, mkDismissAlert, mkSuppressionSync,
+    mkAudience, mkPreview, mkFieldCheck, mkTemplates, mkNewTemplate, mkSaveTemplate, mkDeleteTemplate, mkUseTemplate, mkTemplatePreview, mkUploadEmailImage, mkExportCampaign, mkExportContacts, mkCleanup, mkGrowthFunnel, mkPartners, mkNewPartner, mkSavePartner, mkAutomations, mkSaveAutomations, mkAutomationsPreview, MERCHANT_FEED_URL, mkTestSend, mkSend, mkCampaignAction, mkReport, mkDismissAlert, mkSuppressionSync,
     mkValidateEstimate, mkValidatePending, mkBulkContacts, mkBulkDeleteLists, mkBulkDeleteCampaigns, mkRenameCampaign, mkLearn, mkDisposableRefresh, mkSystemHealth, nlOverview, nlSave, nlDraftNow, nlApprove, nlSkip, fetchBooks, fetchCategories, mediaUrl, formatApiError,
 } from "../../lib/api";
 import { useAuth } from "../../context/AuthContext";
@@ -519,6 +519,7 @@ const BLOCK_TYPES = [["heading", "Heading"], ["text", "Text"], ["image", "Image"
 function CampaignEditor({ c, setC, reload }) {
     const [saving, setSaving] = useState(false);
     const [preview, setPreview] = useState("");
+    const [customFields, setCustomFields] = useState([]);
     const [lists, setLists] = useState([]);
     const [aud, setAud] = useState(null);
     const [testTo, setTestTo] = useState("");
@@ -534,14 +535,14 @@ function CampaignEditor({ c, setC, reload }) {
                 ...(c.kind === "reconfirm" ? { reconfirm_days: Number(c.reconfirm_days) || 30 } : {}) };
             const saved = await mkSaveCampaign(c.id, body);
             setC(saved);
-            if (isEmail) mkPreview(c.id).then((r) => setPreview(r.html)).catch(() => {});
+            if (isEmail) mkPreview(c.id).then((r) => { setPreview(r.html); setCustomFields(r.custom_fields || []); }).catch(() => {});
             mkAudience(c.id).then(setAud).catch(() => {});
             if (!quiet) toast.success("Saved.");
             return saved;
         } catch (e) { toast.error(formatApiError(e)); return null; } finally { setSaving(false); }
     };
     useEffect(() => {
-        if (isEmail) mkPreview(c.id).then((r) => setPreview(r.html)).catch(() => {});
+        if (isEmail) mkPreview(c.id).then((r) => { setPreview(r.html); setCustomFields(r.custom_fields || []); }).catch(() => {});
         mkAudience(c.id).then(setAud).catch(() => {});
     }, [c.id, isEmail]);
     const setBlocks = (blocks) => patch({ blocks });
@@ -583,7 +584,17 @@ function CampaignEditor({ c, setC, reload }) {
         const checks = isEmail && a.ses_on && a.needs_check > 0
             ? `\n\nFirst, ${a.needs_check} addresses get an Amazon SES mailbox check (≈ ₹${a.check_cost_inr}). Any that fail, or can't be checked, are skipped automatically.` : "";
         const guard = isEmail ? "\nIf bounces spike, unproven addresses are dropped and sending carries on; a second spike pauses it." : "";
-        if (!window.confirm(`Send "${c.name}" to up to ${a.total.toLocaleString("en-IN")} ${isEmail ? "email addresses" : "WhatsApp numbers"} ${whenTxt}?${checks}\n\nEstimated sending cost ≈ ₹${a.estimated_cost_inr}.${guard}`)) return;
+        // Personal fields from the list's sheet (payment link, pass number):
+        // shared values block the send on the server; people without one are skipped.
+        let fieldNote = "";
+        if (isEmail) {
+            const fc = await mkFieldCheck(c.id).catch(() => null);
+            const dup = fc && Object.entries(fc.duplicates || {})[0];
+            if (dup) return toast.error(`{{${dup[0]}}} must be different for everyone, but ${dup[1][0].n} people share “${dup[1][0].value}”. Fix the sheet and import it again.`);
+            const used = Object.keys(fc?.used || {});
+            if (used.length) fieldNote = `\n\nPersonal fields: ${used.map((k) => `{{${k}}}`).join(", ")} — each person gets their own.${fc.missing ? ` ${fc.missing} people have no value and will be SKIPPED.` : " Everyone has a value ✓"}`;
+        }
+        if (!window.confirm(`Send "${c.name}" to up to ${a.total.toLocaleString("en-IN")} ${isEmail ? "email addresses" : "WhatsApp numbers"} ${whenTxt}?${checks}\n\nEstimated sending cost ≈ ₹${a.estimated_cost_inr}.${guard}${fieldNote}`)) return;
         try {
             const r = await mkSend(c.id, a.total, schedule ? new Date(schedule).toISOString() : null);
             toast.success(`Checking mailboxes, then ${schedule ? "scheduling" : "sending"} — up to ${r.recipients} people.`);
@@ -628,7 +639,7 @@ function CampaignEditor({ c, setC, reload }) {
                 {isEmail && (
                     <Panel title="Content" right={<span className="text-xs text-[#6B7280]">{blocks.length} blocks</span>}>
                         <BlockEditor blocks={blocks} setBlocks={setBlocks} />
-                        <div className="mt-3"><VariablesHelp /></div>
+                        <div className="mt-3"><VariablesHelp custom={customFields} /></div>
                         <button type="button" className="mt-3 underline text-xs" onClick={saveAsTemplate} data-testid="mk-save-as-template">Save this email as a template</button>
                     </Panel>
                 )}
@@ -975,7 +986,7 @@ const placeholdersIn = (texts) => {
 // The merge variables, from the server (marketing_core.VARIABLES) so this
 // list can never offer one the renderer doesn't fill. Click copies.
 let VARS_CACHE = null;
-function VariablesHelp({ compact = false }) {
+function VariablesHelp({ compact = false, custom = [] }) {
     const [vars, setVars] = useState(VARS_CACHE);
     useEffect(() => { if (!VARS_CACHE) mkTemplates().then((r) => { VARS_CACHE = r.variables || []; setVars(VARS_CACHE); }).catch(() => {}); }, []);
     if (!vars) return null;
@@ -992,9 +1003,44 @@ function VariablesHelp({ compact = false }) {
                         className="font-mono border border-[#E5E7EB] bg-white px-2 py-1 hover:border-[#002B5C]">{`{{${v.key}}}`}</button>
                 ))}
             </div>
+            {custom.length > 0 && (
+                /* Columns of the chosen list's sheet (backend mk_list_fields):
+                   a different value for each person. A link column can be a
+                   button's link: put {{offer_link}} in the button's URL box. */
+                <div data-testid="mk-custom-fields">
+                    <div className="font-medium text-[#002B5C] mt-1">From your list's sheet — different for each person</div>
+                    <div className="flex flex-wrap gap-1.5 mt-1">
+                        {custom.map((v) => (
+                            <button key={v.key} type="button" onClick={() => copy(v.key)} title={`Column “${v.header}” of ${v.list} — e.g. “${v.sample}”${v.link ? " · a link: use it as a button's URL" : ""}`}
+                                className="font-mono border border-[#BFDBFE] bg-[#EFF6FF] px-2 py-1 hover:border-[#002B5C]">{`{{${v.key}}}`}{v.link ? " 🔗" : ""}</button>
+                        ))}
+                    </div>
+                    <div className="text-[#6B7280] mt-1">People with no value are skipped when sending; values that must be unique (serial numbers, payment links) are checked first.</div>
+                </div>
+            )}
             <div className="text-[#6B7280]">
                 Fallback when a contact has no value: <span className="font-mono">{"{{first_name|Reader}}"}</span>. Unknown variables block sending. The unsubscribe link is added to every email automatically.
             </div>
+        </div>
+    );
+}
+
+/* The sheet's extra columns, as the {{variables}} they become for campaigns to
+   this list. Problems are shown BEFORE importing: a serial number or payment
+   link shared by two people, rows with no value, a "link" that isn't one. */
+function ImportFields({ fields }) {
+    return (
+        <div className="border border-[#BFDBFE] bg-[#EFF6FF] p-3 text-xs space-y-1.5" data-testid="mk-import-fields">
+            <div className="font-medium text-[#002B5C]">Personal fields kept from your sheet — use them in campaigns to this list</div>
+            <ul className="space-y-1">{fields.map((f) => (
+                <li key={f.key} className="flex flex-wrap items-baseline gap-x-2">
+                    <span className="font-mono bg-white border border-[#BFDBFE] px-1.5">{`{{${f.key}}}`}</span>
+                    <span className="text-[#4B5563]">column “{f.header}” · {f.filled} filled{f.link ? " · links" : ""}{f.sample ? <> · e.g. <span className="font-mono">{f.sample.slice(0, 40)}</span></> : null}</span>
+                    {f.empty > 0 && <span className="text-[#B45309]">{f.empty} empty — those people are skipped by campaigns using it</span>}
+                    {f.bad_links > 0 && <span className="text-[#CC0033]">{f.bad_links} aren't web links (must start https://)</span>}
+                    {f.duplicates?.length > 0 && <span className="text-[#CC0033] font-medium">shared by more than one person: {f.duplicates.slice(0, 3).join(", ")} — fix before sending</span>}
+                </li>
+            ))}</ul>
         </div>
     );
 }
@@ -1173,7 +1219,7 @@ function BlockEditor({ blocks, setBlocks }) {
                     {b.type === "button" && (
                         <div className="grid sm:grid-cols-2 gap-2">
                             <input className={box} value={b.label || ""} onChange={(e) => upd(i, { label: e.target.value })} placeholder="Button text" />
-                            <input className={box} value={b.url || ""} onChange={(e) => upd(i, { url: e.target.value })} placeholder="https://www.oakbridge.in/…" />
+                            <input className={box} value={b.url || ""} onChange={(e) => upd(i, { url: e.target.value })} placeholder="https://www.oakbridge.in/… or {{offer_link}}" />
                         </div>
                     )}
                     {b.type === "book" && <BookPicker block={b} onPick={(p) => upd(i, p)} />}
@@ -1945,6 +1991,7 @@ function VerifyImport() {
                                     ))}</ul>
                                 </details>
                             )}
+                            {(report.fields || []).length > 0 && <ImportFields fields={report.fields} />}
                             <div className="text-xs text-[#4B5563]">{c.blank_rows ? `${c.blank_rows} empty rows ignored · ` : ""}{c.duplicates_in_file || 0} duplicates removed · {c.fixed || 0} fixed automatically · columns: email “{report.columns.email}”{report.columns.name ? `, name “${report.columns.name}”` : ""}{report.columns.phone ? `, phone “${report.columns.phone}”` : ""}</div>
                             {Object.entries(report.sample || {}).filter(([k]) => ["invalid", "risky", "suppressed"].includes(k)).map(([k, rows]) => (
                                 <details key={k} className="text-xs"><summary className="cursor-pointer" style={{ color: STATUS_COLORS[k] }}>{k}: examples</summary>

@@ -918,6 +918,8 @@ export const mkRenameCampaign = (id, name) => api.patch(`/admin/marketing/campai
 export const mkDuplicate = (id) => api.post(`/admin/marketing/campaigns/${id}/duplicate`).then((r) => r.data);
 export const mkAudience = (id) => api.get(`/admin/marketing/campaigns/${id}/audience`).then((r) => r.data);
 export const mkPreview = (id) => api.get(`/admin/marketing/campaigns/${id}/preview`).then((r) => r.data);
+// Custom fields (sheet columns like offer_link / pass_no) the campaign uses: who lacks one, which values are shared.
+export const mkFieldCheck = (id) => api.get(`/admin/marketing/campaigns/${id}/fields`).then((r) => r.data);
 // Email templates (marketing.py): saved + built-in starters, and the merge variables.
 // Exports (Excel/CSV) and the post-send database clean-up (marketing.py).
 export const mkExportCampaign = (id, format = "xlsx") =>

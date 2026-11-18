@@ -777,17 +777,30 @@ def variable_values(contact: dict, now=None) -> dict:
             "month": _MONTHS[now.month - 1], "year": str(now.year)}
 
 
-def personalise(text: str, contact: dict, now=None) -> str:
+def personalise(text: str, contact: dict, now=None, url: bool = False) -> str:
     """Fill {{variables}}. {{first_name|Reader}} uses "Reader" when there is no
     first name; otherwise the variable's own default. An unknown {{thing}} is
-    removed rather than mailed to thousands of people as raw braces."""
+    removed rather than mailed to thousands of people as raw braces.
+
+    Custom fields (a CSV column kept at import — offer_link, pass_no …) come
+    from contact["_fields"], put there by the sender for THIS campaign's
+    lists (marketing.contact_fields). They never override a built-in
+    variable: a sheet with a "first_name" column can't change how names work."""
     if not text or "{{" not in text:
         return text or ""
-    vals = variable_values(contact, now)
+    vals = {**{k: str(v) for k, v in (contact.get("_fields") or {}).items()}, **variable_values(contact, now)}
     defaults = {v["key"]: v["default"] for v in VARIABLES}
 
     def sub(m):
         key, fallback = m.group(1).lower(), m.group(2)
+        if url:
+            # INSIDE a link (…?email={{email}}&name={{name}}): percent-encoded,
+            # so "Asha Verma" / "a+b@x.in" / "R&D" can't break the link or add
+            # a parameter of their own; and no friendly default — a form must
+            # not arrive pre-filled with name=there.
+            from urllib.parse import quote
+            v = vals.get(key) or (fallback or "")
+            return quote(str(v), safe="")
         if key not in vals:
             return fallback or ""
         return vals[key] or (fallback if fallback is not None else defaults.get(key, ""))
@@ -795,9 +808,10 @@ def personalise(text: str, contact: dict, now=None) -> str:
     return _VAR_RE.sub(sub, text)
 
 
-def unknown_variables(*texts: str) -> list:
-    """{{names}} used that the renderer does not know — shown as a warning."""
-    known = {v["key"] for v in VARIABLES}
+def unknown_variables(*texts: str, extra: Iterable[str] = ()) -> list:
+    """{{names}} used that the renderer does not know — shown as a warning.
+    `extra`: custom field keys the campaign's lists carry (CSV columns)."""
+    known = {v["key"] for v in VARIABLES} | set(extra or ())
     out = []
     for t in texts:
         for m in _VAR_RE.finditer(t or ""):
@@ -805,6 +819,80 @@ def unknown_variables(*texts: str) -> list:
             if k not in known and k not in out:
                 out.append(k)
     return out
+
+
+# ---------------------------------------------------------- custom fields ---
+#
+# Columns of an imported sheet beyond email / name / phone are kept PER LIST
+# (marketing.mk_list_fields) and become {{variables}} for campaigns sent to
+# that list: a personal payment link ({{offer_link}}), an event-pass serial
+# number ({{pass_no}}), a seat, a ticket type.
+#
+# Per list, not per contact: the same customer can be on the Law Summit list
+# with pass 0042 and on the Book Fair list with pass 0107, and a campaign to
+# one list must never print the other's number.
+RESERVED_FIELDS = {v["key"] for v in VARIABLES} | {"unsubscribe", "phone", "mobile", "whatsapp"}
+MAX_FIELDS = 20
+FIELD_VALUE_MAX = 500
+# A key that names something meant to be ONE PER PERSON. Two people with the
+# same serial number or the same payment link is a mistake in the sheet, and
+# mailing it would sell one pass twice — so a duplicate blocks the send.
+_UNIQUE_HINT = re.compile(r"(serial|pass|ticket|seat|code|link|url|number|_no$|^no$|_id$|^id$)")
+
+
+def field_key(header: str) -> str:
+    """'Offer Link' -> 'offer_link'; 'Pass No.' -> 'pass_no'. "" if unusable."""
+    k = re.sub(r"[^a-z0-9]+", "_", (header or "").strip().lower()).strip("_")[:30]
+    if not k or not k[0].isalpha() or k in RESERVED_FIELDS:
+        return ""
+    return k
+
+
+def is_link(v: str) -> bool:
+    return bool(re.match(r"^https?://[^\s<>\"]+$", (v or "").strip(), re.I))
+
+
+def should_be_unique(key: str, values: Iterable[str] = ()) -> bool:
+    vals = [v for v in values if v]
+    return bool(_UNIQUE_HINT.search(key)) or (bool(vals) and all(is_link(v) for v in vals))
+
+
+def resolve_url(u: str, contact: dict) -> str:
+    """A link that may hold a {{variable}} ("{{offer_link}}", or
+    "https://pay.example/{{pass_no}}"), filled for one recipient. Anything
+    that doesn't come out as a plain http(s) link is dropped to "" — a
+    sheet cell can never become a javascript: link or a half-built URL; the
+    sender skips that person instead (marketing.missing_fields)."""
+    if not u or "{{" not in u:
+        return u or ""
+    # The whole link is one field ({{offer_link}}): its value IS the URL, used
+    # as is. Otherwise the variables sit inside a link we wrote
+    # (https://www.oakbridge.events/offer/o/…?email={{email}}&name={{name}})
+    # and each value is percent-encoded into it.
+    whole = _VAR_RE.fullmatch(u.strip())
+    out = personalise(u, contact, url=not whole).strip()
+    return out if is_link(out) else ""
+
+
+def used_fields(texts: Iterable[str], custom: Iterable[str]) -> dict:
+    """{key: required?} for the custom fields a campaign uses. Required =
+    used at least once WITHOUT a fallback ({{pass_no|TBC}} isn't)."""
+    custom = set(custom or ())
+    out: dict = {}
+    for t in texts:
+        for m in _VAR_RE.finditer(t or ""):
+            k = m.group(1).lower()
+            if k in custom:
+                out[k] = out.get(k, False) or m.group(2) is None
+    return out
+
+
+def campaign_texts(c: dict) -> list:
+    """Everything in a campaign a {{variable}} can appear in, links included."""
+    texts = [c.get("subject") or "", c.get("preheader") or ""]
+    for b in c.get("blocks") or []:
+        texts += [b.get("text") or "", b.get("label") or "", b.get("url") or ""]
+    return texts
 
 
 # Starter templates: read-only, always available. "Use" makes a campaign from
@@ -901,13 +989,23 @@ def collect_links(blocks: list) -> list:
         if b.get("type") in ("button", "image", "book") and b.get("url"):
             out.append(b["url"])
         if b.get("type") == "text":
-            out += [html.unescape(u) for u in re.findall(r"\]\((https?://[^)\s]+)\)", b.get("text") or "")]
+            # `{{offer_link}}` too: a personal link is tracked like any other,
+            # by index; the send stores this recipient's resolved list.
+            out += [html.unescape(u) for u in re.findall(r"\]\(((?:https?://|\{\{)[^)\s]+)\)", b.get("text") or "")]
     seen, uniq = set(), []
     for u in out:
         if u not in seen:
             seen.add(u)
             uniq.append(u)
     return uniq
+
+
+def _tmpl(href: str, targets: list) -> str:
+    """inline_md only links http(s)/mailto, so a "{{offer_link}}" target goes
+    through it as a numbered placeholder; this turns it back into the target
+    as written, for L()."""
+    m = re.match(r"^https://x\.invalid/(\d+)$", href)
+    return targets[int(m.group(1))] if m and int(m.group(1)) < len(targets) else href
 
 
 def render_email(blocks: list, *, brand: dict, contact: dict, link_for, open_pixel: str = "",
@@ -920,7 +1018,13 @@ def render_email(blocks: list, *, brand: dict, contact: dict, link_for, open_pix
     rows, text = [], []
 
     def L(u):
-        return _esc(link_for(u)) if u else ""
+        # link_for gets the link AS WRITTEN (it may be "{{offer_link}}"):
+        # tracking indexes the campaign's own list. When it comes back
+        # untracked (preview, test), fill it for this recipient here.
+        return _esc(resolve_url(link_for(u), contact)) if u else ""
+
+    def U(u):   # the plain-text part: the recipient's own link
+        return resolve_url(u, contact)
 
     for b in blocks or []:
         t = b.get("type")
@@ -929,12 +1033,21 @@ def render_email(blocks: list, *, brand: dict, contact: dict, link_for, open_pix
             rows.append(f'<tr><td style="padding:24px 32px 4px;font-family:Arial,Helvetica,sans-serif;font-size:26px;line-height:1.25;font-weight:700;color:{navy}">{_esc(s)}</td></tr>')
             text.append(s.upper())
         elif t == "text":
-            s = personalise(b.get("text"), contact)
-            body = inline_md(s)
+            # Link targets are set aside before personalising, so a
+            # [Pay now]({{offer_link}}) still reaches L() as written — that is
+            # what collect_links saw and what click tracking indexes.
+            targets: list = []
+
+            def _stash(m):
+                targets.append(m.group(1))
+                return f"](\x00{len(targets) - 1}\x00)"
+            s = personalise(re.sub(r"\]\(([^)\s]+)\)", _stash, b.get("text") or ""), contact)
+            s = re.sub("\x00(\\d+)\x00", lambda m: targets[int(m.group(1))], s)
+            body = inline_md(re.sub(r"\]\((\{\{[^)\s]+)\)", lambda m: "](https://x.invalid/" + str(targets.index(m.group(1))) + ")", s))
             # Every [text](url) becomes a tracked link (same URL collect_links saw).
-            body = re.sub(r'href="([^"]+)"', lambda m: f'href="{L(html.unescape(m.group(1)))}"', body)
+            body = re.sub(r'href="([^"]+)"', lambda m: f'href="{L(_tmpl(html.unescape(m.group(1)), targets))}"', body)
             rows.append(f'<tr><td style="padding:10px 32px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.6;color:#1F2937">{body}</td></tr>')
-            text.append(re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r"\1 (\2)", s))
+            text.append(re.sub(r"\[([^\]]+)\]\(([^)]+)\)", lambda m: f"{m.group(1)} ({U(m.group(2))})", s))
         elif t == "image" and b.get("src"):
             img = f'<img src="{_esc(b["src"])}" alt="{_esc(b.get("alt"))}" width="536" style="display:block;width:100%;max-width:536px;height:auto;border:0">'
             if b.get("url"):
@@ -943,7 +1056,7 @@ def render_email(blocks: list, *, brand: dict, contact: dict, link_for, open_pix
         elif t == "button" and b.get("url"):
             label = personalise(b.get("label") or "Find out more", contact)
             rows.append(f'<tr><td align="center" style="padding:18px 32px"><a href="{L(b["url"])}" style="display:inline-block;background:{red};color:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:700;text-decoration:none;padding:14px 28px;border-radius:999px">{_esc(label)}</a></td></tr>')
-            text.append(f"{label}: {b['url']}")
+            text.append(f"{label}: {U(b['url'])}")
         elif t == "book" and b.get("url"):
             cover = f'<img src="{_esc(b.get("cover"))}" alt="" width="120" style="display:block;width:120px;height:auto;border:0">' if b.get("cover") else ""
             price = f'<div style="font-size:16px;font-weight:700;color:{red};padding-top:6px">{_esc(b.get("price"))}</div>' if b.get("price") else ""

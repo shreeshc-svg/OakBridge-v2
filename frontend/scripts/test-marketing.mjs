@@ -209,7 +209,7 @@ check(/@admin_router\.post\("\/templates\/\{tid\}\/use"\)/.test(mk) && /"templat
 check(/Built-in templates can't be changed/.test(mk) && /Built-in templates can't be deleted/.test(mk), "built-in templates are read-only");
 check(/"variables": core\.VARIABLES/.test(mk) && /function VariablesHelp/.test(page) && /<VariablesHelp \/>/.test(page),
       "the variables shown come from the renderer's own list");
-check(/Unknown variable\(s\)/.test(mk) && /bad = _unknown_vars\(c\)/.test(mk), "send refuses unknown {{variables}}");
+check(/Unknown variable\(s\)/.test(mk) && /bad = await _unknown_vars\(c\)/.test(mk), "send refuses unknown {{variables}}");
 check(/placeholdersIn\(\[c\.subject/.test(page), "send warns about '[placeholder]' text left from a template");
 check(/@admin_router\.post\("\/images"\)/.test(mk) && /require_image\(data, "Image"\)/.test(mk) && /f"\{PUBLIC_API\}\/api\/files\/\{path\}"/.test(mk),
       "email images: real-image check, absolute https URL");
