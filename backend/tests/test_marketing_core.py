@@ -220,11 +220,11 @@ ev = next(t for t in m.STARTER_TEMPLATES if t["key"] == "event-special-offer")
 ev_used = set()
 for txt in m.campaign_texts(ev):
     ev_used |= {x.group(1) for x in m._VAR_RE.finditer(txt)}
-check(ev_used >= keys | {"offer_link"} and any(b.get("url") == "{{offer_link}}" for b in ev["blocks"] if b["type"] == "button"),
-      "event offer: every built-in variable + the personal {{offer_link}} on the button")
-eh, _ = m.render_email(ev["blocks"], brand={}, contact={"name": "Asha Verma", "email": "asha@x.in", "_fields": {"offer_link": "https://www.oakbridge.events/offer/o/AE78xn9Y5H?k=1"}}, link_for=lambda u: u)
-check('href="https://www.oakbridge.events/offer/o/AE78xn9Y5H?k=1"' in eh and "{{" not in eh,
-      "event offer renders her own booking link, no raw braces")
+check(ev_used >= keys | {"offer_link", "pass_no"} and any(b.get("url") == "{{offer_link}}" for b in ev["blocks"] if b["type"] == "button"),
+      "event offer: every built-in variable + personal {{offer_link}} (button) and {{pass_no}}")
+eh, _ = m.render_email(ev["blocks"], brand={}, contact={"name": "Asha Verma", "email": "asha@x.in", "_fields": {"offer_link": "https://www.oakbridge.events/offer/o/AE78xn9Y5H?k=1", "pass_no": "ILATS26-0042"}}, link_for=lambda u: u)
+check('href="https://www.oakbridge.events/offer/o/AE78xn9Y5H?k=1"' in eh and eh.count("ILATS26-0042") == 2 and "{{" not in eh,
+      "event offer renders her own booking link and pass number, no raw braces")
 check(len({t["key"] for t in m.STARTER_TEMPLATES}) == len(m.STARTER_TEMPLATES) >= 5, "starter templates have unique keys")
 
 print("-- exports & clean-up (15 Oct 2026) --")
