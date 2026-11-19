@@ -4,6 +4,7 @@ import { AlertTriangle, PackageX, Search } from "lucide-react";
 import { adminLowStock, fetchBooks, adminUpdateBook, formatINR, mediaUrl,
          syncInventoryFromSheet, fetchSettings, adminSetSetting } from "../../lib/api";
 import { toast } from "sonner";
+import { rememberBindings, titleFor } from "../../lib/binding";
 import ExportButton from "../../components/admin/ExportButton";
 
 export default function AdminInventory() {
@@ -49,7 +50,9 @@ export default function AdminInventory() {
     const loadBooks = () => {
         setBooksLoading(true);
         fetchBooks({ limit: 1000, all_formats: true })
-            .then(setBooks)
+            // HB / PB after each title (lib/binding.js) — the low-stock lists
+            // below come without binding, so they read it from this map.
+            .then((rows) => { rememberBindings(rows); setBooks(rows); })
             .finally(() => setBooksLoading(false));
     };
 
@@ -366,7 +369,7 @@ function InventoryRow({ book, threshold, onSaved }) {
                     />
                     <div className="min-w-0">
                         <div className="font-serif text-[#002B5C] truncate max-w-full sm:w-[240px]">
-                            {book.title}
+                            {titleFor(book.title, book.id)}
                         </div>
                         <div className="text-xs text-[#4B5563] truncate max-w-full sm:w-[240px]">
                             {book.author}
@@ -417,7 +420,7 @@ function BookRow({ book, critical = false }) {
             />
             <div className="flex-1 min-w-0">
                 <div className="font-serif text-base text-[#002B5C] truncate">
-                    {book.title}
+                    {titleFor(book.title, book.id)}
                 </div>
                 <div className="text-xs text-[#4B5563] truncate">
                     {book.author} · {book.isbn}

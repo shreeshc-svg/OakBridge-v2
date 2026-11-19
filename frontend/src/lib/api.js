@@ -243,7 +243,7 @@ export const leaveSetBalance = (body) => api.post(`${HL}/set-balance`, body).the
 export const leaveBulk = (body) => api.post(`${HL}/bulk`, body).then((r) => r.data);   // preview: true (default) writes nothing
 export const leaveExport = (month) => api.get(`${HL}/export.csv`, { params: { month }, responseType: "blob" }).then((r) => r.data);
 export const whLookup = (code, id = "") => api.get("/warehouse/lookup", { params: id ? { id } : { code } }).then((r) => r.data);
-// Titles carry HB / SB (lib/binding.js): one title can be on the shelf as both.
+// Titles carry HB / PB (lib/binding.js): one title can be on the shelf as both.
 export const whBooks = (opts = {}) => api.get("/warehouse/books", { params: opts.all ? { all: true } : {} }).then((r) => tagBooks(r.data));
 export const whUploadDoc = (direction, file, practice) => {
     const fd = new FormData();

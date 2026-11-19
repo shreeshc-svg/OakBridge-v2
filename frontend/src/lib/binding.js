@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 
 /*
- * HB / SB after a book's title on every warehouse screen (Nov 2026).
+ * HB / PB after a book's title on every warehouse screen (Nov 2026):
+ * Hardback / Paperback (PB, not SB — the house calls it Paperback).
  *
  * The same title can be on the shelf twice — "Justice M N Venkatachaliah -
  * The Man & The Judge" is a Paperback (9788169999199) AND a Hardback
@@ -26,7 +27,7 @@ export function bindingTag(binding) {
     const b = String(binding || "").toLowerCase();
     if (!b) return "";
     if (/hard|case|cloth/.test(b)) return /dust|jacket/.test(b) ? "HB-DJ" : "HB";
-    if (/soft|paper/.test(b)) return "SB";
+    if (/soft|paper/.test(b)) return "PB";
     if (/spiral/.test(b)) return "Spiral";
     return "";
 }

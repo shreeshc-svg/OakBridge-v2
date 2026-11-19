@@ -49,6 +49,7 @@ const BLANK = {
     price: 0,
     original_price: "",
     cover_image: "",
+    gallery: [],
     pages: 100,
     publication_year: new Date().getFullYear(),
     bestseller: false,
@@ -82,6 +83,48 @@ function resolveImage(url) {
         return `${API.replace(/\/api$/, "")}${url}`;
     }
     return url;
+}
+
+/*
+ * More covers after the front one: back cover first, then anything else
+ * worth seeing (spine, a sample spread). Stored as `gallery` — the same field
+ * a hamper's photos use — and shown as thumbnails under the cover on the
+ * product page (BookDetail.jsx). The server keeps at most 8 and only image
+ * links (extensions.clean_gallery). The front cover stays `cover_image`, so
+ * cards, search, emails and the warehouse are unchanged.
+ */
+const GALLERY_MAX = 8;
+const galleryLabel = (i) => (i === 0 ? "Back cover" : `Image ${i + 2}`);
+
+function GalleryEditor({ value, onChange }) {
+    const set = (i, url) => onChange(value.map((u, k) => (k === i ? url : u)));
+    const move = (i, d) => {
+        const j = i + d;
+        if (j < 0 || j >= value.length) return;
+        const next = [...value];
+        [next[i], next[j]] = [next[j], next[i]];
+        onChange(next);
+    };
+    return (
+        <div className="mt-5 space-y-4" data-testid="book-gallery">
+            {value.map((u, i) => (
+                <div key={i} className="border-l-2 border-[#E5E7EB] pl-3">
+                    <CoverUploader value={u} onChange={(url) => set(i, url)} label={galleryLabel(i)} testIdPrefix={`gallery-${i}`} />
+                    <div className="mt-1 flex gap-3 text-xs">
+                        <button type="button" disabled={i === 0} onClick={() => move(i, -1)} className="underline disabled:opacity-30">Move up</button>
+                        <button type="button" disabled={i === value.length - 1} onClick={() => move(i, 1)} className="underline disabled:opacity-30">Move down</button>
+                        <button type="button" onClick={() => onChange(value.filter((_, k) => k !== i))} className="text-[#CC0033] underline">Remove</button>
+                    </div>
+                </div>
+            ))}
+            {value.length < GALLERY_MAX && (
+                <button type="button" onClick={() => onChange([...value, ""])} data-testid="gallery-add"
+                    className="text-xs border border-[#002B5C] px-3 py-1.5 hover:bg-[#F5F7FA]">
+                    + Add {value.length === 0 ? "back cover" : "another image"}
+                </button>
+            )}
+        </div>
+    );
 }
 
 function CoverUploader({ value, onChange, label = "Cover Image", testIdPrefix = "cover", aspect = "portrait" }) {
@@ -939,6 +982,11 @@ function BookForm({ initial, categories, onClose, onSaved }) {
                         <CoverUploader
                             value={form.cover_image}
                             onChange={(url) => setForm((f) => ({ ...f, cover_image: url }))}
+                            label="Front cover"
+                        />
+                        <GalleryEditor
+                            value={form.gallery || []}
+                            onChange={(gallery) => setForm((f) => ({ ...f, gallery }))}
                         />
                     </div>
                     <div className="col-span-2 sm:col-span-1">

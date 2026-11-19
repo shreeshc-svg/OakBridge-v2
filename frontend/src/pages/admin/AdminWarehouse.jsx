@@ -41,7 +41,7 @@ const when = (iso) => (iso ? new Date(iso).toLocaleString("en-IN") : "—");
 
 export default function AdminWarehouse() {
     const { user } = useAuth();
-    useBindings(whBooks);   // HB / SB after every title in the warehouse admin (lib/binding.js)
+    useBindings(whBooks);   // HB / PB after every title in the warehouse admin (lib/binding.js)
     const [tab, setTab] = useState("approve");
     const [pending, setPending] = useState(null);
     const [moveQ, setMoveQ] = useState("");

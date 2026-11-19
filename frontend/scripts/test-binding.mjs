@@ -1,5 +1,5 @@
 /**
- * HB / SB after book titles on the warehouse screens (src/lib/binding.js),
+ * HB / PB after book titles on the warehouse screens (src/lib/binding.js),
  * and the places that use it.
  *
  *     node frontend/scripts/test-binding.mjs
@@ -15,14 +15,14 @@ let failed = 0;
 const check = (c, l) => { console.log((c ? "ok   " : "FAIL ") + l); if (!c) failed += 1; };
 
 // The live catalogue's bindings (Nov 2026): Paperback 146, Hardback 65, Hardback with Dust Jacket 1, none 1.
-check(B.bindingTag("Paperback") === "SB" && B.bindingTag("Softcover") === "SB", "Paperback / Softcover -> SB");
+check(B.bindingTag("Paperback") === "PB" && B.bindingTag("Softcover") === "PB", "Paperback / Softcover -> PB");
 check(B.bindingTag("Hardback") === "HB" && B.bindingTag("Hardcover") === "HB", "Hardback / Hardcover -> HB");
 check(B.bindingTag("Hardback with Dust Jacket") === "HB-DJ", "dust jacket -> HB-DJ");
 check(B.bindingTag("") === "" && B.withBinding("Some Pack", null) === "Some Pack", "no binding (packs, hampers): title unchanged");
 
 const TITLE = "Justice M N Venkatachaliah - The Man & The Judge";
 const rows = B.tagBooks([{ id: "pb", title: TITLE, binding: "Paperback" }, { id: "hb", title: TITLE, binding: "Hardback" }]);
-check(rows[0].title === `${TITLE} (SB)` && rows[1].title === `${TITLE} (HB)`, "the two Man & The Judge books read differently");
+check(rows[0].title === `${TITLE} (PB)` && rows[1].title === `${TITLE} (HB)`, "the two Man & The Judge books read differently");
 check(rows[0].plain_title === TITLE, "the real title is kept (plain_title)");
 check(B.tagBooks(rows)[1].title === `${TITLE} (HB)`, "never tagged twice");
 check(B.titleFor("The Man & The Judge", "hb") === "The Man & The Judge (HB)" && B.titleFor("X", "unknown") === "X",
@@ -33,6 +33,8 @@ const read = (p) => strip(readFileSync(join(SRC, p), "utf8"));
 const api = read("lib/api.js");
 check(/whBooks = [^\n]*then\(\(r\) => tagBooks\(r\.data\)\)/.test(api), "warehouse book list is tagged at the source (pickers, lookups, toasts)");
 check(/adminWhInventory = [^\n]*rows: tagBooks\(r\.data\?\.rows\)/.test(api), "admin warehouse inventory is tagged");
+const inv = read("pages/admin/AdminInventory.jsx");
+check(/rememberBindings\(/.test(inv) && (inv.match(/titleFor\(book\.title, book\.id\)/g) || []).length >= 2, "Admin → Inventory shows HB / PB too");
 // Not comment-stripped: the file has "image/*" in strings, which a /* */ stripper would eat.
 const app = readFileSync(join(SRC, "pages/warehouse/WarehouseApp.jsx"), "utf8");
 check(/useBindings\(whBooks\)/.test(app) && (app.match(/titleFor\(/g) || []).length >= 8,

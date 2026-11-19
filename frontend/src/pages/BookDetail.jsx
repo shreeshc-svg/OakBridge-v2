@@ -77,6 +77,9 @@ export default function BookDetail() {
     const warm = useRef(bootHas(`${k}:book`));
     const [preview, setPreview] = useBootState(`${k}:preview`, { pages: [], page_count: 0 });
     const [previewOpen, setPreviewOpen] = useState(false);
+    // Which cover is shown: 0 = front, then the book's gallery (back cover …).
+    const [shot, setShot] = useState(0);
+    useEffect(() => { setShot(0); }, [id]);
     const [book, setBook] = useBootState(`${k}:book`, null);
     const [related, setRelated] = useBootState(`${k}:related`, []);
     const relatedRef = useRef(null);
@@ -352,6 +355,11 @@ export default function BookDetail() {
         ? { binding, size, price: activePrice, stock: activeStock }
         : null;
 
+    // Front cover, then the gallery (back cover first). A hamper uses the same
+    // field for its photos, but hampers render on HamperDetail, not here.
+    const covers = [book.cover_image, ...(Array.isArray(book.gallery) ? book.gallery : [])].filter(Boolean);
+    const coverName = (i) => (i === 0 ? "Front" : i === 1 ? "Back" : `View ${i + 1}`);
+
     const LOW_STOCK = 5;
     const stock = hasVariants ? activeStock : Number.isFinite(book.stock) ? book.stock : 0;
     // Print on demand (lib/pod.js): out of stock but sold — printed for this
@@ -502,8 +510,10 @@ export default function BookDetail() {
                     <div className="sticky top-24 max-w-[300px] sm:max-w-[340px] lg:max-w-[380px] mx-auto lg:mx-0">
                         <div className="relative aspect-[2/3] bg-[#F5F7FA] border border-[#E5E7EB] overflow-hidden shadow-sm group">
                             <img
-                                src={mediaUrl(book.cover_image)}
-                                alt={book.author ? `${book.title} — book cover, by ${book.author}` : `${book.title} — book cover`}
+                                src={mediaUrl(covers[Math.min(shot, covers.length - 1)] || book.cover_image)}
+                                alt={shot === 0
+                                    ? (book.author ? `${book.title} — book cover, by ${book.author}` : `${book.title} — book cover`)
+                                    : `${book.title} — ${coverName(shot).toLowerCase()}`}
                                 className="absolute inset-0 w-full h-full object-contain"
                             />
                             {book.bestseller && (
@@ -526,6 +536,21 @@ export default function BookDetail() {
                                 </button>
                             )}
                         </div>
+                        {/* Front, back and any other covers the admin added
+                            (Admin → Books → "Back cover" / more images). */}
+                        {covers.length > 1 && (
+                            <div className="mt-3 flex gap-2 overflow-x-auto" role="tablist" aria-label="Book covers" data-testid="cover-thumbs">
+                                {covers.map((u, i) => (
+                                    <button key={u} type="button" role="tab" aria-selected={shot === i} onClick={() => setShot(i)}
+                                        className={`flex-shrink-0 w-16 text-center ${shot === i ? "" : "opacity-70 hover:opacity-100"}`}>
+                                        <span className={`block aspect-[2/3] bg-[#F5F7FA] border overflow-hidden ${shot === i ? "border-[#002B5C] ring-1 ring-[#002B5C]" : "border-[#E5E7EB]"}`}>
+                                            <img src={mediaUrl(u)} alt="" loading="lazy" className="w-full h-full object-contain" />
+                                        </span>
+                                        <span className="block mt-1 text-[10px] font-mono uppercase tracking-wider text-[#4B5563]">{coverName(i)}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        )}
                         {preview.page_count > 0 && (
                             <button
                                 type="button"

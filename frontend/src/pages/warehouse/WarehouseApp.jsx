@@ -71,7 +71,7 @@ function ConfirmHost() {
 
 export default function WarehouseApp() {
     const { user } = useAuth();
-    useBindings(whBooks);   // HB / SB after every title on these screens (lib/binding.js)
+    useBindings(whBooks);   // HB / PB after every title on these screens (lib/binding.js)
     const [state, setState] = useState(null);
     const [screen, setScreen] = useState("home");
     const [practice, setPractice] = useState(false);

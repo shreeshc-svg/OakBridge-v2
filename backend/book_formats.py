@@ -76,7 +76,7 @@ FIELDS = ("format_group", "format_label", "format_primary", "format_order", "for
 #     on demand is a decision for its own row in Books.
 COPY_FIELDS = (
     "title", "subtitle", "author", "author_bio", "author_photo", "category", "subject",
-    "grade", "edition", "size", "description", "cover_image", "pages", "language",
+    "grade", "edition", "size", "description", "cover_image", "gallery", "pages", "language",
     "publisher", "publication_year", "publication_date", "release_rank",
     "ebook_url", "ebook_price", "coming_soon", "launch_at", "coming_soon_label",
     "is_volume_set", "volumes",

@@ -179,6 +179,26 @@ class BookAdminCreate(BaseModel):
     # for it is overwritten — see volume_sets.py.
     is_volume_set: bool = False
     volumes: Optional[list] = None
+    gallery: Optional[list] = None   # more covers: back, spine … (clean_gallery)
+
+
+GALLERY_MAX = 8
+
+
+def clean_gallery(items) -> list:
+    """A book's extra images after the front cover (back cover first, then
+    any others), as image URLs in display order. Same field a hamper uses
+    (Book.gallery), so the product page reads one list either way.
+
+    Kept to what the uploader produces — our upload paths or a web link —
+    so a pasted value can't put anything else into an <img>; blanks and
+    repeats dropped; at most GALLERY_MAX."""
+    out = []
+    for x in items or []:
+        u = str(x or "").strip()[:500]
+        if u and (u.startswith(("https://", "http://", "/")) and not u.startswith("//")) and u not in out:
+            out.append(u)
+    return out[:GALLERY_MAX]
 
 
 class BookAdminUpdate(BaseModel):
@@ -221,6 +241,7 @@ class BookAdminUpdate(BaseModel):
     # a silently discarded one. Same for an emptied volumes list.
     is_volume_set: Optional[bool] = None
     volumes: Optional[list] = None
+    gallery: Optional[list] = None   # [] clears it (not None, so it reaches the update)
 
 
 # Desk copies -- free examination copies for educators -- were retired in
@@ -1624,6 +1645,7 @@ def clean_store_links(raw) -> dict:
 async def admin_create_book(payload: BookAdminCreate):
     doc = {"id": str(uuid.uuid4()), **payload.model_dump()}
     doc["store_links"] = clean_store_links(doc.get("store_links"))
+    doc["gallery"] = clean_gallery(doc.get("gallery"))
     if doc.get("coming_soon") and doc.get("pod"):
         raise HTTPException(status_code=400, detail="A book can be a pre-order or print on demand, not both.")
     doc["pod"] = bool(doc.get("pod"))
@@ -1664,6 +1686,8 @@ async def admin_update_book(book_id: str, payload: BookAdminUpdate):
     updates = {k: v for k, v in payload.model_dump().items() if v is not None}
     if "store_links" in updates:
         updates["store_links"] = clean_store_links(updates["store_links"])
+    if "gallery" in updates:
+        updates["gallery"] = clean_gallery(updates["gallery"])
     if not updates:
         raise HTTPException(status_code=400, detail="No updates provided")
     prev = await db.books.find_one(

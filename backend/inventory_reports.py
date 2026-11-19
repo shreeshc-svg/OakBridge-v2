@@ -23,7 +23,7 @@ INVENTORY_HEADER = ["Title", "Author", "ISBN", "Category", "Price (Rs)", "MRP (R
                     "Owed to orders", "Set aside (short parcels)", "Difference", "Status", "Last movement", "Last reason", "Movements"]
 
 def binding_tag(binding) -> str:
-    """HB / SB after a title in warehouse exports — the same title can be on
+    """HB / PB after a title in warehouse exports — the same title can be on
     the shelf as both (frontend lib/binding.js has the same rule)."""
     b = str(binding or "").lower()
     if not b:
@@ -31,7 +31,7 @@ def binding_tag(binding) -> str:
     if re.search(r"hard|case|cloth", b):
         return "HB-DJ" if re.search(r"dust|jacket", b) else "HB"
     if re.search(r"soft|paper", b):
-        return "SB"
+        return "PB"
     return "Spiral" if "spiral" in b else ""
 
 
