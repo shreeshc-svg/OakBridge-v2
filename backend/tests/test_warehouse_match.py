@@ -139,6 +139,19 @@ async def main():
     r = await M.match_website("hb", M.MatchBody(note="again"), SUPER)
     check(r.get("unchanged"), "already in step: nothing changes")
 
+    print("-- set both in one go (19 Nov: warehouse -96, website 0) --")
+    await db.books.update_one({"id": "hb"}, {"$set": {"stock": 0, "wh_stock": -96}})
+    M.get_state = _live
+    await expect(M.set_both("hb", M.BothBody(count=0, note="x"), SUPER), 400, "a reason is required")
+    await expect(M.set_both("hb", M.BothBody(count=-1, note="none on the shelf"), SUPER), 400, "no negative counts")
+    r = await M.set_both("hb", M.BothBody(count=0, note="none on the shelf"), SUPER)
+    b = await db.books.find_one({"id": "hb"})
+    check(b["wh_stock"] == 0 and b["stock"] == 0 and r["stock"] == 0 and r["wh_stock"] == 0, "warehouse 0 AND website 0")
+    check([a for a, _ in AUDIT[-2:]] == ["WAREHOUSE_COUNT_SET", "WAREHOUSE_WEBSITE_MATCHED"], "both steps logged")
+    r = await M.set_both("hb", M.BothBody(count=12, note="12 found in the back room"), SUPER)
+    b = await db.books.find_one({"id": "hb"})
+    check(b["wh_stock"] == 12 and b["stock"] == 12, "and any other number: both 12")
+
     print("-- waiting orders and pre-orders --")
     await db.books.insert_one({"id": "w", "title": "Waiting", "stock": 9, "wh_stock": -2})
     OWED["w"] = 2

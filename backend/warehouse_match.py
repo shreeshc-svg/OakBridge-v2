@@ -2,6 +2,7 @@
 (Nov 2026).
 
     POST /api/admin/warehouse/inventory/{book_id}/match-website   superadmin: {note}
+    POST /api/admin/warehouse/inventory/{book_id}/set-both        superadmin: {count, note}
 
 WHY THIS EXISTS. In live mode every stock tool moves BOTH numbers by the same
 amount, on purpose:
@@ -81,3 +82,34 @@ async def match_website(book_id: str, body: MatchBody, user: dict = Depends(requ
                     meta={"book": book_id, "isbn": b.get("isbn"), "title": (b.get("title") or "")[:120], "website_before": before,
                           "website_after": after, "warehouse": int(b["wh_stock"]), "owed": int(owed or 0), "note": note})
     return {"ok": True, "stock": after, "before": before, "wh_stock": int(b["wh_stock"])}
+
+
+class BothBody(BaseModel):
+    count: int
+    note: str
+
+
+@router.post("/inventory/{book_id}/set-both")
+async def set_both(book_id: str, body: BothBody, user: dict = Depends(require_superadmin)):
+    """'There are N on the shelf, and the website must say so too' — in one go.
+
+    The match above only fixes the WEBSITE side. When it's the warehouse side
+    that is off (19 Nov 2026: Man & The Judge HB showed warehouse -96,
+    website 0 after the admin typed 0), the admin needs the count saved AND
+    the website brought along, without the count's correction pushing the
+    website back up. So: the normal shelf count (warehouse.adm_set_count —
+    ledger correction, set-aside copies respected), then the website matched
+    to the new count. Both steps are logged as they always are."""
+    _office_only(user)
+    if not (0 <= int(body.count) <= 100000):
+        raise HTTPException(status_code=400, detail="Enter a count between 0 and 1,00,000.")
+    note = " ".join((body.note or "").split())[:200]
+    if len(note) < 3:
+        raise HTTPException(status_code=400, detail="Say why (e.g. 'none on the shelf — website and warehouse both 0').")
+    if (await get_state()).get("mode") != "live":
+        raise HTTPException(status_code=409, detail="Only once the warehouse is live — during the trial the website follows the sheet.")
+    from warehouse import CountBody, adm_set_count
+    counted = await adm_set_count(book_id, CountBody(count=int(body.count), note=note), user)
+    matched = await match_website(book_id, MatchBody(note=f"set both to {int(body.count)}: {note}"), user)
+    return {"ok": True, "count": counted, "website": matched,
+            "wh_stock": matched.get("wh_stock"), "stock": matched.get("stock")}

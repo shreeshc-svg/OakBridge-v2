@@ -319,6 +319,9 @@ export const adminWhSetCount = (bookId, count, note) =>
 // Website stock out of step with the warehouse count: set the website number only (backend/warehouse_match.py).
 export const adminWhMatchWebsite = (bookId, note) =>
     api.post(`/admin/warehouse/inventory/${bookId}/match-website`, { note }).then((r) => r.data);
+// Shelf count AND website to the same number in one go (backend/warehouse_match.py set_both).
+export const adminWhSetBoth = (bookId, count, note) =>
+    api.post(`/admin/warehouse/inventory/${bookId}/set-both`, { count, note }).then((r) => r.data);
 // Files to share: Excel for founders/reports, a vendor catalogue PDF.
 export const adminWhInventoryXlsx = () =>
     api.get("/admin/warehouse/inventory/export.xlsx", { responseType: "blob", timeout: 120000 }).then((r) => r.data);

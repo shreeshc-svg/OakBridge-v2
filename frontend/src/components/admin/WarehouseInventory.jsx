@@ -3,7 +3,7 @@ import BindingBadge from "../BindingBadge";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Search, AlertTriangle, PackageX, Download, FileText, X, GitCompare, CalendarClock, Printer } from "lucide-react";
-import { adminWhInventory, adminWhSetCount, adminWhMatchWebsite, adminWhInvMove, adminWhInventoryXlsx, adminWhBrochure, saveBlob, fetchCategories,
+import { adminWhInventory, adminWhSetCount, adminWhMatchWebsite, adminWhSetBoth, adminWhInvMove, adminWhInventoryXlsx, adminWhBrochure, saveBlob, fetchCategories,
     formatApiError, formatINR, mediaUrl } from "../../lib/api";
 import ExportButton from "./ExportButton";
 import { preorderState, formatLaunchDate, formatLaunchTimes } from "../../lib/preorder";
@@ -239,14 +239,26 @@ function EditPanel({ b, onDone }) {
  */
 function MatchWebsite({ b, run, busy }) {
     const [note, setNote] = useState("");
+    const [both, setBoth] = useState(Math.max(0, b.wh_stock ?? 0) + (b.set_aside || 0));
     const target = Math.max(0, (b.wh_stock ?? 0) + (b.owed || 0));
+    const okBoth = String(both).trim() !== "" && Number(both) >= 0;
     return (
         <div className="md:col-span-2 border border-[#FDE68A] bg-[#FFFBEB] p-3 space-y-2" data-testid="wh-match-website">
-            <div className="font-medium text-[#92400E]">Website shows {b.stock}, the warehouse count says {target}</div>
+            <div className="font-medium text-[#92400E]">Out of step: warehouse {b.wh_stock ?? 0}, website {b.stock}</div>
             <p className="text-xs text-[#4B5563]">
-                Counting or typing stock moves both numbers together, so a gap like this can't be closed that way.
-                If the warehouse count ({b.wh_stock ?? 0}) is right, set the website to match it. If the shelf count is wrong, fix it with “Save count” first.
+                Counting or typing stock moves both numbers together, so a gap like this can't be closed that way. Write why below, then:
             </p>
+            {/* Most useful first: "N on the shelf, and the website says N too". */}
+            <div className="flex flex-wrap items-center gap-2" data-testid="wh-set-both">
+                <span className="text-sm text-[#002B5C]">Set <b>both</b> to</span>
+                <input type="number" min={0} value={both} onChange={(e) => setBoth(e.target.value)} className="border border-[#E5E7EB] bg-white px-2 py-1.5 text-sm w-24 font-mono" aria-label="Copies on the shelf" />
+                <span className="text-xs text-[#6B7280]">copies on the shelf</span>
+                <button type="button" disabled={busy || note.trim().length < 3 || !okBoth}
+                    onClick={() => window.confirm(`Set “${b.plain_title || b.title}” to ${Number(both)} in the warehouse AND on the website?\n\nSaved as a shelf count (a correction in Movements), then the website is matched to it.`)
+                        && run(() => adminWhSetBoth(b.id, Number(both), note), `Warehouse and website set to ${Number(both)}.`)}
+                    className="bg-[#002B5C] text-white px-3 py-1.5 text-xs disabled:opacity-40" data-testid="wh-set-both-btn">Set both to {okBoth ? Number(both) : "…"}</button>
+            </div>
+            <div className="text-xs text-[#6B7280]">…or, if the warehouse count ({b.wh_stock ?? 0}) is right, set only the website to {target}:</div>
             <div className="flex flex-wrap items-center gap-2">
                 <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Why — e.g. website showed 96, shelf has none"
                     className="border border-[#E5E7EB] bg-white px-2 py-1.5 text-sm flex-1 min-w-[220px]" />
