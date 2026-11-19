@@ -26,7 +26,8 @@ import { useEffect, useState } from "react";
 export function bindingTag(binding) {
     const b = String(binding || "").toLowerCase();
     if (!b) return "";
-    if (/hard|case|cloth/.test(b)) return /dust|jacket/.test(b) ? "HB-DJ" : "HB";
+    // Dust jacket or not, it's a hardback: HB (house rule, 19 Nov 2026).
+    if (/hard|case|cloth/.test(b)) return "HB";
     if (/soft|paper/.test(b)) return "PB";
     if (/spiral/.test(b)) return "Spiral";
     return "";

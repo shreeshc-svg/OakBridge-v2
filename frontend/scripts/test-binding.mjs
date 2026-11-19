@@ -17,7 +17,7 @@ const check = (c, l) => { console.log((c ? "ok   " : "FAIL ") + l); if (!c) fail
 // The live catalogue's bindings (Nov 2026): Paperback 146, Hardback 65, Hardback with Dust Jacket 1, none 1.
 check(B.bindingTag("Paperback") === "PB" && B.bindingTag("Softcover") === "PB", "Paperback / Softcover -> PB");
 check(B.bindingTag("Hardback") === "HB" && B.bindingTag("Hardcover") === "HB", "Hardback / Hardcover -> HB");
-check(B.bindingTag("Hardback with Dust Jacket") === "HB-DJ", "dust jacket -> HB-DJ");
+check(B.bindingTag("Hardback with Dust Jacket") === "HB", "dust jacket -> plain HB");
 check(B.bindingTag("") === "" && B.withBinding("Some Pack", null) === "Some Pack", "no binding (packs, hampers): title unchanged");
 
 const TITLE = "Justice M N Venkatachaliah - The Man & The Judge";

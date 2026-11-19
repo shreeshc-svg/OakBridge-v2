@@ -29,7 +29,7 @@ def binding_tag(binding) -> str:
     if not b:
         return ""
     if re.search(r"hard|case|cloth", b):
-        return "HB-DJ" if re.search(r"dust|jacket", b) else "HB"
+        return "HB"   # dust jacket or not, it's a hardback (house rule, 19 Nov 2026)
     if re.search(r"soft|paper", b):
         return "PB"
     return "Spiral" if "spiral" in b else ""
