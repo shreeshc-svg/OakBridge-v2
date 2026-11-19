@@ -1,3 +1,4 @@
+import { titleFor } from "../../lib/binding";
 import React, { useRef, useState } from "react";
 import { toast } from "sonner";
 import { AlertTriangle, CheckCircle2, FileSpreadsheet, SkipForward, Upload } from "lucide-react";
@@ -102,12 +103,12 @@ export default function MarketplaceSheet({ practice, onDone }) {
                             return (
                                 <div key={`${c.channel}-${c.book_id}`} className="flex items-center gap-3 py-2 border-b border-[#F3F4F6] last:border-0">
                                     <span className="text-[11px] font-semibold px-2 py-0.5" style={{ background: ch.bg, color: ch.tone }}>{ch.label}</span>
-                                    <span className="flex-1 text-base text-[#111827]">{c.title}</span>
+                                    <span className="flex-1 text-base text-[#111827]">{titleFor(c.title, c.book_id)}</span>
                                     <span className={`text-lg font-semibold ${c.delta > 0 ? "text-[#CC0033]" : "text-[#15803D]"}`}>{c.delta > 0 ? `−${c.delta}` : `+${-c.delta}`}</span>
                                 </div>
                             );
                         })}
-                        {pv.rows.filter((r) => r.warn).map((r, i) => <Row key={`w${i}`} n={r.line} title={r.book_title} sub={r.warn} />)}
+                        {pv.rows.filter((r) => r.warn).map((r, i) => <Row key={`w${i}`} n={r.line} title={titleFor(r.book_title, r.book_id)} sub={r.warn} />)}
                     </Section>
 
                     {pv.ignored.length > 0 && (

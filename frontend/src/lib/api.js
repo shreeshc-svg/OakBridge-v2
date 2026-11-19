@@ -1,3 +1,4 @@
+import { tagBooks } from "./binding";
 import axios from "axios";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
@@ -242,7 +243,8 @@ export const leaveSetBalance = (body) => api.post(`${HL}/set-balance`, body).the
 export const leaveBulk = (body) => api.post(`${HL}/bulk`, body).then((r) => r.data);   // preview: true (default) writes nothing
 export const leaveExport = (month) => api.get(`${HL}/export.csv`, { params: { month }, responseType: "blob" }).then((r) => r.data);
 export const whLookup = (code, id = "") => api.get("/warehouse/lookup", { params: id ? { id } : { code } }).then((r) => r.data);
-export const whBooks = (opts = {}) => api.get("/warehouse/books", { params: opts.all ? { all: true } : {} }).then((r) => r.data);
+// Titles carry HB / SB (lib/binding.js): one title can be on the shelf as both.
+export const whBooks = (opts = {}) => api.get("/warehouse/books", { params: opts.all ? { all: true } : {} }).then((r) => tagBooks(r.data));
 export const whUploadDoc = (direction, file, practice) => {
     const fd = new FormData();
     fd.append("direction", direction);
@@ -311,7 +313,7 @@ export const saveBlob = (blob, filename) => {
 // Admin → Warehouse → Inventory: the warehouse's own counts (warehouse.py).
 export const adminWhMpSheets = () => api.get("/admin/warehouse/marketplace/sheets").then((r) => r.data.rows || []);
 export const adminWhMpUndo = (date) => api.post(`/admin/warehouse/marketplace/sheets/${date}/undo`).then((r) => r.data);
-export const adminWhInventory = () => api.get("/admin/warehouse/inventory").then((r) => r.data);
+export const adminWhInventory = () => api.get("/admin/warehouse/inventory").then((r) => ({ ...r.data, rows: tagBooks(r.data?.rows) }));
 export const adminWhSetCount = (bookId, count, note) =>
     api.post(`/admin/warehouse/inventory/${bookId}/count`, { count, note }).then((r) => r.data);
 // Files to share: Excel for founders/reports, a vendor catalogue PDF.

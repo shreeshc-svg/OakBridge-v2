@@ -22,6 +22,24 @@ from xml.sax.saxutils import escape
 INVENTORY_HEADER = ["Title", "Author", "ISBN", "Category", "Price (Rs)", "MRP (Rs)", "Warehouse count", "Website stock",
                     "Owed to orders", "Set aside (short parcels)", "Difference", "Status", "Last movement", "Last reason", "Movements"]
 
+def binding_tag(binding) -> str:
+    """HB / SB after a title in warehouse exports — the same title can be on
+    the shelf as both (frontend lib/binding.js has the same rule)."""
+    b = str(binding or "").lower()
+    if not b:
+        return ""
+    if re.search(r"hard|case|cloth", b):
+        return "HB-DJ" if re.search(r"dust|jacket", b) else "HB"
+    if re.search(r"soft|paper", b):
+        return "SB"
+    return "Spiral" if "spiral" in b else ""
+
+
+def with_binding(title, binding) -> str:
+    t, tag = str(title or ""), binding_tag(binding)
+    return f"{t} ({tag})" if tag and t and not t.endswith(f"({tag})") else t
+
+
 # Readable names for movement reasons — exports used to print the raw codes
 # (amazon_mp, short_cancelled …). Keep in step with the screens' label maps
 # (WarehouseInventory.jsx REASON, AdminWarehouse.jsx REASON_NAME).
@@ -108,7 +126,7 @@ def inventory_xlsx(rows: list, threshold: int, mode: str, cat_names: dict) -> by
         c.fill, c.font = navy, white_b
         c.alignment = Alignment(vertical="center", wrap_text=True)
     for r in rows:
-        inv.append([_safe(r.get("title", "")), _safe(r.get("author") or ""), r.get("isbn") or "",
+        inv.append([_safe(with_binding(r.get("title", ""), r.get("binding"))), _safe(r.get("author") or ""), r.get("isbn") or "",
                     cat_names.get(r.get("category"), r.get("category") or ""), float(r.get("price") or 0),
                     float(r.get("original_price") or r.get("price") or 0),
                     r.get("wh_stock"), int(r.get("stock") or 0), int(r.get("owed") or 0), int(r.get("set_aside") or 0), r.get("diff"),

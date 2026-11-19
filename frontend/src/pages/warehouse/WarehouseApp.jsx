@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
+import { titleFor, useBindings } from "../../lib/binding";
 
 // A count that went below zero after packing/removing books: tell the person
 // holding the phone which books to count, while they are standing there.
 const warnBelowZero = (list) => {
-    (list || []).forEach((b) => toast.warning(`${b.title}: warehouse count is now ${b.wh_stock}. ${b.note}`, { duration: 12000 }));
+    (list || []).forEach((b) => toast.warning(`${titleFor(b.title, b.book_id || b.id)}: warehouse count is now ${b.wh_stock}. ${b.note}`, { duration: 12000 }));
 };
 // The server refuses a document with the same party and the same books as
 // one already done (two photos of one invoice have nothing else in common
@@ -70,6 +71,7 @@ function ConfirmHost() {
 
 export default function WarehouseApp() {
     const { user } = useAuth();
+    useBindings(whBooks);   // HB / SB after every title on these screens (lib/binding.js)
     const [state, setState] = useState(null);
     const [screen, setScreen] = useState("home");
     const [practice, setPractice] = useState(false);
@@ -205,7 +207,7 @@ function Inbox({ onRepack, onOpenJob }) {
                 {d.party_name || "—"}{d.doc_number ? ` · ${d.doc_number}` : ""}
             </div>
             <div className="text-sm text-[#4B5563]">
-                {d.units} cop{d.units === 1 ? "y" : "ies"}: {d.lines.map((l) => `${l.title} ×${l.packed}`).join(", ")}
+                {d.units} cop{d.units === 1 ? "y" : "ies"}: {d.lines.map((l) => `${titleFor(l.title, l.book_id)} ×${l.packed}`).join(", ")}
             </div>
             {children}
         </div>
@@ -546,7 +548,7 @@ function DocFlow({ direction, practice, onDone, initialDoc = null }) {
                                 <select value={l.book_id || ""} onChange={(e) => setLine(i, { book_id: e.target.value || null, include: !!e.target.value })}
                                     className="mt-2 w-full border px-2 py-2 text-sm bg-white">
                                     <option value="">— Not a book / skip —</option>
-                                    {(l.candidates || []).map((c) => <option key={`c-${c.book_id}`} value={c.book_id}>★ {c.title}</option>)}
+                                    {(l.candidates || []).map((c) => <option key={`c-${c.book_id}`} value={c.book_id}>★ {titleFor(c.title, c.book_id)}</option>)}
                                     {books.map((b) => <option key={b.id} value={b.id}>{b.title} ({b.isbn})</option>)}
                                 </select>
                             </div>
@@ -653,7 +655,7 @@ function StillToSend() {
     useEffect(() => { load(); }, [load]);
     if (!rows || !rows.length) return null;
     const done = async (o) => {
-        if (!await askConfirm(`Sent the remaining ${o.owed} × “${o.title}” to ${o.party}?`)) return;
+        if (!await askConfirm(`Sent the remaining ${o.owed} × “${titleFor(o.title, o.book_id)}” to ${o.party}?`)) return;
         setBusy(o.id);
         try {
             const r = await whOwedSent(o.id);
@@ -666,7 +668,7 @@ function StillToSend() {
             <div className="text-sm font-medium text-[#CC0033]">Still to send ({rows.length})</div>
             {rows.map((o) => (
                 <div key={o.id} className="border-2 border-[#F59E0B] bg-white p-3">
-                    <div className="font-medium text-[#002B5C]">{o.title} <span className="font-mono">× {o.owed}</span></div>
+                    <div className="font-medium text-[#002B5C]">{titleFor(o.title, o.book_id)} <span className="font-mono">× {o.owed}</span></div>
                     <div className="text-sm text-[#4B5563]">{o.kind_label}{o.order_number ? ` ${o.order_number}` : ""} · {o.party} · {o.sent} of {o.ordered} went on {new Date(o.created_at).toLocaleDateString("en-IN")}</div>
                     {o.kind === "website_order" && <div className="text-xs text-[#B4750F] mt-1">Keep these {o.owed} aside — the customer has paid for them.</div>}
                     <button type="button" disabled={busy === o.id} onClick={() => done(o)} className={`${BTN} mt-2 w-full bg-[#15803D] text-white`} data-testid="wh-owed-sent">
@@ -987,7 +989,7 @@ function CourierFlow({ practice, onDone, initialDoc = null }) {
                                 ✓ Stock was already removed when the customer paid — nothing is deducted again.
                                 {(p.order_items || []).length > 0 && (
                                     <span className="block text-[#4B5563] mt-1">
-                                        This order has: {p.order_items.map((it) => `${it.title} ×${it.qty}`).join(", ")}
+                                        This order has: {p.order_items.map((it) => `${titleFor(it.title, it.book_id)} ×${it.qty}`).join(", ")}
                                     </span>
                                 )}
                             </div>
@@ -1020,7 +1022,7 @@ function CourierFlow({ practice, onDone, initialDoc = null }) {
                                             <div className="mt-1 flex flex-col gap-1" data-testid="wh-line-suggestions">
                                                 {l.candidates.slice(0, 3).map((c) => (
                                                     <button key={c.book_id} type="button" onClick={() => setLine(pi, li, { book_id: c.book_id, include: true })}
-                                                        className="text-left border-2 border-[#002B5C] px-2 py-2 text-sm text-[#002B5C] bg-white">★ {c.title}</button>
+                                                        className="text-left border-2 border-[#002B5C] px-2 py-2 text-sm text-[#002B5C] bg-white">★ {titleFor(c.title, c.book_id)}</button>
                                                 ))}
                                             </div>
                                         )}
@@ -1085,7 +1087,7 @@ function SingleMove({ practice }) {
             <FindBook books={books} onPick={(id) => look("", id)} />
             {found && (
                 <div className="bg-white border-2 border-[#002B5C] p-4 space-y-3">
-                    <div className="text-lg font-semibold text-[#002B5C]">{found.book.title}</div>
+                    <div className="text-lg font-semibold text-[#002B5C]">{titleFor(found.book.title, found.book.id)}</div>
                     <div className="text-sm text-[#4B5563]">Warehouse count: <b>{found.book.wh_stock ?? "—"}</b></div>
                     <div className="flex gap-2">
                         {[["in", "IN ⬆"], ["out", "OUT ⬇"]].map(([v, l]) => (
@@ -1137,7 +1139,7 @@ function CheckStock() {
             <FindBook books={books} onPick={(id) => look("", id)} />
             {found && (
                 <div className="bg-white border border-[#E5E7EB] p-4">
-                    <div className="text-lg font-semibold text-[#002B5C]">{found.book.title}</div>
+                    <div className="text-lg font-semibold text-[#002B5C]">{titleFor(found.book.title, found.book.id)}</div>
                     <div className="mt-2 grid grid-cols-2 gap-3 text-center">
                         <div className="border p-3"><div className="text-xs">Warehouse count</div><div className="text-3xl font-serif">{found.book.wh_stock ?? "—"}</div></div>
                         <div className="border p-3"><div className="text-xs">On the website</div><div className="text-3xl font-serif">{found.book.stock ?? 0}</div></div>

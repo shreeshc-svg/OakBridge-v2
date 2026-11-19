@@ -1,3 +1,4 @@
+import { titleFor } from "../../lib/binding";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Search, AlertTriangle, PackageX, Download, FileText, X, GitCompare, CalendarClock, Printer } from "lucide-react";
@@ -189,7 +190,7 @@ function EditPanel({ b, onDone }) {
         try {
             const r = await fn();
             toast.success(ok);
-            (r?.below_zero || []).forEach((x) => toast.warning(`${x.title}: warehouse count is now ${x.wh_stock}. ${x.note}`, { duration: 10000 }));
+            (r?.below_zero || []).forEach((x) => toast.warning(`${titleFor(x.title, x.book_id || x.id)}: warehouse count is now ${x.wh_stock}. ${x.note}`, { duration: 10000 }));
             onDone();
         } catch (e) { toast.error(formatApiError(e)); } finally { setBusy(false); }
     };

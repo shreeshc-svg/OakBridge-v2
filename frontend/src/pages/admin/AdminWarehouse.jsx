@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Link, Navigate } from "react-router-dom";
 import { toast } from "sonner";
+import { titleFor, useBindings } from "../../lib/binding";
 import { Search, X } from "lucide-react";
 import {
     adminWhOverview, adminWhDocs, adminWhDoc, adminWhUndoDoc, adminWhTestCase, adminWhAccuracy,
@@ -40,6 +41,7 @@ const when = (iso) => (iso ? new Date(iso).toLocaleString("en-IN") : "—");
 
 export default function AdminWarehouse() {
     const { user } = useAuth();
+    useBindings(whBooks);   // HB / SB after every title in the warehouse admin (lib/binding.js)
     const [tab, setTab] = useState("approve");
     const [pending, setPending] = useState(null);
     const [moveQ, setMoveQ] = useState("");
@@ -157,7 +159,7 @@ function ResetFromSheet({ onDone }) {
                         <tbody>
                             {prev.changes.slice(0, 300).map((c) => (
                                 <tr key={c.id} className="border-t border-[#E5E7EB]">
-                                    <td className="py-2 pr-4">{c.title}<div className="font-mono text-xs text-[#4B5563]">{c.isbn}</div></td>
+                                    <td className="py-2 pr-4">{titleFor(c.title, c.id)}<div className="font-mono text-xs text-[#4B5563]">{c.isbn}</div></td>
                                     <td className="px-3 text-right whitespace-nowrap tabular-nums font-mono">{c.warehouse}</td>
                                     <td className="px-3 text-right whitespace-nowrap tabular-nums font-mono">{c.sheet}</td>
                                     <td className="px-3 text-right whitespace-nowrap tabular-nums font-mono text-[#6B7280]">{c.owed || "—"}</td>
@@ -226,7 +228,7 @@ function TrialTab({ canSwitch }) {
                         <tbody>
                             {ov.below_zero.map((b) => (
                                 <tr key={b.id} className="border-t border-[#E5E7EB] align-top">
-                                    <td className="py-1 pr-2">{b.title}<div className="font-mono text-xs text-[#4B5563]">{b.isbn}</div></td>
+                                    <td className="py-1 pr-2">{titleFor(b.title, b.id)}<div className="font-mono text-xs text-[#4B5563]">{b.isbn}</div></td>
                                     <td className="px-3 text-right whitespace-nowrap tabular-nums font-mono text-[#CC0033]">{b.wh_stock}</td>
                                     <td className="px-3 text-right whitespace-nowrap tabular-nums font-mono">{b.owed || "—"}</td>
                                     <td className="px-3 text-right whitespace-nowrap tabular-nums font-mono">{b.stock}</td>
@@ -255,7 +257,7 @@ function TrialTab({ canSwitch }) {
                             <tbody>
                                 {ov.differences.map((d) => (
                                     <tr key={d.id} className="border-t border-[#E5E7EB]">
-                                        <td className="py-1 pr-2">{d.title}{d.coming_soon ? " (pre-order)" : ""}</td>
+                                        <td className="py-1 pr-2">{titleFor(d.title, d.id)}{d.coming_soon ? " (pre-order)" : ""}</td>
                                         <td className="font-mono text-xs">{d.isbn}</td>
                                         <td className="text-right">{d.wh_stock}</td>
                                         <td className="text-right">{d.stock}</td>
@@ -467,7 +469,7 @@ function DocsTab({ status = null, onChange = () => {}, canDelete = false }) {
                                             const short = l.invoiced != null && l.packed !== Number(l.invoiced);
                                             return (
                                                 <tr key={i} className={`border-t ${short ? "bg-[#CC0033]/10" : ""}`}>
-                                                    <td className="py-1 px-2">{l.title} <span className="font-mono text-[#4B5563]">{l.isbn}</span></td>
+                                                    <td className="py-1 px-2">{titleFor(l.title, l.book_id)} <span className="font-mono text-[#4B5563]">{l.isbn}</span></td>
                                                     <td className="text-right">{l.invoiced ?? "—"}</td>
                                                     <td className={`text-right px-2 ${short ? "text-[#CC0033] font-medium" : ""}`}>{l.packed}</td>
                                                 </tr>
@@ -762,7 +764,7 @@ function MovesTab({ q = "" }) {
             <tbody>
                 {moves.map((m) => (
                     <tr key={m.id} className={`border-t ${m.undone ? "opacity-50 line-through" : ""}`}>
-                        <td className="p-2 text-xs">{when(m.at)}</td><td>{m.title}{m.isbn ? <span className="block text-[11px] font-mono text-[#4B5563]">{m.isbn}</span> : null}</td>
+                        <td className="p-2 text-xs">{when(m.at)}</td><td>{titleFor(m.title, m.book_id)}{m.isbn ? <span className="block text-[11px] font-mono text-[#4B5563]">{m.isbn}</span> : null}</td>
                         <td className="text-xs text-[#4B5563]">{m.category || "—"}</td><td>{REASON_NAME[m.reason] || m.reason}</td>
                         <td className="text-xs">{m.by}{m.party ? ` → ${m.party}` : ""}</td>
                         <td className={`text-right font-mono ${m.qty > 0 ? "text-[#15803D]" : "text-[#CC0033]"}`}>{m.qty > 0 ? `+${m.qty}` : m.qty}</td>

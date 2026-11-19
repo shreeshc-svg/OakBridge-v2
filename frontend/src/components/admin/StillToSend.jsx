@@ -1,3 +1,4 @@
+import { titleFor } from "../../lib/binding";
 import React, { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { adminOwed, adminOwedSent, adminOwedCancel, adminOwedRefundDone, formatApiError, formatINR } from "../../lib/api";
@@ -21,7 +22,7 @@ export default function StillToSend() {
     const act = async (fn, ok) => { try { await fn(); toast.success(ok); load(); } catch (e) { toast.error(formatApiError(e)); } };
     const cancel = (o) => {
         const money = o.kind === "website_order";
-        if (!window.confirm(`Cancel the remaining ${o.owed} × “${o.title}”${o.order_number ? ` on ${o.order_number}` : ""}?\n\n` +
+        if (!window.confirm(`Cancel the remaining ${o.owed} × “${titleFor(o.title, o.book_id)}”${o.order_number ? ` on ${o.order_number}` : ""}?\n\n` +
             (money ? `They go back into stock, the customer is emailed, and a refund reminder is added — refund it in Razorpay.` : "Nothing moves in stock — these copies never left."))) return;
         act(() => adminOwedCancel(o.id, money ? "Not sent — refund" : "Not sent"), money ? "Cancelled — copies back in stock; refund reminder added." : "Cancelled.");
     };
@@ -50,7 +51,7 @@ export default function StillToSend() {
                         const [sl, tone] = STATUS[o.status] || [o.status, "#4B5563"];
                         return (
                             <tr key={o.id} className="border-b border-[#F3F4F6] align-top">
-                                <td className="p-3"><div className="font-medium text-[#002B5C]">{o.title}</div><div className="text-xs font-mono text-[#6B7280]">{o.isbn}</div></td>
+                                <td className="p-3"><div className="font-medium text-[#002B5C]">{titleFor(o.title, o.book_id)}</div><div className="text-xs font-mono text-[#6B7280]">{o.isbn}</div></td>
                                 <td className="py-3">{o.kind_label}{o.order_number ? <span className="block font-mono text-xs">{o.order_number}</span> : null}<span className="block text-xs text-[#6B7280]">{o.party} · {new Date(o.created_at).toLocaleDateString("en-IN")}</span></td>
                                 <td className="py-3 font-mono">{o.sent} / {o.ordered}</td>
                                 <td className="py-3 font-mono font-semibold">{o.owed}</td>
