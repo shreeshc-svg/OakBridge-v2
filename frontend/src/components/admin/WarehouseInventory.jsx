@@ -1,8 +1,9 @@
 import { titleFor } from "../../lib/binding";
+import BindingBadge from "../BindingBadge";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Search, AlertTriangle, PackageX, Download, FileText, X, GitCompare, CalendarClock, Printer } from "lucide-react";
-import { adminWhInventory, adminWhSetCount, adminWhInvMove, adminWhInventoryXlsx, adminWhBrochure, saveBlob, fetchCategories,
+import { adminWhInventory, adminWhSetCount, adminWhMatchWebsite, adminWhInvMove, adminWhInventoryXlsx, adminWhBrochure, saveBlob, fetchCategories,
     formatApiError, formatINR, mediaUrl } from "../../lib/api";
 import ExportButton from "./ExportButton";
 import { preorderState, formatLaunchDate, formatLaunchTimes } from "../../lib/preorder";
@@ -139,7 +140,7 @@ export default function WarehouseInventory({ onHistory }) {
                                         <div className="flex items-center gap-3">
                                             {b.cover_image && <img src={mediaUrl(b.cover_image)} alt="" className="w-8 h-11 object-cover border border-[#E5E7EB]" />}
                                             <div className="min-w-0">
-                                                <div className="text-[#002B5C] truncate sm:max-w-[280px]">{b.title}</div>
+                                                <div className="text-[#002B5C] line-clamp-2 sm:max-w-[320px]" title={b.plain_title || b.title}><BindingBadge binding={b.binding} />{b.plain_title || b.title}</div>
                                                 <div className="text-[11px] text-[#4B5563] font-mono">{b.isbn}</div>
                                                 <KindTag b={b} />
                                             </div>
@@ -222,7 +223,38 @@ function EditPanel({ b, onDone }) {
                 <button type="button" disabled={busy || !(Number(qty) > 0)} onClick={() => run(() => adminWhInvMove(b.id, Number(qty), reason, mnote), "Saved.")}
                     className="border border-[#002B5C] px-3 py-1.5 text-xs disabled:opacity-40">{IN.some(([v]) => v === reason) ? "Add copies" : "Remove copies"}</button>
             </div>
+            {b.diff ? <MatchWebsite b={b} run={run} busy={busy} /> : null}
             <p className="md:col-span-2 text-[11px] text-[#6B7280]">Every change is a line in Movements with your name and note. A mistake is undone there (within 24 hours), not deleted.</p>
+        </div>
+    );
+}
+
+/*
+ * Website and warehouse disagree (the "vs website" line in the table). Every
+ * other tool moves BOTH numbers by the same amount, so it can't close a gap —
+ * typing 0 on the website pushes the warehouse below 0, and counting 0 in the
+ * warehouse puts the website back up. This sets the WEBSITE number alone to
+ * what the warehouse count says (backend/warehouse_match.py). Fix the shelf
+ * count first if that's the wrong one. Superadmin; logged.
+ */
+function MatchWebsite({ b, run, busy }) {
+    const [note, setNote] = useState("");
+    const target = Math.max(0, (b.wh_stock ?? 0) + (b.owed || 0));
+    return (
+        <div className="md:col-span-2 border border-[#FDE68A] bg-[#FFFBEB] p-3 space-y-2" data-testid="wh-match-website">
+            <div className="font-medium text-[#92400E]">Website shows {b.stock}, the warehouse count says {target}</div>
+            <p className="text-xs text-[#4B5563]">
+                Counting or typing stock moves both numbers together, so a gap like this can't be closed that way.
+                If the warehouse count ({b.wh_stock ?? 0}) is right, set the website to match it. If the shelf count is wrong, fix it with “Save count” first.
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+                <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Why — e.g. website showed 96, shelf has none"
+                    className="border border-[#E5E7EB] bg-white px-2 py-1.5 text-sm flex-1 min-w-[220px]" />
+                <button type="button" disabled={busy || note.trim().length < 3}
+                    onClick={() => window.confirm(`Set the website stock of “${b.plain_title || b.title}” from ${b.stock} to ${target}?\n\nThe warehouse count (${b.wh_stock ?? 0}) is not changed.`)
+                        && run(() => adminWhMatchWebsite(b.id, note), `Website stock set to ${target}.`)}
+                    className="bg-[#B4750F] text-white px-3 py-1.5 text-xs disabled:opacity-40">Set website to {target}</button>
+            </div>
         </div>
     );
 }

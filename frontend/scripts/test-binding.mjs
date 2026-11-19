@@ -34,7 +34,13 @@ const api = read("lib/api.js");
 check(/whBooks = [^\n]*then\(\(r\) => tagBooks\(r\.data\)\)/.test(api), "warehouse book list is tagged at the source (pickers, lookups, toasts)");
 check(/adminWhInventory = [^\n]*rows: tagBooks\(r\.data\?\.rows\)/.test(api), "admin warehouse inventory is tagged");
 const inv = read("pages/admin/AdminInventory.jsx");
-check(/rememberBindings\(/.test(inv) && (inv.match(/titleFor\(book\.title, book\.id\)/g) || []).length >= 2, "Admin → Inventory shows HB / PB too");
+check(/rememberBindings\(/.test(inv) && (inv.match(/<BindingBadge binding=\{book\.binding\} bookId=\{book\.id\} \/>/g) || []).length >= 2,
+    "Admin → Inventory: HB / PB badge in front of the title");
+check(!/truncate[^"]*">\s*<BindingBadge/.test(inv) && /line-clamp-2[^"]*" title=\{book\.title\}>/.test(inv),
+    "…and long titles wrap to two lines (full title on hover) instead of being cut");
+const winv = read("components/admin/WarehouseInventory.jsx");
+check(/<BindingBadge binding=\{b\.binding\} \/>\{b\.plain_title \|\| b\.title\}/.test(winv) && /line-clamp-2/.test(winv),
+    "Warehouse → Inventory: same badge in front, title wraps");
 // Not comment-stripped: the file has "image/*" in strings, which a /* */ stripper would eat.
 const app = readFileSync(join(SRC, "pages/warehouse/WarehouseApp.jsx"), "utf8");
 check(/useBindings\(whBooks\)/.test(app) && (app.match(/titleFor\(/g) || []).length >= 8,

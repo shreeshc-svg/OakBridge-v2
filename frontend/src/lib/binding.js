@@ -61,6 +61,9 @@ export function tagBooks(rows) {
     return rows.map((b) => (b && b.title ? { ...b, plain_title: b.plain_title || b.title, title: withBinding(b.title, b.binding) } : b));
 }
 
+/** The binding remembered for a book id ("" when unknown). */
+export const bindingOf = (bookId) => (bookId ? MAP[bookId] || "" : "");
+
 /** A title the server sent next to a book id (inbox lines, owed rows, order items). */
 export const titleFor = (title, bookId) => withBinding(title, bookId ? MAP[bookId] : "");
 

@@ -316,6 +316,9 @@ export const adminWhMpUndo = (date) => api.post(`/admin/warehouse/marketplace/sh
 export const adminWhInventory = () => api.get("/admin/warehouse/inventory").then((r) => ({ ...r.data, rows: tagBooks(r.data?.rows) }));
 export const adminWhSetCount = (bookId, count, note) =>
     api.post(`/admin/warehouse/inventory/${bookId}/count`, { count, note }).then((r) => r.data);
+// Website stock out of step with the warehouse count: set the website number only (backend/warehouse_match.py).
+export const adminWhMatchWebsite = (bookId, note) =>
+    api.post(`/admin/warehouse/inventory/${bookId}/match-website`, { note }).then((r) => r.data);
 // Files to share: Excel for founders/reports, a vendor catalogue PDF.
 export const adminWhInventoryXlsx = () =>
     api.get("/admin/warehouse/inventory/export.xlsx", { responseType: "blob", timeout: 120000 }).then((r) => r.data);

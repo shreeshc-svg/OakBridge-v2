@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { AlertTriangle, PackageX, Search } from "lucide-react";
-import { adminLowStock, fetchBooks, adminUpdateBook, formatINR, mediaUrl,
+import { adminLowStock, fetchBooks, adminUpdateBook, formatINR, mediaUrl, formatApiError,
          syncInventoryFromSheet, fetchSettings, adminSetSetting } from "../../lib/api";
 import { toast } from "sonner";
-import { rememberBindings, titleFor } from "../../lib/binding";
+import { rememberBindings } from "../../lib/binding";
+import BindingBadge from "../../components/BindingBadge";
 import ExportButton from "../../components/admin/ExportButton";
 
 export default function AdminInventory() {
@@ -352,7 +353,9 @@ function InventoryRow({ book, threshold, onSaved }) {
             toast.success(`Stock updated for "${book.title}".`);
             onSaved(book.id, Number(val));
         } catch (e) {
-            toast.error("Could not update stock. Try again.");
+            // The server's own reason (pre-order lock, permissions …), not a
+            // bare "try again" that hides why it was refused.
+            toast.error(formatApiError(e) || "Could not update stock. Try again.");
         } finally {
             setSaving(false);
         }
@@ -368,8 +371,11 @@ function InventoryRow({ book, threshold, onSaved }) {
                         className="w-8 h-11 object-cover border border-[#E5E7EB]"
                     />
                     <div className="min-w-0">
-                        <div className="font-serif text-[#002B5C] truncate max-w-full sm:w-[240px]">
-                            {titleFor(book.title, book.id)}
+                        {/* Badge first, then the WHOLE title over up to two lines
+                            (hover shows it all): a cut-off title used to cut off
+                            the HB / PB with it. */}
+                        <div className="font-serif text-[#002B5C] line-clamp-2 max-w-full sm:w-[300px]" title={book.title}>
+                            <BindingBadge binding={book.binding} bookId={book.id} />{book.title}
                         </div>
                         <div className="text-xs text-[#4B5563] truncate max-w-full sm:w-[240px]">
                             {book.author}
@@ -419,8 +425,8 @@ function BookRow({ book, critical = false }) {
                 className="w-10 h-14 object-cover border border-[#E5E7EB]"
             />
             <div className="flex-1 min-w-0">
-                <div className="font-serif text-base text-[#002B5C] truncate">
-                    {titleFor(book.title, book.id)}
+                <div className="font-serif text-base text-[#002B5C] line-clamp-2" title={book.title}>
+                    <BindingBadge binding={book.binding} bookId={book.id} />{book.title}
                 </div>
                 <div className="text-xs text-[#4B5563] truncate">
                     {book.author} · {book.isbn}

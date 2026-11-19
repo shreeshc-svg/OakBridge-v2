@@ -2192,6 +2192,8 @@ app.include_router(wh_owed_router)
 app.include_router(wh_owed_admin_router)
 from warehouse_undeliver import router as wh_undeliver_router  # noqa: E402  (shipped carton came back undelivered)
 app.include_router(wh_undeliver_router)
+from warehouse_match import router as wh_match_router  # noqa: E402  (website stock back in step with the warehouse count)
+app.include_router(wh_match_router)
 from warehouse import wh_router, wh_admin_router  # noqa: E402
 app.include_router(inventory_router)
 app.include_router(wh_router)
