@@ -286,7 +286,8 @@ function NotDelivered({ doc, onDone }) {
     const [open, setOpen] = useState(false);
     const [note, setNote] = useState("");
     const [busy, setBusy] = useState(false);
-    const units = (doc.lines || []).reduce((n, l) => n + Math.abs(Number(l.qty) || 0), 0);
+    // What actually left the stock: this carton's live movements (out = negative qty).
+    const units = (doc.movements || []).filter((m) => !m.undone).reduce((n, m) => n - Math.min(0, Number(m.qty) || 0), 0);
     const go = async () => {
         if (!window.confirm(`Mark ${doc.doc_number || "this carton"} as NOT delivered?\n\n${units ? `${units} copies go back into warehouse stock` : "Its copies go back into warehouse stock"} and the document is archived (kept in the history with your reason).\n\nOnly do this if the copies are physically back with us.`)) return;
         setBusy(true);
