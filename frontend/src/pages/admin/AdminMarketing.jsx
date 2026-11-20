@@ -5,7 +5,7 @@ import {
     mkDashboard, mkHealth, mkProviders, mkSettings, mkSaveSettings, mkVerify, mkImport, mkImportEstimate, mkImports, mkImportApprove, mkImportReject, mkReverify, mkSync, mkContacts, mkPatchContact,
     mkDeleteContact, mkLists, mkCreateList, mkCampaigns, mkNewCampaign, mkCampaign, mkSaveCampaign, mkDuplicate,
     mkAiGrowth, mkAiCampaign, mkAiDeliverability, mkListMembers, mkExportList, mkActivity,
-    mkAudience, mkPreview, mkFieldCheck, mkTemplates, mkNewTemplate, mkSaveTemplate, mkDeleteTemplate, mkUseTemplate, mkTemplatePreview, mkUploadEmailImage, mkExportCampaign, mkExportContacts, mkCleanup, mkGrowthFunnel, mkPartners, mkNewPartner, mkSavePartner, mkAutomations, mkSaveAutomations, mkAutomationsPreview, MERCHANT_FEED_URL, mkTestSend, mkSend, mkCampaignAction, mkReport, mkDismissAlert, mkSuppressionSync,
+    mkAudience, mkPreview, mkFieldCheck, mkPeopleSearch, mkRecipients, mkSendEmail, mkTemplates, mkNewTemplate, mkSaveTemplate, mkDeleteTemplate, mkUseTemplate, mkTemplatePreview, mkUploadEmailImage, mkExportCampaign, mkExportContacts, mkCleanup, mkGrowthFunnel, mkPartners, mkNewPartner, mkSavePartner, mkAutomations, mkSaveAutomations, mkAutomationsPreview, MERCHANT_FEED_URL, mkTestSend, mkSend, mkCampaignAction, mkReport, mkDismissAlert, mkSuppressionSync,
     mkValidateEstimate, mkValidatePending, mkBulkContacts, mkBulkDeleteLists, mkBulkDeleteCampaigns, mkRenameCampaign, mkLearn, mkDisposableRefresh, mkSystemHealth, nlOverview, nlSave, nlDraftNow, nlApprove, nlSkip, fetchBooks, fetchCategories, mediaUrl, formatApiError,
 } from "../../lib/api";
 import { useAuth } from "../../context/AuthContext";
@@ -389,6 +389,7 @@ function CampaignList({ onOpen, onTemplates }) {
     };
     return (
         <div className="space-y-4">
+            <PeopleSearch onOpen={onOpen} />
             <div className="flex gap-2">
                 <button type="button" className={`${btn} bg-[#002B5C] text-white inline-flex items-center gap-2`} onClick={() => create("email")} data-testid="mk-new-email"><Mail size={15} /> New email campaign</button>
                 <button type="button" className={`${btn} border border-[#002B5C] text-[#002B5C]`} onClick={onTemplates} data-testid="mk-from-template">Start from a template</button>
@@ -406,6 +407,181 @@ function CampaignList({ onOpen, onTemplates }) {
                 </div>
             )}
         </div>
+    );
+}
+
+/* ------------------------------------------------ who got which email --- */
+/*
+ * Find people across every campaign and automation: any part of the name
+ * (words in any order), the email, or 4+ digits of the phone. For each
+ * person: every email we sent them, what it was (campaign + subject), when,
+ * and how far it got; "View" shows the email as THEY received it.
+ * Backend: marketing_people.py (+ marketing_core.people_filter).
+ */
+const OUT_TONE = {
+    clicked: "bg-[#DCFCE7] text-[#166534]", opened: "bg-[#DBEAFE] text-[#1E40AF]", delivered: "bg-[#F3F4F6] text-[#374151]",
+    sent: "bg-[#F3F4F6] text-[#374151]", queued: "bg-[#F3F4F6] text-[#6B7280]", bounced: "bg-[#FEE2E2] text-[#991B1B]",
+    complained: "bg-[#FEE2E2] text-[#991B1B]", unsubscribed: "bg-[#FEF3C7] text-[#92400E]", skipped: "bg-[#F3F4F6] text-[#6B7280]",
+    failed: "bg-[#FEE2E2] text-[#991B1B]", blocked: "bg-[#FEE2E2] text-[#991B1B]",
+};
+const Outcome = ({ o }) => <span className={`text-[10px] font-mono uppercase px-1.5 py-0.5 ${OUT_TONE[o] || "bg-[#F3F4F6]"}`}>{o}</span>;
+
+function EmailModal({ sendId, onClose }) {
+    const [e, setE] = useState(null);
+    // Fetched once per email: onClose is a new function on every parent
+    // render, so it is read through a ref rather than listed as a dependency.
+    const close = useRef(onClose);
+    close.current = onClose;
+    useEffect(() => { mkSendEmail(sendId).then(setE).catch((x) => { toast.error(formatApiError(x)); close.current(); }); }, [sendId]);
+    return (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-start justify-center p-4 overflow-y-auto" onClick={onClose} data-testid="mk-email-modal">
+            <div className="bg-white w-full max-w-3xl my-6 border border-[#002B5C]" onClick={(x) => x.stopPropagation()}>
+                <div className="p-4 border-b border-[#E5E7EB] flex items-start gap-3">
+                    <div className="flex-1 min-w-0 text-sm">
+                        {!e ? "Loading…" : <>
+                            <div className="font-medium text-[#002B5C] break-words">{e.subject || e.campaign}</div>
+                            <div className="text-xs text-[#4B5563] mt-1">To <b>{e.to}</b> · {when(e.at)} · {e.campaign} · <Outcome o={e.outcome} /></div>
+                        </>}
+                    </div>
+                    <button type="button" aria-label="Close" onClick={onClose}><X size={18} /></button>
+                </div>
+                {e?.note && <p className="px-4 py-2 text-xs bg-[#FFFBEB] text-[#92400E]">{e.note}</p>}
+                {e?.html ? <iframe title="Email as received" sandbox="" srcDoc={e.html} className="w-full h-[70vh] bg-white" /> : null}
+            </div>
+        </div>
+    );
+}
+
+function SendRow({ s, onView, onOpen, showTo = false }) {
+    return (
+        <tr className="border-t border-[#F3F4F6] align-top">
+            <td className="py-1.5 pr-3 whitespace-nowrap text-xs text-[#4B5563]">{when(s.at)}</td>
+            <td className="py-1.5 pr-3">
+                {onOpen && !s.automation
+                    ? <button type="button" className="text-left text-[#002B5C] hover:underline" onClick={() => onOpen(s.campaign_id)}>{s.campaign}</button>
+                    : <span className="text-[#002B5C]">{s.campaign}</span>}
+                {s.subject && <div className="text-xs text-[#6B7280] break-words">“{s.subject}”</div>}
+                {showTo && <div className="text-xs font-mono text-[#6B7280]">{s.to}</div>}
+            </td>
+            <td className="py-1.5 pr-3 whitespace-nowrap"><Outcome o={s.outcome} />
+                {s.opened_at && <div className="text-[10px] text-[#6B7280] mt-0.5">opened {when(s.opened_at)}</div>}
+                {s.clicks > 0 && <div className="text-[10px] text-[#6B7280]">{s.clicks} click{s.clicks === 1 ? "" : "s"}</div>}
+                {s.error && <div className="text-[10px] text-[#991B1B] max-w-[200px] break-words">{s.error}</div>}</td>
+            <td className="py-1.5 text-right"><button type="button" className="text-xs underline" onClick={() => onView(s.send_id)} data-testid="mk-view-email">View email</button></td>
+        </tr>
+    );
+}
+
+function PeopleSearch({ onOpen }) {
+    const [q, setQ] = useState("");
+    const dq = useDebounced(q, 300);
+    const [r, setR] = useState(null);
+    const [busy, setBusy] = useState(false);
+    const [view, setView] = useState(null);
+    const seq = useRef(0);
+    useEffect(() => {
+        const t = dq.trim();
+        if (t.length < 2) { setR(null); return; }
+        const n = ++seq.current;   // only the latest answer is shown, however the requests race
+        setBusy(true);
+        mkPeopleSearch(t).then((d) => { if (n === seq.current) setR(d); }).catch((e) => toast.error(formatApiError(e)))
+            .finally(() => { if (n === seq.current) setBusy(false); });
+    }, [dq]);
+    return (
+        <div className="bg-white border border-[#E5E7EB] p-4" data-testid="mk-people-search">
+            <div className="flex items-center gap-2">
+                <Search size={16} className="text-[#6B7280]" />
+                <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a person — name, email or phone: who got which email, and when"
+                    className="flex-1 outline-none text-sm py-1" data-testid="mk-people-q" aria-label="Search people across campaigns" />
+                {busy && <span className="text-xs text-[#6B7280]">Searching…</span>}
+                {q && <button type="button" aria-label="Clear" onClick={() => setQ("")}><X size={15} /></button>}
+            </div>
+            {r && (
+                <div className="mt-3 space-y-3 max-h-[70vh] overflow-y-auto">
+                    {!r.people.length && <p className="text-sm text-[#6B7280]">{r.note || "Nobody found in Marketing contacts or past sends."}</p>}
+                    {r.people.map((p) => (
+                        <div key={p.id || p.email} className="border border-[#E5E7EB]" data-testid="mk-person">
+                            <div className="px-3 py-2 bg-[#F9FAFB] flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
+                                <b className="text-[#002B5C]">{p.name || p.email}</b>
+                                <span className="font-mono text-xs text-[#4B5563]">{p.email}</span>
+                                {p.phone && <span className="font-mono text-xs text-[#4B5563]">{p.phone}</span>}
+                                {p.removed && <span className="text-[10px] uppercase text-[#B45309]">contact deleted — found by past sends</span>}
+                                {p.consent && <span className="text-[10px] uppercase text-[#6B7280]">{p.consent}</span>}
+                                {p.lists?.length > 0 && <span className="text-xs text-[#6B7280]">lists: {p.lists.join(", ")}</span>}
+                                <span className="ml-auto text-xs text-[#4B5563]">{p.send_count} email{p.send_count === 1 ? "" : "s"}</span>
+                            </div>
+                            {p.sends.length ? (
+                                <table className="w-full text-sm"><tbody>
+                                    {p.sends.map((s) => <SendRow key={s.send_id} s={s} onView={setView} onOpen={onOpen} />)}
+                                </tbody></table>
+                            ) : <p className="px-3 py-2 text-xs text-[#6B7280]">No emails sent to this person yet.</p>}
+                        </div>
+                    ))}
+                    {r.more && <p className="text-xs text-[#6B7280]">More people match — type more of the name, email or phone.</p>}
+                </div>
+            )}
+            {view && <EmailModal sendId={view} onClose={() => setView(null)} />}
+        </div>
+    );
+}
+
+/* One sent campaign's recipients: search by name / email / phone, filter by
+   how far the email got, page through, and view the email as each got it. */
+function CampaignRecipients({ id }) {
+    const [q, setQ] = useState("");
+    const dq = useDebounced(q, 300);
+    const [outcome, setOutcome] = useState("");
+    const [page, setPage] = useState(1);
+    const [d, setD] = useState(null);
+    const [view, setView] = useState(null);
+    useEffect(() => { setPage(1); }, [dq, outcome]);
+    useEffect(() => {
+        let live = true;
+        mkRecipients(id, { q: dq.trim(), outcome, page }).then((x) => { if (live) setD(x); }).catch((e) => toast.error(formatApiError(e)));
+        return () => { live = false; };
+    }, [id, dq, outcome, page]);
+    const counts = d?.counts || {};
+    return (
+        <Panel title="Recipients" right={<span className="text-xs text-[#6B7280]">{d ? `${d.total.toLocaleString("en-IN")} shown` : ""}</span>}>
+            <div className="flex flex-wrap gap-2 mb-3" data-testid="mk-recipients">
+                <div className="flex items-center gap-2 border border-[#E5E7EB] px-2 flex-1 min-w-[240px]">
+                    <Search size={14} className="text-[#6B7280]" />
+                    <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Name, email or phone" className="flex-1 outline-none text-sm py-1.5" data-testid="mk-recipients-q" />
+                </div>
+                <select value={outcome} onChange={(e) => setOutcome(e.target.value)} className="border border-[#E5E7EB] px-2 text-sm" aria-label="How far it got">
+                    <option value="">Everyone</option>
+                    {Object.keys(counts).sort().map((k) => <option key={k} value={k}>{k} ({counts[k]})</option>)}
+                </select>
+            </div>
+            {d?.note && <p className="text-xs text-[#6B7280] mb-2">{d.note}</p>}
+            {!d ? <p className="text-sm text-[#6B7280]">Loading…</p> : (
+                <table className="w-full text-sm">
+                    <thead><tr className="text-left text-xs text-[#6B7280]"><th className="py-1">Person</th><th>Sent</th><th>Outcome</th><th></th></tr></thead>
+                    <tbody>
+                        {d.rows.map((s) => (
+                            <tr key={s.send_id} className="border-t border-[#F3F4F6] align-top">
+                                <td className="py-1.5 pr-3"><div className="text-[#002B5C]">{s.name || "—"}</div>
+                                    <div className="text-xs font-mono text-[#6B7280]">{s.to}{s.phone ? ` · ${s.phone}` : ""}</div></td>
+                                <td className="py-1.5 pr-3 whitespace-nowrap text-xs text-[#4B5563]">{when(s.at)}</td>
+                                <td className="py-1.5 pr-3 whitespace-nowrap"><Outcome o={s.outcome} />
+                                    {s.opened_at && <div className="text-[10px] text-[#6B7280] mt-0.5">opened {when(s.opened_at)}</div>}
+                                    {s.error && <div className="text-[10px] text-[#991B1B] max-w-[220px] break-words">{s.error}</div>}</td>
+                                <td className="py-1.5 text-right"><button type="button" className="text-xs underline" onClick={() => setView(s.send_id)}>View email</button></td>
+                            </tr>
+                        ))}
+                        {!d.rows.length && <tr><td colSpan={4} className="py-4 text-[#6B7280]">No one matches.</td></tr>}
+                    </tbody>
+                </table>
+            )}
+            {d?.pages > 1 && (
+                <div className="flex items-center gap-2 mt-3 text-sm">
+                    <button type="button" className="border px-2 py-1 disabled:opacity-40" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</button>
+                    <span className="text-xs text-[#6B7280]">Page {page} of {d.pages}</span>
+                    <button type="button" className="border px-2 py-1 disabled:opacity-40" disabled={page >= d.pages} onClick={() => setPage(page + 1)}>Next</button>
+                </div>
+            )}
+            {view && <EmailModal sendId={view} onClose={() => setView(null)} />}
+        </Panel>
     );
 }
 
@@ -429,6 +605,7 @@ function CampaignView({ id, onBack, onOpen }) {
                     onClick={async () => { if (await deleteCampaigns([id], [c])) onBack(); }} data-testid="mk-camp-delete"><Trash2 size={13} /> Delete</button>}
             </div>
             {editable ? <CampaignEditor c={c} setC={setC} reload={load} /> : <CampaignReport id={id} status={c.status} reload={load} />}
+            {!editable && <CampaignRecipients id={id} />}
             <CampaignActivity id={id} status={c.status} />
         </div>
     );

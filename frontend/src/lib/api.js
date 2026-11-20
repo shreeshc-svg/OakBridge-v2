@@ -921,6 +921,10 @@ export const mkExportList = (id, format = "xlsx", q = "") =>
 export const mkCreateList = (body) => api.post("/admin/marketing/lists", body).then((r) => r.data);
 export const mkDeleteList = (id) => api.delete(`/admin/marketing/lists/${id}`).then((r) => r.data);
 export const mkCampaigns = () => api.get("/admin/marketing/campaigns").then((r) => r.data);
+// Who got which email, and when (backend/marketing_people.py).
+export const mkPeopleSearch = (q) => api.get("/admin/marketing/people", { params: { q } }).then((r) => r.data);
+export const mkRecipients = (id, params) => api.get(`/admin/marketing/campaigns/${id}/recipients`, { params }).then((r) => r.data);
+export const mkSendEmail = (sendId) => api.get(`/admin/marketing/sends/${sendId}/email`).then((r) => r.data);
 export const mkNewCampaign = (body) => api.post("/admin/marketing/campaigns", body).then((r) => r.data);
 export const mkCampaign = (id) => api.get(`/admin/marketing/campaigns/${id}`).then((r) => r.data);
 export const mkSaveCampaign = (id, body) => api.patch(`/admin/marketing/campaigns/${id}`, body).then((r) => r.data);

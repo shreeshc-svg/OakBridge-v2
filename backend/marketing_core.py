@@ -895,6 +895,63 @@ def campaign_texts(c: dict) -> list:
     return texts
 
 
+# -------------------------------------------------------- people search ---
+#
+# "Who got what, when" (marketing_people.py): find a person by any part of
+# their name, email or phone, the way the team actually has it in hand —
+# "rastogi", "shivam1292", "98100 12345", "+91-9810012345".
+PEOPLE_Q_MAX = 100
+
+
+def people_terms(q: str) -> dict:
+    """The parsed search: {"text", "words", "digits"}; empty text = no search."""
+    text = " ".join(str(q or "").split())[:PEOPLE_Q_MAX]
+    return {"text": text, "words": [w for w in re.split(r"\s+", text) if w], "digits": re.sub(r"\D", "", text)}
+
+
+def people_filter(q: str) -> Optional[dict]:
+    """Mongo filter for contacts matching the search, or None (too short).
+
+    Any of: the email contains what was typed; EVERY word is in the name
+    ("shivam rastogi" and "rastogi shivam" both work); the phone contains the
+    digits typed (4+), whatever separators either side used. All patterns
+    are escaped — a typed "(" or "+" is a character, never regex syntax."""
+    t = people_terms(q)
+    if len(t["text"]) < 2:
+        return None
+    ors: list = [{"email": {"$regex": re.escape(t["text"]), "$options": "i"}}]
+    if t["words"]:
+        ors.append({"$and": [{"name": {"$regex": re.escape(w), "$options": "i"}} for w in t["words"]]})
+    if len(t["digits"]) >= 4:
+        # 4+ digits anywhere: "9810012345" finds "+91 98100 12345". A typed
+        # country code ("+91 98100 12345") is dropped, so it still finds a
+        # number stored without one.
+        d = t["digits"][-10:] if len(t["digits"]) > 10 else t["digits"]
+        ors.append({"phone": {"$regex": r"\D*".join(d)}})
+    return {"$or": ors}
+
+
+def people_rank(contact: dict, q: str) -> tuple:
+    """Sort key: exact email, email starting with it, name starting with
+    it, phone match, then the rest — alphabetical within each."""
+    t = people_terms(q)
+    ql = t["text"].lower()
+    email = (contact.get("email") or "").lower()
+    name = (contact.get("name") or "").lower()
+    phone = re.sub(r"\D", "", contact.get("phone") or "")
+    if email == ql:
+        r = 0
+    elif email.startswith(ql):
+        r = 1
+    elif name.startswith(ql):
+        r = 2
+    elif len(t["digits"]) >= 4 and t["digits"][-10:] in phone:
+        r = 3
+    else:
+        r = 4
+    return (r, name or email)
+
+
 # Starter templates: read-only, always available. "Use" makes a campaign from
 # one; "Duplicate" makes an editable copy in the team's own templates. Links
 # point at real site pages; book blocks are left for the admin to pick.

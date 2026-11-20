@@ -2212,6 +2212,8 @@ app.include_router(marketing_public_router)
 # and answer "Unknown action". FastAPI matches routes in registration order.
 from marketing_attachments import router as marketing_attachments_router  # noqa: E402
 app.include_router(marketing_attachments_router)
+from marketing_people import router as marketing_people_router  # noqa: E402  (who got which email, and when)
+app.include_router(marketing_people_router)
 from hrm import router as hrm_router  # noqa: E402  (HRM: /api/hrm, own access rules — see hrm.py)
 app.include_router(hrm_router)
 from hrm_leave import router as hrm_leave_router  # noqa: E402  (HRM release 2: leave)

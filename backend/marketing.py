@@ -217,6 +217,8 @@ async def _ensure_indexes() -> None:
     await _index(db.mk_sends, [("campaign_id", 1), ("status", 1)])
     await _index(db.mk_sends, "message_id", sparse=True)
     await _index(db.mk_sends, [("campaign_id", 1), ("contact_id", 1)], unique=True)
+    # People search (marketing_people.py): every send to one person.
+    await _index(db.mk_sends, "contact_id")
     await _unique_index(db.mk_domains, "domain")
     # Lookups and updates by `id` are on every hot path (each send, each
     # contact update); without these every one of them scanned the collection.
