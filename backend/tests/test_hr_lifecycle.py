@@ -108,6 +108,9 @@ import hrm  # noqa: E402
 import hrm_lifecycle as HL  # noqa: E402
 
 HL._today = lambda: T
+# hrm.py decides "past their last day" by its own clock; pin it too, or this
+# test starts failing once the real date passes the exit dates below.
+hrm._today_ist = lambda: T
 
 
 async def expect(coro, status, label):

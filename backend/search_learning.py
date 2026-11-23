@@ -32,7 +32,10 @@ public_router = APIRouter(prefix="/api/search", tags=["search"])
 LIVE = ("approved", "auto")
 BATCH = 40
 LLM_WAIT = 150
-_cache: dict = {"at": 0.0, "rows": {}}
+# "at" = -inf means "load on next use". Not 0: time.monotonic() counts from
+# boot, so in a process's first minute "now - 0 < 60" held and a freshly
+# approved fix stayed invisible until the minute was up.
+_cache: dict = {"at": float("-inf"), "rows": {}}
 
 
 def _now() -> datetime:
@@ -151,7 +154,7 @@ async def learn(by: str = "system") -> dict:
             continue
         proposed += 1
         auto += status == "auto"
-    _cache["at"] = 0
+    _cache["at"] = float("-inf")
     await audit_log(db, "SEARCH_LEARNING_RUN", email=by, role="system" if by == "system" else "admin",
                     meta={"asked": len(asked), "proposed": proposed, "auto": auto})
     return {"asked": len(asked), "proposed": proposed, "auto": auto}
@@ -195,7 +198,7 @@ async def _set(rid: str, status: str, user: dict, allowed: tuple) -> dict:
                                               {"$set": {"status": status, "decided_by": user.get("email", ""), "decided_at": _now().isoformat()}})
     if not res.modified_count:
         raise HTTPException(status_code=409, detail="This changed a moment ago — refresh.")
-    _cache["at"] = 0
+    _cache["at"] = float("-inf")
     await audit_log(db, f"SEARCH_REWRITE_{status.upper()}", email=user.get("email", ""), role=user.get("role", ""), meta={"rewrite": rid})
     return {"ok": True}
 
