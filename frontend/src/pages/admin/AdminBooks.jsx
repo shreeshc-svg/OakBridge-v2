@@ -31,6 +31,7 @@ import { useAuth } from "../../context/AuthContext";
 import { canDelete } from "../../lib/rbac";
 import ExportButton from "../../components/admin/ExportButton";
 import BookFormats from "../../components/admin/BookFormats";
+import BulkCovers from "../../components/admin/BulkCovers";
 import { Link } from "react-router-dom";
 
 const BLANK = {
@@ -1447,6 +1448,7 @@ export default function AdminBooks() {
     const [cats, setCats] = useState([]);
     const [editing, setEditing] = useState(null); // object or "new"
     const [csvOpen, setCsvOpen] = useState(false);
+    const [coversOpen, setCoversOpen] = useState(false);
     const [releaseOrderOpen, setReleaseOrderOpen] = useState(false);
     const [repairAuthorsOpen, setRepairAuthorsOpen] = useState(false);
     const [loading, setLoading] = useState(true);
@@ -1650,6 +1652,14 @@ export default function AdminBooks() {
                         <Upload size={14} strokeWidth={1.5} /> Import CSV
                     </button>
                     <button
+                        onClick={() => setCoversOpen(true)}
+                        data-testid="admin-bulk-covers-button"
+                        title="Set many covers at once from image files named by ISBN"
+                        className="inline-flex items-center gap-2 border border-[#002B5C] text-[#002B5C] px-4 py-2 text-sm hover:bg-[#F5F7FA]"
+                    >
+                        <ImagePlus size={14} strokeWidth={1.5} /> Covers by ISBN
+                    </button>
+                    <button
                         onClick={() => setReleaseOrderOpen(true)}
                         data-testid="admin-release-order-button"
                         title="Fix which books count as new — the Newest sort runs on this"
@@ -1837,6 +1847,7 @@ export default function AdminBooks() {
                     onDone={load}
                 />
             )}
+            {coversOpen && <BulkCovers books={books} onClose={() => setCoversOpen(false)} onDone={load} />}
             {csvOpen && (
                 <CsvImportDialog
                     onClose={() => setCsvOpen(false)}

@@ -2147,9 +2147,24 @@ def _parse_xlsx_rows(file_bytes: bytes) -> List[dict]:
     return out
 
 
+# Title Master shorthand -> the binding the site shows (Nov 2026 import of the
+# 58 titles missing from the website). Anything else is kept as written.
+_BINDING_CODES = {"PB": "Paperback", "PB(GF)": "Paperback", "HB": "Hardback",
+                  "HB(DJ)": "Hardback with Dust Jacket"}
+
+
+def _csv_binding(v: Optional[str]) -> Optional[str]:
+    v = (v or "").strip()
+    if not v:
+        return None
+    return _BINDING_CODES.get(v.upper().replace(" ", ""), v)
+
+
 def _csv_row_to_book_doc(clean: dict) -> dict:
     if not clean.get("title") or not clean.get("isbn"):
         raise ValueError("title and isbn are required")
+    from extensions import rank_for_year
+    year = _csv_int(clean.get("publication_year"), default=datetime.now().year)
     return {
         "id": str(uuid.uuid4()),
         "title": clean["title"],
@@ -2183,6 +2198,13 @@ def _csv_row_to_book_doc(clean: dict) -> dict:
         "launch_at": (clean.get("launch_at") or "").strip() or None,
         "rating": _csv_float(clean.get("rating")) or 4.5,
         "stock": _csv_int(clean.get("stock"), default=100),
+        # Optional, shown in the Specs tab and as HB / PB in the warehouse.
+        "binding": _csv_binding(clean.get("binding")),
+        "size": (clean.get("size") or "").strip() or None,
+        "edition": (clean.get("edition") or "").strip() or None,
+        # Same as a book added in the form (extensions.admin_create_book):
+        # without a rank an imported title sorts behind everything in "Newest".
+        "release_rank": rank_for_year(year),
     }
 
 
@@ -2247,10 +2269,20 @@ async def admin_bulk_import(file: UploadFile = File(...)):
 
     created: List[dict] = []
     errors: List[dict] = []
+    # Importing the same sheet twice (or a row already added by hand) must not
+    # create a second copy of a title: skip any ISBN already in the catalogue.
+    have = {re.sub(r"[^0-9Xx]", "", str(b.get("isbn") or "")).upper()
+            async for b in db.books.find({}, {"_id": 0, "isbn": 1})}
     for i, row in rows_iter:  # start=2 to match spreadsheet row numbers
         clean = {k.strip(): (str(v) if v is not None else "").strip() for k, v in row.items() if k}
+        key = re.sub(r"[^0-9Xx]", "", clean.get("isbn") or "").upper()
+        if key and key in have:
+            errors.append({"row": i, "error": f"ISBN {key} is already in the catalogue — skipped"})
+            continue
         try:
             doc = _csv_row_to_book_doc(clean)
+            if key:
+                have.add(key)
             await db.books.insert_one({**doc})
             created.append({"row": i, "id": doc["id"], "title": doc["title"]})
         except Exception as e:  # noqa: BLE001
