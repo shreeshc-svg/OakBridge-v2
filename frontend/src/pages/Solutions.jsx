@@ -2,6 +2,8 @@ import React, { useEffect, useState } from "react";
 import { fetchSiteContent, fetchCollection, mediaUrl } from "../lib/api";
 import Breadcrumbs from "../components/Breadcrumbs";
 import Seo from "../components/Seo";
+import NoIndex from "../components/NoIndex";
+import { isComingSoon } from "../lib/comingSoon";
 import { Link, useParams } from "react-router-dom";
 import { ArrowUpRight, Check } from "lucide-react";
 import { breadcrumbLd, metaDescription } from "../lib/schema";
@@ -117,18 +119,24 @@ function SolutionDetail({ slug }) {
              * "For Schools" alone says nothing about K-12 textbook adoption —
              * which is the query these pages can realistically win.
              */}
-            <Seo
-                title={`${s.title} — ${s.kicker}`}
-                description={metaDescription(s.lede)}
-                path={`/solutions/${slug}`}
-                image={hero}
-                jsonLd={[
-                    breadcrumbLd([
-                        { name: "Solutions", path: "/solutions" },
-                        { name: s.title },
-                    ]),
-                ]}
-            />
+            {/* Not launched yet: noindex (no canonical / social card), same
+                title. lib/comingSoon.js has why and how to launch it. */}
+            {isComingSoon(`/solutions/${slug}`) ? (
+                <NoIndex title={`${s.title} — ${s.kicker}`} />
+            ) : (
+                <Seo
+                    title={`${s.title} — ${s.kicker}`}
+                    description={metaDescription(s.lede)}
+                    path={`/solutions/${slug}`}
+                    image={hero}
+                    jsonLd={[
+                        breadcrumbLd([
+                            { name: "Solutions", path: "/solutions" },
+                            { name: s.title },
+                        ]),
+                    ]}
+                />
+            )}
             <section className="px-6 md:px-12 lg:px-16 2xl:px-24 3xl:px-40 pt-20 pb-12 border-b border-[#E5E7EB]">
                 <Link
                     to="/solutions"
@@ -183,8 +191,11 @@ function SolutionDetail({ slug }) {
     );
 }
 
-export default function Solutions() {
-    const { slug } = useParams();
+// `slug` as a prop: the not-yet-launched pages have their own explicit route
+// in App.js (so they can be prerendered as noindex routes — lib/comingSoon.js).
+export default function Solutions({ slug: fixedSlug }) {
+    const params = useParams();
+    const slug = fixedSlug || params.slug;
     const { site, items } = useSolutions();
     if (slug) return <SolutionDetail slug={slug} />;
 

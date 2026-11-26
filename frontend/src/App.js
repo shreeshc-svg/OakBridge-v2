@@ -145,6 +145,10 @@ function App() {
                                 <Route path="/about" element={<About />} />
                                 <Route path="/gifting" element={<Gifting />} />
                                 <Route path="/solutions" element={<Solutions />} />
+                                {/* Not launched yet — own routes so they prerender as
+                                    noindex pages (lib/comingSoon.js). */}
+                                <Route path="/solutions/higher-ed" element={<Solutions slug="higher-ed" />} />
+                                <Route path="/solutions/educators" element={<Solutions slug="educators" />} />
                                 <Route
                                     path="/solutions/:slug"
                                     element={<Solutions />}

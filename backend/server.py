@@ -842,7 +842,10 @@ _SITEMAP_STATIC_PATHS = [
     # prerenderer keeps an identical hardcoded list and sanity-check #7 compares
     # the two, so a slug added in Admin needs adding in both places or it ships
     # the empty shell. Deriving it here alone would silently break that parity.
-    "/solutions", "/solutions/schools", "/solutions/higher-ed", "/solutions/educators",
+    # /solutions/higher-ed and /solutions/educators are left out while they
+    # marked Coming soon: they carry noindex, and a sitemap asks for indexing
+    # (frontend/src/lib/comingSoon.js says how to launch one).
+    "/solutions", "/solutions/schools",
     "/gifting",
     "/careers", "/media",
     "/terms", "/privacy", "/refund-policy", "/shipping-policy", "/cookie-policy",

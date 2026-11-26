@@ -129,7 +129,7 @@ const MIME = {
 const STATIC_ROUTES = [
     "/", "/books", "/authors", "/events", "/about", "/contact",
     "/submissions", "/academy", "/digital-solutions", "/what-we-do", "/ebooks",
-    "/solutions", "/solutions/schools", "/solutions/higher-ed", "/solutions/educators",
+    "/solutions", "/solutions/schools",
     "/gifting",
     "/careers", "/media",
     "/terms", "/privacy", "/refund-policy", "/shipping-policy", "/cookie-policy",
@@ -157,7 +157,9 @@ const STATIC_ROUTES = [
  * to crawl a URL and simultaneously telling it not to index it is a
  * contradiction, and a sitemap is a request to index.
  */
-const NOINDEX_ROUTES = ["/cart", "/checkout", "/account", "/login", "/register", "/forgot-password"];
+const NOINDEX_ROUTES = ["/cart", "/checkout", "/account", "/login", "/register", "/forgot-password",
+    // Not launched yet (Coming soon in the footer) — src/lib/comingSoon.js.
+    "/solutions/higher-ed", "/solutions/educators"];
 
 /*
  * Routes whose rendered HTML must contain a given string, or the render counts
