@@ -152,6 +152,14 @@ async def main():
     b = await db.books.find_one({"id": "hb"})
     check(b["wh_stock"] == 12 and b["stock"] == 12, "and any other number: both 12")
 
+    print("-- a book never counted (no wh_stock at all) --")
+    await db.books.insert_one({"id": "new1", "title": "Indian Economy", "stock": 0})
+    await expect(wh.adm_set_count("new1", wh.CountBody(count=374, note="first count"), SUPER), 404,
+                 "the plain count refuses a never-counted book (the 26 Nov bug)")
+    r = await M.set_both("new1", M.BothBody(count=374, note="first count"), SUPER)
+    b = await db.books.find_one({"id": "new1"})
+    check(b["wh_stock"] == 374 and b["stock"] == 374, "set both gives it its first count: warehouse 374, website 374")
+
     print("-- waiting orders and pre-orders --")
     await db.books.insert_one({"id": "w", "title": "Waiting", "stock": 9, "wh_stock": -2})
     OWED["w"] = 2

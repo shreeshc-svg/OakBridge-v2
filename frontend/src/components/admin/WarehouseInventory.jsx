@@ -207,7 +207,12 @@ function EditPanel({ b, onDone }) {
                     <span className={`text-xs ${diff ? "text-[#B45309]" : "text-[#6B7280]"}`}>{diff ? `${diff > 0 ? "+" : ""}${diff} copies (saved as a correction)` : "no change"}</span>
                 </div>
                 <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Why — e.g. shelf counted 28 Oct by Ravi" className={`${inp} w-full`} />
-                <button type="button" disabled={busy || !diff || note.trim().length < 3} onClick={() => run(() => adminWhSetCount(b.id, Number(count), note), "Count saved.")}
+                <button type="button" disabled={busy || (!diff && b.wh_stock != null) || note.trim().length < 3} onClick={() => run(() => (b.wh_stock == null
+                        // Never counted: the plain count refuses a book with no count yet
+                        // (warehouse.adm_set_count); "set both" starts it at 0 first and
+                        // gives website and warehouse the same first number.
+                        ? adminWhSetBoth(b.id, Number(count), note)
+                        : adminWhSetCount(b.id, Number(count), note)), "Count saved.")}
                     className="bg-[#002B5C] text-white px-3 py-1.5 text-xs disabled:opacity-40">Save count</button>
             </div>
             <div className="space-y-2">

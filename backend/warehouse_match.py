@@ -109,6 +109,14 @@ async def set_both(book_id: str, body: BothBody, user: dict = Depends(require_su
     if (await get_state()).get("mode") != "live":
         raise HTTPException(status_code=409, detail="Only once the warehouse is live — during the trial the website follows the sheet.")
     from warehouse import CountBody, adm_set_count
+    # A book never counted has NO wh_stock field. adm_set_count reads it with
+    # a projection of just {wh_stock}, which comes back as an empty dict —
+    # falsy — and it answers "Book not found". Seen 26 Nov 2026 on the 58
+    # titles added from the Title Master: none could get a first count.
+    # Starting the count at 0 (only where it is missing) lets the normal
+    # count run; the correction then records the full shelf number.
+    await db.books.update_one({"id": book_id, "wh_stock": None, "product_type": {"$nin": list(NOT_COUNTED)}},
+                              {"$set": {"wh_stock": 0}})
     counted = await adm_set_count(book_id, CountBody(count=int(body.count), note=note), user)
     matched = await match_website(book_id, MatchBody(note=f"set both to {int(body.count)}: {note}"), user)
     return {"ok": True, "count": counted, "website": matched,
