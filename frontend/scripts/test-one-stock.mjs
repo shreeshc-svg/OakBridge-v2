@@ -22,5 +22,9 @@ const groups = [...wh.matchAll(/\["(today|stock|docs|shipping|history)", "[A-Z][
 check(groups.join() === "today,stock,docs,shipping,history", "five groups: Today, Stock, Documents, Shipping, History");
 check(/get\("tab"\)/.test(wh), "?tab= opens a screen directly");
 check(/inventory-one-stock/.test(read("pages/admin/AdminInventory.jsx")), "Admin → Inventory says where book stock is changed");
+const today = read("components/admin/WarehouseToday.jsx");
+check(/adminWhCountToday\(10\)/.test(today) && /<AdjustPanel b=\{b\}/.test(today), "Count today: ~10 books, each counted with the same Adjust form");
+check(/adminWhReprint\(within\)/.test(today) && /Days left/.test(today), "Reprint soon: days of stock left at the 60-day pace");
+check(/\["count", "Count today"\], \["reprint", "Reprint soon"\]/.test(wh), "both under Warehouse → Today");
 console.log(failed ? `\n${failed} FAILED` : "\nALL PASSED");
 process.exit(failed ? 1 : 0);

@@ -14,6 +14,7 @@ import CourierRuns from "../../components/admin/CourierRuns";
 import WarehouseInventory from "../../components/admin/WarehouseInventory";
 import MarketplaceSheets from "../../components/admin/MarketplaceSheets";
 import StillToSend from "../../components/admin/StillToSend";
+import { CountToday, ReprintSoon } from "../../components/admin/WarehouseToday";
 
 /**
  * Admin → Warehouse: the manager's side of the warehouse trial.
@@ -38,7 +39,7 @@ import StillToSend from "../../components/admin/StillToSend";
    the HISTORY of every movement. A group with more than one screen shows them
    as a second row. Keys are unchanged, so links into a screen still work. */
 const GROUPS = [
-    ["today", "Today", [["approve", "To approve"], ["owed", "Still to send"]]],
+    ["today", "Today", [["approve", "To approve"], ["count", "Count today"], ["reprint", "Reprint soon"], ["owed", "Still to send"]]],
     ["stock", "Stock", [["inventory", "Stock"]]],
     ["docs", "Documents", [["docs", "Bills & invoices"], ["accuracy", "Reading accuracy"]]],
     ["shipping", "Shipping", [["courier", "Courier labels"], ["marketplace", "Amazon / Flipkart sheets"]]],
@@ -123,6 +124,8 @@ export default function AdminWarehouse() {
                 {tab === "docs" && <DocsTab key="docs" onChange={refreshPending} canDelete={isSuperadmin(user?.role)} />}
                 {tab === "accuracy" && <AccuracyTab />}
                 {tab === "courier" && <CourierRuns />}
+                {tab === "count" && <CountToday />}
+                {tab === "reprint" && <ReprintSoon />}
                 {tab === "inventory" && <WarehouseInventory onHistory={(q) => { setMoveQ(q); setTab("moves"); }} />}
                 {tab === "owed" && <StillToSend />}
                 {tab === "marketplace" && <MarketplaceSheets onOpen={(d) => { setMoveQ(`MP-${d}`); setTab("moves"); }} />}

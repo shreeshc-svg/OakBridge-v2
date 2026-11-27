@@ -25,6 +25,8 @@ import { ebookEdition } from "../lib/ebook";
 import { metaDescription, bookSeoTitle, editionLabel, bookFormatUrl, ratingLd } from "../lib/schema";
 import { preorderState, useCountdown, formatLaunchDate, formatLaunchTimes } from "../lib/preorder";
 import { podActive, dispatchWindow, fmtPodDay } from "../lib/pod";
+import DeliveryEstimate from "../components/DeliveryEstimate";
+import StickyBuyBar from "../components/StickyBuyBar";
 
 // Trust badges under the price. Admin-managed via Settings key `pdp_badges`;
 // this is only the fallback when nothing is saved yet. Spelled-out column
@@ -747,13 +749,24 @@ export default function BookDetail() {
                                     <span className="text-[#4B5563] line-through">
                                         {formatINR(book.original_price)}
                                     </span>
-                                    <span className="bg-[#CC0033] text-white text-xs font-mono px-2 py-1">
-                                        Save {discount}%
+                                    {/* The rupee figure first: "Save ₹199" is read faster
+                                        than a percentage, and the percentage stays beside it. */}
+                                    <span className="bg-[#CC0033] text-white text-xs font-mono px-2 py-1" data-testid="pdp-you-save">
+                                        Save {formatINR(Math.max(0, Number(book.original_price) - Number(activePrice)))} ({discount}%)
                                     </span>
                                 </>
                             )}
                         </div>
                         {!oos && !preorder.active && <PromoBadge book={book} />}
+                        {/* Out of stock here, but another format of the same title is
+                            on the shelf: say so where the price is, not only in the
+                            switcher above — this is a sale, not a dead end. */}
+                        {oos && (book.formats || []).filter((f) => f.id !== book.id && f.stock > 0 && !f.coming_soon).slice(0, 1).map((f) => (
+                            <Link key={f.id} to={`/books/${f.id}`} data-testid="pdp-other-format-in-stock"
+                                className="mt-3 inline-flex items-center gap-2 text-sm text-[#15803D] border-b border-[#15803D]/40 hover:text-[#002B5C]">
+                                The {f.label} is in stock — {formatINR(f.price)} →
+                            </Link>
+                        ))}
                         {ebookPrice === null && oos && (
                             /* Out of print, with no eBook price we are allowed to
                                show. Promised rather than sold — and still a line
@@ -959,6 +972,7 @@ export default function BookDetail() {
                             {!preorder.active && !pod && (
                                 <button
                                     onClick={onAdd}
+                                    id="pdp-add-to-cart"
                                     data-testid="add-to-cart-main-button"
                                     className="atc-shine inline-flex items-center gap-2 bg-[#002B5C] text-[#FFFFFF] px-8 py-4 text-sm font-medium hover:bg-[#001F42] transition-all"
                                 >
@@ -992,6 +1006,10 @@ export default function BookDetail() {
                                 {pod && podSchedule?.show_new === true && <span className="pod-new ml-1 bg-[#F59E0B] text-[#002B5C] text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5">New</span>}
                             </button>
                         </div>
+                    )}
+                    {/* A date, not a range of days: "will it come in time?" (lib/delivery.js). */}
+                    {!oos && !preorder.active && !pod && (
+                        <DeliveryEstimate text={settings?.pdp_delivery ?? "3–7 business days"} freeShipping={Number(settings?.free_ship_threshold ?? 1500) === 0} />
                     )}
                     {pod && (
                         <div data-testid="pod-info" className="mt-4 max-w-md border border-[#F59E0B] bg-[#FFF8EB] p-3 text-sm text-[#002B5C]">
@@ -1391,6 +1409,9 @@ export default function BookDetail() {
                 title={book.title}
                 totalPages={preview.total_pages}
             />
+            {!oos && !preorder.active && !pod && (
+                <StickyBuyBar targetId="pdp-add-to-cart" title={book.title} price={activePrice} onAdd={onAdd} />
+            )}
         </div>
           );
 }

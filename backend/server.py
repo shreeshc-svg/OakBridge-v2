@@ -2197,6 +2197,8 @@ from warehouse_undeliver import router as wh_undeliver_router  # noqa: E402  (sh
 app.include_router(wh_undeliver_router)
 from warehouse_match import router as wh_match_router  # noqa: E402  (website stock back in step with the warehouse count)
 app.include_router(wh_match_router)
+from warehouse_cycle import router as wh_cycle_router  # noqa: E402  (count today + reprint soon)
+app.include_router(wh_cycle_router)
 from warehouse import wh_router, wh_admin_router  # noqa: E402
 app.include_router(inventory_router)
 app.include_router(wh_router)

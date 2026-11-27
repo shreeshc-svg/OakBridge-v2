@@ -208,7 +208,7 @@ const ACTIONS = [
     ...OUT.map(([v, l]) => [v, l, "out"]),
 ];
 
-function AdjustPanel({ b, live, canFix = false, onDone }) {
+export function AdjustPanel({ b, live, canFix = false, onDone }) {
     const aside = b.set_aside || 0;
     const [action, setAction] = useState("count");
     const [n, setN] = useState(String((b.wh_stock ?? 0) + aside));
@@ -375,7 +375,7 @@ const needsCount = (b) => b.wh_stock == null && !byDesign(b);
 
 /* One status per row, in the words an admin would use. "≠ website" is added
    when the website and the shelf disagree (Adjust → Fix mismatch). */
-function StockStatus({ b, threshold }) {
+export function StockStatus({ b, threshold }) {
     const k = kindOf(b);
     const wh = b.wh_stock;
     const [label, cls] = k === "preorder" ? ["Pre-order", "bg-[#EDE9FE] text-[#5B21B6]"]

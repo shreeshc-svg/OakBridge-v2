@@ -320,6 +320,9 @@ export const adminWhSetCount = (bookId, count, note) =>
 export const adminWhMatchWebsite = (bookId, note) =>
     api.post(`/admin/warehouse/inventory/${bookId}/match-website`, { note }).then((r) => r.data);
 // Shelf count AND website to the same number in one go (backend/warehouse_match.py set_both).
+// Count today / reprint soon (backend/warehouse_cycle.py).
+export const adminWhCountToday = (n = 10) => api.get("/admin/warehouse/count-today", { params: { n } }).then((r) => r.data);
+export const adminWhReprint = (within = 45) => api.get("/admin/warehouse/reprint", { params: { within } }).then((r) => r.data);
 export const adminWhSetBoth = (bookId, count, note) =>
     api.post(`/admin/warehouse/inventory/${bookId}/set-both`, { count, note }).then((r) => r.data);
 // Files to share: Excel for founders/reports, a vendor catalogue PDF.
