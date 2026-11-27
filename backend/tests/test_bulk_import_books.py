@@ -5,6 +5,7 @@ Run: python backend/tests/test_bulk_import_books.py"""
 import ast, os, re, sys, types, uuid
 from datetime import datetime
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(HERE))   # book_clean (pure) is imported for real
 SRC = open(os.path.join(os.path.dirname(HERE), "features.py"), encoding="utf-8").read()
 failed = 0
 
@@ -27,6 +28,8 @@ row = {"title": "Bihar At a Glance", "author": "Surendra Raut", "isbn": "9788193
        "description": "d", "price": "220", "original_price": "275", "cover_image": "/logo.jpg", "stock": "0",
        "binding": "HB (DJ)", "size": "24 x 18.5", "edition": "1", "publication_year": "2018"}
 d = ns["_csv_row_to_book_doc"](row)
+d2 = ns["_csv_row_to_book_doc"]({**row, "title": "Bihar  At a Glance ", "isbn": "9788193917114\t"})
+check(d2["title"] == "Bihar At a Glance" and d2["isbn"] == "9788193917114", "sheet tabs / double spaces cleaned on import")
 check(d["binding"] == "Hardback with Dust Jacket" and d["size"] == "24 x 18.5" and d["edition"] == "1", "binding code / size / edition imported")
 check(d["price"] == 220 and d["original_price"] == 275 and d["stock"] == 0, "price, MRP and stock 0 kept")
 check(d["release_rank"] == m.rank_for_year(2018), "release rank set from the year (sorts under Newest)")

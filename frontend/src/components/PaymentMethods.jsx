@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import { Lock } from "lucide-react";
+import { useHydrated } from "../lib/boot";
+import { isPrerender } from "../lib/runtime";
 
 /*
  * "How can I pay?" in the footer (Nov 2026), modelled on the payments strip
@@ -31,12 +33,21 @@ export const PAYMENT_METHODS = [
     { key: "wallets", label: "Wallets", file: null },
 ];
 
+/*
+ * Text on the prerender and on the hydrating render; the logo is tried only
+ * after that. The prerender used to try the <img>, see it fail (no file yet)
+ * and bake the text fallback into the page, while the browser's first render
+ * drew the <img> — a hydration mismatch (React #418, seen live 27 Nov 2026)
+ * that made React throw away and redraw every page.
+ */
 function Badge({ m }) {
-    const [img, setImg] = useState(Boolean(m.file));
+    const hydrated = useHydrated();
+    const [failed, setFailed] = useState(false);
+    const img = Boolean(m.file) && hydrated && !isPrerender() && !failed;
     return (
         <li className="h-8 min-w-[56px] px-2.5 bg-white rounded-[3px] flex items-center justify-center" title={m.label} data-testid={`pay-${m.key}`}>
             {img ? (
-                <img src={`/payments/${m.file}`} alt={m.label} className="h-5 w-auto" loading="lazy" onError={() => setImg(false)} />
+                <img src={`/payments/${m.file}`} alt={m.label} className="h-5 w-auto" loading="lazy" onError={() => setFailed(true)} />
             ) : (
                 <span className="text-[11px] font-semibold text-[#002B5C] whitespace-nowrap">{m.label}</span>
             )}

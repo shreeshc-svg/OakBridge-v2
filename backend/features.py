@@ -2161,6 +2161,8 @@ def _csv_binding(v: Optional[str]) -> Optional[str]:
 
 
 def _csv_row_to_book_doc(clean: dict) -> dict:
+    from book_clean import clean_book_fields
+    clean = clean_book_fields(dict(clean))   # tabs / double spaces from the sheet
     if not clean.get("title") or not clean.get("isbn"):
         raise ValueError("title and isbn are required")
     from extensions import rank_for_year

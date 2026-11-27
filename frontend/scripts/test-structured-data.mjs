@@ -126,6 +126,10 @@ eq('title adds the author', bookSeoTitle({ title: 'Compulsory English for IAS (M
    'Compulsory English for IAS (Mains) Examination 6/e by A P Bhardwaj');
 eq('a long author list becomes "et al."', bookSeoTitle({ title: 'T', author: 'Pramod Rao, Ritvik Lukose & Balanand Menon Kumar' }), 'T by Pramod Rao et al.');
 eq('a title that already names the author is left alone', bookSeoTitle({ title: 'A P Bhardwaj on English', author: 'A P Bhardwaj' }), 'A P Bhardwaj on English');
+eq('same title as HB and PB: the Hardback page says so', [bookSeoTitle({ title: 'Story of the Clan', author: 'S S Naganand', binding: 'Hardback' }), bookSeoTitle({ title: 'Story of the Clan', author: 'S S Naganand', binding: 'Paperback' })],
+   ['Story of the Clan (Hardback) by S S Naganand', 'Story of the Clan by S S Naganand']);
+eq('a later edition is named; 1st is not; a title naming its edition is not told twice', [bookSeoTitle({ title: 'Compulsory English', author: 'A P Bharadwaj', edition: '5' }), bookSeoTitle({ title: 'CSAT', author: 'X', edition: '1' }), bookSeoTitle({ title: 'English 6/e', author: 'X', edition: '6', binding: 'Hardback with Dust Jacket' })],
+   ['Compulsory English (5th ed.) by A P Bharadwaj', 'CSAT by X', 'English 6/e (Hardback) by X']);
 eq('hampers get no "by"', bookSeoTitle({ title: 'Festive Hamper', author: 'Various', product_type: 'hamper' }), 'Festive Hamper');
 eq('ordinals', [1, 2, 3, 4, 11, 12, 13, 21, 22, 23, 101].map(ordinal), ['1st', '2nd', '3rd', '4th', '11th', '12th', '13th', '21st', '22nd', '23rd', '101st']);
 eq('"6" -> "6th edition" (was "6 edition")', editionLabel('6'), '6th edition');

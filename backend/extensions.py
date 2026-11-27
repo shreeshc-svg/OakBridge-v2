@@ -23,6 +23,7 @@ import jwt
 import rbac
 import volume_sets
 from audit import audit_log, LOGIN, LOGIN_FAILED, LOGOUT, REGISTER, USER_DELETED, SPAM_PURGED
+from book_clean import clean_book_fields
 from csv_export import csv_response, flatten_items
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.security.utils import get_authorization_scheme_param
@@ -1662,9 +1663,11 @@ async def warehouse_owns_stock(product_type: Optional[str]) -> bool:
         return False
 
 
+
+
 @admin_router.post("/books")
 async def admin_create_book(payload: BookAdminCreate):
-    doc = {"id": str(uuid.uuid4()), **payload.model_dump()}
+    doc = clean_book_fields({"id": str(uuid.uuid4()), **payload.model_dump()})
     doc["store_links"] = clean_store_links(doc.get("store_links"))
     doc["gallery"] = clean_gallery(doc.get("gallery"))
     if doc.get("coming_soon") and doc.get("pod"):
@@ -1708,7 +1711,7 @@ async def _notify_back_in_stock(book: dict) -> None:
 
 @admin_router.patch("/books/{book_id}")
 async def admin_update_book(book_id: str, payload: BookAdminUpdate):
-    updates = {k: v for k, v in payload.model_dump().items() if v is not None}
+    updates = clean_book_fields({k: v for k, v in payload.model_dump().items() if v is not None})
     if "store_links" in updates:
         updates["store_links"] = clean_store_links(updates["store_links"])
     if "gallery" in updates:

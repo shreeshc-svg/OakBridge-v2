@@ -140,11 +140,24 @@ export const editionLabel = (edition) => {
 export const bookSeoTitle = (book) => {
     const title = String(book?.title || "").trim();
     const author = String(book?.author || "").replace(/\s+/g, " ").trim();
-    if (!title || !author || book?.product_type === "hamper") return title;
-    if (title.toLowerCase().includes(author.toLowerCase())) return title;
+    if (!title || book?.product_type === "hamper") return title;
+    /*
+     * Hardback / later edition in brackets (27 Nov 2026): the same title is
+     * often sold twice — Paperback AND Hardback ("Story of the Clan"), or a
+     * 4th and 5th edition ("Compulsory English") — and both pages carried the
+     * identical <title>, which Google reads as duplicate pages. Paperback and
+     * a 1st edition are the default and add nothing; a title that already
+     * names its edition ("6/e", "2nd edition") is not told twice.
+     */
+    const q = [];
+    const ed = String(book?.edition ?? "").trim();
+    if (/^\d+$/.test(ed) && Number(ed) > 1 && !/\b\d+\s*\/\s*e\b|\bedition\b|\bed\.|\b\d+(st|nd|rd|th)\s+ed/i.test(title)) q.push(`${ordinal(ed)} ed.`);
+    if (/hard|case|cloth/i.test(String(book?.binding || "")) && !/hardback|hardcover|hard bound|\(HB\)/i.test(title)) q.push("Hardback");
+    const named = q.length ? `${title} (${q.join(", ")})` : title;
+    if (!author || title.toLowerCase().includes(author.toLowerCase())) return named;
     const first = author.split(/\s*(?:,|&|\band\b)\s*/i)[0].trim();
     const who = author.length <= 40 ? author : `${first} et al.`;
-    return `${title} by ${who}`;
+    return `${named} by ${who}`;
 };
 
 /** schema.org bookFormat from the stored binding; undefined = do not claim one. */

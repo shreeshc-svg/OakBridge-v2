@@ -31,5 +31,8 @@ check(/md:hidden/.test(bar) && /right-\[84px\]/.test(bar) && /--tray-h/.test(bar
 const code = bar.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
 check(/document\.getElementById\(targetId\)/.test(code.slice(code.indexOf("const check"))) && !/new IntersectionObserver/.test(code),
     "re-finds the button on each scroll (a mount-time observer watched a detached copy live)");
+const de = readFileSync(join(SRC, "components/DeliveryEstimate.jsx"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+check(/useState\(null\)/.test(de) && /useEffect\(\(\) => \{ setNow\(Date\.now\(\)\); \}, \[\]\)/.test(de) && /now \? deliveryWindow\(text, now\) : null/.test(de),
+    "dates only after mount (a number — Date + offset would be a string): the prerender (build day) and first render match — no stale dates, no hydration mismatch");
 console.log(failed ? `\n${failed} FAILED` : "\nALL PASSED");
 process.exit(failed ? 1 : 0);
