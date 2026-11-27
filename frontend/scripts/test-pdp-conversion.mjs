@@ -28,5 +28,8 @@ check(/<StickyBuyBar targetId="pdp-add-to-cart"/.test(pdp) && /id="pdp-add-to-ca
 check(/pdp-you-save/.test(pdp) && /pdp-other-format-in-stock/.test(pdp), "'Save ₹X (N%)' and 'The Hardback is in stock' link");
 const bar = readFileSync(join(SRC, "components/StickyBuyBar.jsx"), "utf8");
 check(/md:hidden/.test(bar) && /right-\[84px\]/.test(bar) && /--tray-h/.test(bar), "phones only, above the bottom tray, clear of the chat button");
+const code = bar.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+check(/document\.getElementById\(targetId\)/.test(code.slice(code.indexOf("const check"))) && !/new IntersectionObserver/.test(code),
+    "re-finds the button on each scroll (a mount-time observer watched a detached copy live)");
 console.log(failed ? `\n${failed} FAILED` : "\nALL PASSED");
 process.exit(failed ? 1 : 0);

@@ -12,11 +12,27 @@ import { formatINR } from "../lib/api";
 export default function StickyBuyBar({ targetId, title, price, onAdd }) {
     const [show, setShow] = useState(false);
     useEffect(() => {
-        const el = document.getElementById(targetId);
-        if (!el || typeof IntersectionObserver === "undefined") return undefined;
-        const io = new IntersectionObserver(([e]) => setShow(!e.isIntersecting && e.boundingClientRect.top < 0), { threshold: 0 });
-        io.observe(el);
-        return () => io.disconnect();
+        // Looked up on every scroll, not observed once: on the live site the
+        // button is re-created after first paint (prerendered HTML replaced on
+        // hydration, loading -> loaded), and an IntersectionObserver set up at
+        // mount kept watching the detached first copy — so the bar never
+        // appeared (seen live 27 Nov 2026). One getElementById per frame of
+        // scrolling is negligible.
+        let raf = 0;
+        const check = () => {
+            raf = 0;
+            const el = document.getElementById(targetId);
+            setShow(!!el && el.getBoundingClientRect().bottom < 0);
+        };
+        const onScroll = () => { if (!raf) raf = requestAnimationFrame(check); };
+        check();
+        window.addEventListener("scroll", onScroll, { passive: true });
+        window.addEventListener("resize", onScroll);
+        return () => {
+            window.removeEventListener("scroll", onScroll);
+            window.removeEventListener("resize", onScroll);
+            if (raf) cancelAnimationFrame(raf);
+        };
     }, [targetId]);
     if (!show) return null;
     return (
