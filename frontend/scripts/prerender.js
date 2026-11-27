@@ -282,6 +282,28 @@ async function getRoutes() {
         throw new Error("The API returned zero books. Refusing to publish a catalogue-free build.");
     }
 
+    /*
+     * Every /books/<id> the SITEMAP advertises gets a page too (27 Nov 2026).
+     * /api/books is the shop listing: it leaves out hampers and the second
+     * format of a title (the Hardback of "The Man & The Judge"), but the
+     * sitemap (server.py, every enabled db.books doc) lists them — so Google
+     * was sent to three URLs whose HTML was the empty app shell: no title,
+     * no text. Same source as the sitemap, so the two cannot drift again.
+     * Best-effort: a failure here keeps the listing's routes.
+     */
+    try {
+        const res = await fetch(`${BACKEND}/api/sitemap.xml`);
+        if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+        const have = new Set(dynamic);
+        let extra = 0;
+        for (const m of (await res.text()).matchAll(/<loc>[^<]*?(\/books\/[A-Za-z0-9-]+)<\/loc>/g)) {
+            if (!have.has(m[1])) { have.add(m[1]); dynamic.push(m[1]); extra++; }
+        }
+        console.log(`Sitemap added ${extra} book route(s) the listing leaves out (hampers, other formats).`);
+    } catch (e) {
+        console.warn(`Sitemap book routes skipped (${e.message}).`);
+    }
+
     // Authors are a nice-to-have: the index lists them all, so a failure here
     // costs some long-tail coverage but does not gut the catalogue.
     try {

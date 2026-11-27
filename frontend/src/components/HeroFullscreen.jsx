@@ -347,7 +347,13 @@ function Render3D({ src, warm }) {
     const [shown, setShown] = useState(null); // null until prepared: no white flash
     const ref = useRef(null);
     useEffect(() => {
-        if (!warm || !src) return undefined;
+        // Not during the build (27 Nov 2026): the prerender is a real browser
+        // and ran this too, baking the prepared cover — a data: URL PNG — into
+        // the homepage HTML, while the browser's first render has none. That
+        // element mismatch (React #418 "HTML") made React discard and redraw
+        // the whole homepage on every visit. The cover fades in after load, as
+        // it always did for visitors.
+        if (!warm || !src || isPrerender()) return undefined;
         let live = true;
         prepareRender(src)
             .then((u) => live && setShown(u))

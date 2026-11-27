@@ -43,14 +43,17 @@ export const PAYMENT_METHODS = [
 function Badge({ m }) {
     const hydrated = useHydrated();
     const [failed, setFailed] = useState(false);
-    const img = Boolean(m.file) && hydrated && !isPrerender() && !failed;
+    const [loaded, setLoaded] = useState(false);
+    const tryImg = Boolean(m.file) && hydrated && !isPrerender() && !failed;
+    // The name stays until the logo has actually LOADED (the badge was blank
+    // while a missing file was still being fetched — seen live 27 Nov 2026).
     return (
         <li className="h-8 min-w-[56px] px-2.5 bg-white rounded-[3px] flex items-center justify-center" title={m.label} data-testid={`pay-${m.key}`}>
-            {img ? (
-                <img src={`/payments/${m.file}`} alt={m.label} className="h-5 w-auto" loading="lazy" onError={() => setFailed(true)} />
-            ) : (
-                <span className="text-[11px] font-semibold text-[#002B5C] whitespace-nowrap">{m.label}</span>
+            {tryImg && (
+                <img src={`/payments/${m.file}`} alt={m.label} className={loaded ? "h-5 w-auto" : "hidden"}
+                    onLoad={(e) => (e.currentTarget.naturalWidth > 0 ? setLoaded(true) : setFailed(true))} onError={() => setFailed(true)} />
             )}
+            {!(tryImg && loaded) && <span className="text-[11px] font-semibold text-[#002B5C] whitespace-nowrap">{m.label}</span>}
         </li>
     );
 }

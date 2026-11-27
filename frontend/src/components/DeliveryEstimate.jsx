@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Truck } from "lucide-react";
 import { deliveryWindow, fmtDay, parseDays } from "../lib/delivery";
+import { isPrerender } from "../lib/runtime";
 
 /*
  * Under the Add to Cart button for an in-stock book (lib/delivery.js has why).
@@ -16,7 +17,9 @@ import { deliveryWindow, fmtDay, parseDays } from "../lib/delivery";
  */
 export default function DeliveryEstimate({ text, freeShipping = false }) {
     const [now, setNow] = useState(null);
-    useEffect(() => { setNow(Date.now()); }, []);   // a number: deliveryWindow does now + IST offset
+    // Not during the build: the prerender is a real browser, runs this effect
+    // too, and baked the build day's dates in anyway (seen live 27 Nov 2026).
+    useEffect(() => { if (!isPrerender()) setNow(Date.now()); }, []);   // a number: deliveryWindow does now + IST offset
     const days = parseDays(text);
     if (!days) return null;
     const w = now ? deliveryWindow(text, now) : null;
