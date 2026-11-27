@@ -793,7 +793,11 @@ async def _taken_twin(doc: dict, doc_number: str) -> Optional[dict]:
     # Our Tally invoice numbers are one series, so the number alone is the
     # invoice. Printer bill numbers repeat across printers: only with the
     # printer's GSTIN is the number evidence of a duplicate.
-    if doc_number and (doc["direction"] != "in" or doc.get("party_gstin")):
+    # A COURIER sheet's "number" is just the office run's name ("Courier
+    # 16.11.2026") and two runs on one day share it — matching on it refused
+    # the second run's Done as "already done" (17 Nov 2026). Courier sheets
+    # are matched on the file only.
+    if doc_number and (doc["direction"] == "out" or (doc["direction"] == "in" and doc.get("party_gstin"))):
         ors.append({"doc_number": doc_number, "party_gstin": doc.get("party_gstin", "")})
     if not ors:
         return None
@@ -1598,6 +1602,114 @@ async def adm_edit_lines(doc_id: str, body: LinesBody, user: dict = Depends(requ
     await audit_log(db, "WAREHOUSE_DOC_LINES_CORRECTED", email=user.get("email", ""), role=user.get("role", ""),
                     meta={"doc": doc_id, "diffs": diffs, "note": note})
     return {"ok": True, "changes": diffs}
+
+
+class ParcelLine(BaseModel):
+    book_id: str
+    qty: int
+
+
+class ParcelEditBody(BaseModel):
+    kind: Optional[str] = None          # dealer_order | author_copy | free_copy
+    name: Optional[str] = None
+    org: Optional[str] = None
+    lines: list[ParcelLine]
+    note: str
+
+
+@wh_admin_router.post("/docs/{doc_id}/parcels/{no}")
+async def adm_edit_parcel(doc_id: str, no: int, body: ParcelEditBody, user: dict = Depends(require_admin)):
+    """Correct ONE parcel of a synced courier sheet — the books, quantities,
+    who it went to and what kind of parcel it was (Nov 2026: "edit the orders
+    going to dealers for internal record keeping").
+
+    Stock already moved, so a quantity change is posted as the DIFFERENCE with
+    the parcel's own reason (a dealer parcel 3 → 5 is two more copies sold),
+    and changing the kind (free copy → phone / dealer order) relabels the
+    parcel's movements so sales and sample reports agree. Website-order
+    parcels are not edited here — their copies follow the order itself.
+    The original parcel is kept (original_confirmed_parcels) and audited."""
+    _office_only(user)
+    note = (body.note or "").strip()[:300]
+    if len(note) < 3:
+        raise HTTPException(status_code=400, detail="Write why this parcel is being corrected.")
+    doc = await db.warehouse_docs.find_one({"id": doc_id}, {"_id": 0})
+    if not doc or doc["direction"] != "courier":
+        raise HTTPException(status_code=404, detail="Courier sheet not found")
+    if doc.get("practice") or doc.get("archived") or doc["status"] != "confirmed":
+        raise HTTPException(status_code=409, detail="Only a courier sheet the warehouse has confirmed can be corrected here.")
+    parcels = [dict(p) for p in doc.get("confirmed_parcels") or []]
+    idx = next((i for i, p in enumerate(parcels) if p.get("no") == no), None)
+    if idx is None:
+        raise HTTPException(status_code=404, detail="Parcel not found")
+    old = parcels[idx]
+    if old.get("kind") not in COURIER_DEDUCT:
+        raise HTTPException(status_code=409, detail="Website-order (or not-sent) parcels can't be edited here — their copies follow the order.")
+    kind = body.kind or old["kind"]
+    if kind not in COURIER_DEDUCT:
+        raise HTTPException(status_code=400, detail="Choose phone / dealer order, author copy or free copy.")
+    if any(ln.qty < 0 or ln.qty > 100000 for ln in body.lines):
+        raise HTTPException(status_code=400, detail="Quantities must be between 0 and 1,00,000.")
+    ids = {ln.book_id for ln in body.lines}
+    found = {b["id"] async for b in db.books.find({"id": {"$in": list(ids)}, "product_type": {"$nin": list(NOT_COUNTED)}}, {"_id": 0, "id": 1})}
+    if ids - found:
+        raise HTTPException(status_code=400, detail="One of the books doesn't exist (or is a pack / hamper — list its books).")
+    read = next((p for p in doc.get("parcels") or [] if p.get("no") == no), {}) or {}
+    old_who = ", ".join(x for x in (old.get("name") or read.get("name"), old.get("org") or read.get("org")) if x) or f"Parcel {no}"
+    name = (body.name if body.name is not None else (old.get("name") or read.get("name") or "")).strip()[:120]
+    org = (body.org if body.org is not None else (old.get("org") or read.get("org") or "")).strip()[:120]
+    who = ", ".join(x for x in (name, org) if x) or f"Parcel {no}"
+    # 1) kind / recipient: relabel what this parcel already moved
+    old_reason, new_reason = COURIER_DEDUCT[old["kind"]], COURIER_DEDUCT[kind]
+    if old_reason != new_reason or who != old_who:
+        # Movements carry the sheet + recipient + reason, not the parcel
+        # number, so a relabel would also catch ANOTHER parcel on this sheet
+        # to the same person of the same kind. Refuse that one case rather
+        # than silently relabel the wrong parcel's copies (quantities can
+        # still be corrected — those post as new, parcel-noted movements).
+        for p2 in parcels:
+            if p2.get("no") == no or p2.get("kind") not in COURIER_DEDUCT or COURIER_DEDUCT[p2["kind"]] != old_reason:
+                continue
+            r2 = next((p for p in doc.get("parcels") or [] if p.get("no") == p2.get("no")), {}) or {}
+            who2 = ", ".join(x for x in (p2.get("name") or r2.get("name"), p2.get("org") or r2.get("org")) if x) or f"Parcel {p2.get('no')}"
+            if who2 == old_who:
+                raise HTTPException(status_code=409, detail=f"Parcel {p2.get('no')} on this sheet went to the same recipient as the same kind — "
+                                    "the type or recipient can't be changed here without mixing the two up. Change the copies only, "
+                                    "or correct it with a stock adjustment.")
+        await db.stock_movements.update_many({"doc_id": doc_id, "party": old_who, "reason": old_reason, "undone": False},
+                                             {"$set": {"reason": new_reason, "party": who[:120]}})
+    # 2) quantities: post the difference
+    was: dict = {}
+    for ln in old.get("lines") or []:
+        ln = ln if isinstance(ln, dict) else ln.model_dump()
+        if ln.get("include") and ln.get("book_id") and int(ln.get("qty") or 0) > 0:
+            was[ln["book_id"]] = was.get(ln["book_id"], 0) + int(ln["qty"])
+    now_q: dict = {}
+    for ln in body.lines:
+        if ln.qty > 0:
+            now_q[ln.book_id] = now_q.get(ln.book_id, 0) + ln.qty
+    diffs = {b: now_q.get(b, 0) - was.get(b, 0) for b in set(was) | set(now_q) if now_q.get(b, 0) != was.get(b, 0)}
+    for bid, d in diffs.items():
+        await _apply(bid, -d, new_reason, actor=user, doc_id=doc_id, party=who, note=f"Parcel {no} edited in Admin: {note}")
+    parcels[idx] = {**old, "kind": kind, "name": name, "org": org,
+                    "lines": [{"line_no": None, "book_id": b, "qty": q, "include": True} for b, q in now_q.items()],
+                    "edited_at": _now().isoformat(), "edited_by": user.get("email", ""), "edit_note": note}
+    upd = {"confirmed_parcels": parcels}
+    if not doc.get("original_confirmed_parcels"):
+        upd["original_confirmed_parcels"] = doc.get("confirmed_parcels") or []
+    await db.warehouse_docs.update_one({"id": doc_id}, {"$set": upd})
+    # The office run this sheet came from (Courier labels) shows the same
+    # parcel, so it is kept in step — one record of what went to whom.
+    run = await db.courier_runs.find_one({"doc_id": doc_id}, {"_id": 0, "id": 1, "parcels": 1})
+    if run and 0 < no <= len(run.get("parcels") or []):
+        titles = {b["id"]: b.get("title", "") async for b in db.books.find({"id": {"$in": list(now_q)}}, {"_id": 0, "id": 1, "title": 1})}
+        rps = list(run["parcels"])
+        rps[no - 1] = {**rps[no - 1], "kind": kind, "name": name, "org": org,
+                       "lines": [{"book_id": b, "label": titles.get(b, ""), "qty": q} for b, q in now_q.items()]}
+        await db.courier_runs.update_one({"id": run["id"]}, {"$set": {"parcels": rps, "edited_after_packing_at": _now().isoformat()}})
+    await audit_log(db, "WAREHOUSE_PARCEL_EDITED", email=user.get("email", ""), role=user.get("role", ""),
+                    meta={"doc": doc_id, "parcel": no, "kind": [old["kind"], kind], "to": [old_who, who], "diffs": diffs, "note": note})
+    return {"ok": True, "changes": diffs, "kind": kind, "party": who}
 
 
 @wh_admin_router.delete("/docs/{doc_id}")

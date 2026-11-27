@@ -344,6 +344,73 @@ async def main():
     except HTTPException as e:
         check(e.status_code == 403, "the phone can't cancel (office only)")
 
+    print("-- two courier runs on the same day (same run name) --")
+    for n in (31, 32):
+        await db.warehouse_docs.insert_one({
+            "id": f"cs{n}", "direction": "courier", "practice": False, "status": "draft", "source": "office_run",
+            "created_at": "2026-11-16T05:00:00+00:00", "read_lines": [], "parcels": [{"no": 1, "name": "Dealer"}],
+            "doc_number": "Courier 16.11.2026", "party_name": "", "party_gstin": "", "party_kind": ""})
+    body2 = lambda: wh.ConfirmBody(lines=[], parcels=[P(no=1, kind="dealer_order", order_id=None,  # noqa: E731
+                                   lines=[L(line_no=1, book_id="a", qty=1, include=True, invoiced=None)])],
+                                   doc_number=None, party_name=None, party_kind=None, allow_duplicate=False, confirm_similar=False, note=None)
+    await wh.wh_confirm("cs31", body2(), PACKER)
+    r = await wh.wh_confirm("cs32", body2(), PACKER)
+    check(r["ok"], "the second run of the day confirms — a run's name is not an invoice number")
+    print("-- office corrects a dealer parcel after it went --")
+    await db.warehouse_docs.insert_one({
+        "id": "cs20", "direction": "courier", "practice": False, "status": "draft", "source": "manual",
+        "created_at": "2026-11-16T05:00:00+00:00", "read_lines": [], "sha256": "cs20", "parcels": [{"no": 1, "name": "Mr. Vishal Arora", "org": "The Lyall Book Depot"}],
+        "doc_number": "", "party_name": "", "party_gstin": "", "party_kind": ""})
+    s0 = book("a")["wh_stock"]
+    await wh.wh_confirm("cs20", wh.ConfirmBody(lines=[], parcels=[P(no=1, kind="free_copy", order_id=None,
+                        lines=[L(line_no=None, book_id="a", qty=3, include=True, invoiced=None)])],
+                        doc_number=None, party_name=None, party_kind=None, allow_duplicate=False, confirm_similar=False, note=None), PACKER)
+    check(book("a")["wh_stock"] == s0 - 3, "3 free copies went")
+    try:
+        await wh.adm_edit_parcel("cs20", 1, wh.ParcelEditBody(kind="dealer_order", name=None, org=None, lines=[wh.ParcelLine(book_id="a", qty=5)], note=""), SUPER)
+        check(False, "reason required")
+    except HTTPException as e:
+        check(e.status_code == 400, "a reason is required")
+    r = await wh.adm_edit_parcel("cs20", 1, wh.ParcelEditBody(kind="dealer_order", name=None, org=None,
+                                 lines=[wh.ParcelLine(book_id="a", qty=5)], note="Was a sale of 5 to Lyall"), SUPER)
+    mv = [m for m in db.stock_movements.docs if m.get("doc_id") == "cs20" and not m.get("undone")]
+    check(r["changes"] == {"a": 2} and book("a")["wh_stock"] == s0 - 5, "3 → 5: two more copies off stock")
+    check({m["reason"] for m in mv} == {"sale_offline"} and sum(m["qty"] for m in mv) == -5 and all("Lyall" in m["party"] for m in mv),
+          "free copy → dealer order: every movement of the parcel now reads as a sale to Lyall (reports agree)")
+    doc20 = await db.warehouse_docs.find_one({"id": "cs20"})
+    check(doc20["confirmed_parcels"][0]["kind"] == "dealer_order" and doc20["original_confirmed_parcels"][0]["kind"] == "free_copy",
+          "the edit is saved on the sheet; the original is kept")
+    await wh.adm_edit_parcel("cs20", 1, wh.ParcelEditBody(kind=None, name="Vishal Arora", org="Lyall Book Depot", lines=[wh.ParcelLine(book_id="a", qty=4)],
+                             note="One copy came back"), SUPER)
+    check(book("a")["wh_stock"] == s0 - 4, "5 → 4: one copy back into stock")
+    try:
+        await wh.adm_edit_parcel("cs12", 1, wh.ParcelEditBody(kind=None, name=None, org=None, lines=[wh.ParcelLine(book_id="a", qty=1)], note="test edit"), SUPER)
+        check(False, "website parcel")
+    except HTTPException as e:
+        check(e.status_code == 409, "website-order parcels are not edited here")
+
+    print("-- two parcels to the same person on one sheet --")
+    await db.warehouse_docs.insert_one({
+        "id": "cs21", "direction": "courier", "practice": False, "status": "draft", "source": "manual",
+        "created_at": "2026-11-16T05:00:00+00:00", "read_lines": [], "sha256": "cs21",
+        "parcels": [{"no": 1, "name": "Asha", "org": "Lyall"}, {"no": 2, "name": "Asha", "org": "Lyall"}],
+        "doc_number": "", "party_name": "", "party_gstin": "", "party_kind": ""})
+    s1 = book("a")["wh_stock"]
+    two = [P(no=n, kind="free_copy", order_id=None, lines=[L(line_no=None, book_id="a", qty=q, include=True, invoiced=None)]) for n, q in ((1, 2), (2, 3))]
+    await wh.wh_confirm("cs21", wh.ConfirmBody(lines=[], parcels=two, doc_number=None, party_name=None, party_kind=None,
+                        allow_duplicate=False, confirm_similar=False, note=None), PACKER)
+    try:
+        await wh.adm_edit_parcel("cs21", 1, wh.ParcelEditBody(kind="dealer_order", name=None, org=None, lines=[wh.ParcelLine(book_id="a", qty=2)],
+                                 note="Parcel 1 was a sale"), SUPER)
+        check(False, "same-recipient relabel refused")
+    except HTTPException as e:
+        check(e.status_code == 409, "type change refused when another parcel on the sheet has the same recipient + kind (would relabel both)")
+    mv21 = [m for m in db.stock_movements.docs if m.get("doc_id") == "cs21" and not m.get("undone")]
+    check({m["reason"] for m in mv21} == {wh.COURIER_DEDUCT["free_copy"]}, "…nothing relabelled")
+    r = await wh.adm_edit_parcel("cs21", 1, wh.ParcelEditBody(kind=None, name=None, org=None, lines=[wh.ParcelLine(book_id="a", qty=1)],
+                                 note="One copy not sent"), SUPER)
+    check(r["changes"] == {"a": -1} and book("a")["wh_stock"] == s1 - 4, "copies can still be corrected (2 → 1: one back)")
+
     print("-- record_fill never records twice --")
     n = len(db.stock_movements.docs)
     await wh.record_fill({"order_number": "T1"}, "a", 3)       # T1 already has a website_order movement for a

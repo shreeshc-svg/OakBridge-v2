@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import {
     crList, crCreate, crGet, crSave, crOrders, crPaste, crSend, crRecall, crDiscard, crSettings, crSaveSettings,
     crLabels, saveBlob, whBooks, formatApiError,
+    adminWhEditParcel,
 } from "../../lib/api";
 
 /**
@@ -100,6 +101,24 @@ function RunEditor({ id, onClose }) {
     // line must match (the server still refuses them as free/author copies).
     useEffect(() => { whBooks({ all: true }).then(setBooks).catch(() => {}); }, []);
     const editable = run?.status === "draft";
+    // A PACKED run can still be corrected parcel by parcel (dealer / author /
+    // free copies — internal records): stock moves by the difference.
+    const [fixing, setFixing] = useState(null);       // index of the parcel being corrected
+    const [fixNote, setFixNote] = useState("");
+    const saveFix = async (i) => {
+        const p = parcels[i];
+        if (fixNote.trim().length < 3) return toast.error("Write why this parcel is being corrected.");
+        if (p.lines.some((l) => !l.book_id)) return toast.error("Every line needs a catalogue book.");
+        setBusy("fix");
+        try {
+            const r = await adminWhEditParcel(run.doc_id, i + 1, { kind: p.kind, name: p.name, org: p.org, note: fixNote,
+                lines: p.lines.map((l) => ({ book_id: l.book_id, qty: Number(l.qty) || 0 })) });
+            const n = Object.values(r.changes || {}).reduce((a, d) => a + Math.abs(d), 0);
+            toast.success(n ? `Saved — stock adjusted by ${n} cop${n === 1 ? "y" : "ies"}.` : "Saved — no stock change.");
+            setFixing(null); setFixNote("");
+            crGet(id).then(apply);
+        } catch (e) { toast.error(formatApiError(e)); } finally { setBusy(""); }
+    };
 
     const change = (fn) => { setParcels(fn); setDirty(true); };
     const setP = (i, patch) => change((ps) => ps.map((p, k) => (k === i ? { ...p, ...patch } : p)));
@@ -224,7 +243,26 @@ function RunEditor({ id, onClose }) {
             )}
 
             {parcels.map((p, i) => (
-                <ParcelCard key={i} p={{ ...p, no: i + 1 }} books={books} editable={editable}
+                <React.Fragment key={i}>
+                {run.status === "packed" && p.kind !== "website_order" && (
+                    <div className="flex flex-wrap items-center gap-2 -mb-3 mt-2">
+                        {fixing === i ? (
+                            <div className="w-full border border-[#F59E0B] bg-[#FFFBEB] p-3 space-y-2 text-sm" data-testid="cr-fix">
+                                <div className="text-xs text-[#4B5563]">Correcting parcel {i + 1} after it went. Change the books, copies, recipient or type below; saving moves stock by the <b>difference</b> and keeps the original in the history.</div>
+                                <input value={fixNote} onChange={(e) => setFixNote(e.target.value)} placeholder="Why? (required — e.g. it was a sale of 5, not 3 free copies)"
+                                    className="w-full border border-[#E5E7EB] px-2 py-1.5" />
+                                <div className="flex gap-2">
+                                    <button type="button" disabled={busy === "fix"} onClick={() => saveFix(i)} className="bg-[#B4750F] text-white px-3 py-1.5 disabled:opacity-50">{busy === "fix" ? "Saving…" : "Save correction"}</button>
+                                    <button type="button" onClick={() => { setFixing(null); setFixNote(""); crGet(id).then(apply); }} className="underline">Cancel</button>
+                                </div>
+                            </div>
+                        ) : (
+                            <button type="button" onClick={() => { setFixing(i); setFixNote(""); }} data-testid="cr-fix-open"
+                                className="text-xs border border-[#B4750F] text-[#B4750F] px-2 py-1">Correct parcel {i + 1}</button>
+                        )}
+                    </div>
+                )}
+                <ParcelCard p={{ ...p, no: i + 1 }} books={books} editable={editable || fixing === i} fixMode={fixing === i}
                     onChange={(patch) => setP(i, patch)} onLine={(li, patch) => setLine(i, li, patch)}
                     // Scanning / adding a book already on this label adds a copy
                     // instead of a second line for the same book.
@@ -236,6 +274,7 @@ function RunEditor({ id, onClose }) {
                     onRemoveLine={(li) => setP(i, { lines: p.lines.filter((_, j) => j !== li) })}
                     onUp={() => move(i, -1)} onDown={() => move(i, 1)}
                     onRemove={() => window.confirm(`Remove parcel ${i + 1}?`) && change((ps) => ps.filter((_, k) => k !== i))} />
+                </React.Fragment>
             ))}
 
             <div className="fixed bottom-0 left-0 right-0 md:left-auto md:right-6 md:bottom-4 bg-white border-t md:border p-3 flex flex-wrap gap-2 justify-end shadow-lg z-20">
@@ -278,7 +317,7 @@ function OrderPicker({ orders, already, onAdd, onClose }) {
     );
 }
 
-function ParcelCard({ p, books, editable, onChange, onLine, onAddBook, onRemoveLine, onUp, onDown, onRemove }) {
+function ParcelCard({ p, books, editable, fixMode = false, onChange, onLine, onAddBook, onRemoveLine, onUp, onDown, onRemove }) {
     const byId = useMemo(() => Object.fromEntries(books.map((b) => [b.id, b])), [books]);
     const web = p.kind === "website_order";
     const inp = "w-full border border-[#E5E7EB] px-2 py-1.5 text-sm disabled:bg-[#F9FAFB]";
@@ -295,7 +334,7 @@ function ParcelCard({ p, books, editable, onChange, onLine, onAddBook, onRemoveL
                         {!p.kind && <span className="text-xs text-[#CC0033] self-center">← choose one</span>}
                     </div>
                 )}
-                {editable && (
+                {editable && !fixMode && (
                     <div className="ml-auto flex gap-2 text-xs">
                         <button type="button" onClick={onUp} aria-label="Move up">↑</button>
                         <button type="button" onClick={onDown} aria-label="Move down">↓</button>
