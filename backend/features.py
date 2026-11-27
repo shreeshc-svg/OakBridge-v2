@@ -2273,6 +2273,10 @@ async def admin_bulk_import(file: UploadFile = File(...)):
     # create a second copy of a title: skip any ISBN already in the catalogue.
     have = {re.sub(r"[^0-9Xx]", "", str(b.get("isbn") or "")).upper()
             async for b in db.books.find({}, {"_id": 0, "isbn": 1})}
+    # Live warehouse: imported titles start at 0 and get their first count in
+    # Warehouse → Inventory (extensions.warehouse_owns_stock).
+    from extensions import warehouse_owns_stock
+    zero_stock = await warehouse_owns_stock("book")
     for i, row in rows_iter:  # start=2 to match spreadsheet row numbers
         clean = {k.strip(): (str(v) if v is not None else "").strip() for k, v in row.items() if k}
         key = re.sub(r"[^0-9Xx]", "", clean.get("isbn") or "").upper()
@@ -2281,6 +2285,8 @@ async def admin_bulk_import(file: UploadFile = File(...)):
             continue
         try:
             doc = _csv_row_to_book_doc(clean)
+            if zero_stock and doc.get("product_type", "book") not in ("hamper", "pack"):
+                doc["stock"] = 0
             if key:
                 have.add(key)
             await db.books.insert_one({**doc})
@@ -3616,7 +3622,14 @@ async def album_photos(prefix: str, limit: int = 300):
 @public_router.get("/settings")
 async def get_settings():
     docs = await db.settings.find({}, {"_id": 0}).to_list(200)
-    return {**SETTINGS_DEFAULTS, **{d["key"]: d["value"] for d in docs}}
+    # warehouse_live: the admin screens lock book stock fields when true
+    # (extensions.warehouse_owns_stock enforces it on the server).
+    try:
+        from warehouse import warehouse_is_master
+        live = await warehouse_is_master()
+    except Exception:  # noqa: BLE001
+        live = False
+    return {**SETTINGS_DEFAULTS, **{d["key"]: d["value"] for d in docs}, "warehouse_live": live}
 
 
 @admin_router.put("/settings")

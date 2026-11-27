@@ -109,6 +109,14 @@ export default function AdminInventory() {
 
     return (
         <div data-testid="admin-inventory-page">
+            {/* One stock (Nov 2026): this page is the website's view — what can be
+                sold, and alerts. Book stock is changed in one place only. */}
+            {data?.warehouse_mode === "live" && (
+                <div className="mb-6 border border-[#BFDBFE] bg-[#EFF6FF] px-4 py-3 text-sm text-[#1E3A8A] flex flex-wrap items-center gap-3" data-testid="inventory-one-stock">
+                    <span>Book stock follows the warehouse count. To change it, use <b>Warehouse → Stock → Adjust</b>. Only packs and hampers are edited on this page.</span>
+                    <Link to="/admin/warehouse?tab=inventory" className="ml-auto bg-[#002B5C] text-white px-3 py-1.5 text-xs">Open Warehouse → Stock</Link>
+                </div>
+            )}
             <div className="flex flex-wrap items-end justify-between gap-4">
                 <div>
                     <div className="overline">Stock Alerts</div>
@@ -125,7 +133,7 @@ export default function AdminInventory() {
                         stays for an install still on the Google sheet (warehouse
                         off / in trial). */}
                     {data?.warehouse_mode === "live" ? (
-                        <Link to="/admin/warehouse" data-testid="inventory-live-from-warehouse"
+                        <Link to="/admin/warehouse?tab=inventory" data-testid="inventory-live-from-warehouse"
                             title="Website stock updates automatically with every warehouse movement — no sync needed."
                             className="inline-flex items-center gap-2 border border-[#15803D] text-[#15803D] bg-[#F0FDF4] px-4 py-2 text-sm font-medium hover:bg-[#DCFCE7]">
                             <span className="w-2 h-2 rounded-full bg-[#15803D] animate-pulse" aria-hidden="true" />
@@ -305,6 +313,7 @@ export default function AdminInventory() {
                                         book={b}
                                         threshold={threshold}
                                         onSaved={onStockSaved}
+                                        whLive={data?.warehouse_mode === "live"}
                                     />
                                 ))}
                                 {filtered.length === 0 && (
@@ -338,7 +347,11 @@ function statusOf(stock, threshold) {
     return { text: "In stock", cls: "text-green-700" };
 }
 
-function InventoryRow({ book, threshold, onSaved }) {
+function InventoryRow({ book, threshold, onSaved, whLive = false }) {
+    // One stock number: with the warehouse live, a book's stock is its shelf
+    // count and is changed in Warehouse → Inventory; only packs and hampers
+    // (not counted in the warehouse) are edited here.
+    const fromWarehouse = whLive && !["pack", "hamper"].includes(book.product_type);
     const [val, setVal] = useState(book.stock ?? 0);
     const [saving, setSaving] = useState(false);
     useEffect(() => setVal(book.stock ?? 0), [book.stock]);
@@ -389,6 +402,12 @@ function InventoryRow({ book, threshold, onSaved }) {
             </td>
             <td className={`px-4 py-3 font-medium whitespace-nowrap ${st.cls}`}>{st.text}</td>
             <td className="px-4 py-3">
+                {fromWarehouse ? (
+                    <div className="flex items-center justify-end gap-3" data-testid={`stock-from-warehouse-${book.id}`}>
+                        <span className="font-mono text-[#002B5C]">{book.stock ?? 0}</span>
+                        <Link to="/admin/warehouse?tab=inventory" className="text-xs underline text-[#4B5563] whitespace-nowrap" title="Stock is the warehouse count — change it there">Adjust in Warehouse</Link>
+                    </div>
+                ) : (
                 <div className="flex items-center justify-end gap-2">
                     <input
                         type="number"
@@ -408,6 +427,7 @@ function InventoryRow({ book, threshold, onSaved }) {
                         {saving ? "…" : "Save"}
                     </button>
                 </div>
+                )}
             </td>
         </tr>
     );

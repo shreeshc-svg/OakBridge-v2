@@ -1641,6 +1641,27 @@ def clean_store_links(raw) -> dict:
     return out
 
 
+NOT_WAREHOUSE_COUNTED = ("hamper", "pack")
+STOCK_LOCKED_MSG = ("Stock for this book is counted in the warehouse now. Change it in "
+                    "Admin → Warehouse → Stock (Adjust) — the website follows automatically.")
+
+
+async def warehouse_owns_stock(product_type: Optional[str]) -> bool:
+    """One stock number (Nov 2026): once the warehouse is LIVE, a book's stock
+    is its shelf count and changes only through Warehouse → Inventory, where
+    every change is a ledger line. Typing website stock elsewhere used to move
+    the warehouse count by the same amount behind the admin's back — the
+    Man & The Judge −96. Packs and hampers are not counted in the warehouse;
+    their stock stays website-only and editable here."""
+    if (product_type or "book") in NOT_WAREHOUSE_COUNTED:
+        return False
+    try:
+        from warehouse import warehouse_is_master
+        return await warehouse_is_master()
+    except Exception:  # noqa: BLE001 — never block an edit on a lookup hiccup
+        return False
+
+
 @admin_router.post("/books")
 async def admin_create_book(payload: BookAdminCreate):
     doc = {"id": str(uuid.uuid4()), **payload.model_dump()}
@@ -1651,6 +1672,10 @@ async def admin_create_book(payload: BookAdminCreate):
     doc["pod"] = bool(doc.get("pod"))
     if doc.get("coming_soon"):
         doc["stock"] = 0  # a pre-order has no copies yet (see admin_update_book)
+    if await warehouse_owns_stock(doc.get("product_type")):
+        # A new title has no copies counted yet: it starts at 0 and the
+        # warehouse gives it its first count (Save count / Set both).
+        doc["stock"] = 0
     _finalise_volume_set(doc)
     # Without this a book added here can never appear under "Newest".
     #
@@ -1692,7 +1717,7 @@ async def admin_update_book(book_id: str, payload: BookAdminUpdate):
         raise HTTPException(status_code=400, detail="No updates provided")
     prev = await db.books.find_one(
         {"id": book_id},
-        {"_id": 0, "stock": 1, "release_rank": 1, "is_volume_set": 1, "volumes": 1, "coming_soon": 1, "pod": 1},
+        {"_id": 0, "stock": 1, "release_rank": 1, "is_volume_set": 1, "volumes": 1, "coming_soon": 1, "pod": 1, "product_type": 1},
     )
     if prev is None:
         raise HTTPException(status_code=404, detail="Book not found")
@@ -1700,6 +1725,18 @@ async def admin_update_book(book_id: str, payload: BookAdminUpdate):
     # promise of 5–7 working days. One book can't make both.
     if updates.get("coming_soon", prev.get("coming_soon")) and updates.get("pod", prev.get("pod")):
         raise HTTPException(status_code=400, detail="A book can be a pre-order or print on demand, not both.")
+
+    # One stock number: in live mode a counted book's stock is set in the
+    # warehouse only. The Books form sends stock only when it was actually
+    # edited (an unchanged value is just dropped here); a real change is
+    # refused with where to make it instead.
+    if "stock" in updates and not updates.get("coming_soon") and await warehouse_owns_stock(prev.get("product_type")):
+        if int(updates["stock"] or 0) == int(prev.get("stock") or 0):
+            updates.pop("stock")
+        else:
+            raise HTTPException(status_code=409, detail=STOCK_LOCKED_MSG)
+        if not updates:
+            return await db.books.find_one({"id": book_id}, {"_id": 0})
 
     # A pre-order carries no stock: there are no printed copies, and any number
     # here showed "Only N left in stock" on the storefront. Locked server-side

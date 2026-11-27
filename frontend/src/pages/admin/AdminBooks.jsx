@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { mediaUrl, fetchCollection,
+import { mediaUrl, fetchCollection, fetchSettings,
     adminUploadBookPreview,
     adminRemoveBookPreview,
 } from "../../lib/api";
@@ -792,6 +792,11 @@ function EbookManager({ bookId, hasEbook, filename, onChange }) {
 
 function BookForm({ initial, categories, onClose, onSaved }) {
     const [form, setForm] = useState({ ...BLANK, ...(initial || {}) });
+    // One stock number: with the warehouse live, a book's stock is its shelf
+    // count and is changed only in Warehouse → Inventory (the server refuses
+    // it here too — extensions.warehouse_owns_stock).
+    const [whLive, setWhLive] = useState(false);
+    useEffect(() => { fetchSettings().then((s) => setWhLive(!!s?.warehouse_live)).catch(() => {}); }, []);
     // Stores come from Admin → Pages → "Available on" stores; one link box each.
     // The Oakbridge eReader has its own field (ebook_url) and is left out here.
     const [stores, setStores] = useState([]);
@@ -874,6 +879,10 @@ function BookForm({ initial, categories, onClose, onSaved }) {
                     Number(form.publication_year) || new Date().getFullYear(),
                 // Pre-orders are saved with no stock (the field is locked to 0).
                 stock: form.coming_soon ? 0 : Number(form.stock),
+                // Never re-send stock the admin didn't touch: the form holds the
+                // number from when the list was loaded, and saving a description
+                // used to put back copies sold in the meantime.
+                ...(isEdit && !form.coming_soon && Number(form.stock) === Number(initial?.stock) ? { stock: undefined } : {}),
                 // Only filled boxes are sent. The server keeps https links only
                 // (extensions.clean_store_links); an emptied box removes that link.
                 store_links: Object.fromEntries(
@@ -959,23 +968,30 @@ function BookForm({ initial, categories, onClose, onSaved }) {
                            book that does not exist yet. Untick Pre-order once
                            copies arrive, then enter the real count. */
                         const preorderStock = name === "stock" && !!form.coming_soon;
-                        const locked = derived || preorderStock;
+                        const warehouseStock = name === "stock" && whLive && !form.coming_soon;
+                        const locked = derived || preorderStock || warehouseStock;
                         return (
                             <div key={name} className={col === 2 ? "col-span-2" : "col-span-2 sm:col-span-1"}>
                                 <label className="overline !text-[10px] block mb-2">
-                                    {derived ? "Pages (total of all volumes)" : preorderStock ? "Stock (locked — pre-order)" : label}
+                                    {derived ? "Pages (total of all volumes)" : preorderStock ? "Stock (locked — pre-order)" : warehouseStock ? "Stock (from the warehouse count)" : label}
                                 </label>
                                 <input
                                     type={type}
                                     name={name}
                                     required={req}
                                     readOnly={locked}
-                                    title={preorderStock ? "Pre-orders carry no stock. Untick Pre-order when copies arrive." : undefined}
-                                    value={derived ? volumeTotalPages(form.volumes) : preorderStock ? 0 : (form[name] ?? "")}
+                                    title={preorderStock ? "Pre-orders carry no stock. Untick Pre-order when copies arrive."
+                                        : warehouseStock ? "Change stock in Admin → Warehouse → Inventory (Save count)." : undefined}
+                                    value={derived ? volumeTotalPages(form.volumes) : preorderStock ? 0 : warehouseStock && !isEdit ? 0 : (form[name] ?? "")}
                                     onChange={onChange}
                                     data-testid={`book-form-${name}`}
                                     className={`w-full border border-[#E5E7EB] px-3 py-2 text-sm outline-none focus:border-[#002B5C] ${locked ? "bg-[#F5F7FA] text-[#4B5563] cursor-not-allowed" : "bg-white"}`}
                                 />
+                                {warehouseStock && (
+                                    <Link to="/admin/warehouse?tab=inventory" className="text-[11px] text-[#002B5C] underline" data-testid="book-form-stock-warehouse">
+                                        {isEdit ? "Change it in Warehouse → Stock" : "Starts at 0 — count it in Warehouse → Stock"}
+                                    </Link>
+                                )}
                             </div>
                         );
                     })}

@@ -6,12 +6,15 @@ import { Search, AlertTriangle, PackageX, Download, FileText, X, GitCompare, Cal
 import { adminWhInventory, adminWhSetCount, adminWhMatchWebsite, adminWhSetBoth, adminWhInvMove, adminWhInventoryXlsx, adminWhBrochure, saveBlob, fetchCategories,
     formatApiError, formatINR, mediaUrl } from "../../lib/api";
 import ExportButton from "./ExportButton";
+import { useAuth } from "../../context/AuthContext";
+import { isSuperadmin } from "../../lib/rbac";
 import { preorderState, formatLaunchDate, formatLaunchTimes } from "../../lib/preorder";
 
 /**
- * Admin → Warehouse → Inventory (Oct 2026): the WAREHOUSE's counts, with the
- * same search / view / edit / export as Admin → Inventory (the website's
- * stock). Every change is a movement in the ledger — who, when, why — so
+ * Admin → Warehouse → Stock (Oct 2026; one-stock rework Nov 2026): THE stock
+ * screen. With the warehouse live, a book's stock is its shelf count; the
+ * website's "available online" follows it, and Admin → Inventory only keeps
+ * packs and hampers (not counted here). Every change is a movement in the ledger — who, when, why — so
  * "Save count" asks for a reason and books the difference as a correction.
  * Nothing deletes: copies leave by a movement out; a wrong movement is undone
  * in the Movements tab. Backend: warehouse.py adm_inventory / adm_set_count /
@@ -28,6 +31,8 @@ const REASON = Object.fromEntries([...IN, ...OUT, ["correction_in", "Correction 
 const when = (iso) => (iso ? new Date(iso).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : "—");
 
 export default function WarehouseInventory({ onHistory }) {
+    const { user } = useAuth();
+    const canFix = isSuperadmin(user?.role);   // Fix mismatch (website-only repair) is superadmin
     const [d, setD] = useState(null);
     const [q, setQ] = useState("");
     const [view, setView] = useState("all");
@@ -112,7 +117,7 @@ export default function WarehouseInventory({ onHistory }) {
                 </div>
                 {uncounted > 0 && (
                     <button type="button" onClick={() => setView(view === "uncounted" ? "all" : "uncounted")} data-testid="wh-inv-never"
-                        title="Added after the trial started, so the opening count missed them. Count the shelf, then Edit → Set count (0 if none)."
+                        title="Added after the trial started, so the opening count missed them. Count the shelf, then Adjust → Counted the shelf (0 if none)."
                         className="inline-flex items-center gap-1 border border-[#B45309] text-[#B45309] bg-[#FFFBEB] px-2 py-1 text-xs font-medium">
                         <AlertTriangle size={12} aria-hidden="true" />{uncounted} never counted — set a count
                     </button>
@@ -128,9 +133,15 @@ export default function WarehouseInventory({ onHistory }) {
             <div className="bg-white border border-[#E5E7EB] overflow-x-auto">
                 <table className="w-full text-sm">
                     <thead><tr className="text-left text-[#4B5563] border-b border-[#E5E7EB] align-bottom">
-                        <th className="px-3 py-2">Book</th><th className="px-3 py-2">Category</th>
-                        <th className="px-3 py-2 text-right whitespace-nowrap">Warehouse</th><th className="px-3 py-2 text-right whitespace-nowrap">Website</th>
-                        <th className="px-3 py-2 text-right whitespace-nowrap">Owed</th><th className="px-3 py-2 whitespace-nowrap">Last movement</th><th className="px-3 py-2" />
+                        {/* One stock, three plain words: what's physically ON THE SHELF,
+                            what of it is RESERVED (paid orders waiting + short-parcel
+                            copies set aside), and what the website can still SELL. */}
+                        <th className="px-3 py-2">Book</th>
+                        <th className="px-3 py-2 text-right whitespace-nowrap" title="Copies physically in the warehouse (the count)">On shelf</th>
+                        <th className="px-3 py-2 text-right whitespace-nowrap" title="Paid orders waiting for copies + copies set aside for short website parcels">Reserved</th>
+                        <th className="px-3 py-2 text-right whitespace-nowrap" title="What the website can sell now — follows the shelf count">Available online</th>
+                        <th className="px-3 py-2 whitespace-nowrap">Status</th>
+                        <th className="px-3 py-2 whitespace-nowrap">Last movement</th><th className="px-3 py-2" />
                     </tr></thead>
                     <tbody>
                         {rows.map((b) => (
@@ -146,7 +157,6 @@ export default function WarehouseInventory({ onHistory }) {
                                             </div>
                                         </div>
                                     </td>
-                                    <td className="px-3 py-2 text-[#4B5563] whitespace-nowrap">{b.category}</td>
                                     {byDesign(b) && (b.wh_stock ?? 0) <= 0 ? (
                                         // Empty by design: a −2 here is 2 copies owed, not a fault.
                                         <td className="px-3 py-2 text-right text-[11px] text-[#6B7280] whitespace-nowrap">
@@ -155,16 +165,17 @@ export default function WarehouseInventory({ onHistory }) {
                                     ) : (
                                         <td className={`px-3 py-2 text-right font-mono ${b.wh_stock == null ? "text-[#9CA3AF]" : b.wh_stock < 0 ? "text-[#CC0033]" : b.wh_stock <= d.threshold ? "text-[#B45309]" : "text-[#002B5C]"}`}>{b.wh_stock ?? "—"}</td>
                                     )}
-                                    <td className="px-3 py-2 text-right font-mono">{b.stock}{b.diff ? <span className="block text-[10px] text-[#CC0033]">{b.diff > 0 ? "+" : ""}{b.diff} vs website</span> : null}</td>
-                                    <td className="px-3 py-2 text-right font-mono">{b.owed || "—"}
-                                        {b.set_aside ? <span className="block text-[10px] text-[#B4750F]" title="On the shelf but sold: a short website parcel's rest (Still to send)">{b.set_aside} set aside</span> : null}</td>
+                                    <td className="px-3 py-2 text-right font-mono" title={`${b.owed || 0} owed to paid orders · ${b.set_aside || 0} set aside for short parcels`}>
+                                        {(b.owed || 0) + (b.set_aside || 0) || "—"}</td>
+                                    <td className="px-3 py-2 text-right font-mono">{b.stock}</td>
+                                    <td className="px-3 py-2"><StockStatus b={b} threshold={d.threshold} /></td>
                                     <td className="px-3 py-2 text-xs text-[#4B5563] whitespace-nowrap">{b.last_at ? <>{when(b.last_at)}<span className="block">{REASON[b.last_reason] || b.last_reason}</span></> : "—"}</td>
                                     <td className="px-3 py-2 text-right whitespace-nowrap">
-                                        <button type="button" className="text-xs border border-[#002B5C] px-2 py-1 mr-2" onClick={() => setOpen(open === b.id ? null : b.id)} data-testid="wh-inv-edit">{open === b.id ? "Close" : "Edit"}</button>
+                                        <button type="button" className="text-xs border border-[#002B5C] px-2 py-1 mr-2" onClick={() => setOpen(open === b.id ? null : b.id)} data-testid="wh-inv-edit">{open === b.id ? "Close" : "Adjust"}</button>
                                         {onHistory && <button type="button" className="text-xs underline" onClick={() => onHistory(b.isbn || b.title)}>History</button>}
                                     </td>
                                 </tr>
-                                {open === b.id && <tr className="bg-[#F9FAFB] border-b border-[#E5E7EB]"><td colSpan={7} className="px-3 py-3"><EditPanel b={b} onDone={() => { setOpen(null); load(); }} /></td></tr>}
+                                {open === b.id && <tr className="bg-[#F9FAFB] border-b border-[#E5E7EB]"><td colSpan={7} className="px-3 py-3"><AdjustPanel b={b} live={d.mode === "live"} canFix={canFix} onDone={() => { setOpen(null); load(); }} /></td></tr>}
                             </React.Fragment>
                         ))}
                         {!rows.length && <tr><td colSpan={7} className="px-3 py-8 text-center text-[#4B5563]">No matching books.</td></tr>}
@@ -175,103 +186,110 @@ export default function WarehouseInventory({ onHistory }) {
     );
 }
 
-function EditPanel({ b, onDone }) {
-    // What he counts on the SHELF. Copies set aside for short website parcels
-    // are on the shelf but already sold; the server takes them out of the
-    // count (warehouse.adm_set_count), and this preview does the same.
+/*
+ * ONE way to change a book's stock (Nov 2026). Before, the row offered
+ * "Save count", "Copies in or out", "Set both" and "Set website to match" —
+ * four forms an admin had to choose between. Now: pick what happened, enter
+ * the number, add a note, Save. Each choice is still its own ledger line
+ * (who, when, why) and the website follows the warehouse automatically.
+ *
+ *   Counted the shelf  -> warehouse_match.set_both in live mode: the count is
+ *                         saved AND the website brought in line, so a count
+ *                         also repairs any mismatch and works on a title never
+ *                         counted before. (Trial mode: the plain count.)
+ *   Copies in / out    -> warehouse.adm_inventory_move with that reason.
+ *
+ * "Fix mismatch" (website only, warehouse untouched) shows only when the two
+ * disagree, as a one-click repair — it is not a daily action.
+ */
+const ACTIONS = [
+    ["count", "Counted the shelf", "count"],
+    ...IN.map(([v, l]) => [v, l, "in"]),
+    ...OUT.map(([v, l]) => [v, l, "out"]),
+];
+
+function AdjustPanel({ b, live, canFix = false, onDone }) {
     const aside = b.set_aside || 0;
-    const [count, setCount] = useState((b.wh_stock ?? 0) + aside);
+    const [action, setAction] = useState("count");
+    const [n, setN] = useState(String((b.wh_stock ?? 0) + aside));
     const [note, setNote] = useState("");
-    const [qty, setQty] = useState(1);
-    const [reason, setReason] = useState("printer");
-    const [mnote, setMnote] = useState("");
     const [busy, setBusy] = useState(false);
-    const run = async (fn, ok) => {
+    const kind = (ACTIONS.find(([v]) => v === action) || [])[2];
+    const pick = (v) => {
+        setAction(v);
+        setN(v === "count" ? String((b.wh_stock ?? 0) + aside) : "1");
+    };
+    const num = Number(n);
+    const valid = String(n).trim() !== "" && Number.isInteger(num) && (kind === "count" ? num >= 0 : num > 0);
+    const after = kind === "count" ? num - aside : (b.wh_stock ?? 0) + (kind === "in" ? num : -num);
+    const changes = kind !== "count" || b.wh_stock == null || after !== (b.wh_stock ?? 0) || Boolean(b.diff);
+    const needNote = kind === "count" ? 3 : 0;
+    const save = async () => {
         setBusy(true);
         try {
-            const r = await fn();
-            toast.success(ok);
-            (r?.below_zero || []).forEach((x) => toast.warning(`${titleFor(x.title, x.book_id || x.id)}: warehouse count is now ${x.wh_stock}. ${x.note}`, { duration: 10000 }));
+            let r;
+            if (kind === "count") {
+                r = live ? await adminWhSetBoth(b.id, num, note) : await adminWhSetCount(b.id, num, note);
+            } else {
+                r = await adminWhInvMove(b.id, num, action, note);
+            }
+            toast.success(kind === "count" ? `Count saved: ${num} on the shelf.` : `Saved: ${kind === "in" ? "+" : "−"}${num}.`);
+            const below = r?.below_zero || r?.count?.below_zero || [];
+            below.forEach((x) => toast.warning(`${titleFor(x.title, x.book_id || x.id)}: warehouse count is now ${x.wh_stock}. ${x.note}`, { duration: 10000 }));
             onDone();
         } catch (e) { toast.error(formatApiError(e)); } finally { setBusy(false); }
     };
-    const diff = Number(count) - aside - (b.wh_stock ?? 0);
     const inp = "border border-[#E5E7EB] bg-white px-2 py-1.5 text-sm";
     return (
-        <div className="grid md:grid-cols-2 gap-5 text-sm">
-            <div className="space-y-2">
-                <div className="font-medium text-[#002B5C]">Set the counted number <span className="font-normal text-xs text-[#6B7280]">(copies on the shelf)</span></div>
-                {aside > 0 && <div className="text-xs bg-[#FEF3C7] px-2 py-1">Includes {aside} cop{aside === 1 ? "y" : "ies"} set aside for a short website parcel — already sold, so the count saved is {Number(count) - aside}.</div>}
-                <div className="flex flex-wrap items-center gap-2">
-                    <input type="number" min={0} value={count} onChange={(e) => setCount(e.target.value)} className={`${inp} w-24 font-mono`} aria-label="Counted copies" />
-                    <span className={`text-xs ${diff ? "text-[#B45309]" : "text-[#6B7280]"}`}>{diff ? `${diff > 0 ? "+" : ""}${diff} copies (saved as a correction)` : "no change"}</span>
-                </div>
-                <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Why — e.g. shelf counted 28 Oct by Ravi" className={`${inp} w-full`} />
-                <button type="button" disabled={busy || (!diff && b.wh_stock != null) || note.trim().length < 3} onClick={() => run(() => (b.wh_stock == null
-                        // Never counted: the plain count refuses a book with no count yet
-                        // (warehouse.adm_set_count); "set both" starts it at 0 first and
-                        // gives website and warehouse the same first number.
-                        ? adminWhSetBoth(b.id, Number(count), note)
-                        : adminWhSetCount(b.id, Number(count), note)), "Count saved.")}
-                    className="bg-[#002B5C] text-white px-3 py-1.5 text-xs disabled:opacity-40">Save count</button>
-            </div>
-            <div className="space-y-2">
-                <div className="font-medium text-[#002B5C]">Copies in or out</div>
-                <div className="flex flex-wrap items-center gap-2">
-                    <select value={reason} onChange={(e) => setReason(e.target.value)} className={inp}>
-                        <optgroup label="In">{IN.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</optgroup>
-                        <optgroup label="Out">{OUT.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</optgroup>
+        <div className="space-y-3 text-sm" data-testid="wh-adjust">
+            <div className="flex flex-wrap items-end gap-2">
+                <label className="block">
+                    <span className="block text-xs text-[#6B7280] mb-1">What happened?</span>
+                    <select value={action} onChange={(e) => pick(e.target.value)} className={inp} data-testid="wh-adjust-action">
+                        <option value="count">Counted the shelf</option>
+                        <optgroup label="Copies in">{IN.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</optgroup>
+                        <optgroup label="Copies out">{OUT.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</optgroup>
                     </select>
-                    <input type="number" min={1} value={qty} onChange={(e) => setQty(e.target.value)} className={`${inp} w-20 font-mono`} aria-label="Copies" />
-                </div>
-                <input value={mnote} onChange={(e) => setMnote(e.target.value)} placeholder="Note (bill no., who it went to…)" className={`${inp} w-full`} />
-                <button type="button" disabled={busy || !(Number(qty) > 0)} onClick={() => run(() => adminWhInvMove(b.id, Number(qty), reason, mnote), "Saved.")}
-                    className="border border-[#002B5C] px-3 py-1.5 text-xs disabled:opacity-40">{IN.some(([v]) => v === reason) ? "Add copies" : "Remove copies"}</button>
+                </label>
+                <label className="block">
+                    <span className="block text-xs text-[#6B7280] mb-1">{kind === "count" ? "Copies on the shelf" : "Copies"}</span>
+                    <input type="number" min={kind === "count" ? 0 : 1} value={n} onChange={(e) => setN(e.target.value)} className={`${inp} w-28 font-mono`} data-testid="wh-adjust-n" />
+                </label>
+                <label className="block flex-1 min-w-[220px]">
+                    <span className="block text-xs text-[#6B7280] mb-1">Note {kind === "count" ? "(required)" : "(bill no., who it went to…)"}</span>
+                    <input value={note} onChange={(e) => setNote(e.target.value)} placeholder={kind === "count" ? "e.g. shelf counted 27 Nov by Ravi" : ""} className={`${inp} w-full`} data-testid="wh-adjust-note" />
+                </label>
+                <button type="button" onClick={save} disabled={busy || !valid || !changes || note.trim().length < needNote}
+                    className="bg-[#002B5C] text-white px-4 py-2 text-sm disabled:opacity-40" data-testid="wh-adjust-save">{busy ? "Saving…" : "Save"}</button>
             </div>
-            {b.diff ? <MatchWebsite b={b} run={run} busy={busy} /> : null}
-            <p className="md:col-span-2 text-[11px] text-[#6B7280]">Every change is a line in Movements with your name and note. A mistake is undone there (within 24 hours), not deleted.</p>
+            {valid && (
+                <p className="text-xs text-[#4B5563]" data-testid="wh-adjust-preview">
+                    On shelf: <b>{b.wh_stock ?? "never counted"}</b> → <b>{kind === "count" ? num : after}</b>
+                    {kind === "count" && aside ? ` (${aside} of them already sold to a short website parcel — counted ${after})` : ""}
+                    {live ? " · the website follows automatically." : " · trial mode: the website is not changed."}
+                    {kind === "count" && !changes ? " Nothing to change." : ""}
+                </p>
+            )}
+            {live && b.diff ? (canFix ? <FixMismatch b={b} onDone={onDone} />
+                : <p className="text-xs text-[#92400E]">Website and shelf disagree. Count the shelf above to fix both, or ask a super admin to use Fix mismatch.</p>) : null}
         </div>
     );
 }
 
-/*
- * Website and warehouse disagree (the "vs website" line in the table). Every
- * other tool moves BOTH numbers by the same amount, so it can't close a gap —
- * typing 0 on the website pushes the warehouse below 0, and counting 0 in the
- * warehouse puts the website back up. This sets the WEBSITE number alone to
- * what the warehouse count says (backend/warehouse_match.py). Fix the shelf
- * count first if that's the wrong one. Superadmin; logged.
- */
-function MatchWebsite({ b, run, busy }) {
-    const [note, setNote] = useState("");
-    const [both, setBoth] = useState(Math.max(0, b.wh_stock ?? 0) + (b.set_aside || 0));
+function FixMismatch({ b, onDone }) {
+    const [busy, setBusy] = useState(false);
     const target = Math.max(0, (b.wh_stock ?? 0) + (b.owed || 0));
-    const okBoth = String(both).trim() !== "" && Number(both) >= 0;
+    const fix = async () => {
+        if (!window.confirm(`Set the website stock of “${b.plain_title || b.title}” from ${b.stock} to ${target}?\n\nThe shelf count (${b.wh_stock ?? 0}) is not changed. If the shelf count is wrong, use “Counted the shelf” above instead.`)) return;
+        setBusy(true);
+        try { await adminWhMatchWebsite(b.id, "Fix mismatch: website set to the warehouse count"); toast.success(`Website stock set to ${target}.`); onDone(); }
+        catch (e) { toast.error(formatApiError(e)); } finally { setBusy(false); }
+    };
     return (
-        <div className="md:col-span-2 border border-[#FDE68A] bg-[#FFFBEB] p-3 space-y-2" data-testid="wh-match-website">
-            <div className="font-medium text-[#92400E]">Out of step: warehouse {b.wh_stock ?? 0}, website {b.stock}</div>
-            <p className="text-xs text-[#4B5563]">
-                Counting or typing stock moves both numbers together, so a gap like this can't be closed that way. Write why below, then:
-            </p>
-            {/* Most useful first: "N on the shelf, and the website says N too". */}
-            <div className="flex flex-wrap items-center gap-2" data-testid="wh-set-both">
-                <span className="text-sm text-[#002B5C]">Set <b>both</b> to</span>
-                <input type="number" min={0} value={both} onChange={(e) => setBoth(e.target.value)} className="border border-[#E5E7EB] bg-white px-2 py-1.5 text-sm w-24 font-mono" aria-label="Copies on the shelf" />
-                <span className="text-xs text-[#6B7280]">copies on the shelf</span>
-                <button type="button" disabled={busy || note.trim().length < 3 || !okBoth}
-                    onClick={() => window.confirm(`Set “${b.plain_title || b.title}” to ${Number(both)} in the warehouse AND on the website?\n\nSaved as a shelf count (a correction in Movements), then the website is matched to it.`)
-                        && run(() => adminWhSetBoth(b.id, Number(both), note), `Warehouse and website set to ${Number(both)}.`)}
-                    className="bg-[#002B5C] text-white px-3 py-1.5 text-xs disabled:opacity-40" data-testid="wh-set-both-btn">Set both to {okBoth ? Number(both) : "…"}</button>
-            </div>
-            <div className="text-xs text-[#6B7280]">…or, if the warehouse count ({b.wh_stock ?? 0}) is right, set only the website to {target}:</div>
-            <div className="flex flex-wrap items-center gap-2">
-                <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Why — e.g. website showed 96, shelf has none"
-                    className="border border-[#E5E7EB] bg-white px-2 py-1.5 text-sm flex-1 min-w-[220px]" />
-                <button type="button" disabled={busy || note.trim().length < 3}
-                    onClick={() => window.confirm(`Set the website stock of “${b.plain_title || b.title}” from ${b.stock} to ${target}?\n\nThe warehouse count (${b.wh_stock ?? 0}) is not changed.`)
-                        && run(() => adminWhMatchWebsite(b.id, note), `Website stock set to ${target}.`)}
-                    className="bg-[#B4750F] text-white px-3 py-1.5 text-xs disabled:opacity-40">Set website to {target}</button>
-            </div>
+        <div className="border border-[#FDE68A] bg-[#FFFBEB] p-3 flex flex-wrap items-center gap-3" data-testid="wh-fix-mismatch">
+            <span className="text-[#92400E]">Website shows {b.stock}, the shelf count says {target}.</span>
+            <button type="button" disabled={busy} onClick={fix} className="border border-[#B4750F] text-[#92400E] px-3 py-1 text-xs bg-white disabled:opacity-40">Fix mismatch (set website to {target})</button>
+            <span className="text-xs text-[#6B7280]">or count the shelf above — that fixes both.</span>
         </div>
     );
 }
@@ -354,6 +372,27 @@ const isOut = (b) => kindOf(b) === "book" && (b.wh_stock ?? 0) <= 0;
 const isLow = (b, t) => kindOf(b) === "book" && (b.wh_stock ?? 0) > 0 && b.wh_stock <= t;
 // Same rule as the go-live check: no count at all, and not empty by design.
 const needsCount = (b) => b.wh_stock == null && !byDesign(b);
+
+/* One status per row, in the words an admin would use. "≠ website" is added
+   when the website and the shelf disagree (Adjust → Fix mismatch). */
+function StockStatus({ b, threshold }) {
+    const k = kindOf(b);
+    const wh = b.wh_stock;
+    const [label, cls] = k === "preorder" ? ["Pre-order", "bg-[#EDE9FE] text-[#5B21B6]"]
+        : k === "pod" ? ["Print on demand", "bg-[#E0F2FE] text-[#075985]"]
+        : k === "launched_empty" ? ["Launched, no copies", "bg-[#FEE2E2] text-[#991B1B]"]
+        : wh == null ? ["Not counted yet", "bg-[#FEF3C7] text-[#92400E]"]
+        : wh < 0 ? ["Below 0 — count it", "bg-[#FEE2E2] text-[#991B1B]"]
+        : wh === 0 ? ["Out of stock", "bg-[#FEE2E2] text-[#991B1B]"]
+        : wh <= threshold ? ["Low", "bg-[#FEF3C7] text-[#92400E]"]
+        : ["In stock", "bg-[#DCFCE7] text-[#166534]"];
+    return (
+        <span className="inline-flex flex-col gap-0.5" data-testid="wh-stock-status">
+            <span className={`text-[11px] px-1.5 py-0.5 whitespace-nowrap ${cls}`}>{label}</span>
+            {b.diff ? <span className="text-[10px] text-[#CC0033] whitespace-nowrap" title="Website and shelf disagree — Adjust → Fix mismatch">≠ website</span> : null}
+        </span>
+    );
+}
 
 function KindTag({ b }) {
     const k = kindOf(b);

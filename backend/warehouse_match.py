@@ -2,7 +2,7 @@
 (Nov 2026).
 
     POST /api/admin/warehouse/inventory/{book_id}/match-website   superadmin: {note}
-    POST /api/admin/warehouse/inventory/{book_id}/set-both        superadmin: {count, note}
+    POST /api/admin/warehouse/inventory/{book_id}/set-both        warehouse admins: {count, note}
 
 WHY THIS EXISTS. In live mode every stock tool moves BOTH numbers by the same
 amount, on purpose:
@@ -90,7 +90,7 @@ class BothBody(BaseModel):
 
 
 @router.post("/inventory/{book_id}/set-both")
-async def set_both(book_id: str, body: BothBody, user: dict = Depends(require_superadmin)):
+async def set_both(book_id: str, body: BothBody, user: dict = Depends(require_admin)):
     """'There are N on the shelf, and the website must say so too' — in one go.
 
     The match above only fixes the WEBSITE side. When it's the warehouse side
@@ -99,7 +99,13 @@ async def set_both(book_id: str, body: BothBody, user: dict = Depends(require_su
     the website brought along, without the count's correction pushing the
     website back up. So: the normal shelf count (warehouse.adm_set_count —
     ledger correction, set-aside copies respected), then the website matched
-    to the new count. Both steps are logged as they always are."""
+    to the new count. Both steps are logged as they always are.
+
+    Same people as "Save count" (anyone with the Warehouse section, office
+    side only — not the phone login): since Nov 2026 it IS the Stock page's
+    "Counted the shelf". A count already moves website stock in live mode;
+    bringing the website fully in line is part of the same act. The
+    website-only repair (match_website) stays superadmin."""
     _office_only(user)
     if not (0 <= int(body.count) <= 100000):
         raise HTTPException(status_code=400, detail="Enter a count between 0 and 1,00,000.")

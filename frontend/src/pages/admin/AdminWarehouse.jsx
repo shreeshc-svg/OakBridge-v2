@@ -6,7 +6,7 @@ import { Search, X } from "lucide-react";
 import {
     adminWhOverview, adminWhDocs, adminWhDoc, adminWhUndoDoc, adminWhTestCase, adminWhAccuracy,
     adminWhReplay, adminWhMode, adminWhGoLiveCheck, adminWhMovements, adminWhUndoMove, adminWhReview, adminWhCreateDoc, adminWhEditDoc,
-    adminWhEditLines, adminWhDeleteDoc, adminWhRestoreDoc, adminWhNotDelivered, adminWhResetFromSheet, syncInventoryFromSheet, whBooks, whDocFile, formatApiError,
+    adminWhEditLines, adminWhDeleteDoc, adminWhRestoreDoc, adminWhNotDelivered, adminWhResetFromSheet, syncInventoryFromSheet, whBooks, whDocFile, formatApiError, fetchSettings,
 } from "../../lib/api";
 import { useAuth } from "../../context/AuthContext";
 import { isSuperadmin } from "../../lib/rbac";
@@ -33,7 +33,18 @@ import StillToSend from "../../components/admin/StillToSend";
  *
  * The warehouse role itself never lands here: it is sent to /warehouse.
  */
-const TABS = [["approve", "To approve"], ["inventory", "Inventory"], ["courier", "Courier labels"], ["trial", "Trial & comparison"], ["docs", "Bills & invoices"], ["accuracy", "Accuracy"], ["marketplace", "Amazon / Flipkart sheets"], ["owed", "Still to send"], ["moves", "Movements"]];
+/* Five places instead of nine tabs (Nov 2026): what needs doing TODAY, the
+   STOCK itself, the DOCUMENTS read from photos, SHIPPING runs and sheets, and
+   the HISTORY of every movement. A group with more than one screen shows them
+   as a second row. Keys are unchanged, so links into a screen still work. */
+const GROUPS = [
+    ["today", "Today", [["approve", "To approve"], ["owed", "Still to send"]]],
+    ["stock", "Stock", [["inventory", "Stock"]]],
+    ["docs", "Documents", [["docs", "Bills & invoices"], ["accuracy", "Reading accuracy"]]],
+    ["shipping", "Shipping", [["courier", "Courier labels"], ["marketplace", "Amazon / Flipkart sheets"]]],
+    ["history", "History", [["moves", "Movements"]]],
+];
+const SETUP = ["setup", "Setup", [["trial", "Trial & go-live"]]];
 // Readable names for the reasons the Movements table shows raw.
 const REASON_NAME = { amazon_mp: "Carton out – Amazon", flipkart_mp: "Carton out – Flipkart", short_cancelled: "Short parcel cancelled – back in stock" };
 const pct = (x) => (x == null ? "—" : `${Math.round(x * 100)}%`);
@@ -42,9 +53,20 @@ const when = (iso) => (iso ? new Date(iso).toLocaleString("en-IN") : "—");
 export default function AdminWarehouse() {
     const { user } = useAuth();
     useBindings(whBooks);   // HB / PB after every title in the warehouse admin (lib/binding.js)
-    const [tab, setTab] = useState("approve");
+    // ?tab=inventory opens a screen directly (links from Books / Inventory).
+    const [tab, setTab] = useState(() => {
+        const t = new URLSearchParams(window.location.search).get("tab");
+        return [...GROUPS, SETUP].some(([, , subs]) => subs.some(([k]) => k === t)) ? t : "approve";
+    });
     const [pending, setPending] = useState(null);
     const [moveQ, setMoveQ] = useState("");
+    // Live since 3 Nov 2026: "Trial & comparison" (sheet vs warehouse, Go live)
+    // is set-up work, not daily work. Once live it moves to the end as
+    // "Setup", superadmins only, so the daily tabs come first.
+    const [live, setLive] = useState(false);
+    useEffect(() => { fetchSettings().then((s) => setLive(!!s?.warehouse_live)).catch(() => {}); }, []);
+    const groups = live ? [...GROUPS, ...(isSuperadmin(user?.role) ? [SETUP] : [])] : [...GROUPS, SETUP];
+    const group = groups.find(([, , subs]) => subs.some(([k]) => k === tab)) || groups[0];
     const refreshPending = useCallback(() => {
         adminWhDocs("awaiting_approval").then((d) => setPending(d.length)).catch(() => {});
     }, []);
@@ -60,10 +82,10 @@ export default function AdminWarehouse() {
                 <Link to="/warehouse" className="bg-[#002B5C] text-white px-4 py-2 text-sm">Open the warehouse screen</Link>
             </div>
             <div className="mt-6 flex flex-wrap items-end gap-2 border-b border-[#E5E7EB]">
-                {TABS.map(([k, l]) => (
-                    <button key={k} type="button" onClick={() => setTab(k)}
-                        className={`px-4 py-2 text-sm -mb-px border-b-2 ${tab === k ? "border-[#002B5C] text-[#002B5C] font-medium" : "border-transparent text-[#4B5563]"}`}>
-                        {l}{k === "approve" && pending ? ` (${pending})` : ""}
+                {groups.map(([g, l, subs]) => (
+                    <button key={g} type="button" onClick={() => setTab(subs[0][0])} data-testid={`wh-group-${g}`}
+                        className={`px-4 py-2 text-sm -mb-px border-b-2 ${group[0] === g ? "border-[#002B5C] text-[#002B5C] font-medium" : "border-transparent text-[#4B5563]"}`}>
+                        {l}{g === "today" && pending ? ` (${pending})` : ""}
                     </button>
                 ))}
                 {tab === "moves" && (
@@ -86,6 +108,16 @@ export default function AdminWarehouse() {
                 )}
             </div>
             <div className="mt-6">
+                {group[2].length > 1 && (
+                    <div className="flex flex-wrap gap-2 mb-4" data-testid="wh-subtabs">
+                        {group[2].map(([k, l]) => (
+                            <button key={k} type="button" onClick={() => setTab(k)}
+                                className={`px-3 py-1 text-xs border ${tab === k ? "bg-[#002B5C] text-white border-[#002B5C]" : "border-[#E5E7EB] text-[#4B5563] bg-white"}`}>
+                                {l}{k === "approve" && pending ? ` (${pending})` : ""}
+                            </button>
+                        ))}
+                    </div>
+                )}
                 {tab === "trial" && <TrialTab canSwitch={isSuperadmin(user?.role)} />}
                 {tab === "approve" && <DocsTab key="approve" status="awaiting_approval" onChange={refreshPending} />}
                 {tab === "docs" && <DocsTab key="docs" onChange={refreshPending} canDelete={isSuperadmin(user?.role)} />}

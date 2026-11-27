@@ -34,7 +34,7 @@ inv_code = "\n".join(x for x in inv.splitlines() if not x.strip().startswith("#"
 check("delete" not in inv_code.lower() and "@wh_admin_router.delete" not in inv_code, "no delete — a wrong movement is undone in Movements")
 check('"WAREHOUSE_INVENTORY_EXPORT"' in inv and '"WAREHOUSE_COUNT_SET"' in inv, "exports and counts are audited")
 app = open(os.path.join(ROOT, "frontend", "src", "pages", "admin", "AdminWarehouse.jsx"), encoding="utf-8").read()
-check('["inventory", "Inventory"]' in app and "<WarehouseInventory" in app, "Inventory tab in Admin → Warehouse")
+check('["inventory", "Stock"]' in app and "<WarehouseInventory" in app, "Stock screen in Admin → Warehouse (key 'inventory')")
 print("-- shareable files --")
 sys.path.insert(0, os.path.join(ROOT, "backend"))
 import io  # noqa: E402
