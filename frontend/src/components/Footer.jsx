@@ -6,6 +6,7 @@ import { useFormShield, HoneypotField } from "../lib/formShield";
 import { socialIcon, socialLabel, visibleSocials } from "../lib/socials";
 import { useBootState } from "../lib/boot";
 import { isComingSoon } from "../lib/comingSoon";
+import PaymentMethods from "./PaymentMethods";
 
 const DEFAULT_COLUMNS = [
     {
@@ -280,6 +281,8 @@ export default function Footer() {
                         ))}
                     </div>
                 </div>
+
+                <PaymentMethods />
 
                 {/* Bottom bar — extra right padding on desktop reserves the corner
                     where the floating chat + back-to-top widgets sit, so the legal
