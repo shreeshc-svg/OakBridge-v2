@@ -3276,8 +3276,56 @@ class FromUsersBody(BaseModel):
     user_ids: Optional[list] = None   # specific people ticked in Admin → Users
     all_customers: bool = False       # everyone with an account (customers) + every guest buyer
     name: Optional[str] = None
-    template: Optional[str] = None    # "for-you" | "blank" | None (list only)
+    template: Optional[str] = None    # "for-you" | "bestsellers" | "hot-press" | "blank" | None (list only)
     ask_permission: bool = False      # one permission email for those who never decided
+
+
+# Admin → Users → "Email all customers": the homepage's two shelves as ready
+# emails (Nov 2026). The SAME books the site shows — the homepage endpoints
+# are called, not re-implemented, so the email and the shelf it names can't
+# disagree — filled into ordinary "book" blocks at prepare time, so the admin
+# sees, edits and previews exactly what will go out in the draft. Only books a
+# reader can buy now (in stock, live pre-order or print-on-demand): an email
+# is no place for a sold-out title.
+SHELF_EMAILS = {
+    "bestsellers": {"name": "Bestsellers", "subject": "{{first_name|Readers}}, what everyone is reading at Oakbridge",
+                    "preheader": "Our bestselling titles this season",
+                    "heading": "Our bestsellers, {{first_name|reader}}",
+                    "intro": "These are the titles readers are buying most right now:",
+                    "button": ("See all bestsellers", f"{SITE}/books?bestseller=true")},
+    "hot-press": {"name": "Hot off the press", "subject": "{{first_name|Readers}}, just published at Oakbridge",
+                  "preheader": "Our newest titles — hot off the press",
+                  "heading": "Hot off the press, {{first_name|reader}}",
+                  "intro": "Our newest titles, just out:",
+                  "button": ("See all new releases", f"{SITE}/books?new_release=true")},
+}
+SHELF_EMAIL_BOOKS = 6
+
+
+def _buyable(b: dict) -> bool:
+    return (isinstance(b.get("stock"), (int, float)) and b["stock"] > 0) or bool(b.get("coming_soon")) or bool(b.get("pod"))
+
+
+async def shelf_books(kind: str) -> list:
+    # Imported here: server.py imports this module, and by the time a request
+    # runs, server is fully loaded.
+    from server import bestseller_books, new_release_books
+    docs = await (bestseller_books(limit=24) if kind == "bestsellers" else new_release_books(limit=24))
+    return [d for d in docs if isinstance(d, dict) and d.get("id") and _buyable(d)][:SHELF_EMAIL_BOOKS]
+
+
+async def shelf_template(kind: str) -> dict:
+    t = SHELF_EMAILS[kind]
+    books = await shelf_books(kind)
+    if not books:
+        raise HTTPException(status_code=409, detail=f"No {t['name'].lower()} in stock to send right now.")
+    blocks = [{"type": "heading", "text": t["heading"]}, {"type": "text", "text": t["intro"]}]
+    for b in books:
+        blocks.append({"type": "book", "book_id": b["id"], "title": b.get("title") or "", "author": b.get("author") or "",
+                       "price": f"₹{float(b.get('price') or 0):,.0f}" if b.get("price") else "",
+                       "cover": _abs_media(b.get("cover_image") or ""), "url": f"{SITE}/books/{b['id']}"})
+    blocks.append({"type": "button", "label": t["button"][0], "url": t["button"][1]})
+    return {"name": t["name"], "subject": t["subject"], "preheader": t["preheader"], "blocks": blocks}
 
 
 @admin_router.post("/lists/from-users")
@@ -3290,6 +3338,12 @@ async def adm_list_from_users(body: FromUsersBody, user: dict = Depends(require_
     unsubscribed / complained / bounced people are never mailed. Those who
     never decided can, if ticked, be sent ONE permission email (the re-confirm
     campaign) — the lawful way to reach them under the DPDP Act."""
+    tmpl = (body.template or "").strip()
+    if tmpl and tmpl not in ("for-you", "blank") and tmpl not in SHELF_EMAILS:
+        raise HTTPException(status_code=400, detail="Unknown email type.")
+    # Before anything is created: no bestsellers / new titles in stock means
+    # no list and no half-made draft, just the reason.
+    shelf = await shelf_template(tmpl) if tmpl in SHELF_EMAILS else None
     people: dict = {}
     if body.all_customers:
         async for u in db.users.find({"role": {"$in": [None, "customer"]}}, {"_id": 0, "email": 1, "name": 1, "phone": 1}):
@@ -3332,10 +3386,13 @@ async def adm_list_from_users(body: FromUsersBody, user: dict = Depends(require_
                     {"$set": {"permission_pending": True, "permission_list": lst["id"], "permission_since": _iso()}})
                 counts["asked_permission"] += r.modified_count
     out = {"list": lst, "counts": counts, "campaigns": []}
-    tmpl = (body.template or "").strip()
-    if tmpl in ("for-you", "blank"):
+    if shelf:
+        t = shelf
+        blocks = _clean_blocks(t["blocks"])
+    elif tmpl in ("for-you", "blank"):
         t = next((x for x in core.STARTER_TEMPLATES if x["key"] == "for-you"), None) if tmpl == "for-you" else None
         blocks = _clean_blocks((t or {}).get("blocks") or [])
+    if tmpl in ("for-you", "blank") or tmpl in SHELF_EMAILS:
         doc = {"id": str(uuid.uuid4()), "name": (t["name"] if t else "Email to customers") + f" — {lst['name']}", "channel": "email",
                "kind": "standard", "reconfirm_days": None, "subject": (t or {}).get("subject", ""), "preheader": (t or {}).get("preheader", ""),
                "blocks": blocks, "links": core.collect_links(blocks), "audience": {"list_ids": [lst["id"]], "rules": []},

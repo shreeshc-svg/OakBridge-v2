@@ -53,6 +53,16 @@ export default function EmailCustomersDialog({ userIds, all, onClose }) {
                                 <input type="radio" name="tmpl" checked={tmpl === "for-you"} onChange={() => setTmpl("for-you")} className="mt-1" />
                                 <span><b>Latest releases, picked for each person</b><span className="block text-xs text-[#6B7280]">New books matched to what each reader bought, carted or asked about — newest releases for everyone else.</span></span>
                             </label>
+                            {/* The homepage's two shelves, filled with the books the site shows
+                                today (in stock only) when you press Prepare — edit them in the draft. */}
+                            <label className="flex gap-2 items-start cursor-pointer">
+                                <input type="radio" name="tmpl" checked={tmpl === "bestsellers"} onChange={() => setTmpl("bestsellers")} className="mt-1" data-testid="email-tmpl-bestsellers" />
+                                <span><b>Bestsellers</b><span className="block text-xs text-[#6B7280]">Up to 6 of our bestselling titles in stock now — the same books as the homepage “Bestsellers” shelf.</span></span>
+                            </label>
+                            <label className="flex gap-2 items-start cursor-pointer">
+                                <input type="radio" name="tmpl" checked={tmpl === "hot-press"} onChange={() => setTmpl("hot-press")} className="mt-1" data-testid="email-tmpl-hot-press" />
+                                <span><b>Hot off the press</b><span className="block text-xs text-[#6B7280]">Up to 6 of our newest titles you can buy now — the same as the homepage “Hot Off the Press” row.</span></span>
+                            </label>
                             <label className="flex gap-2 items-start cursor-pointer">
                                 <input type="radio" name="tmpl" checked={tmpl === "blank"} onChange={() => setTmpl("blank")} className="mt-1" />
                                 <span><b>Write my own email</b><span className="block text-xs text-[#6B7280]">A blank campaign aimed at this list.</span></span>
