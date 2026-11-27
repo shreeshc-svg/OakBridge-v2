@@ -1109,15 +1109,24 @@ async def suggest_index():
     this router and owns `/books/{book_id}`, so a literal path added here would be
     swallowed by that catch-all and 404 as "book not found".
     """
-    docs = (
-        await db.books.find(
-            # Secondary formats (a Hardback beside the listed Paperback) would
-            # suggest the same title twice; the listed one is enough.
-            {"format_primary": {"$ne": False}}, {"_id": 0, "id": 1, "title": 1, "author": 1, "category": 1, "release_rank": 1}
-        )
-        .sort("release_rank", 1)
-        .to_list(None)
-    )
+    docs = await db.books.find(
+        # Secondary formats (a Hardback beside the listed Paperback) would
+        # suggest the same title twice; the listed one is enough.
+        {"format_primary": {"$ne": False}},
+        {"_id": 0, "id": 1, "title": 1, "author": 1, "category": 1, "release_rank": 1,
+         "stock": 1, "coming_soon": 1, "pod": 1},
+    ).to_list(None)
+    # Books a visitor can buy now come first (27 Nov 2026). The search box
+    # keeps this order within its "starts with" / "contains" groups, so a
+    # sold-out title no longer takes a top suggestion slot from one in stock —
+    # the same rule the bookstore and search results already follow
+    # (server.list_books, in-stock first). Pre-order and print-on-demand
+    # titles are buyable. Then newest first; an unranked book goes last, as
+    # in list_books ($ifNull -> 10**6), not first as a bare Mongo sort did.
+    docs.sort(key=lambda b: (
+        0 if ((isinstance(b.get("stock"), (int, float)) and b["stock"] > 0) or b.get("coming_soon") or b.get("pod")) else 1,
+        b.get("release_rank") if isinstance(b.get("release_rank"), (int, float)) else 10**6,
+    ))
     return {
         "count": len(docs),
         "books": [
